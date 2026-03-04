@@ -1,0 +1,11 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: https://api.smrestoration.com/v1
+        NEXT_PUBLIC_APP_NAME: "SM System"
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
