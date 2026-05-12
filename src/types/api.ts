@@ -3,7 +3,15 @@
 // ============================================================
 
 // ---- Auth ----
-export type UserRole = "pm" | "advisor" | "kd" | "mechanic" | "direksi" | "mis";
+export type UserRole =
+  | "pm" | "mp" | "manager_produksi" | "kepala_produksi" | "manager_operational"
+  | "adv" | "advisor"
+  | "kd" | "ketua_divisi"
+  | "op" | "mechanic" | "team_lapangan"
+  | "direksi"
+  | "mis" | "admin"
+  | "warehouse" | "kepala_gudang" | "gudang" | "admin_gudang"
+  | "ppic" | "ppc" | "manager_gudang";
 
 export interface AuthUser {
   userId: string;
@@ -17,6 +25,8 @@ export interface AuthUser {
 export interface LoginRequest {
   employeeId: string;
   password: string;
+  deviceId?: string;
+  force?: boolean;
 }
 
 export interface LoginResponse {
@@ -352,4 +362,205 @@ export interface MasterPanel {
   panelId: number;
   panelName: string;
   category: string;
+}
+
+// ============================================================
+// Warehouse Module Types
+// ============================================================
+
+export type WhtTransactionType =
+  | "PEMINJAMAN"
+  | "PENGAMBILAN"
+  | "PENGEMBALIAN"
+  | "PENYIMPANAN";
+
+export type WhtItemCategory =
+  | "TOOLS"
+  | "BAHAN"
+  | "SPARE_PART"
+  | "CONSUMABLE";
+
+export type WhtItemStatus =
+  | "OPEN"
+  | "READY"
+  | "RELEASED"
+  | "RETURNED"
+  | "STORED"
+  | "LOST";
+
+export type WhtApprovalStatus =
+  | "PENDING_KD"
+  | "PENDING_KEPALA_GUDANG"
+  | "PENDING_PPIC"
+  | "APPROVED"
+  | "REJECTED";
+
+export type WhtView = "ALL" | "PENDING" | "READY" | "FIELD" | "OVERDUE";
+
+export interface WhtTransaction {
+  id: string;
+  transactionType: WhtTransactionType;
+  itemCategory: WhtItemCategory;
+  itemName: string;
+  itemMasterId: string | null;
+  itemAliasUsed: string | null;
+  itemCondition: string | null;
+  qty: number;
+  qtyReturned: number | null;
+  uom: string;
+  carId: string | null;
+  unitName: string | null;
+  coreId: string | null;
+  jobdesc: string | null;
+  panelName: string | null;
+  employeeId: string;
+  requester: string;
+  divisionId: number;
+  division: string;
+  stockCardId: string | null;
+  storageLocationId: number | null;
+  locationLabel: string | null;
+  locationDetail: string | null;
+  picWarehouseId: string | null;
+  picWarehouseName: string | null;
+  accKdName: string | null;
+  requestDate: string;
+  targetSearchDate: string | null;
+  actualReleaseDate: string | null;
+  deadlineDate: string | null;
+  actualReturnDate: string | null;
+  itemStatus: WhtItemStatus;
+  approvalStatus: WhtApprovalStatus;
+  photoUrls: string[];
+  notes: string | null;
+  installToUnit: boolean;
+  daysOverdue: number | null;
+}
+
+export interface WhtApprovalLogEntry {
+  stage: string;
+  action: string;
+  actorName: string;
+  notes: string | null;
+  createdAt: string;
+}
+
+export interface WhtTimelineEntry {
+  event: string;
+  label: string;
+  at: string;
+  by: string;
+}
+
+export interface WhtTransactionDetail extends WhtTransaction {
+  stockCard: {
+    id: string;
+    entryNo: number;
+    partCode: string | null;
+    panelSection: string | null;
+    conditionType: string;
+    status: string;
+    isLabeled: boolean;
+    photoUrls: string[];
+    locationLabel: string | null;
+    locationDetail: string | null;
+    dateIn: string;
+    dateOut: string | null;
+    takenByName: string | null;
+  } | null;
+  approvalLog: WhtApprovalLogEntry[];
+  timeline: WhtTimelineEntry[];
+}
+
+export type WhtStockCardStatus =
+  | "IN_STORAGE"
+  | "RETRIEVED"
+  | "INSTALLED"
+  | "LOST";
+
+export interface WhtStockCard {
+  id: string;
+  entryNo: number;
+  carId: string;
+  carName: string;
+  sourceTransactionId: string | null;
+  partCode: string | null;
+  panelSection: string | null;
+  partName: string;
+  conditionType: string;
+  qty: number;
+  uom: string | null;
+  storageLocationId: number | null;
+  locationLabel: string | null;
+  locationDetail: string | null;
+  dateIn: string;
+  dateOut: string | null;
+  takenByName: string | null;
+  status: WhtStockCardStatus;
+  isLabeled: boolean;
+  photoUrls: string[];
+  notes: string | null;
+  inputByName: string | null;
+  createdAt: string;
+}
+
+export interface WhtMasterItem {
+  id: string;
+  itemCode: string | null;
+  itemName: string;
+  itemCategory: WhtItemCategory;
+  uom: string | null;
+  description: string | null;
+  isActive: boolean;
+  aliasCount: number;
+  aliases: {
+    id: number;
+    alias: string;
+    source: string;
+    createdAt: string;
+  }[];
+  lastUsed?: string | null;
+  usageCount?: number;
+}
+
+export type WhtLocationType = "GUDANG" | "WORKSHOP" | "UNIT";
+
+export interface WhtLocation {
+  id: number;
+  locationType: WhtLocationType;
+  zone: string | null;
+  rack: string | null;
+  shelf: string | null;
+  label: string;
+  isActive: boolean;
+  stockCount?: number;
+}
+
+export interface WhtDashboardSummary {
+  pendingApproval: number;
+  pendingKd: number;
+  pendingKepalaGudang: number;
+  pendingPpic: number;
+  readyToPickup: number;
+  releasedInField: number;
+  overdueReturn: number;
+  storedToday: number;
+  totalActiveStock: number;
+}
+
+export interface WhtOverdueItem {
+  id: string;
+  itemName: string;
+  requester: string;
+  division: string;
+  unitName: string | null;
+  deadlineDate: string;
+  daysOverdue: number;
+}
+
+export interface WhtDashboard {
+  summary: WhtDashboardSummary;
+  recentTransactions: WhtTransaction[];
+  overdueItems: WhtOverdueItem[];
+  pendingByDivision: { divisionId: number; divisionName: string; count: number }[];
 }

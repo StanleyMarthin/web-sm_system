@@ -1,9 +1,9 @@
-// Task Execution Page (mechanic)
+// Warehouse Master Item Page
 import { Suspense } from "react";
-import { TaskExecutionPageClient } from "@/features/task-execution/components/task-execution-page-client";
 import { Loader2 } from "lucide-react";
+import { WarehouseMasterItem } from "@/features/warehouse/components/warehouse-master-item";
 
-export default function TasksPage() {
+export default function WarehouseMasterItemPage() {
   return (
     <Suspense
       fallback={
@@ -12,7 +12,7 @@ export default function TasksPage() {
         </div>
       }
     >
-      <TaskExecutionPageClient />
+      <WarehouseMasterItem />
     </Suspense>
   );
 }

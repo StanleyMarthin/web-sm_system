@@ -7,11 +7,15 @@
 
 import { hasPermission, Permission } from "@/config/rbac";
 import {
+  canManageWarehouseReference,
+  canOperateWarehouse,
+  canViewWarehouseReports,
+  isWarehouseApproverOnly,
+} from "@/features/warehouse/services/warehouse-access";
+import {
   LayoutDashboard,
-  Monitor,
   Calendar,
   FileText,
-  CheckSquare,
   BarChart3,
   Car,
   Wrench,
@@ -21,6 +25,7 @@ import {
   Truck,
   ShieldCheck,
   Database,
+  Package,
 } from "lucide-react";
 import type { UserRole } from "@/types";
 
@@ -28,6 +33,7 @@ export interface NavItem {
   label: string;
   href: string;
   icon: React.ReactNode;
+  children?: { label: string; href: string; isTitle?: boolean }[];
 }
 
 /**
@@ -40,9 +46,9 @@ export function getNavItems(role: UserRole): NavItem[] {
 
   if (role === "mechanic") {
     items.push(
-      { label: "Tugas Hari Ini", href: "/dashboard/tasks", icon: <Wrench className="w-4 h-4" /> },
-      { label: "Work Order", href: "/dashboard/work-orders", icon: <FileText className="w-4 h-4" /> },
-      { label: "Plan Saya", href: "/dashboard/planning", icon: <Calendar className="w-4 h-4" /> }
+      { label: "Tugas Hari Ini", href: "/dashboard/operational/monitoring", icon: <Wrench className="w-4 h-4" /> },
+      { label: "Work Order", href: "/dashboard/operational/work-orders", icon: <FileText className="w-4 h-4" /> },
+      { label: "Plan Saya", href: "/dashboard/operational/planning", icon: <Calendar className="w-4 h-4" /> }
     );
     return items;
   }
@@ -54,18 +60,33 @@ export function getNavItems(role: UserRole): NavItem[] {
     icon: <LayoutDashboard className="w-4 h-4" />,
   });
 
-  if (hasPermission(role, Permission.VIEW_MONITORING)) {
-    items.push({ label: "Monitoring", href: "/dashboard/monitoring", icon: <Monitor className="w-4 h-4" /> });
+
+
+  // ── OPERATIONAL HUB (Job Plan + Tasks + QC + WO) ──────────────────────────
+  if (hasPermission(role, Permission.VIEW_OPERATIONAL)) {
+    items.push({
+      label: "Operational",
+      href: "/dashboard/operational",
+      icon: <Layers className="w-4 h-4" />,
+      children: [
+        { label: "Planning", href: "/dashboard/operational/planning" },
+        { label: "Monitoring", href: "/dashboard/operational/monitoring" },
+        { label: "Quality Check", href: "/dashboard/operational/qc" },
+        { label: "Work Order", href: "/dashboard/operational/work-orders" },
+      ],
+    });
   }
-  if (hasPermission(role, Permission.VIEW_PLANNING)) {
-    items.push({ label: "Planning", href: "/dashboard/planning", icon: <Calendar className="w-4 h-4" /> });
+
+  // ── COUNTDOWN MONITOR (menggantikan Core Jobs) ────────────────────────────
+  if (hasPermission(role, Permission.VIEW_COUNTDOWN)) {
+    items.push({
+      label: "Countdown",
+      href: "/dashboard/countdown",
+      icon: <CalendarClock className="w-4 h-4" />,
+    });
   }
-  if (hasPermission(role, Permission.VIEW_WORK_ORDERS)) {
-    items.push({ label: "Work Order", href: "/dashboard/work-orders", icon: <FileText className="w-4 h-4" /> });
-  }
-  if (hasPermission(role, Permission.VIEW_QC)) {
-    items.push({ label: "Quality Check", href: "/dashboard/qc", icon: <CheckSquare className="w-4 h-4" /> });
-  }
+
+
   if (hasPermission(role, Permission.VIEW_KPI)) {
     items.push({ label: "KPI", href: "/dashboard/kpi", icon: <BarChart3 className="w-4 h-4" /> });
   }
@@ -77,9 +98,6 @@ export function getNavItems(role: UserRole): NavItem[] {
   }
   if (hasPermission(role, Permission.VIEW_WORKLOAD)) {
     items.push({ label: "Workload", href: "/dashboard/workload", icon: <CalendarClock className="w-4 h-4" /> });
-  }
-  if (hasPermission(role, Permission.VIEW_CORE_JOBS)) {
-    items.push({ label: "Core Jobs", href: "/dashboard/core-jobs", icon: <Layers className="w-4 h-4" /> });
   }
   if (hasPermission(role, Permission.VIEW_VENDORS)) {
     items.push({ label: "Vendors", href: "/dashboard/vendors", icon: <Truck className="w-4 h-4" /> });
@@ -93,6 +111,38 @@ export function getNavItems(role: UserRole): NavItem[] {
   if (hasPermission(role, Permission.VIEW_MASTER_DATA)) {
     items.push({ label: "Master Data", href: "/dashboard/master-data", icon: <Database className="w-4 h-4" /> });
   }
+  if (hasPermission(role, Permission.VIEW_WAREHOUSE)) {
+    const warehouseChildren: { label: string; href: string; isTitle?: boolean }[] = [
+      { label: "Dashboard", href: "/dashboard/warehouse" },
+      { label: "Transaksi", href: "/dashboard/warehouse/transactions" },
+    ];
+
+    if (canOperateWarehouse(role)) {
+      warehouseChildren.push(
+        { label: "Stock Card", href: "/dashboard/warehouse/stock-card" },
+        { label: "Master Item", href: "/dashboard/warehouse/master-item" },
+        { label: "Lokasi Rak", href: "/dashboard/warehouse/locations" },
+      );
+    }
+
+    if (canViewWarehouseReports(role)) {
+      warehouseChildren.push({ label: "Laporan", href: "/dashboard/warehouse/reports" });
+    }
+
+    if (canManageWarehouseReference(role) && !isWarehouseApproverOnly(role)) {
+      warehouseChildren.push(
+        { label: "REFERENSI", href: "#", isTitle: true },
+        { label: "Referensi", href: "/dashboard/warehouse/ref" },
+      );
+    }
+
+    items.push({
+      label: "Gudang",
+      href: "/dashboard/warehouse",
+      icon: <Package className="w-4 h-4" />,
+      children: warehouseChildren,
+    });
+  }
 
   return items;
 }
@@ -100,5 +150,7 @@ export function getNavItems(role: UserRole): NavItem[] {
 /** Check if a nav item is active based on current pathname */
 export function isNavActive(href: string, pathname: string): boolean {
   if (href === "/dashboard") return pathname === "/dashboard";
-  return pathname.startsWith(href);
+  // Strip query string before matching
+  const cleanHref = href.split("?")[0];
+  return pathname.startsWith(cleanHref);
 }

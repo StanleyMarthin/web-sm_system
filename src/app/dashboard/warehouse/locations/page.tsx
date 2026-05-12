@@ -1,9 +1,9 @@
-// Planning Page
+// Warehouse Locations Page
 import { Suspense } from "react";
-import { PlanningPageClient } from "@/features/planning/components/planning-page-client";
 import { Loader2 } from "lucide-react";
+import { WarehouseLocations } from "@/features/warehouse/components/warehouse-locations";
 
-export default function PlanningPage() {
+export default function WarehouseLocationsPage() {
   return (
     <Suspense
       fallback={
@@ -12,7 +12,7 @@ export default function PlanningPage() {
         </div>
       }
     >
-      <PlanningPageClient />
+      <WarehouseLocations />
     </Suspense>
   );
 }

@@ -1,9 +1,9 @@
-// Work Order Page
+// Warehouse Dashboard Page
 import { Suspense } from "react";
-import { WorkOrderPageClient } from "@/features/work-order/components/work-order-page-client";
 import { Loader2 } from "lucide-react";
+import { WarehouseDashboard } from "@/features/warehouse/components/warehouse-dashboard";
 
-export default function WorkOrderPage() {
+export default function WarehouseDashboardPage() {
   return (
     <Suspense
       fallback={
@@ -12,7 +12,7 @@ export default function WorkOrderPage() {
         </div>
       }
     >
-      <WorkOrderPageClient />
+      <WarehouseDashboard />
     </Suspense>
   );
 }

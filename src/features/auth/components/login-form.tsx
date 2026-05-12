@@ -15,8 +15,7 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { useAuthStore } from "@/features/auth/stores/auth-store";
 import { loginService } from "@/features/auth/services/auth-service";
-import { DEMO_USERS } from "@/lib/dummy-data";
-import { LogIn, User, Lock, Loader2, ChevronRight } from "lucide-react";
+import { LogIn, User, Lock, Loader2 } from "lucide-react";
 import { SERIF_STYLE } from "@/lib/constants";
 
 export function LoginForm() {
@@ -24,21 +23,25 @@ export function LoginForm() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [showDemo, setShowDemo] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [confirmMessage, setConfirmMessage] = useState("");
   const router = useRouter();
   const login = useAuthStore((s) => s.login);
   const year = useMemo(() => new Date().getFullYear(), []);
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleSubmit(e?: React.FormEvent, force: boolean = false) {
+    if (e) e.preventDefault();
     setError(null);
     setLoading(true);
 
     try {
-      const result = await loginService({ employeeId, password });
+      const result = await loginService({ employeeId, password, force });
       if (result.success && result.user && result.token) {
         login(result.user, result.token);
         router.push("/dashboard");
+      } else if (result.requiresConfirmation) {
+        setConfirmMessage(result.confirmationMessage || "Sesi aktif di perangkat lain.");
+        setShowConfirm(true);
       } else {
         setError(result.error ?? "Login gagal");
       }
@@ -49,9 +52,9 @@ export function LoginForm() {
     }
   }
 
-  function handleQuickLogin(empId: string, pwd: string) {
-    setEmployeeId(empId);
-    setPassword(pwd);
+  function handleForceLogin() {
+    setShowConfirm(false);
+    handleSubmit(undefined, true);
   }
 
   return (
@@ -104,7 +107,7 @@ export function LoginForm() {
               <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/25 group-focus-within:text-amber-500/70 transition-colors" />
               <input
                 id="employeeId"
-                placeholder="emp-004"
+                placeholder="SM-00.000"
                 value={employeeId}
                 onChange={(e) => setEmployeeId(e.target.value)}
                 required
@@ -157,47 +160,39 @@ export function LoginForm() {
           </button>
         </form>
 
-        {/* Demo Quick Login */}
-        <div className="mt-8">
-          <button
-            type="button"
-            onClick={() => setShowDemo(!showDemo)}
-            className="w-full flex items-center justify-center gap-2 text-white/30 hover:text-white/50 transition-colors py-2"
-          >
-            <span className="text-[10px] uppercase tracking-[0.2em]">
-              Demo Accounts
-            </span>
-            <ChevronRight
-              className={`w-3 h-3 transition-transform ${showDemo ? "rotate-90" : ""}`}
-            />
-          </button>
-
-          {showDemo && (
-            <div className="mt-3 grid grid-cols-2 gap-1.5">
-              {DEMO_USERS.map((u) => (
-                <button
-                  key={u.employeeId}
-                  type="button"
-                  onClick={() => handleQuickLogin(u.employeeId, u.password)}
-                  className="text-left px-3 py-2 rounded-lg bg-white/[0.03] border border-white/[0.06] hover:border-amber-500/30 hover:bg-white/[0.06] transition-all group"
-                >
-                  <p className="text-[11px] text-white/70 group-hover:text-white truncate leading-tight">
-                    {u.fullName}
-                  </p>
-                  <p className="text-[9px] uppercase tracking-wider text-amber-500/50 group-hover:text-amber-500/80 mt-0.5">
-                    {u.role}
-                  </p>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
         {/* Footer */}
         <p className="text-center text-white/15 text-[10px] tracking-[0.15em] uppercase mt-10">
           &copy; {year} Stanley Marthin Restoration
         </p>
       </div>
+
+      {/* Confirmation Overlay */}
+      {showConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="bg-[#111] border border-white/10 rounded-xl p-6 max-w-sm w-full shadow-2xl">
+            <h3 className="text-white text-lg font-medium mb-3">Konfirmasi Login</h3>
+            <p className="text-white/70 text-sm mb-6 leading-relaxed">
+              {confirmMessage}
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                type="button"
+                onClick={() => setShowConfirm(false)}
+                className="px-4 py-2 rounded-lg text-white/50 hover:text-white hover:bg-white/5 transition-colors text-sm font-medium"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleForceLogin}
+                className="px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-black transition-colors text-sm font-semibold"
+              >
+                Lanjutkan
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

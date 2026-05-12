@@ -1,38 +1,80 @@
 // ============================================================
-// Auth Service — login/logout using dummy data (MVP)
-// Will be replaced with actual API calls via env.apiUrl
+// Auth Service — real API call to /auth/login-web
 // ============================================================
 
-import { DEMO_USERS } from "@/lib/dummy-data";
-import type { AuthUser, LoginRequest } from "@/types";
+import type { AuthUser, LoginRequest, UserRole } from "@/types";
 
 interface LoginResult {
   success: boolean;
   user?: AuthUser;
   token?: string;
   error?: string;
+  requiresConfirmation?: boolean;
+  confirmationMessage?: string;
+}
+
+function getOrCreateDeviceId() {
+  if (typeof window === "undefined") return "web-unknown";
+  let id = localStorage.getItem("sm_web_device_id");
+  if (!id) {
+    id = "web-" + crypto.randomUUID();
+    localStorage.setItem("sm_web_device_id", id);
+  }
+  return id;
 }
 
 export async function loginService(req: LoginRequest): Promise<LoginResult> {
-  // Simulate network delay
-  await new Promise((r) => setTimeout(r, 500));
+  try {
+    const baseUrl = "/api-proxy";
+    const deviceId = req.deviceId || getOrCreateDeviceId();
+    
+    const res = await fetch(`${baseUrl}/auth/login-web`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        employeeId: req.employeeId,
+        password: req.password,
+        deviceId,
+        force: req.force || false,
+      }),
+    });
 
-  const found = DEMO_USERS.find(
-    (u) => u.employeeId === req.employeeId && u.password === req.password
-  );
+    const data = await res.json();
 
-  if (!found) {
-    return { success: false, error: "Employee ID atau password salah" };
+    if (res.status === 409 && data.errorCode === "ACTIVE_SESSION_EXISTS") {
+      return {
+        success: false,
+        requiresConfirmation: true,
+        confirmationMessage: data.message || "Sesi aktif di perangkat lain.",
+      };
+    }
+
+    if (!res.ok || !data.success) {
+      return { success: false, error: data.message || "Login gagal" };
+    }
+
+    const apiUser = data.data.user;
+    const mappedUser: AuthUser = {
+      userId: apiUser.userId,
+      employeeId: apiUser.employeeId,
+      fullName: apiUser.fullname || apiUser.fullName || "User",
+      role: (apiUser.roleName || apiUser.role || "mechanic").toLowerCase() as UserRole,
+      divisionName: apiUser.division || apiUser.divisionName || "-",
+      divisionId: apiUser.divisionId || 0,
+    };
+
+    return {
+      success: true,
+      user: mappedUser,
+      token: data.data.token,
+    };
+  } catch (error) {
+    console.error("[auth-service] login failed:", error);
+    return { success: false, error: "Terjadi kesalahan jaringan" };
   }
-
-  const { password: _, ...user } = found;
-  return {
-    success: true,
-    user,
-    token: `dummy-jwt-${user.employeeId}-${Date.now()}`,
-  };
 }
 
 export async function logoutService(): Promise<void> {
+  // Can be implemented if needed, currently just clear local state in store
   await new Promise((r) => setTimeout(r, 200));
 }
