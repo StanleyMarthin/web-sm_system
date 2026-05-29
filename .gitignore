@@ -9,13 +9,39 @@
 !.yarn/plugins
 !.yarn/releases
 !.yarn/versions
+.vscode/
+.codex/
+.agents/
+.agent/
+.claude/
+.cursor/
+.continue/
+start-dev.sh
+# markdown notes / docs kept local in this workspace
+*.md
+progress/
+
+# temporary copied projects / local analysis dumps
+.tmp_*/
+
+# local scratch and probe scripts
+/scratch*
+/test-*.*
+/fix_redirects.js
+*.sh
+/apps/api/scratch*
+/apps/api/check-db.ts
+/apps/api/db/migrations/*.sql
 
 # testing
 /coverage
+**/coverage/
 
 # next.js
 /.next/
+**/.next/
 /out/
+**/out/
 
 # production
 /build
@@ -23,6 +49,15 @@
 # misc
 .DS_Store
 *.pem
+*.log
+*.tmp
+*.bak
+*.orig
+*.swp
+*~
+.dev/
+.cache/
+tmp/
 
 # debug
 npm-debug.log*

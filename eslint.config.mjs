@@ -7,11 +7,16 @@ const eslintConfig = defineConfig([
   ...nextTs,
   // Override default ignores of eslint-config-next.
   globalIgnores([
-    // Default ignores of eslint-config-next:
+    // Default ignores of eslint-config-next and monorepo nested apps:
     ".next/**",
+    "**/.next/**",
     "out/**",
+    "**/out/**",
     "build/**",
+    "**/build/**",
     "next-env.d.ts",
+    "**/next-env.d.ts",
+    "**/bun.d.ts",
   ]),
 ]);
 

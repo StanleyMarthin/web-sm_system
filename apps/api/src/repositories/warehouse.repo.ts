@@ -896,23 +896,30 @@ export class MySqlWarehouseRepository implements WarehouseRepository {
       this.pool.query<DashboardLowStockRow[]>(
         `
           SELECT
-            sc.part_name AS itemName,
+            stock.partName AS itemName,
             (
               SELECT m.item_category
               FROM ${this.tables.itemMaster} m
-              WHERE (m.item_code IS NOT NULL AND m.item_code = sc.part_code)
-                 OR m.item_name = sc.part_name
+              WHERE (m.item_code IS NOT NULL AND m.item_code = stock.partCode)
+                 OR m.item_name = stock.partName
               ORDER BY m.updated_at DESC
               LIMIT 1
             ) AS itemCategory,
-            COALESCE(SUM(sc.qty), 0) AS qtyAvailable,
-            COALESCE(MAX(sc.uom), 'pcs') AS uom
-          FROM ${this.tables.stockCard} sc
-          LEFT JOIN ${this.tables.cars} c ON c.id = sc.car_id
-          WHERE ${stockConditions.join(" AND ")}
-          GROUP BY sc.part_name
-          HAVING COALESCE(SUM(sc.qty), 0) <= 10
-          ORDER BY qtyAvailable ASC, sc.part_name ASC
+            stock.qtyAvailable AS qtyAvailable,
+            stock.uom AS uom
+          FROM (
+            SELECT
+              sc.part_name AS partName,
+              MAX(sc.part_code) AS partCode,
+              COALESCE(SUM(sc.qty), 0) AS qtyAvailable,
+              COALESCE(MAX(sc.uom), 'pcs') AS uom
+            FROM ${this.tables.stockCard} sc
+            LEFT JOIN ${this.tables.cars} c ON c.id = sc.car_id
+            WHERE ${stockConditions.join(" AND ")}
+            GROUP BY sc.part_name
+            HAVING COALESCE(SUM(sc.qty), 0) <= 10
+          ) stock
+          ORDER BY stock.qtyAvailable ASC, stock.partName ASC
           LIMIT 8
         `,
         stockParams,

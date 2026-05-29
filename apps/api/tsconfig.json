@@ -1,0 +1,16 @@
+{
+  "extends": "../../packages/config/tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@smsystem/contracts/*": ["../../packages/contracts/src/*"],
+      "@smsystem/permissions": ["../../packages/permissions/src/index.ts"]
+    }
+  },
+  "include": [
+    "src/**/*.ts",
+    "tests/**/*.ts",
+    "bun.d.ts"
+  ]
+}

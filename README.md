@@ -1,36 +1,106 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# SM System (Monorepo)
 
-## Getting Started
+SM System adalah workspace web ERP untuk operasional workshop, dengan pemisahan jelas antara frontend (`apps/web`), API (`apps/api`), dan shared package.
 
-First, run the development server:
+## Arsitektur Singkat
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+```text
+Browser
+-> Next.js Web (`apps/web`)
+-> Bun API (`apps/api`)
+-> MySQL + Redis + layanan auth (`sm_login`)
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Struktur Path dan Fungsi
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Root
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- `apps/`: aplikasi runtime aktif.
+- `packages/`: kode bersama lintas aplikasi.
+- `progress/`: log progres implementasi per phase + hardening.
+- `SYSTEM_MAP_WEB.md`: peta sistem utama (source-of-truth teknis).
+- `PLAN_REFACTOR_WEBAPP_NEXTJS_BUN_SM_MIS.md`: rencana refactor final.
+- `Dockerfile`, `docker-compose.yml`: jalur container build/run.
 
-## Learn More
+### `apps/web` (Next.js App Router)
 
-To learn more about Next.js, take a look at the following resources:
+- `apps/web/app/`: route page/layout.
+- `apps/web/modules/`: UI shell per domain bisnis (units, countdown, spk, wo, pr, vendor, warehouse, reports, dll).
+- `apps/web/shared/api/`: client API per modul + parser query/response.
+- `apps/web/shared/auth/`: helper auth/session web.
+- `apps/web/shared/datagrid/`: SmartDataGrid server-side.
+- `apps/web/shared/navigation/`: konfigurasi menu berbasis permission.
+- `apps/web/shared/layouts/`: kerangka layout aplikasi.
+- `apps/web/proxy.ts`: guard request di sisi web.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### `apps/api` (Bun API)
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- `apps/api/src/index.ts`: bootstrap server.
+- `apps/api/src/app.ts`: router dispatcher endpoint API.
+- `apps/api/src/routes/`: handler endpoint per modul.
+- `apps/api/src/services/`: business logic per modul.
+- `apps/api/src/repositories/`: query DB + mapping data.
+- `apps/api/src/middleware/`: auth, permission, error, dan guard lain.
+- `apps/api/src/config/env.ts`: parsing/validasi environment API.
+- `apps/api/src/db/`: helper DB + migration SQL.
+- `apps/api/tests/`: test API/service/query.
 
-## Deploy on Vercel
+### Shared Packages
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- `packages/contracts/src/`: kontrak schema/DTO (Zod + type inference) lintas web/API.
+- `packages/permissions/src/index.ts`: katalog permission code dan helper permission check.
+- `packages/config/`: baseline konfigurasi TypeScript lintas workspace.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Menjalankan Project Lokal
+
+1. Install dependency
+
+```bash
+npm install
+```
+
+2. Jalankan helper startup
+
+```bash
+./start-dev.sh start local
+```
+
+Mode `local` adalah jalur yang paling aman untuk testing cepat di mesin ini karena:
+- MySQL memakai socket lokal `/var/run/mysqld/mysqld.sock`
+- Redis dev akan dinyalakan otomatis jika belum ada
+- Web dipaksa ke API lokal, jadi tidak tersambung diam-diam ke endpoint publik lama
+
+URL default helper:
+- Web: `http://127.0.0.1:3103/login`
+- API: `http://127.0.0.1:3203`
+
+Perintah lain:
+
+```bash
+./start-dev.sh status
+./start-dev.sh logs
+./start-dev.sh stop
+```
+
+Jika perlu memakai data MySQL/Redis VPS untuk debug:
+
+```bash
+./start-dev.sh start tunnel
+```
+
+Mode `tunnel` akan membuka SSH tunnel ke VPS lalu menjalankan API + web dengan port lokal yang sama.
+
+## Quality Check
+
+```bash
+npx tsc --noEmit -p apps/api/tsconfig.json
+npx tsc --noEmit -p apps/web/tsconfig.json
+bun test apps/api/tests
+```
+
+## Guardrail RBAC/EBAC
+
+- Tidak boleh hardcode role untuk akses fitur.
+- Akses harus lewat kombinasi permission + scope (`canViewAllUnits`, division/unit scope).
+- Gunakan katalog dari `@smsystem/permissions`.
+- Semua endpoint write action wajib melewati guard permission server-side.

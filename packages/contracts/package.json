@@ -1,0 +1,32 @@
+{
+  "name": "@smsystem/contracts",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    "./auth": "./src/auth.ts",
+    "./dashboard": "./src/dashboard.ts",
+    "./countdown": "./src/countdown.ts",
+    "./grid": "./src/grid.ts",
+    "./health": "./src/health.ts",
+    "./job-plan": "./src/job-plan.ts",
+    "./job-plan-schedule": "./src/job-plan-schedule.ts",
+    "./monitoring": "./src/monitoring.ts",
+    "./issue": "./src/issue.ts",
+    "./qa": "./src/qa.ts",
+    "./qc": "./src/qc.ts",
+    "./calendar": "./src/calendar.ts",
+    "./planning-evaluation": "./src/planning-evaluation.ts",
+    "./spk": "./src/spk.ts",
+    "./wo": "./src/wo.ts",
+    "./pr": "./src/pr.ts",
+    "./vendor": "./src/vendor.ts",
+    "./warehouse": "./src/warehouse.ts",
+    "./bubut-invoice": "./src/bubut-invoice.ts",
+    "./reports": "./src/reports.ts",
+    "./rbac": "./src/rbac.ts",
+    "./user": "./src/user.ts",
+    "./unit": "./src/unit.ts",
+    "./unit-bom": "./src/unit-bom.ts"
+  }
+}

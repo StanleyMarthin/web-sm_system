@@ -1,0 +1,1000 @@
+"use client";
+
+import type {
+  UnitBomDocument,
+  UnitBomNode,
+  UnitBomPhotoSlot,
+  UnitBomPhotoSlotSummary,
+  UnitBomTimelineItem,
+} from "@smsystem/contracts/unit-bom";
+import type { GalleryPhotoRecord, GalleryPhotoType } from "@smsystem/contracts/gallery";
+import {
+  Archive,
+  Camera,
+  CheckCircle2,
+  ClipboardList,
+  Download,
+  Eye,
+  FileText,
+  FolderOpen,
+  MapPin,
+  PackageCheck,
+  PackageSearch,
+  ShoppingCart,
+  Trash2,
+  Truck,
+  Upload,
+  Wrench,
+  X,
+} from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { getProxiedImageUrl } from "@/shared/api/config";
+import { GalleryUploadForm, type UploadFormValues } from "@/modules/gallery/components/forms/gallery-upload-form";
+import { GalleryPhotoEditForm, type EditFormValues } from "@/modules/gallery/components/forms/gallery-photo-edit-form";
+import {
+  createGalleryPhoto,
+  deleteGalleryPhoto,
+  fetchGalleryPhotos,
+  requestGalleryUploadTicket,
+  updateGalleryPhoto,
+} from "@/shared/api/gallery";
+
+type DrawerTab = "timeline" | "photos" | "documents";
+type TriageTone = "good" | "repair" | "replace" | "unknown";
+
+interface PanelDetailDrawerProps {
+  node: UnitBomNode | null;
+  isOpen: boolean;
+  canManagePhotos: boolean;
+  canDownloadPhotos: boolean;
+  onClose: () => void;
+}
+
+interface TimelineItem {
+  eventType?: UnitBomTimelineItem["eventType"];
+  title: string;
+  detail: string;
+  date: string | null;
+  icon: typeof Truck;
+  tone: string;
+}
+
+interface PhotoSlot {
+  slot: UnitBomPhotoSlot;
+  label: string;
+  caption: string;
+  icon: typeof Camera;
+  photoCount: number;
+  latestPhotoUrl: string | null;
+  latestPhotoAt: string | null;
+  photos: GalleryPhotoRecord[];
+}
+
+interface DocumentCard {
+  title: string;
+  detail: string;
+  icon: typeof FileText;
+  tone: string;
+}
+
+interface GalleryPhotoState {
+  actualId: string | null;
+  photos: GalleryPhotoRecord[];
+  isLoading: boolean;
+  error: string | null;
+  submittedToLedger: boolean;
+}
+
+function triageMeta(node: UnitBomNode | null): { label: string; tone: TriageTone; className: string } {
+  if (!node) {
+    return { label: "Belum Ada Data", tone: "unknown", className: "bg-white/[0.06] text-white/45 ring-white/[0.10]" };
+  }
+
+  if (node.physicalStatus === "INSTALLED" || node.logisticStatus === "READY_GUDANG") {
+    return { label: "BAGUS", tone: "good", className: "bg-emerald-500/12 text-emerald-300 ring-emerald-500/25" };
+  }
+
+  if (node.physicalStatus === "IN_DIVISION" || node.logisticStatus === "AT_VENDOR") {
+    return { label: "REPAIR", tone: "repair", className: "bg-amber-500/12 text-amber-300 ring-amber-500/25" };
+  }
+
+  if (node.physicalStatus === "DISASSEMBLED" || node.logisticStatus === "ORDER_PR") {
+    return { label: "REPLACE", tone: "replace", className: "bg-rose-500/12 text-rose-300 ring-rose-500/25" };
+  }
+
+  return { label: "PERLU CEK", tone: "unknown", className: "bg-white/[0.06] text-white/50 ring-white/[0.10]" };
+}
+
+function workStatusLabel(node: UnitBomNode): string {
+  if (node.physicalStatus === "INSTALLED") return "Siap Dipasang";
+  if (node.physicalStatus === "IN_DIVISION") return "Sedang Dikerjakan";
+  if (node.physicalStatus === "DISASSEMBLED") return "Menunggu Tindak Lanjut";
+  return "Belum Dicek";
+}
+
+function hierarchyLabel(node: UnitBomNode): string {
+  const parts = [node.category, node.section].filter(Boolean);
+  if (parts.length === 0) return "Kategori belum tercatat";
+  return `Kategori: ${parts.join(" > ")}`;
+}
+
+function buildTimeline(node: UnitBomNode): TimelineItem[] {
+  const items: TimelineItem[] = [];
+
+  if (node.detail?.timeline.length) {
+    items.push(
+      ...node.detail.timeline.map((item) => ({
+        eventType: item.eventType,
+        title: item.title,
+        detail: item.description,
+        date: formatShortDate(item.occurredAt),
+        icon: timelineIcon(item.eventType),
+        tone: timelineTone(item.eventType),
+      }))
+    );
+  } else {
+    const divisionName = node.divisionName ?? "Divisi terkait";
+    items.push({
+      title: "Serah terima fisik",
+      detail: `Diserahkan ke ${divisionName}`,
+      date: "12 Mei",
+      icon: Truck,
+      tone: "border-sky-400/30 bg-sky-400/10 text-sky-300",
+    });
+    items.push({
+      title: "Pekerjaan job plan",
+      detail: "Dempul dasar oleh Budi (4 jam) - Lolos QC",
+      date: "13 Mei",
+      icon: Wrench,
+      tone: "border-amber-400/30 bg-amber-400/10 text-amber-300",
+    });
+    items.push({
+      title: "Pemeriksaan akhir",
+      detail: `Progress terakhir ${Math.round(node.progressPercent ?? 0)}%`,
+      date: "Hari ini",
+      icon: CheckCircle2,
+      tone: "border-emerald-400/30 bg-emerald-400/10 text-emerald-300",
+    });
+  }
+
+  // Include WOV from documents into timeline (WO/WOV belongs to history)
+  if (node.detail?.documents.length) {
+    const wovDocs = node.detail.documents.filter(d => d.documentType === "WOV");
+    for (const doc of wovDocs) {
+      items.push({
+        title: doc.title,
+        detail: doc.description,
+        date: "-",
+        icon: Wrench,
+        tone: "border-sky-400/30 bg-sky-400/10 text-sky-300",
+      });
+    }
+  }
+
+  // Handle AT_VENDOR as WO Vendor in timeline
+  if (!node.detail?.documents.length && node.logisticStatus === "AT_VENDOR") {
+    items.push({
+      title: "WO Vendor",
+      detail: node.logisticReference ?? "Sedang dikerjakan di Vendor",
+      date: "-",
+      icon: Wrench,
+      tone: "border-sky-400/30 bg-sky-400/10 text-sky-300",
+    });
+  }
+
+  return items;
+}
+
+function buildDocuments(node: UnitBomNode): DocumentCard[] {
+  const cards: DocumentCard[] = [];
+
+  if (node.detail?.documents.length) {
+    cards.push(
+      ...node.detail.documents
+        .filter((d) => d.documentType !== "WOV") // WOV moved to timeline
+        .map(mapDocumentCard)
+    );
+  } else {
+    if (node.logisticStatus === "ORDER_PR") {
+      cards.push({
+        title: "PR Logistik",
+        detail: node.logisticReference ?? "Menunggu kedatangan parts",
+        icon: ShoppingCart,
+        tone: "border-amber-400/20 bg-amber-400/[0.08] text-amber-300",
+      });
+    }
+
+    if (node.logisticStatus === "CANNIBALIZED") {
+      cards.push({
+        title: "Pemakaian Sementara",
+        detail: node.logisticReference ?? "Part dipakai sementara untuk kebutuhan unit lain",
+        icon: PackageSearch,
+        tone: "border-rose-400/20 bg-rose-400/[0.08] text-rose-300",
+      });
+    }
+  }
+
+  // Mock data for materials/tools usage
+  cards.push({
+    title: "Pemakaian Bahan & Alat",
+    detail: "Data konsumsi bahan dan alat yang digunakan (Hardener, Dempul, dll)",
+    icon: Archive,
+    tone: "border-emerald-400/20 bg-emerald-400/[0.08] text-emerald-300",
+  });
+
+  return cards;
+}
+
+const basePhotoSlots: Array<Pick<PhotoSlot, "slot" | "label" | "caption" | "icon">> = [
+  { slot: "BEFORE", label: "Before", caption: "Kondisi awal / triage", icon: Camera },
+  { slot: "EVIDENCE", label: "Evidence", caption: "Proses pengerjaan", icon: ClipboardList },
+  { slot: "AFTER", label: "After", caption: "Hasil akhir / QC", icon: PackageCheck },
+];
+
+const tabs: Array<{ id: DrawerTab; label: string }> = [
+  { id: "timeline", label: "Timeline" },
+  { id: "photos", label: "Galeri Bukti" },
+  { id: "documents", label: "Logistik" },
+];
+
+function Badge({ children, className }: { children: ReactNode; className: string }) {
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium ring-1 ${className}`}>
+      {children}
+    </span>
+  );
+}
+
+function formatShortDate(value: string | null): string | null {
+  if (!value) return null;
+  const date = new Date(value.replace(" ", "T"));
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("id-ID", { day: "2-digit", month: "short" }).format(date);
+}
+
+function humanizePhotoType(photoType: GalleryPhotoType): string {
+  switch (photoType) {
+    case "BEFORE":
+      return "Sebelum";
+    case "AFTER":
+      return "Sesudah";
+    case "DEFECT":
+      return "Temuan";
+    default:
+      return "Proses";
+  }
+}
+
+function proxiedPhotoUrl(photoUrl: string): string {
+  return getProxiedImageUrl(photoUrl) ?? photoUrl;
+}
+
+function buildDownloadFileName(partName: string, photo: GalleryPhotoRecord, index?: number): string {
+  const originalName = decodeURIComponent(photo.photoUrl.split("/").pop() ?? "foto.jpg");
+  const extension = originalName.includes(".") ? originalName.split(".").pop() : "jpg";
+  const safePart = partName.replace(/[^\w\- ]/gu, "_").trim() || "part";
+  const fileName = `${safePart}_${photo.photoType.toLowerCase()}.${extension}`;
+  return typeof index === "number" && index > 0 ? `${index}_${fileName}` : fileName;
+}
+
+async function downloadUrl(url: string, fileName: string) {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error("DOWNLOAD_FAILED");
+  }
+
+  const blob = await response.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = objectUrl;
+  anchor.download = fileName;
+  anchor.click();
+  URL.revokeObjectURL(objectUrl);
+}
+
+function timelineIcon(eventType: UnitBomTimelineItem["eventType"]) {
+  if (eventType === "HANDOVER") return Truck;
+  if (eventType === "QC") return CheckCircle2;
+  return Wrench;
+}
+
+function timelineTone(eventType: UnitBomTimelineItem["eventType"]) {
+  if (eventType === "HANDOVER") return "border-sky-400/30 bg-sky-400/10 text-sky-300";
+  if (eventType === "QC") return "border-emerald-400/30 bg-emerald-400/10 text-emerald-300";
+  return "border-amber-400/30 bg-amber-400/10 text-amber-300";
+}
+
+function mapDocumentCard(document: UnitBomDocument): DocumentCard {
+  const iconMap: Record<UnitBomDocument["documentType"], typeof FileText> = {
+    PR: ShoppingCart,
+    WOV: Wrench,
+    STOCK: PackageCheck,
+    TRANSFER: PackageSearch,
+  };
+  const toneMap: Record<UnitBomDocument["documentType"], string> = {
+    PR: "border-amber-400/20 bg-amber-400/[0.08] text-amber-300",
+    WOV: "border-sky-400/20 bg-sky-400/[0.08] text-sky-300",
+    STOCK: "border-emerald-400/20 bg-emerald-400/[0.08] text-emerald-300",
+    TRANSFER: "border-rose-400/20 bg-rose-400/[0.08] text-rose-300",
+  };
+
+  return {
+    title: document.title,
+    detail: document.description,
+    icon: iconMap[document.documentType],
+    tone: toneMap[document.documentType],
+  };
+}
+
+function buildPhotoSlots(apiSlots: UnitBomPhotoSlotSummary[] | undefined): PhotoSlot[] {
+  const bySlot = new Map<UnitBomPhotoSlot, UnitBomPhotoSlotSummary>();
+  for (const slot of apiSlots ?? []) {
+    bySlot.set(slot.slot, slot);
+  }
+
+  return basePhotoSlots.map((slot) => {
+    const apiSlot = bySlot.get(slot.slot);
+    return {
+      ...slot,
+      label: apiSlot?.label ?? slot.label,
+      photoCount: apiSlot?.photoCount ?? 0,
+      latestPhotoUrl: apiSlot?.latestPhotoUrl ?? null,
+      latestPhotoAt: apiSlot?.latestPhotoAt ?? null,
+      photos: [],
+    };
+  });
+}
+
+function photoMatchesSlot(photo: GalleryPhotoRecord, slot: UnitBomPhotoSlot): boolean {
+  if (slot === "BEFORE") return photo.photoType === "BEFORE";
+  if (slot === "AFTER") return photo.photoType === "AFTER";
+  return photo.photoType === "PROCESS" || photo.photoType === "DEFECT";
+}
+
+function mergeGalleryPhotos(slots: PhotoSlot[], photos: GalleryPhotoRecord[]): PhotoSlot[] {
+  if (photos.length === 0) return slots;
+
+  return slots.map((slot) => {
+    const slotPhotos = photos.filter((photo) => photoMatchesSlot(photo, slot.slot));
+    const latest = slotPhotos[0] ?? null;
+    return {
+      ...slot,
+      photoCount: slotPhotos.length,
+      latestPhotoUrl: latest?.photoUrl ?? slot.latestPhotoUrl,
+      latestPhotoAt: latest?.uploadedAt ?? slot.latestPhotoAt,
+      photos: slotPhotos,
+    };
+  });
+}
+
+export function PanelDetailDrawer({ node, isOpen, canManagePhotos, canDownloadPhotos, onClose }: PanelDetailDrawerProps) {
+  const router = useRouter();
+  const replaceInputRef = useRef<HTMLInputElement | null>(null);
+  const [activeTab, setActiveTab] = useState<DrawerTab>("timeline");
+  const [galleryState, setGalleryState] = useState<GalleryPhotoState>({
+    actualId: null,
+    photos: [],
+    isLoading: false,
+    error: null,
+    submittedToLedger: false,
+  });
+  const [isUploading, setIsUploading] = useState(false);
+  const [rowSavingId, setRowSavingId] = useState<string | null>(null);
+  const [selectedPhotoIds, setSelectedPhotoIds] = useState<string[]>([]);
+  const [replaceTarget, setReplaceTarget] = useState<GalleryPhotoRecord | null>(null);
+
+  const timeline = useMemo(() => (node ? buildTimeline(node) : []), [node]);
+  const documents = useMemo(() => (node ? buildDocuments(node) : []), [node]);
+  const galleryPhotos = useMemo(
+    () => (galleryState.actualId === node?.actualId ? galleryState.photos : []),
+    [galleryState.actualId, galleryState.photos, node?.actualId],
+  );
+  const photoSlots = useMemo(
+    () => mergeGalleryPhotos(buildPhotoSlots(node?.detail?.photos), galleryPhotos),
+    [galleryPhotos, node],
+  );
+  const selectedPhotos = useMemo(
+    () => galleryPhotos.filter((photo) => selectedPhotoIds.includes(photo.photoId)),
+    [galleryPhotos, selectedPhotoIds],
+  );
+  const triage = triageMeta(node);
+  const canMutatePhotos = canManagePhotos && !galleryState.submittedToLedger;
+
+  useEffect(() => {
+    const actualId = isOpen ? node?.actualId ?? null : null;
+
+    let cancelled = false;
+
+    async function loadPhotos() {
+      await Promise.resolve();
+      if (cancelled) return;
+
+      if (!actualId) {
+        setGalleryState({ actualId: null, photos: [], isLoading: false, error: null, submittedToLedger: false });
+        setSelectedPhotoIds([]);
+        return;
+      }
+
+      setGalleryState({ actualId, photos: [], isLoading: true, error: null, submittedToLedger: false });
+      const result = await fetchGalleryPhotos("", actualId);
+      if (cancelled) return;
+
+      if (!result.payload) {
+        setGalleryState({ actualId, photos: [], isLoading: false, error: "Foto belum bisa dimuat.", submittedToLedger: false });
+        return;
+      }
+
+      setGalleryState({ actualId, photos: result.payload.data.photos, isLoading: false, error: null, submittedToLedger: result.payload.data.actual.submittedToLedger ?? false });
+      setSelectedPhotoIds([]);
+    }
+
+    void loadPhotos();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, node?.actualId]);
+
+  async function refreshPhotos() {
+    const actualId = node?.actualId;
+    if (!actualId) return;
+
+    const result = await fetchGalleryPhotos("", actualId);
+    if (!result.payload) {
+      setGalleryState({ actualId, photos: galleryPhotos, isLoading: false, error: "Data foto belum bisa dimuat ulang.", submittedToLedger: galleryState.submittedToLedger });
+      return;
+    }
+
+    setGalleryState({ actualId, photos: result.payload.data.photos, isLoading: false, error: null, submittedToLedger: result.payload.data.actual.submittedToLedger ?? false });
+  }
+
+  async function uploadFileToR2(params: {
+    actualId: string;
+    photoType: GalleryPhotoType;
+    file: File;
+  }) {
+    const ticketResult = await requestGalleryUploadTicket({
+      actualId: params.actualId,
+      photoType: params.photoType,
+      filename: params.file.name,
+      contentType: params.file.type || "image/jpeg",
+    });
+
+    if (!ticketResult.success) {
+      throw new Error(ticketResult.message);
+    }
+
+    const uploadResponse = await fetch(ticketResult.result.uploadUrl, {
+      method: "PUT",
+      headers: {
+        "Content-Type": params.file.type || "image/jpeg",
+      },
+      body: params.file,
+    });
+
+    if (!uploadResponse.ok) {
+      throw new Error("Upload ke penyimpanan foto gagal.");
+    }
+
+    return ticketResult.result.publicUrl;
+  }
+
+  async function handleUpload(data: UploadFormValues & { file: File }) {
+    const actualId = node?.actualId;
+    if (!actualId) return;
+
+    setIsUploading(true);
+    setGalleryState((current) => ({ ...current, error: null }));
+
+    try {
+      const photoUrl = await uploadFileToR2({
+        actualId,
+        photoType: data.photoType,
+        file: data.file,
+      });
+
+      const createResult = await createGalleryPhoto({
+        actualId,
+        photoType: data.photoType,
+        photoUrl,
+        caption: data.caption?.trim() || null,
+      });
+
+      if (!createResult.success) {
+        throw new Error(createResult.message);
+      }
+
+      await refreshPhotos();
+      router.refresh();
+    } catch (error) {
+      setGalleryState((current) => ({
+        ...current,
+        error: error instanceof Error ? error.message : "Upload foto gagal.",
+      }));
+    } finally {
+      setIsUploading(false);
+    }
+  }
+
+  async function handleSavePhoto(photoId: string, data: EditFormValues) {
+    setRowSavingId(photoId);
+    setGalleryState((current) => ({ ...current, error: null }));
+
+    try {
+      const result = await updateGalleryPhoto(photoId, {
+        photoType: data.photoType,
+        caption: data.caption?.trim() || null,
+      });
+
+      if (!result.success) {
+        throw new Error(result.message);
+      }
+
+      await refreshPhotos();
+      router.refresh();
+    } catch (error) {
+      setGalleryState((current) => ({
+        ...current,
+        error: error instanceof Error ? error.message : "Foto belum bisa diperbarui.",
+      }));
+    } finally {
+      setRowSavingId(null);
+    }
+  }
+
+  async function handleDeletePhoto(photoId: string) {
+    setRowSavingId(photoId);
+    setGalleryState((current) => ({ ...current, error: null }));
+
+    try {
+      const result = await deleteGalleryPhoto(photoId);
+      if (!result.success) {
+        throw new Error(result.message);
+      }
+
+      await refreshPhotos();
+      router.refresh();
+      setSelectedPhotoIds((current) => current.filter((id) => id !== photoId));
+    } catch (error) {
+      setGalleryState((current) => ({
+        ...current,
+        error: error instanceof Error ? error.message : "Foto belum bisa dihapus.",
+      }));
+    } finally {
+      setRowSavingId(null);
+    }
+  }
+
+  async function handleReplaceFile(file: File) {
+    const actualId = node?.actualId;
+    if (!actualId || !replaceTarget) return;
+
+    setRowSavingId(replaceTarget.photoId);
+    setGalleryState((current) => ({ ...current, error: null }));
+
+    try {
+      const draft = {
+        photoType: replaceTarget.photoType,
+        caption: replaceTarget.caption ?? "",
+      };
+      const photoUrl = await uploadFileToR2({
+        actualId,
+        photoType: draft.photoType,
+        file,
+      });
+
+      const result = await updateGalleryPhoto(replaceTarget.photoId, {
+        photoType: draft.photoType,
+        caption: draft.caption.trim() || null,
+        photoUrl,
+      });
+
+      if (!result.success) {
+        throw new Error(result.message);
+      }
+
+      await refreshPhotos();
+      router.refresh();
+      setReplaceTarget(null);
+    } catch (error) {
+      setGalleryState((current) => ({
+        ...current,
+        error: error instanceof Error ? error.message : "File foto belum bisa diganti.",
+      }));
+    } finally {
+      setRowSavingId(null);
+    }
+  }
+
+  async function handleDownloadSelected() {
+    if (!node || selectedPhotos.length === 0) return;
+
+    setGalleryState((current) => ({ ...current, error: null }));
+
+    for (const [index, photo] of selectedPhotos.entries()) {
+      try {
+        await downloadUrl(
+          proxiedPhotoUrl(photo.photoUrl),
+          buildDownloadFileName(node.label, photo, index),
+        );
+      } catch {
+        setGalleryState((current) => ({
+          ...current,
+          error: "Sebagian foto tidak bisa diunduh. Coba lagi satu per satu.",
+        }));
+        break;
+      }
+    }
+  }
+
+  if (!isOpen || !node) return null;
+
+  const location = triage.tone === "good" ? "Gudang" : node.divisionName ?? "Belum ditentukan";
+
+  return (
+    <div className="fixed inset-0 z-[85] flex justify-end bg-black/70 backdrop-blur-sm" role="dialog" aria-modal="true">
+      <button type="button" aria-label="Tutup panel detail" className="absolute inset-0 cursor-default" onClick={onClose} />
+      <aside className="relative flex h-full w-full max-w-[620px] flex-col border-l border-white/[0.08] bg-[#0a0a0a] shadow-2xl shadow-black/60">
+        <header className="sticky top-0 z-10 border-b border-white/[0.06] bg-[#0a0a0a]/95 px-5 py-5 backdrop-blur">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-[10px] uppercase tracking-[0.2em] text-amber-400/70">Rekam Medis Part</p>
+              <h2 className="mt-2 truncate text-2xl font-light text-white">{node.label}</h2>
+              <p className="mt-1 text-sm text-white/45">{hierarchyLabel(node)}</p>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-full border border-white/[0.08] p-2 text-white/45 transition-colors hover:border-white/[0.16] hover:text-white"
+              aria-label="Tutup"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Badge className={triage.className}>
+              <Archive className="h-3.5 w-3.5" />
+              Kondisi: {triage.label}
+            </Badge>
+            <Badge className="bg-white/[0.04] text-white/65 ring-white/[0.10]">
+              <MapPin className="h-3.5 w-3.5" />
+              Lokasi: {location}
+            </Badge>
+            <Badge className="bg-sky-500/10 text-sky-300 ring-sky-500/20">
+              <Wrench className="h-3.5 w-3.5" />
+              Status: {node.detail?.workStatusLabel ?? workStatusLabel(node)}
+            </Badge>
+          </div>
+
+          <nav className="mt-5 grid grid-cols-3 gap-1 rounded-full border border-white/[0.06] bg-white/[0.03] p-1">
+            {tabs.map((tab) => {
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`rounded-full px-3 py-2 text-xs font-medium transition-colors ${
+                    isActive ? "bg-white text-black" : "text-white/45 hover:text-white"
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              );
+            })}
+          </nav>
+        </header>
+
+        <div className="flex-1 overflow-y-auto px-5 py-5">
+          {activeTab === "timeline" ? (
+            <div className="overflow-x-auto rounded-2xl border border-white/[0.06] bg-white/[0.03]">
+              <table className="min-w-full text-left text-sm text-white">
+                <thead>
+                  <tr className="border-b border-white/[0.06] bg-white/[0.02] text-[11px] uppercase tracking-[0.15em] text-white/45">
+                    <th className="px-4 py-3 font-medium">Tanggal</th>
+                    <th className="px-4 py-3 font-medium">Riwayat</th>
+                    <th className="px-4 py-3 font-medium">Keterangan</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/[0.04]">
+                  {timeline.length > 0 ? (
+                    timeline.map((item, index) => {
+                      return (
+                        <tr key={`${item.eventType ?? "event"}-${item.title}-${item.date ?? "no-date"}-${index}`} className="transition-colors hover:bg-white/[0.02]">
+                          <td className="whitespace-nowrap px-4 py-4 align-top text-xs text-white/45">
+                            {item.date ?? "-"}
+                          </td>
+                          <td className="px-4 py-4 align-top">
+                            <span className="font-medium">{item.title}</span>
+                          </td>
+                          <td className="px-4 py-4 align-top text-white/60">
+                            {item.detail}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan={3} className="px-4 py-6 text-center text-white/35">
+                        Belum ada riwayat tercatat.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+
+          {activeTab === "photos" ? (
+            <div className="space-y-4">
+              {galleryState.actualId === node.actualId && galleryState.isLoading ? (
+                <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] px-4 py-3 text-sm text-white/50">
+                  Memuat foto pengerjaan...
+                </div>
+              ) : null}
+
+              {galleryState.actualId === node.actualId && galleryState.error ? (
+                <div className="rounded-2xl border border-amber-400/20 bg-amber-400/[0.06] px-4 py-3 text-sm text-amber-100/80">
+                  {galleryState.error}
+                </div>
+              ) : null}
+
+              <div className="grid gap-3 sm:grid-cols-3">
+                {photoSlots.map((slot) => {
+                  const Icon = slot.icon;
+                  return (
+                    <div
+                      key={slot.label}
+                      className="min-h-[150px] rounded-3xl border border-white/[0.06] bg-white/[0.03] p-4"
+                    >
+                      <div className="flex h-full flex-col justify-between">
+                        {slot.latestPhotoUrl ? (
+                          <button
+                            type="button"
+                            onClick={() => window.open(getProxiedImageUrl(slot.latestPhotoUrl), "_blank", "noopener,noreferrer")}
+                            className="h-16 w-full rounded-2xl bg-cover bg-center ring-1 ring-white/[0.08]"
+                            style={{ backgroundImage: `url(${getProxiedImageUrl(slot.latestPhotoUrl)})` }}
+                            aria-label={slot.caption}
+                          />
+                        ) : (
+                          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-black/30 text-white/70 ring-1 ring-white/[0.08]">
+                            <Icon className="h-5 w-5" />
+                          </div>
+                        )}
+                        <div>
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-sm font-medium text-white">{slot.label}</p>
+                            <span className="rounded-full bg-black/35 px-2 py-0.5 text-[10px] text-white/55">{slot.photoCount} foto</span>
+                          </div>
+                          <p className="mt-1 text-xs text-white/45">{slot.caption}</p>
+                          {slot.latestPhotoAt ? <p className="mt-1 text-[10px] text-white/30">{formatShortDate(slot.latestPhotoAt)}</p> : null}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {canMutatePhotos ? (
+                <div className="rounded-3xl border border-white/[0.06] bg-white/[0.03] p-4">
+                  <div className="flex items-center gap-2">
+                    <Upload className="h-4 w-4 text-amber-400" />
+                    <h3 className="text-sm font-medium text-white">Tambah Foto</h3>
+                  </div>
+                  <GalleryUploadForm
+                    isUploading={isUploading}
+                    isDisabled={!node.actualId}
+                    defaultCaption={""}
+                    onSubmit={(data) => {
+                      void handleUpload(data);
+                    }}
+                  />
+                  {!node.actualId ? null : null}
+                </div>
+              ) : null}
+
+              {canManagePhotos && galleryState.submittedToLedger ? null : null}
+
+              {galleryPhotos.length > 0 ? (
+                <div className="rounded-3xl border border-white/[0.06] bg-white/[0.025] p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <h3 className="text-sm font-medium text-white">Foto Tersimpan</h3>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-full border border-white/[0.08] px-2.5 py-1 text-[11px] text-white/45">
+                        {galleryPhotos.length} foto
+                      </span>
+                      {canDownloadPhotos ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void handleDownloadSelected();
+                          }}
+                          disabled={selectedPhotos.length === 0}
+                          className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.08] px-3 py-1 text-[11px] text-white/60 hover:text-white disabled:cursor-not-allowed disabled:opacity-35"
+                        >
+                          <Download className="h-3.5 w-3.5" />
+                          Unduh Terpilih ({selectedPhotos.length})
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    {galleryPhotos.map((photo) => {
+                      const isBusy = rowSavingId === photo.photoId;
+                      const isMutable = canMutatePhotos && photo.canEdit;
+                      const isSelected = selectedPhotoIds.includes(photo.photoId);
+                      const photoUrl = proxiedPhotoUrl(photo.photoUrl);
+
+                      return (
+                        <article
+                          key={photo.photoId}
+                          className={`overflow-hidden rounded-2xl border bg-black/20 transition-colors ${
+                            isSelected ? "border-amber-400/35" : "border-white/[0.06]"
+                          }`}
+                        >
+                          <div className="relative">
+                            <label className="absolute left-2.5 top-2.5 z-[1] flex h-6 w-6 cursor-pointer items-center justify-center rounded-full border border-white/20 bg-black/55 backdrop-blur-sm">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={(event) => {
+                                  setSelectedPhotoIds((current) =>
+                                    event.target.checked
+                                      ? [...current, photo.photoId]
+                                      : current.filter((id) => id !== photo.photoId),
+                                  );
+                                }}
+                                className="h-3 w-3 rounded accent-amber-500"
+                              />
+                            </label>
+                            <span className="absolute right-2.5 top-2.5 z-[1] rounded-full bg-black/60 px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-white/70">
+                              {humanizePhotoType(photo.photoType)}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => window.open(photoUrl, "_blank", "noopener,noreferrer")}
+                              className="block aspect-video w-full bg-cover bg-center"
+                              style={{ backgroundImage: `url(${photoUrl})` }}
+                              aria-label={photo.caption ?? "Lihat foto"}
+                            />
+                          </div>
+
+                          <div className="space-y-3 p-3">
+                            {isMutable ? (
+                              <GalleryPhotoEditForm
+                                initialPhotoType={photo.photoType}
+                                initialCaption={photo.caption ?? ""}
+                                isBusy={isBusy}
+                                onSave={(data) => {
+                                  void handleSavePhoto(photo.photoId, data);
+                                }}
+                              />
+                            ) : (
+                              <p className="line-clamp-2 text-xs text-white/55">
+                                {photo.caption || "Tidak ada keterangan foto."}
+                              </p>
+                            )}
+
+                            <div className="flex flex-wrap gap-x-2 gap-y-1 text-[10px] text-white/35">
+                              <span>{photo.uploadedByName || photo.uploadedBy || "-"}</span>
+                              <span>-</span>
+                              <span>{photo.uploadedAt}</span>
+                              <span>-</span>
+                              <span>{photo.source}</span>
+                            </div>
+
+                            <div className="flex flex-wrap gap-1.5 border-t border-white/[0.06] pt-3">
+                              <button
+                                type="button"
+                                onClick={() => window.open(photoUrl, "_blank", "noopener,noreferrer")}
+                                className="inline-flex items-center gap-1 rounded-full border border-white/[0.08] px-2.5 py-1 text-[11px] text-white/60 hover:text-white"
+                              >
+                                <Eye className="h-3 w-3" />
+                                Lihat
+                              </button>
+
+                              {canDownloadPhotos ? (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    void downloadUrl(photoUrl, buildDownloadFileName(node.label, photo));
+                                  }}
+                                  className="inline-flex items-center gap-1 rounded-full border border-white/[0.08] px-2.5 py-1 text-[11px] text-white/60 hover:text-white"
+                                >
+                                  <Download className="h-3 w-3" />
+                                  Unduh
+                                </button>
+                              ) : null}
+
+                              {isMutable ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    disabled={isBusy}
+                                    onClick={() => {
+                                      setReplaceTarget(photo);
+                                      replaceInputRef.current?.click();
+                                    }}
+                                    className="rounded-full border border-white/[0.08] px-2.5 py-1 text-[11px] text-white/60 hover:text-white disabled:opacity-35"
+                                  >
+                                    Ganti
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={isBusy}
+                                    onClick={() => {
+                                      void handleDeletePhoto(photo.photoId);
+                                    }}
+                                    className="inline-flex items-center gap-1 rounded-full bg-red-500/10 px-2.5 py-1 text-[11px] text-red-300 ring-1 ring-red-500/20 disabled:opacity-35"
+                                  >
+                                    <Trash2 className="h-3 w-3" />
+                                    Hapus
+                                  </button>
+                                </>
+                              ) : (
+                                <span className="rounded-full border border-white/[0.06] px-2.5 py-1 text-[11px] text-white/25">
+                                  Foto final
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
+
+              <input
+                ref={replaceInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) {
+                    void handleReplaceFile(file);
+                  }
+                  event.currentTarget.value = "";
+                }}
+              />
+            </div>
+          ) : null}
+
+          {activeTab === "documents" ? (
+            <div className="space-y-3">
+              {documents.length > 0 ? (
+                documents.map((document) => {
+                  const Icon = document.icon;
+                  return (
+                    <article key={document.title} className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-4">
+                      <div className="flex items-start gap-3">
+                        <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border ${document.tone}`}>
+                          <Icon className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <h3 className="text-sm font-medium text-white">{document.title}</h3>
+                          <p className="mt-1 text-sm text-white/55">{document.detail}</p>
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })
+              ) : (
+                <div className="rounded-3xl border border-dashed border-white/[0.10] bg-white/[0.025] px-6 py-10 text-center">
+                  <FolderOpen className="mx-auto h-9 w-9 text-white/25" />
+                  <h3 className="mt-4 text-base font-medium text-white">Tidak ada data logistik</h3>
+                  <p className="mt-2 text-sm text-white/45">Belum ada PR parts atau catatan pemakaian bahan/alat terkait part ini.</p>
+                </div>
+              )}
+            </div>
+          ) : null}
+        </div>
+      </aside>
+    </div>
+  );
+}

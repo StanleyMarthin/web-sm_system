@@ -1,0 +1,244 @@
+"use client";
+
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { useTransition } from "react";
+import { UserCog } from "lucide-react";
+import { createUser } from "@/shared/api/users";
+import type { UserGridReference } from "@smsystem/contracts/user";
+import { useRouter } from "next/navigation";
+
+const createUserSchema = z.object({
+  employeeId: z.string().min(1, "ID Pegawai wajib diisi"),
+  fullName: z.string().min(1, "Nama lengkap wajib diisi"),
+  email: z.string().email("Email tidak valid").or(z.literal("")).optional(),
+  roleId: z.string().min(1, "Role wajib dipilih"),
+  divisionId: z.string().min(1, "Divisi wajib dipilih"),
+  grade: z.string().optional(),
+  password: z.string().min(8, "Kata sandi minimal 8 karakter"),
+  managedDivisionIds: z.array(z.string()),
+});
+
+type CreateUserFormValues = z.infer<typeof createUserSchema>;
+
+interface UserCreateFormProps {
+  references: UserGridReference;
+  onSuccess: (message: string) => void;
+  onError: (message: string) => void;
+  onClose: () => void;
+}
+
+function buildScopeHint(role: UserGridReference["roles"][number] | undefined): string {
+  switch (role?.scopeBasis) {
+    case "GLOBAL":
+      return "Role ini dapat melihat seluruh data sesuai permission yang dicentang.";
+    case "ASSIGNED_DIVISIONS":
+      return "Role ini mengikuti daftar divisi pegangan yang dicentang di bawah.";
+    case "ASSIGNED_UNITS":
+      return "Role ini mengikuti unit yang sedang dipegang pada assignment operasional. Daftar unit tidak diatur manual dari layar ini.";
+    case "SELF_ONLY":
+      return "Role ini hanya memakai data milik user itu sendiri.";
+    default:
+      return "Role ini mengikuti divisi utama user.";
+  }
+}
+
+export function UserCreateForm({ references, onSuccess, onError, onClose }: UserCreateFormProps) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+
+  const {
+    register,
+    handleSubmit,
+    watch,
+    setValue,
+    formState: { errors, isValid },
+  } = useForm<CreateUserFormValues>({
+    resolver: zodResolver(createUserSchema),
+    defaultValues: {
+      employeeId: "",
+      fullName: "",
+      email: "",
+      roleId: "",
+      divisionId: "",
+      grade: "",
+      password: "",
+      managedDivisionIds: [],
+    },
+    mode: "onChange",
+  });
+
+  const selectedRoleId = watch("roleId");
+  const selectedRoleDefinition = references.roles.find((r) => r.value === selectedRoleId);
+  const managedDivisionIds = watch("managedDivisionIds");
+
+  const onSubmit = (data: CreateUserFormValues) => {
+    startTransition(async () => {
+      const createResult = await createUser({
+        employeeId: data.employeeId.trim(),
+        fullName: data.fullName.trim(),
+        email: data.email?.trim() || null,
+        password: data.password,
+        roleId: Number(data.roleId),
+        divisionId: Number(data.divisionId),
+        grade: data.grade?.trim() || null,
+        managedDivisionIds: data.managedDivisionIds.map(Number),
+      });
+
+      if (!createResult.success) {
+        onError(createResult.message);
+        return;
+      }
+
+      onSuccess(`Pengguna ${createResult.user?.employeeId || data.employeeId} berhasil dibuat.`);
+      onClose();
+      router.refresh();
+    });
+  };
+
+  return (
+    <form className="mt-5 grid gap-4 md:grid-cols-2" onSubmit={handleSubmit(onSubmit)}>
+      <label className="space-y-1">
+        <span className="text-xs uppercase tracking-[0.14em] text-white/45">ID Pegawai</span>
+        <input
+          {...register("employeeId")}
+          className="h-11 w-full rounded-2xl border border-white/[0.08] bg-white/[0.03] px-3 text-sm text-white outline-none focus:border-amber-500/40"
+        />
+        {errors.employeeId && <p className="text-xs text-red-400">{errors.employeeId.message}</p>}
+      </label>
+
+      <label className="space-y-1">
+        <span className="text-xs uppercase tracking-[0.14em] text-white/45">Nama Lengkap</span>
+        <input
+          {...register("fullName")}
+          className="h-11 w-full rounded-2xl border border-white/[0.08] bg-white/[0.03] px-3 text-sm text-white outline-none focus:border-amber-500/40"
+        />
+        {errors.fullName && <p className="text-xs text-red-400">{errors.fullName.message}</p>}
+      </label>
+
+      <label className="space-y-1">
+        <span className="text-xs uppercase tracking-[0.14em] text-white/45">Email</span>
+        <input
+          {...register("email")}
+          className="h-11 w-full rounded-2xl border border-white/[0.08] bg-white/[0.03] px-3 text-sm text-white outline-none focus:border-amber-500/40"
+        />
+        {errors.email && <p className="text-xs text-red-400">{errors.email.message}</p>}
+      </label>
+
+      <label className="space-y-1">
+        <span className="text-xs uppercase tracking-[0.14em] text-white/45">Jabatan / Grade</span>
+        <input
+          {...register("grade")}
+          className="h-11 w-full rounded-2xl border border-white/[0.08] bg-white/[0.03] px-3 text-sm text-white outline-none focus:border-amber-500/40"
+        />
+      </label>
+
+      <label className="space-y-1">
+        <span className="text-xs uppercase tracking-[0.14em] text-white/45">Role Akses</span>
+        <select
+          {...register("roleId")}
+          onChange={(e) => {
+            setValue("roleId", e.target.value, { shouldValidate: true });
+            const roleDef = references.roles.find((r) => r.value === e.target.value);
+            if (roleDef?.scopeBasis !== "ASSIGNED_DIVISIONS") {
+              setValue("managedDivisionIds", []);
+            }
+          }}
+          className="h-11 w-full rounded-2xl border border-white/[0.08] bg-white/[0.03] px-3 text-sm text-white outline-none focus:border-amber-500/40"
+        >
+          <option value="">Pilih role</option>
+          {references.roles.map((role) => (
+            <option key={role.value} value={role.value}>
+              {role.label}
+            </option>
+          ))}
+        </select>
+        {errors.roleId && <p className="text-xs text-red-400">{errors.roleId.message}</p>}
+      </label>
+
+      <label className="space-y-1">
+        <span className="text-xs uppercase tracking-[0.14em] text-white/45">Divisi Utama</span>
+        <select
+          {...register("divisionId")}
+          className="h-11 w-full rounded-2xl border border-white/[0.08] bg-white/[0.03] px-3 text-sm text-white outline-none focus:border-amber-500/40"
+        >
+          <option value="">Pilih divisi</option>
+          {references.divisions.map((division) => (
+            <option key={division.value} value={division.value}>
+              {division.label}
+            </option>
+          ))}
+        </select>
+        {errors.divisionId && <p className="text-xs text-red-400">{errors.divisionId.message}</p>}
+      </label>
+
+      <div className="md:col-span-2 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4">
+        <p className="text-xs uppercase tracking-[0.14em] text-white/45">Ringkasan Lingkup</p>
+        {buildScopeHint(selectedRoleDefinition) ? null : null}
+      </div>
+
+      {selectedRoleDefinition?.scopeBasis === "ASSIGNED_DIVISIONS" && (
+        <div className="space-y-3 md:col-span-2">
+          <div>
+            <p className="text-xs uppercase tracking-[0.14em] text-white/45">Divisi Pegangan</p>
+          </div>
+          <div className="grid gap-2 md:grid-cols-2">
+            {references.divisions.map((division) => {
+              const checked = managedDivisionIds.includes(division.value);
+              return (
+                <label
+                  key={division.value}
+                  className={[
+                    "flex items-start gap-3 rounded-2xl border px-4 py-3 transition-colors cursor-pointer",
+                    checked
+                      ? "border-amber-500/30 bg-amber-500/10"
+                      : "border-white/[0.06] bg-black/20",
+                  ].join(" ")}
+                >
+                  <input
+                    type="checkbox"
+                    value={division.value}
+                    {...register("managedDivisionIds")}
+                    className="mt-1 h-4 w-4 rounded border-white/20 bg-transparent text-amber-500"
+                  />
+                  <span className="text-sm text-white">{division.label}</span>
+                </label>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      <label className="space-y-1 md:col-span-2">
+        <span className="text-xs uppercase tracking-[0.14em] text-white/45">Kata Sandi</span>
+        <input
+          type="password"
+          {...register("password")}
+          placeholder="Minimal 8 karakter"
+          className="h-11 w-full rounded-2xl border border-white/[0.08] bg-white/[0.03] px-3 text-sm text-white outline-none focus:border-amber-500/40"
+        />
+        {errors.password && <p className="text-xs text-red-400">{errors.password.message}</p>}
+      </label>
+
+      <div className="flex justify-end gap-2 pt-2 md:col-span-2">
+        <button
+          type="button"
+          onClick={onClose}
+          disabled={isPending}
+          className="rounded-full border border-white/[0.08] px-4 py-2 text-sm text-white/60 hover:text-white"
+        >
+          Batal
+        </button>
+        <button
+          type="submit"
+          disabled={isPending || !isValid}
+          className="inline-flex items-center gap-2 rounded-full bg-amber-500 px-4 py-2 text-sm font-semibold text-black hover:bg-amber-400 disabled:opacity-40"
+        >
+          <UserCog className="h-4 w-4" />
+          Simpan Pengguna
+        </button>
+      </div>
+    </form>
+  );
+}
