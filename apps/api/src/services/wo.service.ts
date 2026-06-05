@@ -1,4 +1,5 @@
 import type {
+  WoApproveRequest,
   WoCreateRequest,
   WoGridQuery,
   WoLinkedCountdown,
@@ -39,6 +40,7 @@ interface WoDetailResult {
 interface WoMutationResult {
   woId: string;
   status: WoStatus;
+  linkedCountdownId?: string | null;
 }
 
 function buildMeta(page: number, limit: number, total: number) {
@@ -85,7 +87,7 @@ export interface WoService {
   listUrgent(session: WebSession): Promise<WoRecord[]>;
   create(session: WebSession, input: WoCreateRequest): Promise<{ woId: string }>;
   findDetail(session: WebSession, woId: string): Promise<WoDetailResult | null>;
-  approve(session: WebSession, woId: string): Promise<WoMutationResult>;
+  approve(session: WebSession, woId: string, input?: WoApproveRequest): Promise<WoMutationResult>;
   reject(session: WebSession, woId: string, reason: string): Promise<WoMutationResult>;
   markDone(session: WebSession, woId: string): Promise<WoMutationResult>;
   findLinkedCountdowns(session: WebSession, woId: string): Promise<WoLinkedCountdown[]>;
@@ -253,19 +255,33 @@ export class DefaultWoService implements WoService {
     };
   }
 
-  async approve(session: WebSession, woId: string): Promise<WoMutationResult> {
+  async approve(
+    session: WebSession,
+    woId: string,
+    input: WoApproveRequest = { picId: null, estimatedHours: null, notes: null },
+  ): Promise<WoMutationResult> {
     const detail = await this.findDetail(session, woId);
     if (!detail) {
       throw new Error("WO_NOT_FOUND");
     }
 
-    if (!["OPEN", "SUBMITTED"].includes(detail.ticket.status)) {
+    const result = await this.repository.approveStage(
+      {
+        employeeId: session.user.employeeId,
+        scope: session.user.scope,
+        woId,
+      },
+      {
+        actorId: session.user.employeeId,
+        actorDivisionId: session.user.divisionId,
+        approvalRank: session.user.roleProfile?.approvalRank ?? null,
+        permissions: session.user.permissions,
+        input,
+      },
+    );
+    if (!result) {
       throw new Error("INVALID_STATUS_TRANSITION");
     }
-
-    await this.repository.updateStatus(woId, "APPROVED", {
-      actorId: session.user.employeeId,
-    });
     woListCache.clear();
 
     await this.auditService.log({
@@ -278,13 +294,15 @@ export class DefaultWoService implements WoService {
         status: detail.ticket.status,
       },
       newValue: {
-        status: "APPROVED",
+        status: result.status,
+        linkedCountdownId: result.linkedCountdownId ?? null,
       },
     });
 
     return {
       woId,
-      status: "APPROVED",
+      status: result.status,
+      linkedCountdownId: result.linkedCountdownId ?? null,
     };
   }
 

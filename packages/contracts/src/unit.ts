@@ -2,11 +2,45 @@ import { gridMetaSchema, gridQueryStateSchema } from "@smsystem/contracts/grid";
 import { z } from "zod";
 
 export const unitRiskLevelSchema = z.enum(["GREEN", "YELLOW", "ORANGE", "RED", "UNKNOWN"]);
+export const unitMasterStatusSchema = z.enum(["In_Progress", "Done"]);
+
+const nullableTrimmedText = z
+  .string()
+  .trim()
+  .max(255)
+  .nullable()
+  .optional()
+  .transform((value) => {
+    if (value === undefined || value === null) {
+      return null;
+    }
+
+    return value.length > 0 ? value : null;
+  });
+
+const nullableDateText = z
+  .string()
+  .trim()
+  .regex(/^\d{4}-\d{2}-\d{2}$/u, "Tanggal harus berformat YYYY-MM-DD")
+  .nullable()
+  .optional()
+  .transform((value) => {
+    if (value === undefined || value === null) {
+      return null;
+    }
+
+    return value.length > 0 ? value : null;
+  });
 
 export const unitBoardRowSchema = z.object({
   unitId: z.string(),
   unitName: z.string(),
+  plateNumber: z.string().nullable(),
   customerName: z.string().nullable(),
+  restorationType: z.string().nullable(),
+  isMargin: z.boolean(),
+  incomingDate: z.string().nullable(),
+  revisionContract: z.string().nullable(),
   kpName: z.string(),
   advisorName: z.string(),
   targetDeliveryDate: z.string().nullable(),
@@ -27,6 +61,47 @@ export const unitBoardEnvelopeSchema = z.object({
   data: z.array(unitBoardRowSchema),
   meta: gridMetaSchema,
   query: gridQueryStateSchema,
+});
+
+export const createUnitRequestSchema = z.object({
+  unitId: z.string().trim().min(1).max(64),
+  unitName: z.string().trim().min(1).max(255),
+  plateNumber: nullableTrimmedText,
+  customerName: nullableTrimmedText,
+  restorationType: z.string().trim().max(50).default("FULL_RESTORASI"),
+  isMargin: z.boolean().default(true),
+  contractDeliveryDate: nullableDateText,
+  incomingDate: nullableDateText,
+  revisionContract: nullableDateText,
+  status: unitMasterStatusSchema.default("In_Progress"),
+});
+
+export const updateUnitRequestSchema = z.object({
+  unitName: z.string().trim().min(1).max(255),
+  plateNumber: nullableTrimmedText,
+  customerName: nullableTrimmedText,
+  restorationType: z.string().trim().max(50).default("FULL_RESTORASI"),
+  isMargin: z.boolean().default(true),
+  contractDeliveryDate: nullableDateText,
+  incomingDate: nullableDateText,
+  revisionContract: nullableDateText,
+  status: unitMasterStatusSchema.default("In_Progress"),
+});
+
+export const unitMutationEnvelopeSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+  data: z.object({
+    unit: unitBoardRowSchema,
+  }),
+});
+
+export const unitDeleteEnvelopeSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+  data: z.object({
+    deletedUnitId: z.string(),
+  }),
 });
 
 export const countdownSummarySchema = z.object({
@@ -107,3 +182,5 @@ export const unitWorkspaceEnvelopeSchema = z.object({
 
 export type UnitBoardRow = z.infer<typeof unitBoardRowSchema>;
 export type UnitWorkspace = z.infer<typeof unitWorkspaceSchema>;
+export type CreateUnitRequest = z.infer<typeof createUnitRequestSchema>;
+export type UpdateUnitRequest = z.infer<typeof updateUnitRequestSchema>;

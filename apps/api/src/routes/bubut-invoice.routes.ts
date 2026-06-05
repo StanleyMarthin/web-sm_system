@@ -2,6 +2,7 @@ import {
   bubutInvoiceCancelRequestSchema,
   bubutInvoicePreviewQuerySchema,
   bubutInvoiceReleaseRequestSchema,
+  bubutInvoiceUpdateRequestSchema,
 } from "@smsystem/contracts/bubut-invoice";
 import { permissionCodes } from "@smsystem/permissions";
 import { ZodError } from "zod";
@@ -116,16 +117,11 @@ export async function handleBubutInvoicePreviewRoute(
   }
 
   try {
-    const url = new URL(request.url);
-    const query = bubutInvoicePreviewQuerySchema.parse({
-      sourceWoId: url.searchParams.get("sourceWoId"),
-      invoiceType: url.searchParams.get("invoiceType"),
-      salesInvoiceDate: url.searchParams.get("salesInvoiceDate") ?? undefined,
-      poNo: url.searchParams.get("poNo"),
-      poDate: url.searchParams.get("poDate"),
-      roundingStep: Number.parseInt(url.searchParams.get("roundingStep") ?? "1000", 10),
-    });
-    const preview = await service.buildInvoicePreview(sessionResult.session, query);
+    const body = await parseJsonBody(request, bubutInvoicePreviewQuerySchema);
+    if (!body.success) {
+      return withCors(request, body.response);
+    }
+    const preview = await service.buildInvoicePreview(sessionResult.session, body.data);
     return withCors(
       request,
       Response.json({
@@ -165,6 +161,41 @@ export async function handleBubutInvoiceReleaseRoute(
       Response.json({
         success: true,
         message: "Invoice WO Bubut berhasil dirilis",
+        data: result,
+      }),
+    );
+  } catch (error) {
+    return mapBubutInvoiceError(request, error);
+  }
+}
+
+export async function handleBubutInvoiceUpdateRoute(
+  request: Request,
+  invoiceId: number,
+  authService: AuthService,
+  service: BubutInvoiceService,
+): Promise<Response> {
+  const sessionResult = await requireBubutInvoiceSession(
+    request,
+    authService,
+    permissionCodes.bubutInvoiceRelease, // Using same permission as release
+  );
+  if ("response" in sessionResult) {
+    return sessionResult.response;
+  }
+
+  try {
+    const body = await parseJsonBody(request, bubutInvoiceUpdateRequestSchema);
+    if (!body.success) {
+      return withCors(request, body.response);
+    }
+    const input = body.data;
+    const result = await service.updateInvoice(sessionResult.session, invoiceId, input);
+    return withCors(
+      request,
+      Response.json({
+        success: true,
+        message: "Invoice WO Bubut berhasil diupdate",
         data: result,
       }),
     );

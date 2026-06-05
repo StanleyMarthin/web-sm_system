@@ -5,7 +5,9 @@ import {
   bubutInvoiceReleaseEnvelopeSchema,
   bubutInvoiceWorkHistoryEnvelopeSchema,
   bubutInvoiceWorkOrderEnvelopeSchema,
+  type BubutInvoiceCancelRequest,
   type BubutInvoiceReleaseRequest,
+  type BubutInvoiceUpdateRequest,
   type BubutInvoiceType,
 } from "@smsystem/contracts/bubut-invoice";
 import { getApiBaseUrl } from "@/shared/api/config";
@@ -25,6 +27,21 @@ function toUrlSearchParams(
   }
   return params;
 }
+export async function fetchBubutInvoiceWorkOrdersClient(
+  searchParams: Record<string, string | string[] | undefined>,
+) {
+  const queryString = toUrlSearchParams(searchParams).toString();
+  const suffix = queryString ? `?${queryString}` : "";
+  const response = await fetch(`/api/bubut-invoices/work-orders${suffix}`, {
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    const errText = await response.text().catch(() => "");
+    throw new Error(`FETCH_FAILED: ${response.status} ${errText}`);
+  }
+  return bubutInvoiceWorkOrderEnvelopeSchema.parse(await response.json()).data;
+}
+
 
 export async function fetchBubutInvoiceWorkOrders(
   cookieHeader: string,
@@ -77,21 +94,17 @@ export async function fetchBubutInvoiceDetail(
 export async function fetchBubutInvoicePreview(params: {
   sourceWoId: string;
   invoiceType: BubutInvoiceType;
-  salesInvoiceDate: string;
+  salesInvoiceDate?: string;
   poNo?: string | null;
   poDate?: string | null;
   roundingStep?: number;
+  mergedWoIds?: string[];
+  materialOverrides?: Array<{ materialName: string; qty: number; price: number }>;
 }) {
-  const query = new URLSearchParams({
-    sourceWoId: params.sourceWoId,
-    invoiceType: params.invoiceType,
-    salesInvoiceDate: params.salesInvoiceDate,
-    roundingStep: String(params.roundingStep ?? 1000),
-  });
-  if (params.poNo) query.set("poNo", params.poNo);
-  if (params.poDate) query.set("poDate", params.poDate);
-
-  const response = await fetch(`/api/bubut-invoices/preview?${query.toString()}`, {
+  const response = await fetch("/api/bubut-invoices/preview", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(params),
     cache: "no-store",
   });
   if (!response.ok) {
@@ -123,6 +136,28 @@ export async function releaseBubutInvoice(input: BubutInvoiceReleaseRequest) {
     throw new Error("RELEASE_FAILED");
   }
   return bubutInvoiceReleaseEnvelopeSchema.parse(await response.json()).data;
+}
+
+export async function updateBubutInvoice(invoiceId: number, input: BubutInvoiceUpdateRequest) {
+  const response = await fetch(`/api/bubut-invoices/${invoiceId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    throw new Error("UPDATE_FAILED");
+  }
+  return response.json();
+}
+
+export async function getBubutInvoice(invoiceId: number) {
+  const response = await fetch(`/api/bubut-invoices/${invoiceId}`, {
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error("FETCH_FAILED");
+  }
+  return bubutInvoiceDetailEnvelopeSchema.parse(await response.json()).data;
 }
 
 export async function cancelBubutInvoice(invoiceId: number, reason: string) {

@@ -43,6 +43,7 @@ async function requireJobPlanSession(
 }
 
 function mapJobPlanError(request: Request, error: unknown): Response {
+  console.error("[mapJobPlanError] Captured error:", error);
   if (error instanceof Error) {
     if (error.message === "PLAN_NOT_FOUND" || error.message === "COUNTDOWN_NOT_FOUND") {
       return errorResponse(request, "Data job plan tidak ditemukan.", 404, error.message);

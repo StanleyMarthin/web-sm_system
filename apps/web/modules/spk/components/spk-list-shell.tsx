@@ -1,11 +1,18 @@
 "use client";
 
+/* Hallmark · pre-emit critique: P4 H4 E4 S4 R4 V4 */
+/* Hallmark · genre: modern-minimal · macrostructure: Workbench · design-system: design.md · designed-as-app */
+
 import type {
   SpkGridQuery,
   SpkHeaderRecord,
 } from "@smsystem/contracts/spk";
 import type { GridFilter } from "@smsystem/contracts/grid";
-import { CalendarDays, FileCheck2, RefreshCcw } from "lucide-react";
+import {
+  CalendarDays,
+  FileCheck2,
+  RefreshCcw,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTransition } from "react";
@@ -33,24 +40,6 @@ interface SpkListShellProps {
   };
 }
 
-function SummaryCard({
-  label,
-  value,
-  helper,
-}: {
-  label: string;
-  value: string;
-  helper?: string;
-}) {
-  return (
-    <div className="border border-gray-300 dark:border-white/[0.05] bg-white dark:bg-[#111114] px-3 py-2">
-      <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/30">{label}</p>
-      <p className="mt-1 font-mono text-[13px] text-gray-950 dark:text-white">{value}</p>
-      {helper ? <p className="mt-2 text-sm text-gray-400 dark:text-white/40">{helper}</p> : null}
-    </div>
-  );
-}
-
 function formatStatusLabel(value: string): string {
   switch (value) {
     case "DRAFT":
@@ -68,6 +57,43 @@ function formatStatusLabel(value: string): string {
     default:
       return value || "-";
   }
+}
+
+function statusClassName(status: string): string {
+  if (status === "ACTIVE") {
+    return "border-emerald-500/25 bg-emerald-500/[0.06] text-emerald-400";
+  }
+  if (status === "DONE") {
+    return "border-white/10 bg-white/[0.03] text-white/50";
+  }
+  if (status === "REJECTED") {
+    return "border-red-500/25 bg-red-500/[0.06] text-red-400";
+  }
+  return "border-amber-500/25 bg-amber-500/[0.06] text-amber-400";
+}
+
+function SummaryCard({
+  label,
+  value,
+  tone = "default",
+}: {
+  label: string;
+  value: string;
+  tone?: "default" | "warn" | "ok";
+}) {
+  const toneClassName =
+    tone === "warn"
+      ? "text-amber-500"
+      : tone === "ok"
+        ? "text-emerald-400"
+        : "text-white/80";
+
+  return (
+    <div className="border border-white/5 bg-[#111114] px-4 py-3">
+      <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-white/25">{label}</p>
+      <p className={`mt-1 font-mono text-[20px] font-semibold ${toneClassName}`}>{value}</p>
+    </div>
+  );
 }
 
 const sortOptions: SmartDataGridSortOption[] = [
@@ -145,7 +171,7 @@ const columns: SmartDataGridColumn[] = [
     renderCell: (value, row) => (
       <Link
         href={`/spk/${String(row.spkId)}`}
-        className="text-amber-400 transition-colors hover:text-amber-300"
+        className="font-semibold text-amber-500 hover:text-amber-400"
       >
         {String(value)}
       </Link>
@@ -162,18 +188,9 @@ const columns: SmartDataGridColumn[] = [
     align: "center",
     renderCell: (value) => {
       const status = String(value ?? "");
-      const className =
-        status === "ACTIVE"
-          ? "border-emerald-500/30 text-emerald-300"
-          : status === "DONE"
-            ? "border-white/15 text-gray-800 dark:text-white/75"
-            : status === "REJECTED"
-              ? "border-red-500/30 text-red-300"
-              : "border-amber-500/30 text-amber-300";
-
-        return (
-          <span
-          className={`inline-flex border px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] ${className}`}
+      return (
+        <span
+          className={`inline-flex border px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] ${statusClassName(status)}`}
         >
           {formatStatusLabel(status)}
         </span>
@@ -221,111 +238,113 @@ export function SpkListShell({
   const draftCount = rows.filter((row) => row.status === "DRAFT").length;
   const activeCount = rows.filter((row) => row.status === "ACTIVE").length;
   const doneCount = rows.filter((row) => row.status === "DONE").length;
-
-  function pushDate(value: string) {
-    const nextParams = new URLSearchParams(searchParams.toString());
-    nextParams.set("date", value);
-    nextParams.set("page", "1");
-    router.push(`${pathname}?${nextParams.toString()}`);
-  }
+  const periodLabel = state.date;
 
   return (
-    <div className="space-y-3">
-      <section className="border border-gray-300 dark:border-white/[0.05] bg-white dark:bg-[#111114] px-4 py-3">
-        <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
-          <div className="max-w-2xl">
-            <div className="flex items-center gap-3">
-              <div className="flex h-8 w-8 items-center justify-center border border-gray-300 dark:border-white/[0.08] bg-slate-50 dark:bg-[#0a0a0c]">
-                <FileCheck2 className="h-5 w-5 text-amber-400" />
-              </div>
-              <div>
-                <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/30">
-                  SPK Planner
-                </p>
-                <h3 className="mt-1 text-[13px] font-medium text-gray-950 dark:text-white">
-                  Draft SPK hasil planner mingguan
-                </h3>
-              </div>
+    <div className="space-y-4">
+      <section className="border border-white/5 bg-[#111114] px-4 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="flex h-8 w-8 items-center justify-center border border-white/[0.08]">
+              <FileCheck2 className="h-4 w-4 text-amber-500" />
             </div>
-            <p className="mt-2 text-[12px] text-gray-600 dark:text-white/45">
-              Halaman ini hanya menampilkan draft SPK yang diproduksi oleh planner mingguan.
-              Kepala divisi cukup membuka detail, menerima target kerja, lalu memulai SPK.
-            </p>
+            <div>
+              <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-white/30">
+                SPK Planner
+              </p>
+              <h1 className="text-[13px] font-mono text-white/80">
+                Papan Kerja SPK Mingguan
+              </h1>
+            </div>
           </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <label className="inline-flex items-center gap-2 border border-gray-300 dark:border-white/[0.05] bg-slate-50 dark:bg-[#0a0a0c] px-2.5 py-1.5 font-mono text-[11px] text-gray-800 dark:text-white/70">
-              <CalendarDays className="h-4 w-4 text-gray-500 dark:text-white/30" />
+          <div className="flex items-center gap-2">
+            <label className="flex items-center gap-2 border border-white/10 bg-[#0a0a0c] px-3 h-8">
+              <CalendarDays className="h-3.5 w-3.5 text-white/30" />
               <input
                 type="date"
-                value={state.date}
+                value={state.date || ""}
                 onChange={(event) => {
                   const nextValue = event.target.value;
                   startTransition(() => {
-                    pushDate(nextValue);
+                    const nextParams = new URLSearchParams(searchParams.toString());
+                    if (nextValue) nextParams.set("date", nextValue);
+                    else nextParams.delete("date");
+                    nextParams.set("page", "1");
+                    router.push(`${pathname}?${nextParams.toString()}`);
                   });
                 }}
-                className="bg-transparent font-mono text-[11px] text-gray-950 dark:text-white outline-none"
+                className="bg-transparent font-mono text-[11px] text-white/60 outline-none dark:[color-scheme:dark]"
               />
             </label>
             <button
               type="button"
               onClick={() => router.refresh()}
-              className="inline-flex h-8 items-center gap-2 border border-gray-300 dark:border-white/[0.08] bg-transparent px-3 font-mono text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/55 hover:text-gray-900 dark:text-white/80"
+              className="inline-flex h-8 items-center gap-2 border border-white/10 px-3 font-mono text-[10px] uppercase tracking-[0.12em] text-white/40 hover:text-white transition-colors"
             >
-              <RefreshCcw className="h-3.5 w-3.5" />
-              {isPending ? "Memuat..." : "Muat Ulang"}
+              <RefreshCcw className={`h-3.5 w-3.5 ${isPending ? "animate-spin" : ""}`} />
+              {isPending ? "Memuat..." : "Refresh"}
             </button>
+            <span className="border border-white/5 bg-[#0a0a0c] px-3 h-8 flex items-center font-mono text-[10px] text-white/30">
+              {meta.total} SPK
+            </span>
           </div>
         </div>
       </section>
 
-      <section className="grid gap-2 xl:grid-cols-[repeat(4,minmax(0,1fr))]">
+      <section className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
         <SummaryCard
-          label="Draft Planner"
+          label="Draft Di Halaman Ini"
           value={String(draftCount)}
-          helper="Menunggu diterima oleh kepala divisi."
+          tone="warn"
         />
         <SummaryCard
-          label="Sedang Berjalan"
+          label="Berjalan Di Halaman Ini"
           value={String(activeCount)}
-          helper="SPK yang sudah diterima dan aktif."
+          tone="ok"
         />
         <SummaryCard
-          label="Selesai"
+          label="Selesai Di Halaman Ini"
           value={String(doneCount)}
-          helper="SPK yang sudah ditutup."
         />
         <SummaryCard
           label="Perlu Tindakan"
           value={String(summary.pendingApproval)}
-          helper="Masih ada draft yang belum dilanjutkan."
+          tone="warn"
         />
       </section>
 
-      <SmartDataGrid
-        title="Daftar SPK"
-        description="Buka detail untuk melihat rekomendasi jam kerja, menerima target, lalu memulai SPK."
-        columns={columns}
-        rows={rows.map((row) => ({
-          spkId: row.spkId,
-          spkNumber: row.spkNumber,
-          spkDate: row.spkDate,
-          status: row.status,
-          totalUnits: row.totalUnits,
-          totalHours: Number(row.totalHours.toFixed(2)),
-          createdBy: row.createdBy,
-          activatedAt: row.activatedAt,
-          notes: row.plannerMeta?.note ?? row.notes,
-        }))}
-        meta={meta}
-        state={state}
-        searchPlaceholder="Cari nomor SPK, unit, atau catatan..."
-        filters={filters}
-        sortOptions={sortOptions}
-        savedViews={savedViews}
-        emptyMessage="Belum ada draft SPK dari planner untuk query ini."
-      />
+      <section className="overflow-hidden border border-white/5 bg-[#111114]">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/5 px-4 py-3">
+          <div>
+            <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-white/30">Tabel Kerja</p>
+            <h2 className="text-[13px] font-mono text-white/80 mt-0.5">Daftar SPK</h2>
+          </div>
+        </div>
+
+        <SmartDataGrid
+          title="Daftar SPK"
+          description="Buka detail untuk melihat rekomendasi jam kerja, menerima target, lalu memulai SPK."
+          columns={columns}
+          rows={rows.map((row) => ({
+            spkId: row.spkId,
+            spkNumber: row.spkNumber,
+            spkDate: row.spkDate,
+            status: row.status,
+            totalUnits: row.totalUnits,
+            totalHours: Number(row.totalHours.toFixed(2)),
+            createdBy: row.createdBy,
+            activatedAt: row.activatedAt,
+            notes: row.plannerMeta?.note ?? row.notes,
+          }))}
+          meta={meta}
+          state={state}
+          searchPlaceholder="Cari nomor SPK, unit, atau catatan..."
+          filters={filters}
+          sortOptions={sortOptions}
+          savedViews={savedViews}
+          emptyMessage="Belum ada draft SPK dari planner untuk query ini."
+        />
+      </section>
     </div>
   );
 }

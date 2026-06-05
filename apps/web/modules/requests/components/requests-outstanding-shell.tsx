@@ -2,18 +2,101 @@
 
 import Image from "next/image";
 import { useState } from "react";
-import { PlusCircle, FileText, ArrowRight, Eye, ClipboardList, CheckCircle2, ShoppingBag, Truck, Filter, RotateCcw, Loader2, UploadCloud, Plus, Trash2, Info } from "lucide-react";
+import { Eye, ClipboardList, ShoppingBag, Truck, RotateCcw, Loader2, UploadCloud, Plus, Trash2, Info } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { RequestDetailDialog } from "./request-detail-dialog";
 import { createWo } from "@/shared/api/wo";
 import { createPr, requestPrUploadTicket } from "@/shared/api/pr";
 import { createVendor } from "@/shared/api/vendor";
+import { SearchSelect, StrictSearchSelect, useMasterPanelOptions } from "./forms/master-panel-search";
+
+interface ReferenceOption {
+  value: string;
+  label: string;
+}
+
+interface RequestUser {
+  divisionName?: string;
+  scope?: { canViewAllUnits?: boolean };
+  roleProfile?: {
+    scopeBasis?: string;
+    approvalRank?: number | null;
+  } | null;
+}
+
+interface WoListRow {
+  woId: string;
+  woNumber: string;
+  requestDate: string;
+  carId?: string | null;
+  unitName?: string;
+  fromDivisionName?: string;
+  toDivisionName?: string;
+  status: string;
+  createdAt?: string;
+  estimatedHours?: number | null;
+}
+
+interface PrListRow {
+  prId: string;
+  prNumber: string;
+  carId?: string | null;
+  unitName?: string;
+  divisionName?: string;
+  status: string;
+  accTracking?: string;
+  createdAt?: string;
+  totalItems?: number;
+  totalEstimatedPrice?: number;
+}
+
+interface VendorListRow {
+  wovId: string;
+  wovNumber: string;
+  carId?: string | null;
+  unitName?: string;
+  divisionName?: string;
+  status: string;
+  accTracking?: string;
+  createdAt?: string;
+  vendorName?: string;
+}
+
+interface RequestPayload<T> {
+  data?: T[];
+  references?: {
+    units?: ReferenceOption[];
+    divisions?: ReferenceOption[];
+    vendors?: ReferenceOption[];
+  };
+}
+
+type RequestCard = {
+  reqType: "WO" | "PR" | "WOV";
+  id: string;
+  number: string;
+  date: string;
+  info: string;
+  status: string;
+  createdAt?: string;
+  carId?: string | null;
+  unitName?: string;
+  fromDivisionName?: string;
+  toDivisionName?: string;
+  divisionName?: string;
+};
+
+function defaultWoTargetDate() {
+  const target = new Date();
+  target.setDate(target.getDate() + 3);
+  return target.toISOString().split("T")[0];
+}
 
 interface RequestsOutstandingShellProps {
-  user: any;
-  woPayload: any;
-  prPayload: any;
-  vendorPayload: any;
+  user: RequestUser;
+  woPayload: RequestPayload<WoListRow>;
+  prPayload: RequestPayload<PrListRow>;
+  vendorPayload: RequestPayload<VendorListRow>;
 }
 
 export function RequestsOutstandingShell({
@@ -47,9 +130,9 @@ export function RequestsOutstandingShell({
   const activeFormTab = filterType === "ALL" ? "WO" : filterType;
 
   // Reference lists
-  const unitsList = woPayload?.references?.units || prPayload?.references?.units || [];
-  const divisionsList = woPayload?.references?.divisions || [];
-  const vendorsList = vendorPayload?.references?.vendors || [];
+  const unitsList: ReferenceOption[] = woPayload?.references?.units || prPayload?.references?.units || [];
+  const divisionsList: ReferenceOption[] = woPayload?.references?.divisions || [];
+  const vendorsList: ReferenceOption[] = vendorPayload?.references?.vendors || [];
 
   // ----------------------------------------------------
   // FORM STATES FOR INLINE COMPOSER
@@ -57,10 +140,16 @@ export function RequestsOutstandingShell({
   const [woForm, setWoForm] = useState({
     carId: "",
     toDivisionId: "",
-    requestDate: new Date().toISOString().split("T")[0],
+    requestDate: defaultWoTargetDate(),
     isPriority: false,
-    jobDetail: "",
-    notes: ""
+    notes: "",
+    items: [
+      {
+        panelName: "",
+        qty: 1,
+        jobDetail: "",
+      },
+    ],
   });
 
   const [prForm, setPrForm] = useState({
@@ -70,6 +159,7 @@ export function RequestsOutstandingShell({
     notes: "",
     items: [
       {
+        itemSourceType: "MASTER_PANEL" as "MASTER_PANEL" | "OTHER",
         itemName: "",
         description: "",
         originType: "LOKAL" as "LOKAL" | "LN",
@@ -89,6 +179,7 @@ export function RequestsOutstandingShell({
     remarks: "",
     items: [
       {
+        itemSourceType: "MASTER_PANEL" as "MASTER_PANEL" | "OTHER",
         itemName: "",
         quantity: 1,
         uom: "pcs",
@@ -97,6 +188,9 @@ export function RequestsOutstandingShell({
       }
     ]
   });
+  const { options: woPanelOptions, isLoading: isLoadingWoPanels } = useMasterPanelOptions(woForm.carId);
+  const { options: prPanelOptions, isLoading: isLoadingPrPanels } = useMasterPanelOptions(prForm.carId);
+  const { options: wovPanelOptions, isLoading: isLoadingWovPanels } = useMasterPanelOptions(wovForm.carId);
 
   // Unified status options across all three modules
   const statusOptions = [
@@ -113,35 +207,62 @@ export function RequestsOutstandingShell({
     { value: "CANCELLED", label: "CANCELLED" },
     { value: "REJECTED", label: "REJECTED" }
   ];
+  const requestTypeOptions = [
+    { value: "ALL", label: "Semua Jenis" },
+    { value: "WO", label: "Work Order" },
+    { value: "PR", label: "Purchase Request" },
+    { value: "WOV", label: "Vendor WO" },
+  ];
+  const filterDivisionOptions = isDivisionLeadScope
+    ? [{ value: user.divisionName ?? "", label: user.divisionName ?? "-" }]
+    : [{ value: "", label: "Semua Divisi" }, ...divisionsList.map((division) => ({ value: division.label, label: division.label }))];
+  const filterUnitOptions = [{ value: "", label: "Semua Unit" }, ...unitsList];
+  const filterStatusOptions = [{ value: "", label: "Semua Status" }, ...statusOptions];
+  const priorityOptions = [
+    { value: "NORMAL", label: "NORMAL" },
+    { value: "HIGH", label: "URGENT" },
+  ];
 
   // Derive consolidated active lists
   // Active means status is not DONE, ARRIVED, RECEIVED, CANCELLED, or REJECTED.
-  const activeStatuses = ["OPEN", "APPROVED", "SUBMITTED", "SENT", "PROSES_VENDOR", "HUNTING", "ORDERED"];
+  const activeStatuses = [
+    "OPEN",
+    "SUBMITTED",
+    "PENDING_TARGET_KD_APPROVAL",
+    "PENDING_ADVISOR_APPROVAL",
+    "PENDING_KP_APPROVAL",
+    "PENDING_PM_APPROVAL",
+    "APPROVED",
+    "SENT",
+    "PROSES_VENDOR",
+    "HUNTING",
+    "ORDERED",
+  ];
   
   // 1. DIAJUKAN (Requested/submitted by the logged-in user's division)
-  const submittedWo = (woPayload?.data || [])
-    .filter((w: any) => (!isDivisionLeadScope || w.fromDivisionName === user.divisionName) && activeStatuses.includes(w.status))
-    .map((w: any) => ({ ...w, reqType: "WO" as const, id: w.woId, number: w.woNumber, date: w.requestDate, info: `Tujuan: ${w.toDivisionName}` }));
+  const submittedWo: RequestCard[] = (woPayload?.data || [])
+    .filter((w) => (!isDivisionLeadScope || w.fromDivisionName === user.divisionName) && activeStatuses.includes(w.status))
+    .map((w) => ({ ...w, reqType: "WO" as const, id: w.woId, number: w.woNumber, date: w.requestDate, info: `Tujuan: ${w.toDivisionName}` }));
 
-  const submittedPr = (prPayload?.data || [])
-    .filter((p: any) => (!isDivisionLeadScope || p.divisionName === user.divisionName) && activeStatuses.includes(p.status))
-    .map((p: any) => ({ ...p, reqType: "PR" as const, id: p.prId, number: p.prNumber, date: p.createdAt ? p.createdAt.split("T")[0] : "-", info: `${p.totalItems || 0} Items · Est: Rp ${Number(p.totalEstimatedPrice || 0).toLocaleString("id-ID")}` }));
+  const submittedPr: RequestCard[] = (prPayload?.data || [])
+    .filter((p) => (!isDivisionLeadScope || p.divisionName === user.divisionName) && activeStatuses.includes(p.status))
+    .map((p) => ({ ...p, reqType: "PR" as const, id: p.prId, number: p.prNumber, date: p.createdAt ? p.createdAt.split("T")[0] : "-", info: `${p.totalItems || 0} Items · Est: Rp ${Number(p.totalEstimatedPrice || 0).toLocaleString("id-ID")}` }));
 
-  const submittedWov = (vendorPayload?.data || [])
-    .filter((v: any) => (!isDivisionLeadScope || v.divisionName === user.divisionName) && activeStatuses.includes(v.status))
-    .map((v: any) => ({ ...v, reqType: "WOV" as const, id: v.wovId, number: v.wovNumber, date: v.createdAt ? v.createdAt.split("T")[0] : "-", info: `Vendor: ${v.vendorName || "-"}` }));
+  const submittedWov: RequestCard[] = (vendorPayload?.data || [])
+    .filter((v) => (!isDivisionLeadScope || v.divisionName === user.divisionName) && activeStatuses.includes(v.status))
+    .map((v) => ({ ...v, reqType: "WOV" as const, id: v.wovId, number: v.wovNumber, date: v.createdAt ? v.createdAt.split("T")[0] : "-", info: `Vendor: ${v.vendorName || "-"}` }));
 
   const rawSubmitted = [...submittedWo, ...submittedPr, ...submittedWov]
     .sort((a, b) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime());
 
   // 2. HARUS DIKERJAKAN (Assigned to the user's division to be worked on - Work Orders specifically)
-  const rawAssigned = (woPayload?.data || [])
-    .filter((w: any) => (!isDivisionLeadScope || w.toDivisionName === user.divisionName) && activeStatuses.includes(w.status))
-    .map((w: any) => ({ ...w, reqType: "WO" as const, id: w.woId, number: w.woNumber, date: w.requestDate, info: `Dari: ${w.fromDivisionName} · Est: ${w.estimatedHours || 0} Jam` }))
-    .sort((a: any, b: any) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime());
+  const rawAssigned: RequestCard[] = (woPayload?.data || [])
+    .filter((w) => (!isDivisionLeadScope || w.toDivisionName === user.divisionName) && activeStatuses.includes(w.status))
+    .map((w) => ({ ...w, reqType: "WO" as const, id: w.woId, number: w.woNumber, date: w.requestDate, info: `Dari: ${w.fromDivisionName} · Est: ${w.estimatedHours || 0} Jam` }))
+    .sort((a, b) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime());
 
   // Apply dashboard filters dynamically
-  const filterRecord = (r: any) => {
+  const filterRecord = (r: RequestCard) => {
     if (filterType !== "ALL" && r.reqType !== filterType) return false;
     
     // For Division Filter
@@ -163,9 +284,9 @@ export function RequestsOutstandingShell({
   const assignedWo = rawAssigned.filter(filterRecord).slice(0, 5);
 
   // Count Summary Stats
-  const woPending = (woPayload?.data || []).filter((w: any) => ["OPEN", "SUBMITTED"].includes(w.status)).length;
-  const prPending = (prPayload?.data || []).filter((p: any) => p.accTracking !== "APPROVED" && p.status === "OPEN").length;
-  const wovPending = (vendorPayload?.data || []).filter((v: any) => v.accTracking !== "APPROVED" && v.status === "OPEN").length;
+  const woPending = (woPayload?.data || []).filter((w) => ["OPEN", "SUBMITTED"].includes(w.status)).length;
+  const prPending = (prPayload?.data || []).filter((p) => p.accTracking !== "APPROVED" && p.status === "OPEN").length;
+  const wovPending = (vendorPayload?.data || []).filter((v) => v.accTracking !== "APPROVED" && v.status === "OPEN").length;
 
   // ----------------------------------------------------
   // PR UPLOAD HANDLER
@@ -206,8 +327,8 @@ export function RequestsOutstandingShell({
         copy[index] = { ...copy[index], photoUrl: publicUrl, uploading: false };
         return { ...curr, items: copy };
       });
-    } catch (err: any) {
-      alert(err.message || "Gagal upload.");
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Gagal upload.");
       setPrForm((curr) => {
         const copy = [...curr.items];
         copy[index] = { ...copy[index], uploading: false };
@@ -227,29 +348,42 @@ export function RequestsOutstandingShell({
 
     try {
       if (activeFormTab === "WO") {
-        if (!woForm.carId || !woForm.toDivisionId || !woForm.jobDetail) {
-          throw new Error("Kolom Unit, Divisi Tujuan, dan Rincian Pekerjaan wajib diisi!");
+        const validWoItems = woForm.items.filter((item) => item.panelName.trim() && item.jobDetail.trim());
+        if (!woForm.carId || !woForm.toDivisionId || validWoItems.length === 0) {
+          throw new Error("Pilih unit, divisi tujuan, panel/parts, dan rincian pekerjaan!");
         }
+        const firstItem = validWoItems[0];
         const res = await createWo({
           carId: woForm.carId,
           toDivisionId: Number(woForm.toDivisionId),
           requestDate: woForm.requestDate,
           isPriority: woForm.isPriority,
-          panelName: null,
-          jobDetail: woForm.jobDetail,
+          panelName: firstItem?.panelName ?? null,
+          jobDetail: firstItem?.jobDetail ?? null,
           estimatedHours: null,
           notes: woForm.notes || null,
-          items: []
+          items: validWoItems.map((item) => {
+            const matchedPanel = woPanelOptions.find((option) => option.value === item.panelName);
+            return {
+              panelName: item.panelName,
+              sectionName: null,
+              panelCategory: matchedPanel?.category ?? null,
+              jobDetail: [`Qty: ${item.qty}`, item.jobDetail].join("\n"),
+              estimatedHours: null,
+              notes: woForm.notes || null,
+              addPanelToMaster: false,
+            };
+          })
         });
         if (!res.success) throw new Error(res.message);
         setComposerSuccess("Work Order berhasil dikirim!");
         setWoForm({
           carId: "",
           toDivisionId: "",
-          requestDate: new Date().toISOString().split("T")[0],
+          requestDate: defaultWoTargetDate(),
           isPriority: false,
-          jobDetail: "",
-          notes: ""
+          notes: "",
+          items: [{ panelName: "", qty: 1, jobDetail: "" }],
         });
       }
 
@@ -280,7 +414,7 @@ export function RequestsOutstandingShell({
           targetDate: "",
           priority: "NORMAL",
           notes: "",
-          items: [{ itemName: "", description: "", originType: "LOKAL", qty: 1, uom: "pcs", estimatedPrice: 0, photoUrl: "", uploading: false }]
+          items: [{ itemSourceType: "MASTER_PANEL", itemName: "", description: "", originType: "LOKAL", qty: 1, uom: "pcs", estimatedPrice: 0, photoUrl: "", uploading: false }]
         });
       }
 
@@ -288,7 +422,7 @@ export function RequestsOutstandingShell({
         if (!wovForm.carId || !wovForm.vendorName || wovForm.items.some((it) => !it.itemName)) {
           throw new Error("Pilih unit, vendor, dan lengkapi nama item vendor!");
         }
-        const selectedVendor = vendorsList.find((vendor: any) => vendor.value === wovForm.vendorName);
+        const selectedVendor = vendorsList.find((vendor) => vendor.value === wovForm.vendorName);
         const res = await createVendor({
           carId: wovForm.carId,
           coreId: null,
@@ -318,13 +452,13 @@ export function RequestsOutstandingShell({
           vendorName: "",
           targetDateReturn: "",
           remarks: "",
-          items: [{ itemName: "", quantity: 1, uom: "pcs", goodsConditionOut: "", estimatedCost: 0 }]
+          items: [{ itemSourceType: "MASTER_PANEL", itemName: "", quantity: 1, uom: "pcs", goodsConditionOut: "", estimatedCost: 0 }]
         });
       }
 
       router.refresh();
-    } catch (err: any) {
-      setComposerError(err?.message || "Terjadi kesalahan saat menyimpan data.");
+    } catch (err: unknown) {
+      setComposerError(err instanceof Error ? err.message : "Terjadi kesalahan saat menyimpan data.");
     } finally {
       setComposerLoading(false);
     }
@@ -371,56 +505,46 @@ export function RequestsOutstandingShell({
 
       {/* Flexible & Interactive Filter Bar */}
       <div className="flex flex-wrap items-center gap-2 border border-gray-200 dark:border-white/[0.05] bg-white dark:bg-[#111114] px-3 py-3">
-        <select
-          value={filterType}
-          onChange={(e) => setFilterType(e.target.value as "ALL" | "WO" | "PR" | "WOV")}
-          className="h-8 border border-gray-200 dark:border-white/[0.05] bg-gray-50 dark:bg-[#0a0a0c] px-2.5 font-mono text-[11px] text-gray-900 dark:text-white outline-none focus:border-amber-500/30"
-        >
-          <option value="ALL">Semua Jenis</option>
-          <option value="WO">Work Order</option>
-          <option value="PR">Purchase Request</option>
-          <option value="WOV">Vendor WO</option>
-        </select>
+        <div className="min-w-[160px]">
+          <StrictSearchSelect
+            value={filterType}
+            options={requestTypeOptions}
+            onChange={(value) => setFilterType(value as "ALL" | "WO" | "PR" | "WOV")}
+            placeholder="Cari jenis"
+            accent="amber"
+          />
+        </div>
 
-        <select
-          value={filterDivision}
-          disabled={isDivisionLeadScope}
-          onChange={(e) => setFilterDivision(e.target.value)}
-          className="h-8 border border-gray-200 dark:border-white/[0.05] bg-gray-50 dark:bg-[#0a0a0c] px-2.5 font-mono text-[11px] text-gray-900 dark:text-white outline-none focus:border-amber-500/30 disabled:opacity-50"
-        >
-          {isDivisionLeadScope ? (
-            <option value={user.divisionName}>{user.divisionName}</option>
-          ) : (
-            <>
-              <option value="">Semua Divisi</option>
-              {divisionsList.map((d: any) => (
-                <option key={d.value} value={d.label}>{d.label}</option>
-              ))}
-            </>
-          )}
-        </select>
+        <div className="min-w-[180px]">
+          <StrictSearchSelect
+            value={filterDivision}
+            options={filterDivisionOptions}
+            onChange={setFilterDivision}
+            placeholder="Cari divisi"
+            disabled={isDivisionLeadScope}
+            accent="amber"
+          />
+        </div>
 
-        <select
-          value={filterUnit}
-          onChange={(e) => setFilterUnit(e.target.value)}
-          className="h-8 border border-gray-200 dark:border-white/[0.05] bg-gray-50 dark:bg-[#0a0a0c] px-2.5 font-mono text-[11px] text-gray-900 dark:text-white outline-none focus:border-amber-500/30"
-        >
-          <option value="">Semua Unit</option>
-          {unitsList.map((u: any) => (
-            <option key={u.value} value={u.value}>{u.label}</option>
-          ))}
-        </select>
+        <div className="min-w-[180px]">
+          <StrictSearchSelect
+            value={filterUnit}
+            options={filterUnitOptions}
+            onChange={setFilterUnit}
+            placeholder="Cari unit"
+            accent="amber"
+          />
+        </div>
 
-        <select
-          value={filterStatus}
-          onChange={(e) => setFilterStatus(e.target.value)}
-          className="h-8 border border-gray-200 dark:border-white/[0.05] bg-gray-50 dark:bg-[#0a0a0c] px-2.5 font-mono text-[11px] text-gray-900 dark:text-white outline-none focus:border-amber-500/30"
-        >
-          <option value="">Semua Status</option>
-          {statusOptions.map((st) => (
-            <option key={st.value} value={st.value}>{st.label}</option>
-          ))}
-        </select>
+        <div className="min-w-[160px]">
+          <StrictSearchSelect
+            value={filterStatus}
+            options={filterStatusOptions}
+            onChange={setFilterStatus}
+            placeholder="Cari status"
+            accent="amber"
+          />
+        </div>
 
         {(filterType !== "ALL" || filterDivision || filterUnit || filterStatus) && (
           <button
@@ -457,7 +581,7 @@ export function RequestsOutstandingShell({
               {consolidatedSubmitted.length === 0 ? (
                 <p className="py-8 text-xs text-gray-400 dark:text-white/30 text-center">Tidak ada permintaan yang sesuai dengan filter.</p>
               ) : (
-                consolidatedSubmitted.map((row: any) => (
+                consolidatedSubmitted.map((row) => (
                   <div key={row.id} className="group flex items-center justify-between px-2 py-2 transition-colors hover:bg-gray-100 dark:hover:bg-white/[0.02]">
                     <div className="flex items-center gap-3 min-w-0">
                       <span className="shrink-0 border border-gray-300 dark:border-white/[0.08] px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/45">
@@ -504,7 +628,7 @@ export function RequestsOutstandingShell({
               {assignedWo.length === 0 ? (
                 <p className="py-8 text-xs text-gray-400 dark:text-white/30 text-center">Tidak ada Work Order yang sesuai dengan filter.</p>
               ) : (
-                assignedWo.map((row: any) => (
+                assignedWo.map((row) => (
                   <div key={row.id} className="group flex items-center justify-between px-2 py-2 transition-colors hover:bg-gray-100 dark:hover:bg-white/[0.02]">
                     <div className="flex items-center gap-3 min-w-0">
                       <span className="shrink-0 border border-gray-300 dark:border-white/[0.08] px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/45">
@@ -568,35 +692,33 @@ export function RequestsOutstandingShell({
                   <div className="grid grid-cols-2 gap-3.5">
                     <div className="space-y-1.5">
                       <label className="text-[9px] uppercase font-bold text-gray-400 dark:text-white/30 pl-0.5">Unit Kendaraan</label>
-                      <select
+                      <StrictSearchSelect
                         value={woForm.carId}
-                        onChange={(e) => setWoForm({ ...woForm, carId: e.target.value })}
-                        className="h-8 w-full border border-gray-200 dark:border-white/[0.05] bg-gray-50 dark:bg-[#0a0a0c] px-2.5 text-[11px] text-gray-900 dark:text-white outline-none focus:border-amber-500/30"
-                      >
-                        <option value="" className="bg-black">Pilih Unit</option>
-                        {unitsList.map((u: any) => (
-                          <option key={u.value} value={u.value} className="bg-black">{u.label}</option>
-                        ))}
-                      </select>
+                        options={unitsList}
+                        onChange={(value) => setWoForm({
+                          ...woForm,
+                          carId: value,
+                          items: woForm.items.map((item) => ({ ...item, panelName: "", qty: 1 })),
+                        })}
+                        placeholder="Cari unit"
+                        accent="amber"
+                      />
                     </div>
                     <div className="space-y-1.5">
                       <label className="text-[9px] uppercase font-bold text-gray-400 dark:text-white/30 pl-0.5">Tujuan Divisi</label>
-                      <select
+                      <StrictSearchSelect
                         value={woForm.toDivisionId}
-                        onChange={(e) => setWoForm({ ...woForm, toDivisionId: e.target.value })}
-                        className="h-8 w-full border border-gray-200 dark:border-white/[0.05] bg-gray-50 dark:bg-[#0a0a0c] px-2.5 text-[11px] text-gray-900 dark:text-white outline-none focus:border-amber-500/30"
-                      >
-                        <option value="" className="bg-black">Pilih Divisi</option>
-                        {divisionsList.map((d: any) => (
-                          <option key={d.value} value={d.value} className="bg-black">{d.label}</option>
-                        ))}
-                      </select>
+                        options={divisionsList}
+                        onChange={(value) => setWoForm({ ...woForm, toDivisionId: value })}
+                        placeholder="Cari divisi"
+                        accent="amber"
+                      />
                     </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-3.5">
-                    <div className="space-y-1.5">
-                      <label className="text-[9px] uppercase font-bold text-gray-400 dark:text-white/30 pl-0.5">Tanggal Permintaan</label>
+	                    <div className="space-y-1.5">
+	                      <label className="text-[9px] uppercase font-bold text-gray-400 dark:text-white/30 pl-0.5">Target Selesai</label>
                       <input
                         type="date"
                         value={woForm.requestDate}
@@ -616,15 +738,82 @@ export function RequestsOutstandingShell({
                     </div>
                   </div>
 
-                  <div className="space-y-1.5">
-                    <label className="text-[9px] uppercase font-bold text-gray-400 dark:text-white/30 pl-0.5">Rincian Pekerjaan (Job Detail)</label>
-                    <textarea
-                      value={woForm.jobDetail}
-                      onChange={(e) => setWoForm({ ...woForm, jobDetail: e.target.value })}
-                      placeholder="Tulis detail keluhan/pekerjaan yang diajukan divisi..."
-                      className="w-full min-h-[70px] border border-gray-200 dark:border-white/[0.05] bg-gray-50 dark:bg-[#0a0a0c] px-2.5 py-2 text-[11px] text-gray-900 dark:text-white outline-none focus:border-amber-500/30"
-                    />
-                  </div>
+	                  <div className="space-y-2 border-t border-white/[0.04] pt-3">
+	                    <div className="flex items-center justify-between">
+	                      <span className="text-[9px] font-bold text-amber-400 uppercase tracking-wide">Daftar Pekerjaan ({woForm.items.length})</span>
+	                      <button
+	                        type="button"
+	                        onClick={() => setWoForm({
+	                          ...woForm,
+		                          items: [...woForm.items, { panelName: "", qty: 1, jobDetail: "" }],
+	                        })}
+	                        className="flex items-center gap-1 text-[10px] font-semibold text-amber-400 hover:text-amber-300"
+	                      >
+	                        <Plus className="h-3 w-3" />
+	                        Tambah
+	                      </button>
+	                    </div>
+
+	                    <div className="max-h-[300px] space-y-3 overflow-y-auto pr-1">
+	                      {woForm.items.map((item, idx) => (
+	                        <div key={idx} className="space-y-2 border border-white/[0.05] bg-black/20 p-3">
+	                          <div className="flex items-center justify-between">
+	                            <span className="text-[9px] font-bold uppercase tracking-wide text-white/30">Pekerjaan #{idx + 1}</span>
+	                            {woForm.items.length > 1 && (
+	                              <button
+	                                type="button"
+	                                onClick={() => setWoForm({ ...woForm, items: woForm.items.filter((_, itemIndex) => itemIndex !== idx) })}
+	                                className="text-red-400 hover:text-red-300"
+	                              >
+	                                <Trash2 className="h-3.5 w-3.5" />
+	                              </button>
+	                            )}
+	                          </div>
+
+		                          <div className="grid grid-cols-[1fr_96px] gap-2">
+                            <SearchSelect
+                              value={item.panelName}
+                              options={woPanelOptions}
+                              onChange={(value, option) => {
+                                const copy = [...woForm.items];
+                                copy[idx] = { ...copy[idx], panelName: value, qty: option?.qty ?? copy[idx].qty };
+                                setWoForm({ ...woForm, items: copy });
+                              }}
+			                            placeholder={!woForm.carId ? "Pilih unit dulu" : "Cari master panel"}
+			                            disabled={!woForm.carId}
+			                            isLoading={isLoadingWoPanels}
+			                            accent="amber"
+			                          />
+		                            <label className="space-y-1">
+		                              <span className="block text-[8px] font-bold uppercase tracking-wide text-white/30">Qty</span>
+		                              <input
+		                                type="number"
+		                                min={1}
+		                                value={item.qty}
+		                                onChange={(e) => {
+		                                  const copy = [...woForm.items];
+		                                  copy[idx] = { ...copy[idx], qty: Number(e.target.value) };
+		                                  setWoForm({ ...woForm, items: copy });
+		                                }}
+		                                className="h-10 w-full border border-gray-200 dark:border-white/[0.05] bg-gray-50 dark:bg-[#0a0a0c] px-2.5 text-[11px] text-gray-900 dark:text-white outline-none focus:border-amber-500/30"
+		                              />
+		                            </label>
+		                          </div>
+
+	                          <textarea
+	                            value={item.jobDetail}
+	                            onChange={(e) => {
+	                              const copy = [...woForm.items];
+	                              copy[idx] = { ...copy[idx], jobDetail: e.target.value };
+	                              setWoForm({ ...woForm, items: copy });
+	                            }}
+	                            placeholder="Detail pekerjaan item ini..."
+	                            className="w-full min-h-[58px] border border-gray-200 dark:border-white/[0.05] bg-gray-50 dark:bg-[#0a0a0c] px-2.5 py-2 text-[11px] text-gray-900 dark:text-white outline-none focus:border-amber-500/30"
+	                          />
+	                        </div>
+	                      ))}
+	                    </div>
+	                  </div>
 
                   <div className="space-y-1.5">
                     <label className="text-[9px] uppercase font-bold text-gray-400 dark:text-white/30 pl-0.5">Catatan Tambahan (Optional)</label>
@@ -645,27 +834,29 @@ export function RequestsOutstandingShell({
                   <div className="grid grid-cols-2 gap-3.5">
                     <div className="space-y-1.5">
                       <label className="text-[9px] uppercase font-bold text-gray-400 dark:text-white/30 pl-0.5">Unit Kendaraan</label>
-                      <select
+                      <StrictSearchSelect
                         value={prForm.carId}
-                        onChange={(e) => setPrForm({ ...prForm, carId: e.target.value })}
-                      className="h-8 w-full border border-gray-200 dark:border-white/[0.05] bg-gray-50 dark:bg-[#0a0a0c] px-2.5 text-[11px] text-gray-900 dark:text-white outline-none focus:border-amber-500/30"
-                      >
-                        <option value="" className="bg-black">Pilih Unit</option>
-                        {unitsList.map((u: any) => (
-                          <option key={u.value} value={u.value} className="bg-black">{u.label}</option>
-                        ))}
-                      </select>
+                        options={unitsList}
+                        onChange={(value) => setPrForm({
+                          ...prForm,
+                          carId: value,
+                          items: prForm.items.map((item) =>
+                            item.itemSourceType === "MASTER_PANEL" ? { ...item, itemName: "", qty: 1 } : item,
+                          ),
+                        })}
+                        placeholder="Cari unit"
+                        accent="purple"
+                      />
                     </div>
                     <div className="space-y-1.5">
                       <label className="text-[9px] uppercase font-bold text-gray-400 dark:text-white/30 pl-0.5">Prioritas PR</label>
-                      <select
+                      <StrictSearchSelect
                         value={prForm.priority}
-                        onChange={(e) => setPrForm({ ...prForm, priority: e.target.value })}
-                      className="h-8 w-full border border-gray-200 dark:border-white/[0.05] bg-gray-50 dark:bg-[#0a0a0c] px-2.5 text-[11px] text-gray-900 dark:text-white outline-none focus:border-amber-500/30"
-                      >
-                        <option value="NORMAL" className="bg-black">NORMAL</option>
-                        <option value="HIGH" className="bg-black">URGENT</option>
-                      </select>
+                        options={priorityOptions}
+                        onChange={(value) => setPrForm({ ...prForm, priority: value })}
+                        placeholder="Cari prioritas"
+                        accent="purple"
+                      />
                     </div>
                   </div>
 
@@ -699,7 +890,7 @@ export function RequestsOutstandingShell({
                         type="button"
                         onClick={() => setPrForm({
                           ...prForm,
-                          items: [...prForm.items, { itemName: "", description: "", originType: "LOKAL", qty: 1, uom: "pcs", estimatedPrice: 0, photoUrl: "", uploading: false }]
+	                          items: [...prForm.items, { itemSourceType: "MASTER_PANEL", itemName: "", description: "", originType: "LOKAL", qty: 1, uom: "pcs", estimatedPrice: 0, photoUrl: "", uploading: false }]
                         })}
                         className="text-[9px] text-purple-400 hover:text-purple-300 font-bold uppercase flex items-center gap-1"
                       >
@@ -719,19 +910,55 @@ export function RequestsOutstandingShell({
                               <Trash2 className="h-3 w-3" />
                             </button>
                           )}
-                          <div className="grid grid-cols-2 gap-2">
-                            <input
-                              type="text"
-                              required
-                              value={item.itemName}
-                              onChange={(e) => {
-                                const copy = [...prForm.items];
-                                copy[idx] = { ...copy[idx], itemName: e.target.value };
-                                setPrForm({ ...prForm, items: copy });
-                              }}
-                              placeholder="Nama Barang *"
-                              className="h-8 border border-gray-200 dark:border-white/[0.05] bg-white dark:bg-[#111114] px-2 text-[10px]"
-                            />
+	                          <div className="grid grid-cols-2 gap-2">
+	                            <div className="space-y-1.5">
+	                              <div className="grid grid-cols-2 gap-1 border border-white/[0.05] bg-black p-1">
+	                                {(["MASTER_PANEL", "OTHER"] as const).map((mode) => (
+	                                  <button
+	                                    key={mode}
+	                                    type="button"
+	                                    onClick={() => {
+	                                      const copy = [...prForm.items];
+	                                      copy[idx] = { ...copy[idx], itemSourceType: mode, itemName: "", qty: mode === "MASTER_PANEL" ? 1 : copy[idx].qty };
+	                                      setPrForm({ ...prForm, items: copy });
+	                                    }}
+	                                    className={`px-2 py-1.5 text-[9px] font-bold uppercase tracking-wider transition-colors ${
+	                                      item.itemSourceType === mode ? "bg-purple-500/15 text-purple-300" : "text-white/35 hover:text-white"
+	                                    }`}
+	                                  >
+	                                    {mode === "MASTER_PANEL" ? "Panel/Parts" : "Lainnya"}
+	                                  </button>
+	                                ))}
+	                              </div>
+	                              {item.itemSourceType === "MASTER_PANEL" ? (
+	                                <SearchSelect
+	                                  value={item.itemName}
+	                                  options={prPanelOptions}
+	                                  onChange={(value, option) => {
+	                                    const copy = [...prForm.items];
+	                                    copy[idx] = { ...copy[idx], itemName: value, qty: option?.qty ?? copy[idx].qty };
+	                                    setPrForm({ ...prForm, items: copy });
+	                                  }}
+	                                  placeholder={!prForm.carId ? "Pilih unit dulu" : "Cari panel/parts"}
+	                                  disabled={!prForm.carId}
+	                                  isLoading={isLoadingPrPanels}
+	                                  accent="purple"
+	                                />
+	                              ) : (
+	                                <input
+	                                  type="text"
+	                                  required
+	                                  value={item.itemName}
+	                                  onChange={(e) => {
+	                                    const copy = [...prForm.items];
+	                                    copy[idx] = { ...copy[idx], itemName: e.target.value };
+	                                    setPrForm({ ...prForm, items: copy });
+	                                  }}
+	                                  placeholder="Nama Barang *"
+	                                  className="h-8 w-full border border-gray-200 dark:border-white/[0.05] bg-white dark:bg-[#111114] px-2 text-[10px]"
+	                                />
+	                              )}
+	                            </div>
                             <input
                               type="text"
                               value={item.description}
@@ -745,44 +972,50 @@ export function RequestsOutstandingShell({
                             />
                           </div>
 
-                          <div className="grid grid-cols-3 gap-2">
-                            <input
-                              type="number"
-                              required
-                              value={item.qty}
-                              onChange={(e) => {
-                                const copy = [...prForm.items];
-                                copy[idx] = { ...copy[idx], qty: Number(e.target.value) };
-                                setPrForm({ ...prForm, items: copy });
-                              }}
-                              placeholder="Qty"
-                              className="h-8 border border-gray-200 dark:border-white/[0.05] bg-white dark:bg-[#111114] px-2 text-[10px]"
-                            />
-                            <input
-                              type="text"
-                              required
-                              value={item.uom}
-                              onChange={(e) => {
-                                const copy = [...prForm.items];
-                                copy[idx] = { ...copy[idx], uom: e.target.value };
-                                setPrForm({ ...prForm, items: copy });
-                              }}
-                              placeholder="UOM"
-                              className="h-8 border border-gray-200 dark:border-white/[0.05] bg-white dark:bg-[#111114] px-2 text-[10px]"
-                            />
-                            <input
-                              type="number"
-                              required
-                              value={item.estimatedPrice}
-                              onChange={(e) => {
-                                const copy = [...prForm.items];
-                                copy[idx] = { ...copy[idx], estimatedPrice: Number(e.target.value) };
-                                setPrForm({ ...prForm, items: copy });
-                              }}
-                              placeholder="Est. Harga"
-                              className="h-8 border border-gray-200 dark:border-white/[0.05] bg-white dark:bg-[#111114] px-2 text-[10px]"
-                            />
-                          </div>
+	                          <div className="grid grid-cols-3 gap-2">
+	                            <label className="space-y-1">
+	                              <span className="block text-[8px] font-bold uppercase tracking-wide text-white/30">Qty</span>
+	                              <input
+	                                type="number"
+	                                required
+	                                value={item.qty}
+	                                onChange={(e) => {
+	                                  const copy = [...prForm.items];
+	                                  copy[idx] = { ...copy[idx], qty: Number(e.target.value) };
+	                                  setPrForm({ ...prForm, items: copy });
+	                                }}
+	                                className="h-8 w-full border border-gray-200 dark:border-white/[0.05] bg-white dark:bg-[#111114] px-2 text-[10px]"
+	                              />
+	                            </label>
+	                            <label className="space-y-1">
+	                              <span className="block text-[8px] font-bold uppercase tracking-wide text-white/30">UOM</span>
+	                              <input
+	                                type="text"
+	                                required
+	                                value={item.uom}
+	                                onChange={(e) => {
+	                                  const copy = [...prForm.items];
+	                                  copy[idx] = { ...copy[idx], uom: e.target.value };
+	                                  setPrForm({ ...prForm, items: copy });
+	                                }}
+	                                className="h-8 w-full border border-gray-200 dark:border-white/[0.05] bg-white dark:bg-[#111114] px-2 text-[10px]"
+	                              />
+	                            </label>
+	                            <label className="space-y-1">
+	                              <span className="block text-[8px] font-bold uppercase tracking-wide text-white/30">Est. Harga</span>
+	                              <input
+	                                type="number"
+	                                required
+	                                value={item.estimatedPrice}
+	                                onChange={(e) => {
+	                                  const copy = [...prForm.items];
+	                                  copy[idx] = { ...copy[idx], estimatedPrice: Number(e.target.value) };
+	                                  setPrForm({ ...prForm, items: copy });
+	                                }}
+	                                className="h-8 w-full border border-gray-200 dark:border-white/[0.05] bg-white dark:bg-[#111114] px-2 text-[10px]"
+	                              />
+	                            </label>
+	                          </div>
 
                           {/* Lampirkan Foto / R2 Upload */}
                           <div className="flex items-center justify-between border border-gray-200 dark:border-white/[0.05] bg-white dark:bg-[#111114] p-2">
@@ -833,29 +1066,29 @@ export function RequestsOutstandingShell({
                   <div className="grid grid-cols-2 gap-3.5">
                     <div className="space-y-1.5">
                       <label className="text-[9px] uppercase font-bold text-gray-400 dark:text-white/30 pl-0.5">Unit Kendaraan</label>
-                      <select
+                      <StrictSearchSelect
                         value={wovForm.carId}
-                        onChange={(e) => setWovForm({ ...wovForm, carId: e.target.value })}
-                        className="h-8 w-full border border-gray-200 dark:border-white/[0.05] bg-gray-50 dark:bg-[#0a0a0c] px-2.5 text-[11px] text-gray-900 dark:text-white outline-none focus:border-amber-500/30"
-                      >
-                        <option value="" className="bg-black">Pilih Unit</option>
-                        {unitsList.map((u: any) => (
-                          <option key={u.value} value={u.value} className="bg-black">{u.label}</option>
-                        ))}
-                      </select>
+                        options={unitsList}
+                        onChange={(value) => setWovForm({
+                          ...wovForm,
+                          carId: value,
+                          items: wovForm.items.map((item) =>
+                            item.itemSourceType === "MASTER_PANEL" ? { ...item, itemName: "", quantity: 1, goodsConditionOut: "" } : item,
+                          ),
+                        })}
+                        placeholder="Cari unit"
+                        accent="sky"
+                      />
                     </div>
                     <div className="space-y-1.5">
                       <label className="text-[9px] uppercase font-bold text-gray-400 dark:text-white/30 pl-0.5">Nama Vendor</label>
-                      <select
+                      <StrictSearchSelect
                         value={wovForm.vendorName}
-                        onChange={(e) => setWovForm({ ...wovForm, vendorName: e.target.value })}
-                        className="h-8 w-full border border-gray-200 dark:border-white/[0.05] bg-gray-50 dark:bg-[#0a0a0c] px-2.5 text-[11px] text-gray-900 dark:text-white outline-none focus:border-amber-500/30"
-                      >
-                        <option value="" className="bg-black">Pilih Vendor</option>
-                        {vendorsList.map((v: any) => (
-                          <option key={v.value} value={v.value} className="bg-black">{v.label}</option>
-                        ))}
-                      </select>
+                        options={vendorsList}
+                        onChange={(value) => setWovForm({ ...wovForm, vendorName: value })}
+                        placeholder="Cari vendor"
+                        accent="sky"
+                      />
                     </div>
                   </div>
 
@@ -889,7 +1122,7 @@ export function RequestsOutstandingShell({
                         type="button"
                         onClick={() => setWovForm({
                           ...wovForm,
-                          items: [...wovForm.items, { itemName: "", quantity: 1, uom: "pcs", goodsConditionOut: "", estimatedCost: 0 }]
+	                          items: [...wovForm.items, { itemSourceType: "MASTER_PANEL", itemName: "", quantity: 1, uom: "pcs", goodsConditionOut: "", estimatedCost: 0 }]
                         })}
                         className="text-[9px] text-sky-400 hover:text-sky-300 font-bold uppercase flex items-center gap-1"
                       >
@@ -909,19 +1142,66 @@ export function RequestsOutstandingShell({
                               <Trash2 className="h-3 w-3" />
                             </button>
                           )}
-                          <div className="grid grid-cols-2 gap-2">
-                            <input
-                              type="text"
-                              required
-                              value={item.itemName}
-                              onChange={(e) => {
-                                const copy = [...wovForm.items];
-                                copy[idx] = { ...copy[idx], itemName: e.target.value };
-                                setWovForm({ ...wovForm, items: copy });
-                              }}
-                              placeholder="Pekerjaan Vendor *"
-                              className="h-8 border border-gray-200 dark:border-white/[0.05] bg-white dark:bg-[#111114] px-2 text-[10px]"
-                            />
+	                          <div className="grid grid-cols-2 gap-2">
+	                            <div className="space-y-1.5">
+	                              <div className="grid grid-cols-2 gap-1 border border-white/[0.05] bg-black p-1">
+	                                {(["MASTER_PANEL", "OTHER"] as const).map((mode) => (
+	                                  <button
+	                                    key={mode}
+	                                    type="button"
+	                                    onClick={() => {
+	                                      const copy = [...wovForm.items];
+	                                      copy[idx] = {
+	                                        ...copy[idx],
+	                                        itemSourceType: mode,
+	                                        itemName: "",
+	                                        quantity: mode === "MASTER_PANEL" ? 1 : copy[idx].quantity,
+	                                        goodsConditionOut: mode === "MASTER_PANEL" ? "" : copy[idx].goodsConditionOut,
+	                                      };
+	                                      setWovForm({ ...wovForm, items: copy });
+	                                    }}
+	                                    className={`px-2 py-1.5 text-[9px] font-bold uppercase tracking-wider transition-colors ${
+	                                      item.itemSourceType === mode ? "bg-sky-500/15 text-sky-300" : "text-white/35 hover:text-white"
+	                                    }`}
+	                                  >
+	                                    {mode === "MASTER_PANEL" ? "Panel/Parts" : "Lainnya"}
+	                                  </button>
+	                                ))}
+	                              </div>
+	                              {item.itemSourceType === "MASTER_PANEL" ? (
+	                                <SearchSelect
+	                                  value={item.itemName}
+	                                  options={wovPanelOptions}
+	                                  onChange={(value, option) => {
+	                                    const copy = [...wovForm.items];
+	                                    copy[idx] = {
+	                                      ...copy[idx],
+	                                      itemName: value,
+	                                      quantity: option?.qty ?? copy[idx].quantity,
+	                                      goodsConditionOut: option?.defaultConditionType ?? copy[idx].goodsConditionOut,
+	                                    };
+	                                    setWovForm({ ...wovForm, items: copy });
+	                                  }}
+	                                  placeholder={!wovForm.carId ? "Pilih unit dulu" : "Cari panel/parts"}
+	                                  disabled={!wovForm.carId}
+	                                  isLoading={isLoadingWovPanels}
+	                                  accent="sky"
+	                                />
+	                              ) : (
+	                                <input
+	                                  type="text"
+	                                  required
+	                                  value={item.itemName}
+	                                  onChange={(e) => {
+	                                    const copy = [...wovForm.items];
+	                                    copy[idx] = { ...copy[idx], itemName: e.target.value };
+	                                    setWovForm({ ...wovForm, items: copy });
+	                                  }}
+	                                  placeholder="Pekerjaan Vendor *"
+	                                  className="h-8 w-full border border-gray-200 dark:border-white/[0.05] bg-white dark:bg-[#111114] px-2 text-[10px]"
+	                                />
+	                              )}
+	                            </div>
                             <input
                               type="text"
                               value={item.goodsConditionOut}
@@ -935,44 +1215,50 @@ export function RequestsOutstandingShell({
                             />
                           </div>
 
-                          <div className="grid grid-cols-3 gap-2">
-                            <input
-                              type="number"
-                              required
-                              value={item.quantity}
-                              onChange={(e) => {
-                                const copy = [...wovForm.items];
-                                copy[idx] = { ...copy[idx], quantity: Number(e.target.value) };
-                                setWovForm({ ...wovForm, items: copy });
-                              }}
-                              placeholder="Qty"
-                              className="h-8 border border-gray-200 dark:border-white/[0.05] bg-white dark:bg-[#111114] px-2 text-[10px]"
-                            />
-                            <input
-                              type="text"
-                              required
-                              value={item.uom}
-                              onChange={(e) => {
-                                const copy = [...wovForm.items];
-                                copy[idx] = { ...copy[idx], uom: e.target.value };
-                                setWovForm({ ...wovForm, items: copy });
-                              }}
-                              placeholder="UOM"
-                              className="h-8 border border-gray-200 dark:border-white/[0.05] bg-white dark:bg-[#111114] px-2 text-[10px]"
-                            />
-                            <input
-                              type="number"
-                              required
-                              value={item.estimatedCost}
-                              onChange={(e) => {
-                                const copy = [...wovForm.items];
-                                copy[idx] = { ...copy[idx], estimatedCost: Number(e.target.value) };
-                                setWovForm({ ...wovForm, items: copy });
-                              }}
-                              placeholder="Est. Biaya"
-                              className="h-8 border border-gray-200 dark:border-white/[0.05] bg-white dark:bg-[#111114] px-2 text-[10px]"
-                            />
-                          </div>
+	                          <div className="grid grid-cols-3 gap-2">
+	                            <label className="space-y-1">
+	                              <span className="block text-[8px] font-bold uppercase tracking-wide text-white/30">Qty</span>
+	                              <input
+	                                type="number"
+	                                required
+	                                value={item.quantity}
+	                                onChange={(e) => {
+	                                  const copy = [...wovForm.items];
+	                                  copy[idx] = { ...copy[idx], quantity: Number(e.target.value) };
+	                                  setWovForm({ ...wovForm, items: copy });
+	                                }}
+	                                className="h-8 w-full border border-gray-200 dark:border-white/[0.05] bg-white dark:bg-[#111114] px-2 text-[10px]"
+	                              />
+	                            </label>
+	                            <label className="space-y-1">
+	                              <span className="block text-[8px] font-bold uppercase tracking-wide text-white/30">UOM</span>
+	                              <input
+	                                type="text"
+	                                required
+	                                value={item.uom}
+	                                onChange={(e) => {
+	                                  const copy = [...wovForm.items];
+	                                  copy[idx] = { ...copy[idx], uom: e.target.value };
+	                                  setWovForm({ ...wovForm, items: copy });
+	                                }}
+	                                className="h-8 w-full border border-gray-200 dark:border-white/[0.05] bg-white dark:bg-[#111114] px-2 text-[10px]"
+	                              />
+	                            </label>
+	                            <label className="space-y-1">
+	                              <span className="block text-[8px] font-bold uppercase tracking-wide text-white/30">Est. Biaya</span>
+	                              <input
+	                                type="number"
+	                                required
+	                                value={item.estimatedCost}
+	                                onChange={(e) => {
+	                                  const copy = [...wovForm.items];
+	                                  copy[idx] = { ...copy[idx], estimatedCost: Number(e.target.value) };
+	                                  setWovForm({ ...wovForm, items: copy });
+	                                }}
+	                                className="h-8 w-full border border-gray-200 dark:border-white/[0.05] bg-white dark:bg-[#111114] px-2 text-[10px]"
+	                              />
+	                            </label>
+	                          </div>
                         </div>
                       ))}
                     </div>

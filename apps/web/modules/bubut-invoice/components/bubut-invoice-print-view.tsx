@@ -1,174 +1,176 @@
 "use client";
 
+/* eslint-disable @next/next/no-img-element */
+
 import type { BubutInvoiceSnapshot } from "@smsystem/contracts/bubut-invoice";
+import { getProxiedImageUrl } from "@/shared/api/config";
 import { Printer } from "lucide-react";
 import { useState } from "react";
 
-function rupiah(value: number | null | undefined) {
+function intId(value: number | null | undefined) {
   return new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: "IDR",
     maximumFractionDigits: 0,
   }).format(value ?? 0);
 }
 
-// ── Editable inline field ─────────────────────────────────────────────────────
+function numberId(value: number | null | undefined) {
+  return new Intl.NumberFormat("id-ID", {
+    maximumFractionDigits: 3,
+  }).format(value ?? 0);
+}
+
+function displayDate(value: string | null | undefined) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("id-ID", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(date);
+}
+
 function Editable({
   value,
   onChange,
-  style,
+  className,
   multiline,
   placeholder,
 }: {
   value: string;
   onChange: (v: string) => void;
-  style?: React.CSSProperties;
+  className?: string;
   multiline?: boolean;
   placeholder?: string;
 }) {
-  const base: React.CSSProperties = {
-    border: "none",
-    borderBottom: "1px dashed #f59e0b",
-    background: "transparent",
-    outline: "none",
-    fontFamily: "inherit",
-    fontSize: "inherit",
-    color: "inherit",
-    fontWeight: "inherit",
-    fontStyle: "inherit",
-    width: "100%",
-    padding: 0,
-    margin: 0,
-    display: "block",
-    ...style,
-  };
+  const sharedClass = `editable-field ${className ?? ""}`;
   if (multiline) {
     return (
       <textarea
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
         rows={2}
-        style={{ ...base, resize: "none" }}
+        className={sharedClass}
       />
     );
   }
+
   return (
     <input
       value={value}
-      onChange={(e) => onChange(e.target.value)}
+      onChange={(event) => onChange(event.target.value)}
       placeholder={placeholder}
-      style={base}
+      className={sharedClass}
     />
   );
 }
 
-// ── Shared style objects ──────────────────────────────────────────────────────
-const thDark: React.CSSProperties = {
-  background: "#1a1a1a",
-  color: "#fff",
-  fontWeight: 700,
-  fontSize: 8,
-  textTransform: "uppercase",
-  letterSpacing: 0.4,
-  padding: "5px 6px",
-  border: "1px solid #000",
-  textAlign: "center",
-  whiteSpace: "nowrap",
-  WebkitPrintColorAdjust: "exact",
-  printColorAdjust: "exact",
-};
-
-const tdBase: React.CSSProperties = {
-  border: "1px solid #000",
-  padding: "5px 6px",
-  fontSize: 9,
-  verticalAlign: "middle",
-};
-
-const sectionBar: React.CSSProperties = {
-  background: "#1a1a1a",
-  color: "#fff",
-  fontWeight: 700,
-  fontSize: 9,
-  textTransform: "uppercase",
-  letterSpacing: 0.8,
-  padding: "3px 8px",
-  border: "1px solid #000",
-  borderBottom: "none",
-  WebkitPrintColorAdjust: "exact",
-  printColorAdjust: "exact",
-};
-
-// ── Main component ────────────────────────────────────────────────────────────
 export function BubutInvoicePrintView({ invoice }: { invoice: BubutInvoiceSnapshot }) {
   const [printMode, setPrintMode] = useState<"DIREKSI" | "CUSTOMER">(
     invoice.invoiceType === "CUSTOMER" ? "CUSTOMER" : "DIREKSI",
   );
   const isCustomer = printMode === "CUSTOMER";
 
-  // Editable fields state
   const [headProject, setHeadProject] = useState(invoice.headProjectName ?? "");
   const [carType, setCarType] = useState(invoice.carType ?? "");
   const [sparepartName, setSparepartName] = useState(invoice.sparepartName ?? "");
   const [qty, setQty] = useState(String(invoice.qty ?? ""));
   const [qtyUnit, setQtyUnit] = useState(invoice.qtyUnit ?? "pcs");
-  const [poNo, setPoNo] = useState(invoice.invoiceNo ?? "");
-  const [poDate, setPoDate] = useState(invoice.woDate ?? "");
-  const [operator, setOperator] = useState(invoice.operatorName ?? "");
-  const [costLabour, setCostLabour] = useState("");
+  const [poNo, setPoNo] = useState(invoice.poNo ?? invoice.invoiceNo ?? "");
+  const [poDate, setPoDate] = useState(displayDate(invoice.poDate ?? invoice.woDate));
+  const [operator, setOperator] = useState(invoice.operatorName ?? "____________");
+  const [costLabour, setCostLabour] = useState("____________");
   const [detailProses, setDetailProses] = useState(invoice.processDetailText ?? "");
   const [sigName1, setSigName1] = useState(invoice.operatorName ?? "Sahrul Riswanto");
   const [sigName2, setSigName2] = useState(invoice.headProjectName ?? "");
-  const [sigName3, setSigName3] = useState("Chrecentia Wenny K");
+  const [sigName3, setSigName3] = useState("Renova Febri Adisti");
   const [sigName4, setSigName4] = useState("Widya Fitri");
 
-  // Pad rows to minimum
-  const matRows = [...invoice.materials];
-  while (matRows.length < 3) matRows.push(null as any);
-  const whRows = [...invoice.workingHours];
-  while (whRows.length < 9) whRows.push(null as any);
+  const materialRows = [...invoice.materials];
+  while (materialRows.length < 3) materialRows.push(null as never);
 
-  const sigCols = [
-    { label: "Dibuat oleh,", sub: "Administrasi Oprasional", name: sigName1, setName: setSigName1 },
-    { label: "Diketahui oleh,", sub: "Project Manager", name: sigName2, setName: setSigName2 },
-    { label: "Diketahui oleh,", sub: "SPV Finance Accounting", name: sigName3, setName: setSigName3 },
-    { label: "Disetujui oleh,", sub: "Office Manager", name: sigName4, setName: setSigName4 },
+  const workRows = [...invoice.workingHours];
+  while (workRows.length < 9) workRows.push(null as never);
+
+  const beforePictures = invoice.pictures.filter((picture) =>
+    picture.caption?.toUpperCase().includes("BEFORE"),
+  );
+  const afterPictures = invoice.pictures.filter((picture) =>
+    picture.caption?.toUpperCase().includes("AFTER"),
+  );
+  const untaggedPictures = invoice.pictures.filter((picture) =>
+    !beforePictures.includes(picture) && !afterPictures.includes(picture),
+  );
+  const pictureGroups =
+    beforePictures.length > 0 || afterPictures.length > 0
+      ? [
+          { label: "Before", pictures: beforePictures },
+          { label: "After", pictures: afterPictures },
+        ].filter((group) => group.pictures.length > 0)
+      : [{ label: "", pictures: untaggedPictures }];
+
+  const signatures = [
+    {
+      label: "Dibuat oleh,",
+      role: "Administrasi Oprasional",
+      name: sigName1,
+      setName: setSigName1,
+    },
+    {
+      label: "Diketahui oleh,",
+      role: "Project Manager",
+      name: sigName2,
+      setName: setSigName2,
+    },
+    {
+      label: "Diketahui oleh,",
+      role: "Finance Accounting",
+      name: sigName3,
+      setName: setSigName3,
+    },
+    {
+      label: "Disetujui oleh,",
+      role: "Office Manager",
+      name: sigName4,
+      setName: setSigName4,
+    },
   ];
 
   return (
     <>
-      {/* ── SCREEN TOPBAR ── */}
-      <div className="print:hidden fixed top-0 left-0 right-0 z-50 flex items-center justify-between border-b border-white/10 bg-[#111114] px-5 h-11">
+      <div className="print:hidden fixed top-0 left-0 right-0 z-50 flex h-11 items-center justify-between border-b border-white/10 bg-[#111114] px-5">
         <button
           type="button"
           onClick={() => window.history.back()}
-          className="font-mono text-[11px] text-white/40 hover:text-white transition-colors"
+          className="font-mono text-[11px] text-white/45 transition-colors hover:text-white"
         >
-          ← Kembali
+          Kembali
         </button>
-        <span className="font-mono text-[10px] text-white/20">
-          ✏ Klik field bergaris untuk edit
+        <span className="font-mono text-[10px] text-white/35">
+          Klik field bergaris untuk edit
         </span>
         <div className="flex items-center gap-2">
-          <div className="flex border border-white/10 h-8">
+          <div className="flex h-8 border border-white/10">
             <button
               type="button"
               onClick={() => setPrintMode("DIREKSI")}
-              className={`px-3 h-full text-[10px] font-mono uppercase tracking-[0.1em] transition-colors border-r ${printMode === "DIREKSI"
-                ? "bg-amber-500/10 text-amber-500 border-amber-500/30"
-                : "text-white/35 hover:text-white/60 border-white/10"
-                }`}
+              className={`h-full border-r px-3 font-mono text-[10px] uppercase tracking-[0.1em] transition-colors ${
+                printMode === "DIREKSI"
+                  ? "border-amber-500/30 bg-amber-500/10 text-amber-500"
+                  : "border-white/10 text-white/35 hover:text-white/60"
+              }`}
             >
               Direksi
             </button>
             <button
               type="button"
               onClick={() => setPrintMode("CUSTOMER")}
-              className={`px-3 h-full text-[10px] font-mono uppercase tracking-[0.1em] transition-colors ${printMode === "CUSTOMER"
-                ? "bg-sky-500/10 text-sky-400"
-                : "text-white/35 hover:text-white/60"
-                }`}
+              className={`h-full px-3 font-mono text-[10px] uppercase tracking-[0.1em] transition-colors ${
+                printMode === "CUSTOMER"
+                  ? "bg-sky-500/10 text-sky-400"
+                  : "text-white/35 hover:text-white/60"
+              }`}
             >
               Customer
             </button>
@@ -176,7 +178,7 @@ export function BubutInvoicePrintView({ invoice }: { invoice: BubutInvoiceSnapsh
           <button
             type="button"
             onClick={() => window.print()}
-            className="flex items-center gap-1.5 border border-amber-500/30 bg-amber-500/[0.04] h-8 px-3 text-[10px] font-mono uppercase tracking-[0.1em] text-amber-500 hover:bg-amber-500/10 transition-colors"
+            className="flex h-8 items-center gap-1.5 border border-amber-500/30 bg-amber-500/[0.04] px-3 font-mono text-[10px] uppercase tracking-[0.1em] text-amber-500 transition-colors hover:bg-amber-500/10"
           >
             <Printer className="h-3 w-3" />
             Print {isCustomer ? "Customer" : "Direksi"}
@@ -184,394 +186,725 @@ export function BubutInvoicePrintView({ invoice }: { invoice: BubutInvoiceSnapsh
         </div>
       </div>
 
-      {/* ── PAGE WRAPPER ── */}
-      <main
-        style={{ background: "#1a1a1e", minHeight: "100vh", paddingTop: 44 }}
-        className="print:pt-0 print:bg-white print:min-h-0 print:block"
-      >
-        <div
-          className="w-[210mm] print:w-full shadow-2xl print:shadow-none print:my-0 print:mx-0 mx-auto my-6 bg-white text-black box-border"
-          style={{
-            padding: "0",
-            fontFamily: "'Times New Roman', Times, serif",
-            fontSize: 10,
-          }}
-        >
-          {/* ── HEADER ── */}
-          <div style={{ borderTop: "2px solid #000", paddingTop: 6, marginBottom: 0 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-              {/* Left */}
-              <div>
-                <div style={{ fontSize: 22, fontWeight: 900, letterSpacing: 2, textTransform: "uppercase", lineHeight: 1 }}>
-                  SALES INVOICE
-                </div>
-              </div>
-              {/* Right */}
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <div style={{ textAlign: "right" }}>
-                  <div style={{ fontSize: 15, fontWeight: 700, letterSpacing: 0.5 }}>STANLEY MARTHIN</div>
-                  <div style={{ fontSize: 8, color: "#555", lineHeight: 1.5 }}>
-                    Jl. Padasaluyu Utara II No. 8 Sukasari<br />Isola Bandung
-                  </div>
-                </div>
-                <img src="/sm.jpeg" alt="SM" style={{ width: 48, height: 48, objectFit: "contain" }} />
-              </div>
+      <main className="min-h-screen bg-[#1a1a1e] pt-11 print:block print:min-h-0 print:bg-white print:pt-0">
+        <section className="invoice-page mx-auto my-6 bg-white text-black shadow-2xl print:my-0 print:shadow-none">
+          <header className="invoice-header">
+            <div className="invoice-title-box">
+              <div className="rule rule-light" />
+              <div className="rule rule-dark" />
+              <h1>SALES INVOICE</h1>
+              <div className="rule rule-dark" />
             </div>
-          </div>
-          <div style={{ borderTop: "1px solid #000", marginTop: 5, borderBottom: "2px solid #000", marginBottom: 8 }} />
+            <div className="brand-box">
+              <div className="brand-text">
+                <strong>STANLEY MARTHIN</strong>
+                <span>Jl. Padasaluyu Utara II No. 8 Sukasari</span>
+                <span>Isola Bandung</span>
+              </div>
+              <img src="/sm.jpeg" alt="Stanley Marthin" />
+              <div className="rule rule-light" />
+            </div>
+          </header>
 
-          {/* ── INFO BLOCK ── */}
-          <div style={{ display: "flex", gap: 0, marginBottom: 10 }}>
-            {/* Left box */}
-            <div style={{ flex: "0 0 58%", padding: "8px 12px" }}>
-              {[
-                { label: "HEAD PROJECT", value: headProject, set: setHeadProject },
-                { label: "CAR TYPE", value: carType, set: setCarType },
-                { label: "SPAREPART NAME", value: sparepartName, set: setSparepartName },
-              ].map(({ label, value, set }) => (
-                <div key={label} style={{ display: "flex", alignItems: "baseline", marginBottom: 4, gap: 4 }}>
-                  <span style={{ fontWeight: 700, fontSize: 9, textTransform: "uppercase", minWidth: 106, flexShrink: 0 }}>
-                    {label}
-                  </span>
-                  <span style={{ fontSize: 9, marginRight: 3 }}>:</span>
-                  <Editable value={value} onChange={set} style={{ fontSize: 10 }} />
+          <div className="info-row">
+            <div className="info-box info-main">
+              <label>
+                <span>HEAD PROJECT</span>
+                <b>:</b>
+                <Editable value={headProject} onChange={setHeadProject} />
+              </label>
+              <label>
+                <span>CAR TYPE</span>
+                <b>:</b>
+                <Editable value={carType} onChange={setCarType} />
+              </label>
+              <label>
+                <span>SPAREPART NAME</span>
+                <b>:</b>
+                <Editable value={sparepartName} onChange={setSparepartName} />
+              </label>
+              <label className="qty-line">
+                <span>QTY</span>
+                <b>:</b>
+                <div className="qty-combo">
+                  <Editable value={qty} onChange={setQty} className="qty-value" />
+                  <Editable value={qtyUnit} onChange={setQtyUnit} className="qty-unit" />
                 </div>
-              ))}
-              <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
-                <span style={{ fontWeight: 700, fontSize: 9, textTransform: "uppercase", minWidth: 106, flexShrink: 0 }}>QTY</span>
-                <span style={{ fontSize: 9, marginRight: 3 }}>:</span>
-                <Editable value={qty} onChange={setQty} style={{ fontSize: 10, width: 60 }} />
-                <Editable value={qtyUnit} onChange={setQtyUnit} style={{ fontSize: 10, width: 48 }} />
-              </div>
+              </label>
             </div>
-            {/* Right box */}
-            <div style={{ flex: 1, padding: "8px 12px" }}>
-              {[
-                { label: "PO No.", value: poNo, set: setPoNo },
-                { label: "PO DATE", value: poDate, set: setPoDate },
-              ].map(({ label, value, set }) => (
-                <div key={label} style={{ display: "flex", alignItems: "baseline", marginBottom: 4, gap: 4 }}>
-                  <span style={{ fontSize: 9, color: "#555", minWidth: 52, flexShrink: 0 }}>{label}</span>
-                  <span style={{ fontSize: 9, color: "#555", marginRight: 3 }}>:</span>
-                  <Editable value={value} onChange={set} style={{ fontSize: 10 }} />
-                </div>
-              ))}
+            <div className="info-box info-po">
+              <label>
+                <span>PO No.</span>
+                <b>:</b>
+                <Editable value={poNo} onChange={setPoNo} />
+              </label>
+              <label>
+                <span>PO DATE</span>
+                <b>:</b>
+                <Editable value={poDate} onChange={setPoDate} />
+              </label>
             </div>
           </div>
 
-          {/* ── SECTION I: MATERIAL USE ── */}
-          <div style={sectionBar}>I. MATERIAL USE</div>
-          <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 10 }}>
+          <div className="section-bar">I. MATERIAL USE</div>
+          <table className="sheet material-table">
             <thead>
               <tr>
-                <th style={{ ...thDark, width: 22 }}>NO</th>
-                <th style={{ ...thDark, textAlign: "left" }}>TYPE OF MATERIAL</th>
-                <th style={{ ...thDark, width: 38 }}>QTY</th>
-                <th style={{ ...thDark, width: 44 }}>QUOM</th>
-                <th style={{ ...thDark, width: 80, textAlign: "right" }}>PRICE</th>
-                <th style={{ ...thDark, width: 90, textAlign: "right" }}>TOTAL</th>
+                <th className="no-col">NO</th>
+                <th className="material-name">TYPE of MATERIAL</th>
+                <th className="qty-col">QTY</th>
+                <th className="unit-col">QUOM</th>
+                <th className="money-col">PRICE</th>
+                <th className="money-col">TOTAL</th>
               </tr>
             </thead>
             <tbody>
-              {matRows.map((item, idx) => (
-                <tr key={idx}>
-                  <td style={{ ...tdBase, textAlign: "center" }}>{item?.no ?? ""}</td>
-                  <td style={tdBase}>{item?.materialName ?? ""}</td>
-                  <td style={{ ...tdBase, textAlign: "center" }}>{item?.qty ?? ""}</td>
-                  <td style={{ ...tdBase, textAlign: "center" }}>{item?.unit ?? ""}</td>
-                  <td style={{ ...tdBase, textAlign: "right", fontFamily: "monospace" }}>
-                    {item ? rupiah(item.price) : ""}
-                  </td>
-                  <td style={{ ...tdBase, textAlign: "right", fontFamily: "monospace" }}>
-                    {item ? rupiah(item.total) : ""}
-                  </td>
+              {materialRows.map((item, index) => (
+                <tr key={index}>
+                  <td className="center">{item?.no ?? index + 1}</td>
+                  <td className="center strong">{item?.materialName ?? ""}</td>
+                  <td className="center">{item?.qty ?? ""}</td>
+                  <td className="center">{item?.unit ?? ""}</td>
+                  <td className="currency">{item ? <><span>Rp</span><span>{intId(item.price)}</span></> : null}</td>
+                  <td className="currency">{item ? <><span>Rp</span><span>{intId(item.total)}</span></> : null}</td>
                 </tr>
               ))}
-              {/* Total row */}
-              <tr>
-                <td
-                  colSpan={5}
-                  style={{ ...tdBase, textAlign: "right", fontWeight: 700, fontSize: 8 }}
-                >
-                  TOTAL PEMAKAIAN BAHAN
-                </td>
-                <td style={{ ...tdBase, textAlign: "right", fontFamily: "monospace", fontWeight: 700 }}>
-                  {rupiah(invoice.totals.materialTotal)}
-                </td>
+              <tr className="total-row">
+                <td colSpan={5}>TOTAL PEMAKAIAN BAHAN</td>
+                <td className="currency"><span>Rp</span><span>{intId(invoice.totals.materialTotal)}</span></td>
               </tr>
             </tbody>
           </table>
 
-          {/* ── SECTION II: WORKING HOUR ── */}
-          <div style={sectionBar}>II. WORKING HOUR</div>
-          <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 3 }}>
+          <div className="section-bar work-title">II. WORKING HOUR</div>
+          <table className="sheet work-table">
             <thead>
               <tr>
-                <th style={{ ...thDark, width: 20 }}>NO</th>
-                <th style={{ ...thDark, width: 58 }}>DATE</th>
-                <th style={{ ...thDark, width: 40 }}>START</th>
-                <th style={{ ...thDark, width: 40 }}>BREAK</th>
-                <th style={{ ...thDark, width: 40 }}>FINISH</th>
-                <th style={{ ...thDark, width: 64 }}>WORKING HOUR</th>
-                <th style={{ ...thDark, width: 64 }}>POWER (watt)</th>
-                <th style={{ ...thDark, width: 80 }}>POWER COST/kwh</th>
-                <th style={{ ...thDark, width: 80, textAlign: "right" }}>TOTAL</th>
+                <th className="no-col">NO</th>
+                <th>DATE</th>
+                <th>START</th>
+                <th>BREAK</th>
+                <th>FINISH</th>
+                <th>WORKING<br />HOUR</th>
+                <th>POWER<br />(watt)</th>
+                <th>POWER<br />COST/kwh</th>
+                <th>TOTAL</th>
               </tr>
             </thead>
             <tbody>
-              {whRows.map((item, idx) => (
-                <tr key={idx}>
-                  <td style={{ ...tdBase, textAlign: "center" }}>{item?.no ?? ""}</td>
-                  <td style={{ ...tdBase, textAlign: "center", fontFamily: "monospace" }}>{item?.date ?? ""}</td>
-                  <td style={{ ...tdBase, textAlign: "center", fontFamily: "monospace" }}>{item?.start ?? ""}</td>
-                  <td style={{ ...tdBase, textAlign: "center", fontFamily: "monospace" }}>{item?.break ?? ""}</td>
-                  <td style={{ ...tdBase, textAlign: "center", fontFamily: "monospace" }}>{item?.finish ?? ""}</td>
-                  <td style={{ ...tdBase, textAlign: "center", fontFamily: "monospace" }}>{item?.workingHourText ?? ""}</td>
-                  <td style={{ ...tdBase, textAlign: "center", fontFamily: "monospace" }}>
-                    {item ? item.powerWatt : ""}
-                  </td>
-                  <td style={{ ...tdBase, textAlign: "right", fontFamily: "monospace" }}>
-                    {item ? rupiah(item.powerCostKwh) : ""}
-                  </td>
-                  <td style={{ ...tdBase, textAlign: "right", fontFamily: "monospace" }}>
-                    {item ? rupiah(item.total) : ""}
-                  </td>
+              {workRows.map((item, index) => (
+                <tr key={index}>
+                  <td className="center">{item?.no ?? index + 1}</td>
+                  <td className="center">{item?.date ?? ""}</td>
+                  <td className="center">{item?.start ?? ""}</td>
+                  <td className="center">{item?.break ?? ""}</td>
+                  <td className="center">{item?.finish ?? ""}</td>
+                  <td className="center">{item?.workingHourText ?? ""}</td>
+                  <td className="center">{item ? numberId(item.powerWatt) : ""}</td>
+                  <td className="center">{item ? numberId(item.powerCostKwh) : ""}</td>
+                  <td className="currency">{item ? <><span>Rp</span><span>{intId(item.total)}</span></> : null}</td>
                 </tr>
               ))}
-              {/* Total row */}
-              <tr>
-                <td colSpan={5} style={tdBase} />
-                <td style={{ ...tdBase, textAlign: "center", fontFamily: "monospace", fontWeight: 700 }}>
-                  {invoice.totals.totalWorkHourText}
-                </td>
-                <td colSpan={2} style={{ ...tdBase, textAlign: "right", fontWeight: 700, fontSize: 8 }}>
-                  TOTAL
-                </td>
-                <td style={{ ...tdBase, textAlign: "right", fontFamily: "monospace", fontWeight: 700 }}>
-                  {rupiah(invoice.totals.workingHourTotal)}
-                </td>
+              <tr className="total-row">
+                <td colSpan={5} />
+                <td className="center">{invoice.totals.totalWorkHourText}</td>
+                <td colSpan={2}>TOTAL</td>
+                <td className="currency"><span>Rp</span><span>{intId(invoice.totals.workingHourTotal)}</span></td>
               </tr>
             </tbody>
           </table>
-          <div style={{ fontSize: 7, fontStyle: "italic", color: "#555", marginBottom: 10 }}>
-            Rumus : (Daya (watt) x waktu (jam) x tarif Listrik/kwh)/(1.000) x 2
+          <div className="formula">
+            Rumus : <strong>(Daya (watt) x waktu (jam) x tarif Listrik/kwh)/(1.000) x 2</strong>
           </div>
 
-          {/* ── NOTES + SUMMARY ── */}
-          <div style={{ display: "flex", gap: 14, marginBottom: 10 }}>
-            {/* Left: Notes */}
-            <div style={{ flex: "0 0 55%" }}>
-              <div style={{ fontWeight: 700, textDecoration: "underline", fontSize: 9, marginBottom: 6 }}>
-                NOTES
-              </div>
-              {[
-                { label: "OPERATOR", value: operator, set: setOperator },
-                { label: "COST LABOUR", value: costLabour, set: setCostLabour },
-              ].map(({ label, value, set }) => (
-                <div key={label} style={{ display: "flex", alignItems: "baseline", gap: 4, marginBottom: 4, fontSize: 9 }}>
-                  <span style={{ fontWeight: 700, minWidth: 80, flexShrink: 0 }}>{label}</span>
-                  <span>:</span>
-                  <Editable value={value} onChange={set} style={{ fontSize: 9 }} />
+          <div className="bottom-grid">
+            <div className="notes-block">
+              <div className="notes-title">NOTES</div>
+              <label>
+                <span>OPERATOR</span>
+                <b>:</b>
+                <Editable value={operator} onChange={setOperator} />
+              </label>
+              <label>
+                <span>COST LABOUR</span>
+                <b>:</b>
+                <Editable value={costLabour} onChange={setCostLabour} />
+              </label>
+              <label>
+                <span>WORK HOUR</span>
+                <b>:</b>
+                <strong>{invoice.totals.totalWorkHourText || "____________"}</strong>
+              </label>
+
+              <div className="picture-label">Picture :</div>
+              {invoice.pictures.length > 0 ? (
+                <div className="picture-groups">
+                  {pictureGroups.map((group) => (
+                    <div key={group.label || "pictures"} className="picture-group">
+                      {group.label ? <div className="picture-group-label">{group.label}</div> : null}
+                      <div className="picture-list">
+                        {group.pictures.slice(0, 2).map((picture, index) => {
+                            const resolvedUrl = getProxiedImageUrl(picture.url) ?? picture.url;
+                            return (
+                              <img
+                                key={`${picture.url}-${index}`}
+                                src={resolvedUrl}
+                                alt={picture.caption ?? ""}
+                              />
+                            );
+                          })}
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))}
-              <div style={{ display: "flex", alignItems: "baseline", gap: 4, marginBottom: 8, fontSize: 9 }}>
-                <span style={{ fontWeight: 700, minWidth: 80, flexShrink: 0 }}>WORK HOUR</span>
-                <span>:</span>
-                <span style={{ fontSize: 9 }}>{invoice.totals.totalWorkHourText}</span>
-              </div>
-              {/* Picture */}
-              <div style={{ marginBottom: 8 }}>
-                <div style={{ fontSize: 9, fontWeight: 700, fontStyle: "italic", marginBottom: 4 }}>Picture :</div>
-                {invoice.pictures && invoice.pictures.length > 0 ? (
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-                    {invoice.pictures.slice(0, 4).map((pic, i) => (
-                      <img
-                        key={i}
-                        src={pic.url}
-                        alt={pic.caption ?? ""}
-                        style={{ width: 80, height: 72, objectFit: "cover", border: "1px solid #ccc" }}
-                      />
-                    ))}
-                  </div>
-                ) : (
-                  <div style={{
-                    width: 100, height: 90,
-                    border: "1px dashed #bbb",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    fontSize: 8, color: "#bbb",
-                  }}>
-                    No Photo
-                  </div>
-                )}
-              </div>
-              {/* Detail proses */}
-              <div style={{ fontSize: 9, fontWeight: 700, fontStyle: "italic", marginBottom: 3 }}>
-                Detail proses:
-              </div>
+              ) : (
+                <div className="picture-placeholder" />
+              )}
+
+              <div className="detail-label">Detail proses :</div>
               <Editable
                 value={detailProses}
                 onChange={setDetailProses}
                 multiline
-                style={{ fontSize: 9, fontStyle: "italic", fontWeight: 700 }}
-                placeholder="e.g. MAKING BUSHING RING SETING 1 PCS"
+                placeholder="Detail proses"
+                className="detail-field"
               />
             </div>
 
-            {/* Right: Summary */}
-            <div style={{ flex: 1, alignSelf: "flex-start" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 9 }}>
-                <tbody>
-                  {!isCustomer && (
+            <table className="summary-table">
+              <tbody>
+                <tr>
+                  <td>TOTAL PRICE BUBUT</td>
+                  <td>:</td>
+                  <td>Rp</td>
+                  <td>{intId(invoice.totals.totalPriceBubut)}</td>
+                </tr>
+                {isCustomer ? (
+                  <>
                     <tr>
-                      <td style={{ border: "1px solid #000", padding: "4px 8px", fontWeight: 700, textTransform: "uppercase" }}>
-                        TOTAL PRICE BUBUT
-                      </td>
-                      <td style={{ border: "1px solid #000", padding: "4px 6px", width: 12, textAlign: "center" }}>:</td>
-                      <td style={{ border: "1px solid #000", padding: "4px 4px", width: 18, textAlign: "center" }}>Rp</td>
-                      <td style={{ border: "1px solid #000", padding: "4px 8px", textAlign: "right", fontFamily: "monospace", fontWeight: 700 }}>
-                        {rupiah(invoice.totals.totalPriceBubut)}
-                      </td>
+                      <td>UP {invoice.totals.markupPercent ?? 235} %</td>
+                      <td>:</td>
+                      <td>Rp</td>
+                      <td>{intId(invoice.totals.priceAfterMarkup)}</td>
                     </tr>
-                  )}
-                  {isCustomer && (
-                    <>
-                      <tr>
-                        <td style={{ border: "1px solid #000", padding: "4px 8px", fontWeight: 700, textTransform: "uppercase" }}>
-                          TOTAL PRICE BUBUT
-                        </td>
-                        <td style={{ border: "1px solid #000", padding: "4px 6px", width: 12, textAlign: "center" }}>:</td>
-                        <td style={{ border: "1px solid #000", padding: "4px 4px", width: 18, textAlign: "center" }}>Rp</td>
-                        <td style={{ border: "1px solid #000", padding: "4px 8px", textAlign: "right", fontFamily: "monospace", fontWeight: 700 }}>
-                          {rupiah(invoice.totals.totalPriceBubut)}
-                        </td>
-                      </tr>
-                      <tr>
-                        <td style={{ border: "1px solid #000", padding: "4px 8px", fontWeight: 700, textTransform: "uppercase" }}>
-                          UP {invoice.totals.markupPercent ?? 235}%
-                        </td>
-                        <td style={{ border: "1px solid #000", padding: "4px 6px", width: 12, textAlign: "center" }}>:</td>
-                        <td style={{ border: "1px solid #000", padding: "4px 4px", width: 18, textAlign: "center" }}>Rp</td>
-                        <td style={{ border: "1px solid #000", padding: "4px 8px", textAlign: "right", fontFamily: "monospace", fontWeight: 700 }}>
-                          {rupiah(invoice.totals.priceAfterMarkup)}
-                        </td>
-                      </tr>
-                      <tr style={{ 
-                        background: "#e8e8e8",
-                        WebkitPrintColorAdjust: "exact",
-                        printColorAdjust: "exact",
-                      }}>
-                        <td style={{ border: "1px solid #000", padding: "4px 8px", fontWeight: 700, textTransform: "uppercase" }}>
-                          PRICE ROUNDING
-                        </td>
-                        <td style={{ border: "1px solid #000", padding: "4px 6px", textAlign: "center" }}>:</td>
-                        <td style={{ border: "1px solid #000", padding: "4px 4px", textAlign: "center" }}>Rp</td>
-                        <td style={{ border: "1px solid #000", padding: "4px 8px", textAlign: "right", fontFamily: "monospace", fontWeight: 700 }}>
-                          {rupiah(invoice.totals.priceRounding)}
-                        </td>
-                      </tr>
-                    </>
-                  )}
-                  <tr style={{ 
-                    background: "#fef9c3",
-                    WebkitPrintColorAdjust: "exact",
-                    printColorAdjust: "exact",
-                  }}>
-                    <td style={{ border: "1px solid #000", padding: "4px 8px", fontWeight: 700, textTransform: "uppercase" }}>
-                      ACC BU WIDYA
-                    </td>
-                    <td style={{ border: "1px solid #000", padding: "4px 6px", textAlign: "center" }}>:</td>
-                    <td style={{ border: "1px solid #000", padding: "4px 4px" }} />
-                    <td style={{ border: "1px solid #000", padding: "4px 8px" }} />
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+                    <tr>
+                      <td>PRICE ROUNDING</td>
+                      <td>:</td>
+                      <td>Rp</td>
+                      <td>{intId(invoice.totals.priceRounding)}</td>
+                    </tr>
+                  </>
+                ) : null}
+                <tr className="approval-row">
+                  <td>ACC BU WIDYA</td>
+                  <td>:</td>
+                  <td />
+                  <td />
+                </tr>
+              </tbody>
+            </table>
           </div>
 
-          {/* ── SIGNATURE TABLE ── */}
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 9, marginTop: 12 }}>
+          <table className="signature-table">
             <tbody>
               <tr>
-                {sigCols.map(({ label }, i) => (
-                  <td
-                    key={i}
-                    style={{ border: "none", padding: "5px 8px", textAlign: "center", fontStyle: "italic", fontWeight: 400, width: "25%" }}
-                  >
-                    {label}
-                  </td>
+                {signatures.map((signature) => (
+                  <td key={signature.role}>{signature.label}</td>
                 ))}
               </tr>
               <tr>
-                {sigCols.map(({ sub }, i) => (
-                  <td key={i} style={{ border: "none", padding: "2px 8px", textAlign: "center", fontSize: 8, color: "#888" }}>
-                    {sub}
-                  </td>
+                {signatures.map((signature) => (
+                  <td key={signature.role}>{signature.role}</td>
+                ))}
+              </tr>
+              <tr className="sign-space">
+                {signatures.map((signature) => (
+                  <td key={signature.role} />
                 ))}
               </tr>
               <tr>
-                {sigCols.map((_, i) => (
-                  <td key={i} style={{ border: "none", height: 60 }} />
-                ))}
-              </tr>
-              <tr>
-                {sigCols.map(({ name, setName }, i) => (
-                  <td
-                    key={i}
-                    style={{ border: "none", padding: "4px 8px", textAlign: "center" }}
-                  >
+                {signatures.map((signature) => (
+                  <td key={signature.role}>
+                    <span className="sign-line" />
                     <Editable
-                      value={name}
-                      onChange={setName}
-                      style={{ fontSize: 10, fontWeight: 700, textAlign: "center" }}
+                      value={signature.name}
+                      onChange={signature.setName}
+                      className="sign-name"
                     />
                   </td>
                 ))}
               </tr>
             </tbody>
           </table>
-
-          {/* ── FOOTER ── */}
-          <div style={{
-            marginTop: 10,
-            borderTop: "1px solid #e5e5e5",
-            paddingTop: 5,
-            fontSize: 7,
-            color: "#aaa",
-          }}>
-            <span>Stanley Marthin Restoration Garage · JL. Padasaluyu Utara II No. 8 Bandung 40154</span>
-          </div>
-        </div>
+        </section>
       </main>
 
-      <style>{`
+      <style jsx global>{`
+        .invoice-page {
+          box-sizing: border-box;
+          width: 210mm;
+          min-height: 285mm;
+          padding: 7mm 12mm 7mm;
+          font-family: Arial, Helvetica, sans-serif;
+          font-size: 9.2pt;
+          font-weight: 600;
+          line-height: 1.18;
+        }
+
+        .editable-field {
+          display: block;
+          width: 100%;
+          min-width: 0;
+          border: 0;
+          border-bottom: 1px dashed #d97706;
+          background: transparent;
+          color: inherit;
+          font: inherit;
+          font-weight: 800;
+          line-height: inherit;
+          outline: none;
+          padding: 0;
+          resize: none;
+        }
+
+        .invoice-header {
+          display: grid;
+          grid-template-columns: 40.5% 1fr;
+          align-items: start;
+          gap: 14mm;
+          margin-bottom: 6mm;
+        }
+
+        .rule {
+          width: 100%;
+          height: 1px;
+        }
+
+        .rule-light {
+          background: #bdbdbd;
+        }
+
+        .rule-dark {
+          background: #000;
+        }
+
+        .invoice-title-box .rule-light {
+          margin-bottom: 3.5mm;
+        }
+
+        .invoice-title-box h1 {
+          margin: 7mm 0 6.2mm;
+          font-family: "Arial Black", Arial, Helvetica, sans-serif;
+          font-size: 18pt;
+          letter-spacing: 0;
+          line-height: 1;
+        }
+
+        .brand-box {
+          display: grid;
+          grid-template-columns: 1fr 18mm;
+          align-items: center;
+          column-gap: 2.5mm;
+          padding-top: 3mm;
+        }
+
+        .brand-text {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-end;
+          text-align: right;
+          color: #111;
+          line-height: 1.05;
+        }
+
+        .brand-text strong {
+          font-family: "Arial Black", Arial, Helvetica, sans-serif;
+          font-size: 13.8pt;
+          line-height: 1.05;
+          white-space: nowrap;
+        }
+
+        .brand-text span {
+          font-size: 9.2pt;
+          font-weight: 900;
+          white-space: nowrap;
+        }
+
+        .brand-box img {
+          width: 18mm;
+          height: 16mm;
+          object-fit: cover;
+        }
+
+        .brand-box .rule {
+          grid-column: 1 / -1;
+          margin-top: 9mm;
+        }
+
+        .info-row {
+          display: grid;
+          grid-template-columns: 55.5% 38.3%;
+          justify-content: space-between;
+          align-items: start;
+          margin-bottom: 4mm;
+        }
+
+        .info-box {
+          background: #d0d0d0;
+          padding: 1.2mm 1.2mm 1.4mm;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
+
+        .info-box label,
+        .notes-block label {
+          display: grid;
+          grid-template-columns: max-content 4mm 1fr;
+          align-items: baseline;
+          min-height: 4.5mm;
+          font-family: "Arial Black", Arial, Helvetica, sans-serif;
+          font-size: 8.9pt;
+        }
+
+        .info-box label span {
+          width: 33mm;
+        }
+
+        .info-po label span {
+          width: 20mm;
+        }
+
+        .qty-line {
+          margin-top: 4.5mm;
+        }
+
+        .qty-combo {
+          display: flex;
+          align-items: baseline;
+          gap: 1.6mm;
+        }
+
+        .qty-value {
+          width: 10mm;
+        }
+
+        .qty-unit {
+          width: 14mm;
+        }
+
+        .section-bar {
+          background: #000;
+          color: #ffc000;
+          font-family: "Arial Black", Arial, Helvetica, sans-serif;
+          font-size: 9pt;
+          height: 4.7mm;
+          line-height: 4.7mm;
+          padding: 0 1.2mm;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
+
+        .work-title {
+          margin-top: 7mm;
+        }
+
+        .sheet {
+          width: 100%;
+          border-collapse: collapse;
+          table-layout: fixed;
+        }
+
+        .sheet th {
+          height: 5.1mm;
+          border: 1px solid #b7b7b7;
+          background: #3c3c3c;
+          color: #ffc000;
+          font-family: "Arial Black", Arial, Helvetica, sans-serif;
+          font-size: 8.3pt;
+          line-height: 1.05;
+          padding: 0 0.6mm;
+          text-align: center;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
+
+        .sheet td {
+          height: 4.55mm;
+          border: 1px solid #b7b7b7;
+          padding: 0 1mm;
+          font-size: 8.1pt;
+          font-weight: 600;
+          vertical-align: middle;
+        }
+
+        .sheet .no-col {
+          width: 7mm;
+        }
+
+        .material-table .material-name {
+          width: 78mm;
+          text-align: left;
+        }
+
+        .material-table .qty-col {
+          width: 18mm;
+        }
+
+        .material-table .unit-col {
+          width: 20mm;
+        }
+
+        .material-table .money-col {
+          width: 25mm;
+        }
+
+        .work-table th:nth-child(2) {
+          width: 24mm;
+        }
+
+        .work-table th:nth-child(3),
+        .work-table th:nth-child(4),
+        .work-table th:nth-child(5) {
+          width: 20mm;
+        }
+
+        .work-table th:nth-child(6) {
+          width: 20mm;
+        }
+
+        .work-table th:nth-child(7) {
+          width: 18mm;
+        }
+
+        .work-table th:nth-child(8) {
+          width: 23mm;
+        }
+
+        .work-table th:nth-child(9) {
+          width: 25mm;
+        }
+
+        .center {
+          text-align: center;
+        }
+
+        .strong,
+        .total-row {
+          font-family: "Arial Black", Arial, Helvetica, sans-serif;
+        }
+
+        .currency {
+          text-align: right;
+          white-space: nowrap;
+        }
+
+        .currency span:first-child {
+          float: left;
+        }
+
+        .total-row td {
+          font-size: 8.1pt;
+          font-weight: 900;
+          text-align: right;
+        }
+
+        .formula {
+          display: inline-block;
+          min-width: 99mm;
+          background: #9e9e9e;
+          font-size: 7.7pt;
+          font-weight: 500;
+          height: 4.4mm;
+          line-height: 4.4mm;
+          padding: 0 1.2mm;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
+
+        .bottom-grid {
+          display: grid;
+          grid-template-columns: 55.5% 38.3%;
+          justify-content: space-between;
+          align-items: start;
+          margin-top: 4mm;
+        }
+
+        .notes-title {
+          display: inline-block;
+          margin-bottom: 1.5mm;
+          border-bottom: 1px solid #000;
+          font-family: "Arial Black", Arial, Helvetica, sans-serif;
+          font-size: 8.2pt;
+          line-height: 1;
+        }
+
+        .notes-block label {
+          grid-template-columns: 25mm 4mm 1fr;
+          min-height: 3.8mm;
+          font-size: 8.2pt;
+        }
+
+        .notes-block label span {
+          font-family: "Arial Black", Arial, Helvetica, sans-serif;
+        }
+
+        .picture-label,
+        .detail-label {
+          margin-top: 2.2mm;
+          font-family: "Arial Black", Arial, Helvetica, sans-serif;
+          font-size: 8.3pt;
+          font-style: italic;
+        }
+
+        .picture-groups {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 3mm;
+          margin: 1.5mm 0 0 14.5mm;
+        }
+
+        .picture-group {
+          display: flex;
+          flex-direction: column;
+          gap: 1mm;
+        }
+
+        .picture-group-label {
+          font-family: "Arial Black", Arial, Helvetica, sans-serif;
+          font-size: 7.4pt;
+          font-style: italic;
+        }
+
+        .picture-list {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 1.5mm;
+        }
+
+        .picture-list img,
+        .picture-placeholder {
+          width: 28mm;
+          height: 22mm;
+          object-fit: cover;
+        }
+
+        .picture-placeholder {
+          margin: 1.5mm 0 0 14.5mm;
+          border: 1px solid transparent;
+        }
+
+        .detail-label {
+          margin-top: 1.7mm;
+        }
+
+        .detail-field {
+          margin-top: 1.3mm;
+          min-height: 9mm;
+          border-bottom: 0;
+          font-family: "Arial Black", Arial, Helvetica, sans-serif;
+          font-size: 8.3pt;
+          font-style: italic;
+          text-transform: uppercase;
+        }
+
+        .summary-table {
+          width: 100%;
+          margin-top: 13mm;
+          border-collapse: collapse;
+          table-layout: fixed;
+          font-family: "Arial Black", Arial, Helvetica, sans-serif;
+        }
+
+        .summary-table td {
+          height: 5.6mm;
+          border: 1px solid #b7b7b7;
+          background: #d0d0d0;
+          font-size: 8.3pt;
+          padding: 0 1.1mm;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
+
+        .summary-table td:nth-child(1) {
+          width: auto;
+        }
+
+        .summary-table td:nth-child(2) {
+          width: 4mm;
+          text-align: center;
+        }
+
+        .summary-table td:nth-child(3) {
+          width: 8mm;
+          text-align: center;
+        }
+
+        .summary-table td:nth-child(4) {
+          text-align: right;
+        }
+
+        .summary-table .approval-row td {
+          background: #ffc000;
+        }
+
+        .signature-table {
+          width: 100%;
+          margin-top: 5mm;
+          border-collapse: collapse;
+          table-layout: fixed;
+          font-size: 8.8pt;
+        }
+
+        .signature-table td {
+          border: 0;
+          text-align: center;
+          font-weight: 500;
+          line-height: 1.45;
+        }
+
+        .sign-space td {
+          height: 20mm;
+        }
+
+        .sign-line {
+          display: block;
+          width: 25mm;
+          margin: 0 auto 2.4mm;
+          border-top: 1px solid #000;
+        }
+
+        .sign-name {
+          margin: 0 auto;
+          border: 0;
+          text-align: center;
+          font-size: 8.7pt;
+          font-weight: 500;
+        }
+
         @media print {
-          @page { 
-            size: A4 portrait; 
-            margin: 15mm; 
+          @page {
+            size: A4 portrait;
+            margin: 0;
           }
-          html { background: white !important; }
-          body { 
-            background: white !important; 
-            margin: 0 !important; 
-            padding: 0 !important; 
-          }
-          body > div { background: white !important; }
-          main { 
-            background: white !important; 
-            padding: 0 !important; 
+
+          html,
+          body,
+          body > div {
             margin: 0 !important;
-            min-height: unset !important;
-            height: auto !important;
+            background: white !important;
           }
-          main > div {
-            min-height: unset !important;
-            height: auto !important;
+
+          main,
+          main > section {
+            margin: 0 !important;
+            box-shadow: none !important;
           }
-          input, textarea {
+
+          input,
+          textarea {
             border: none !important;
-            border-bottom: none !important;
             background: transparent !important;
-            padding: 0 !important;
+            overflow: hidden !important;
           }
         }
       `}</style>

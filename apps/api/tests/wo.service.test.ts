@@ -169,6 +169,20 @@ class InMemoryWoRepository implements WoRepository {
     };
   }
 
+  async approveStage() {
+    this.ticket = {
+      ...this.ticket,
+      status: "APPROVED",
+      approvalDate: "2026-05-14 10:00:00",
+      linkedCountdownId: "CD-1",
+      linkedCountdownStatus: "PLAN",
+    };
+    return {
+      status: this.ticket.status,
+      linkedCountdownId: "CD-1",
+    };
+  }
+
   async findLinkedCountdowns() {
     return this.linkedCountdowns;
   }

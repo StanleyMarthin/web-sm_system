@@ -19,23 +19,23 @@ function SpkUnavailableState({
 }) {
   return (
     <div className="space-y-6">
-      <div className="rounded-[28px] border border-white/[0.06] bg-[#050505] p-6 shadow-[0_0_0_1px_rgba(255,255,255,0.02)]">
-        <p className="text-[11px] uppercase tracking-[0.2em] text-amber-500/70">SPK</p>
-        <h1 className="mt-3 text-2xl font-light text-white">Detail SPK belum bisa dimuat</h1>
-        <p className="mt-2 text-sm text-white/45">
-          Data untuk nomor <span className="text-white/75">{spkId}</span> belum bisa dibaca saat
+      <div className="rounded-md border border-white/5 bg-[#111114] p-6">
+        <p className="text-[12px] uppercase tracking-[0.2em] text-amber-500/70">SPK</p>
+        <h1 className="mt-3 text-[13px] font-semibold text-white">Detail SPK belum bisa dimuat</h1>
+        <p className="mt-2 text-[12px] text-white/40">
+          Data untuk nomor <span className="text-white/80">{spkId}</span> belum bisa dibaca saat
           ini. Coba muat ulang beberapa saat lagi.
         </p>
         <div className="mt-5 flex flex-wrap gap-2">
           <Link
             href="/spk"
-            className="inline-flex items-center gap-2 rounded-full border border-white/[0.08] px-4 py-2 text-sm text-white/65 hover:text-white"
+            className="inline-flex items-center gap-2 rounded border border-white/10 px-4 py-2 text-[12px] text-white/80 hover:text-white"
           >
             Kembali ke Daftar
           </Link>
           <Link
             href="/dashboard"
-            className="inline-flex items-center gap-2 rounded-full bg-amber-500 px-4 py-2 text-sm font-semibold text-black hover:bg-amber-400"
+            className="inline-flex items-center gap-2 rounded bg-amber-500 px-4 py-2 text-[12px] font-semibold text-[#0a0a0c] hover:bg-amber-400"
           >
             Ke Dashboard
           </Link>
@@ -45,7 +45,7 @@ function SpkUnavailableState({
   );
 }
 
-async function SpkDetailPageContent({ params }: SpkDetailPageProps) {
+export default async function SpkDetailPage({ params }: SpkDetailPageProps) {
   const resolvedParams = await params;
   const requestHeaders = await headers();
   const cookieHeader = requestHeaders.get("cookie") ?? "";
@@ -79,7 +79,3 @@ async function SpkDetailPageContent({ params }: SpkDetailPageProps) {
   );
 }
 
-
-export default function SpkDetailPage(props: SpkDetailPageProps) {
-  return <SpkDetailPageContent {...props} />;
-}

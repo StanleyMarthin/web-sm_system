@@ -62,6 +62,7 @@ export function sanitizeBubutInvoiceWorkOrderQuery(
     workDateTo: nullableParam(searchParams, "workDateTo"),
     team: nullableParam(searchParams, "team"),
     carId: nullableParam(searchParams, "carId"),
+    sparepartName: nullableParam(searchParams, "sparepartName"),
     operatorId: nullableParam(searchParams, "operatorId"),
     invoiceStatus: invoiceStatus || statusFilter
       ? bubutInvoiceCombinedStatusSchema.parse(invoiceStatus || statusFilter)

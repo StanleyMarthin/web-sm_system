@@ -40,10 +40,22 @@ import {
   handleRolesListRoute,
   handleRolesUpdateRoute,
 } from "@/routes/roles.routes";
+import {
+  handleDivisionCreateRoute,
+  handleDivisionDeleteRoute,
+  handleDivisionJobTypeCreateRoute,
+  handleDivisionManagementListRoute,
+  handleDivisionUpdateRoute,
+  handleGeneralJobTypeCreateRoute,
+  handleJobTypeDeleteRoute,
+  handleJobTypeUpdateRoute,
+} from "@/routes/division-management.routes";
 import { DefaultRolesService, type RolesService } from "@/services/roles.service";
 import {
   handleUnitBomRoute,
   handleUnitDetailRoute,
+  handleUnitPanelDetailRoute,
+  handleUnitPanelsRoute,
   handleUnitWorkspaceRoute,
   handleUnitsListRoute,
 } from "@/routes/units.routes";
@@ -156,6 +168,15 @@ import {
 } from "@/routes/planning.routes";
 import { handlePlanningWorkspaceSummaryRoute } from "@/routes/planning-workspace.routes";
 import {
+  handleWorkControlCapacityRoute,
+  handleWorkControlCreateTargetRoute,
+  handleWorkControlOvertimeRecommendationListRoute,
+  handleWorkControlOvertimeRecommendationRoute,
+  handleWorkControlReleaseSpkRoute,
+  handleWorkControlUnitProgressRoute,
+  handleWorkControlUnitsRoute,
+} from "@/routes/planning-work-control.routes";
+import {
   DefaultWeeklyPlanningService,
   type WeeklyPlanningService,
 } from "@/services/planning.service";
@@ -163,6 +184,10 @@ import {
   DefaultPlanningWorkspaceService,
   type PlanningWorkspaceService,
 } from "@/services/planning-workspace.service";
+import {
+  DefaultPlanningWorkControlService,
+  type PlanningWorkControlService,
+} from "@/services/planning-work-control.service";
 import { handlePlanningEvaluationRoute } from "@/routes/planning-evaluation.routes";
 import {
   DefaultPlanningEvaluationService,
@@ -278,6 +303,7 @@ import {
   handleBubutInvoicePreviewRoute,
   handleBubutInvoicePrintRoute,
   handleBubutInvoiceReleaseRoute,
+  handleBubutInvoiceUpdateRoute,
   handleBubutInvoiceWorkHistoryRoute,
   handleBubutInvoiceWorkOrdersRoute,
 } from "@/routes/bubut-invoice.routes";
@@ -323,6 +349,7 @@ export interface AppDependencies extends HealthDependencies {
   calendarService?: CalendarService;
   planningService?: WeeklyPlanningService;
   planningWorkspaceService?: PlanningWorkspaceService;
+  planningWorkControlService?: PlanningWorkControlService;
   planningEvaluationService?: PlanningEvaluationService;
   qcService?: QcService;
   qaService?: QaService;
@@ -398,6 +425,10 @@ function getDefaultPlanningWorkspaceService(): PlanningWorkspaceService {
   return new DefaultPlanningWorkspaceService();
 }
 
+function getDefaultPlanningWorkControlService(): PlanningWorkControlService {
+  return new DefaultPlanningWorkControlService();
+}
+
 function getDefaultPlanningEvaluationService(): PlanningEvaluationService {
   return new DefaultPlanningEvaluationService();
 }
@@ -453,6 +484,8 @@ export function createApiFetchHandler(dependencies: AppDependencies = {}) {
     dependencies.planningService ?? getDefaultPlanningService();
   const getPlanningWorkspaceService = () =>
     dependencies.planningWorkspaceService ?? getDefaultPlanningWorkspaceService();
+  const getPlanningWorkControlService = () =>
+    dependencies.planningWorkControlService ?? getDefaultPlanningWorkControlService();
   const getPlanningEvaluationService = () =>
     dependencies.planningEvaluationService ?? getDefaultPlanningEvaluationService();
   const getQcService = () => dependencies.qcService ?? getDefaultQcService();
@@ -591,6 +624,64 @@ export function createApiFetchHandler(dependencies: AppDependencies = {}) {
         request,
         getAuthService(),
         getRolesService(),
+      );
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/admin/divisions") {
+      return handleDivisionManagementListRoute(request, getAuthService());
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/admin/divisions") {
+      return handleDivisionCreateRoute(request, getAuthService());
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/admin/job-types") {
+      return handleGeneralJobTypeCreateRoute(request, getAuthService());
+    }
+
+    const divisionDetailMatch = url.pathname.match(/^\/api\/admin\/divisions\/(\d+)$/);
+    if (divisionDetailMatch && (request.method === "PATCH" || request.method === "PUT")) {
+      const divisionId = Number.parseInt(divisionDetailMatch[1], 10);
+      return handleDivisionUpdateRoute(
+        request,
+        divisionId,
+        getAuthService(),
+      );
+    }
+
+    if (divisionDetailMatch && request.method === "DELETE") {
+      const divisionId = Number.parseInt(divisionDetailMatch[1], 10);
+      return handleDivisionDeleteRoute(
+        request,
+        divisionId,
+        getAuthService(),
+      );
+    }
+
+    const divisionJobTypeMatch = url.pathname.match(/^\/api\/admin\/divisions\/(\d+)\/job-types$/);
+    if (divisionJobTypeMatch && request.method === "POST") {
+      const divisionId = Number.parseInt(divisionJobTypeMatch[1], 10);
+      return handleDivisionJobTypeCreateRoute(
+        request,
+        divisionId,
+        getAuthService(),
+      );
+    }
+
+    const jobTypeMatch = url.pathname.match(/^\/api\/admin\/job-types\/([^/]+)$/);
+    if (jobTypeMatch && (request.method === "PATCH" || request.method === "PUT")) {
+      return handleJobTypeUpdateRoute(
+        request,
+        jobTypeMatch[1],
+        getAuthService(),
+      );
+    }
+
+    if (jobTypeMatch && request.method === "DELETE") {
+      return handleJobTypeDeleteRoute(
+        request,
+        jobTypeMatch[1],
+        getAuthService(),
       );
     }
 
@@ -798,6 +889,69 @@ export function createApiFetchHandler(dependencies: AppDependencies = {}) {
         request,
         getAuthService(),
         getPlanningWorkspaceService(),
+      );
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/planning/work-control/units") {
+      return handleWorkControlUnitsRoute(
+        request,
+        getAuthService(),
+        getPlanningWorkControlService(),
+      );
+    }
+
+    const workControlProgressMatch = url.pathname.match(
+      /^\/api\/planning\/work-control\/units\/([^/]+)\/progress$/,
+    );
+    if (workControlProgressMatch && request.method === "GET") {
+      return handleWorkControlUnitProgressRoute(
+        request,
+        workControlProgressMatch[1],
+        getAuthService(),
+        getPlanningWorkControlService(),
+      );
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/planning/work-control/capacity") {
+      return handleWorkControlCapacityRoute(
+        request,
+        getAuthService(),
+        getPlanningWorkControlService(),
+      );
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/planning/work-control/overtime-recommendations") {
+      return handleWorkControlOvertimeRecommendationListRoute(
+        request,
+        getAuthService(),
+        getPlanningWorkControlService(),
+      );
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/planning/work-control/targets") {
+      return handleWorkControlCreateTargetRoute(
+        request,
+        getAuthService(),
+        getPlanningWorkControlService(),
+      );
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/planning/work-control/release-spk") {
+      return handleWorkControlReleaseSpkRoute(
+        request,
+        getAuthService(),
+        getPlanningWorkControlService(),
+      );
+    }
+
+    if (
+      request.method === "POST" &&
+      url.pathname === "/api/planning/work-control/overtime-recommendation"
+    ) {
+      return handleWorkControlOvertimeRecommendationRoute(
+        request,
+        getAuthService(),
+        getPlanningWorkControlService(),
       );
     }
 
@@ -1057,7 +1211,7 @@ export function createApiFetchHandler(dependencies: AppDependencies = {}) {
       );
     }
 
-    if (request.method === "GET" && url.pathname === "/api/bubut-invoices/preview") {
+    if (request.method === "POST" && url.pathname === "/api/bubut-invoices/preview") {
       return handleBubutInvoicePreviewRoute(
         request,
         getAuthService(),
@@ -1124,6 +1278,16 @@ export function createApiFetchHandler(dependencies: AppDependencies = {}) {
         reportType.data,
         getAuthService(),
         getReportsService(),
+      );
+    }
+
+    const bubutInvoiceUpdateMatch = /^\/api\/bubut-invoices\/(\d+)$/u.exec(url.pathname);
+    if (request.method === "PUT" && bubutInvoiceUpdateMatch) {
+      return handleBubutInvoiceUpdateRoute(
+        request,
+        Number(bubutInvoiceUpdateMatch[1]),
+        getAuthService(),
+        getBubutInvoiceService(),
       );
     }
 
@@ -1841,6 +2005,30 @@ export function createApiFetchHandler(dependencies: AppDependencies = {}) {
       return handleUnitBomRoute(
         request,
         unitId,
+        getAuthService(),
+        getUnitsService(),
+      );
+    }
+
+    const unitPanelsMatch = url.pathname.match(/^\/api\/units\/([^/]+)\/master-panels$/);
+    if (unitPanelsMatch && (request.method === "GET" || request.method === "POST")) {
+      const unitId = unitPanelsMatch[1];
+      return handleUnitPanelsRoute(
+        request,
+        unitId,
+        getAuthService(),
+        getUnitsService(),
+      );
+    }
+
+    const unitPanelDetailMatch = url.pathname.match(/^\/api\/units\/([^/]+)\/master-panels\/(\d+)$/);
+    if (unitPanelDetailMatch && (request.method === "PUT" || request.method === "DELETE")) {
+      const unitId = unitPanelDetailMatch[1];
+      const panelId = Number.parseInt(unitPanelDetailMatch[2], 10);
+      return handleUnitPanelDetailRoute(
+        request,
+        unitId,
+        panelId,
         getAuthService(),
         getUnitsService(),
       );

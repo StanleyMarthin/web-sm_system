@@ -30,6 +30,7 @@ export const bubutInvoiceWorkOrderQuerySchema = z.object({
   workDateTo: z.string().nullable().default(null),
   team: z.string().nullable().default(null),
   carId: z.string().nullable().default(null),
+  sparepartName: z.string().nullable().default(null),
   operatorId: z.string().nullable().default(null),
   invoiceStatus: bubutInvoiceCombinedStatusSchema.nullable().default(null),
   invoiceType: bubutInvoiceTypeSchema.nullable().default(null),
@@ -219,6 +220,12 @@ export const bubutInvoicePreviewQuerySchema = z.object({
   poNo: z.string().nullable().optional(),
   poDate: z.string().nullable().optional(),
   roundingStep: z.number().int().positive().optional().default(1000),
+  mergedWoIds: z.array(z.string()).optional(),
+  materialOverrides: z.array(z.object({
+    materialName: z.string(),
+    qty: z.number(),
+    price: z.number(),
+  })).optional(),
 });
 
 export const bubutInvoiceReleaseRequestSchema = z.object({
@@ -229,6 +236,19 @@ export const bubutInvoiceReleaseRequestSchema = z.object({
   poDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u).nullable().optional().default(null),
   roundingStep: z.number().int().positive().max(1_000_000).optional().default(1000),
   notes: z.string().trim().max(1000).nullable().optional().default(null),
+  beforePictureUrls: z.array(z.string().min(1)).max(4).optional().default([]),
+  afterPictureUrls: z.array(z.string().min(1)).max(4).optional().default([]),
+  mergedWoIds: z.array(z.string()).optional(),
+  materialOverrides: z.array(z.object({
+    materialName: z.string(),
+    qty: z.number(),
+    price: z.number(),
+  })).optional(),
+});
+
+export const bubutInvoiceUpdateRequestSchema = bubutInvoiceReleaseRequestSchema.omit({
+  sourceWoId: true,
+  invoiceType: true,
 });
 
 export const bubutInvoiceCancelRequestSchema = z.object({
@@ -278,5 +298,6 @@ export type BubutInvoiceWorkOrderQuery = z.infer<typeof bubutInvoiceWorkOrderQue
 export type BubutInvoiceWorkOrderRow = z.infer<typeof bubutInvoiceWorkOrderRowSchema>;
 export type BubutInvoiceSnapshot = z.infer<typeof bubutInvoiceSnapshotSchema>;
 export type BubutInvoiceReleaseRequest = z.infer<typeof bubutInvoiceReleaseRequestSchema>;
+export type BubutInvoiceUpdateRequest = z.infer<typeof bubutInvoiceUpdateRequestSchema>;
 export type BubutInvoiceCancelRequest = z.infer<typeof bubutInvoiceCancelRequestSchema>;
 export type BubutInvoiceWorkHistory = z.infer<typeof bubutInvoiceWorkHistorySchema>;

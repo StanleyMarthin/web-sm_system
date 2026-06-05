@@ -1,6 +1,7 @@
 import { SESSION_COOKIE_NAME } from "@smsystem/contracts/auth";
 import type { AuthUser } from "@smsystem/contracts/auth";
 import type { UnitBomWorkspace } from "@smsystem/contracts/unit-bom";
+import type { UnitPanelCollection, UnitPanelRecord } from "@smsystem/contracts/unit-panel";
 import { permissionCodes } from "@smsystem/permissions";
 import { describe, expect, test } from "bun:test";
 import { createApiFetchHandler } from "@/app";
@@ -47,7 +48,12 @@ const sampleBoardResult: UnitBoardListResult = {
     {
       unitId: "MB500SEL_MRSILMY",
       unitName: "MB 500 SEL",
+      plateNumber: null,
       customerName: "Mr. SILMY",
+      restorationType: "FULL_RESTORASI",
+      isMargin: true,
+      incomingDate: "2026-05-01",
+      revisionContract: null,
       kpName: "IQBAL TAUFIK NURDIN",
       advisorName: "-",
       targetDeliveryDate: "2026-05-30",
@@ -114,7 +120,12 @@ function createStubUnitsService(overrides: Partial<UnitsService> = {}): UnitsSer
       return {
         unitId: "MB500SEL_MRSILMY",
         unitName: "MB 500 SEL",
+        plateNumber: null,
         customerName: "Mr. SILMY",
+        restorationType: "FULL_RESTORASI",
+        isMargin: true,
+        incomingDate: "2026-05-01",
+        revisionContract: null,
         kpName: "IQBAL TAUFIK NURDIN",
         advisorName: "-",
         targetDeliveryDate: "2026-05-30",
@@ -128,6 +139,57 @@ function createStubUnitsService(overrides: Partial<UnitsService> = {}): UnitsSer
         issueOpenCount: 0,
         status: "In_Progress",
       };
+    },
+    async createUnit(_session, input) {
+      return {
+        unitId: input.unitId,
+        unitName: input.unitName,
+        plateNumber: input.plateNumber,
+        customerName: input.customerName,
+        restorationType: input.restorationType,
+        isMargin: input.isMargin,
+        incomingDate: input.incomingDate,
+        revisionContract: input.revisionContract,
+        kpName: "-",
+        advisorName: "-",
+        targetDeliveryDate: input.contractDeliveryDate,
+        etaDate: input.contractDeliveryDate,
+        riskLevel: "UNKNOWN",
+        progressPercent: 0,
+        remainingHours: 0,
+        woOpenCount: 0,
+        prOpenCount: 0,
+        qcIssueOpenCount: 0,
+        issueOpenCount: 0,
+        status: input.status,
+      };
+    },
+    async updateUnit(_session, unitId, input) {
+      return {
+        unitId,
+        unitName: input.unitName,
+        plateNumber: input.plateNumber,
+        customerName: input.customerName,
+        restorationType: input.restorationType,
+        isMargin: input.isMargin,
+        incomingDate: input.incomingDate,
+        revisionContract: input.revisionContract,
+        kpName: "-",
+        advisorName: "-",
+        targetDeliveryDate: input.contractDeliveryDate,
+        etaDate: input.contractDeliveryDate,
+        riskLevel: "UNKNOWN",
+        progressPercent: 0,
+        remainingHours: 0,
+        woOpenCount: 0,
+        prOpenCount: 0,
+        qcIssueOpenCount: 0,
+        issueOpenCount: 0,
+        status: input.status,
+      };
+    },
+    async deleteUnit(_session, unitId) {
+      return { deletedUnitId: unitId };
     },
     async getUnitWorkspace() {
       return {
@@ -228,6 +290,109 @@ function createStubUnitsService(overrides: Partial<UnitsService> = {}): UnitsSer
       };
 
       return payload;
+    },
+    async getUnitPanels() {
+      const payload: UnitPanelCollection = {
+        unitId: "MB500SEL_MRSILMY",
+        tree: [
+          {
+            id: 1,
+            carId: "MB500SEL_MRSILMY",
+            parentId: null,
+            nodeType: "PANEL",
+            section: "Interior",
+            name: "Dashboard",
+            category: "Interior",
+            isActive: true,
+            sortOrder: 1,
+            qty: 1,
+            defaultLocationType: "UNIT",
+            defaultStockStatus: "INSTALLED",
+            defaultConditionType: "BEKAS",
+            countdownUsageCount: 0,
+            statusUsageCount: 0,
+            childCount: 1,
+            createdAt: "2026-05-30 10:00:00",
+            updatedAt: "2026-05-30 10:00:00",
+            children: [
+              {
+                id: 2,
+                carId: "MB500SEL_MRSILMY",
+                parentId: 1,
+                nodeType: "PART",
+                section: "Interior",
+                name: "Panel Speedometer",
+                category: "Interior",
+                isActive: true,
+                sortOrder: 1,
+                qty: 1,
+                defaultLocationType: "UNIT",
+                defaultStockStatus: "INSTALLED",
+                defaultConditionType: "BEKAS",
+                countdownUsageCount: 0,
+                statusUsageCount: 0,
+                childCount: 0,
+                createdAt: "2026-05-30 10:00:00",
+                updatedAt: "2026-05-30 10:00:00",
+                children: [],
+              },
+            ],
+          },
+        ],
+      };
+
+      return payload;
+    },
+    async createUnitPanel(_session, _unitId, input) {
+      const record: UnitPanelRecord = {
+        id: 10,
+        carId: "MB500SEL_MRSILMY",
+        parentId: input.parentId,
+        nodeType: input.parentId === null ? "PANEL" : "PART",
+        section: input.section,
+        name: input.name,
+        category: input.category,
+        isActive: input.isActive,
+        sortOrder: input.sortOrder,
+        qty: input.qty,
+        defaultLocationType: input.defaultLocationType,
+        defaultStockStatus: input.defaultStockStatus,
+        defaultConditionType: input.defaultConditionType,
+        countdownUsageCount: 0,
+        statusUsageCount: 0,
+        childCount: 0,
+        createdAt: "2026-05-30 10:00:00",
+        updatedAt: "2026-05-30 10:00:00",
+        children: [],
+      };
+      return record;
+    },
+    async updateUnitPanel(_session, _unitId, panelId, input) {
+      const record: UnitPanelRecord = {
+        id: panelId,
+        carId: "MB500SEL_MRSILMY",
+        parentId: null,
+        nodeType: "PANEL",
+        section: input.section,
+        name: input.name,
+        category: input.category,
+        isActive: input.isActive,
+        sortOrder: input.sortOrder,
+        qty: input.qty,
+        defaultLocationType: input.defaultLocationType,
+        defaultStockStatus: input.defaultStockStatus,
+        defaultConditionType: input.defaultConditionType,
+        countdownUsageCount: 0,
+        statusUsageCount: 0,
+        childCount: 0,
+        createdAt: "2026-05-30 10:00:00",
+        updatedAt: "2026-05-30 10:10:00",
+        children: [],
+      };
+      return record;
+    },
+    async deleteUnitPanel(_session, _unitId, panelId) {
+      return { deletedId: panelId };
     },
     ...overrides,
   };
@@ -356,6 +521,122 @@ describe("units routes", () => {
 
     const response = await fetchHandler(
       new Request("http://localhost/api/units/MB500SEL_MRSILMY"),
+    );
+
+    expect(response.status).toBe(403);
+  });
+
+  test("lists unit master panels and mutates with manage permission", async () => {
+    const fetchHandler = createApiFetchHandler({
+      authService: createStubAuthService({
+        async getCurrentSession() {
+          return {
+            ...sampleSession,
+            user: {
+              ...sampleUser,
+              permissions: [
+                permissionCodes.viewUnits,
+                permissionCodes.unitDetailView,
+                permissionCodes.unitPanelManage,
+              ],
+            },
+          };
+        },
+      }),
+      unitsService: createStubUnitsService(),
+    });
+
+    const listResponse = await fetchHandler(
+      new Request("http://localhost/api/units/MB500SEL_MRSILMY/master-panels"),
+    );
+    const listBody = await listResponse.json();
+
+    expect(listResponse.status).toBe(200);
+    expect(listBody.data.tree[0].children[0].name).toBe("Panel Speedometer");
+
+    const createResponse = await fetchHandler(
+      new Request("http://localhost/api/units/MB500SEL_MRSILMY/master-panels", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          parentId: null,
+          section: "Interior",
+          name: "Console Tengah",
+          category: "Interior",
+          sortOrder: 2,
+          isActive: true,
+        }),
+      }),
+    );
+    const createBody = await createResponse.json();
+
+    expect(createResponse.status).toBe(201);
+    expect(createBody.data.record.id).toBe(10);
+
+    const updateResponse = await fetchHandler(
+      new Request("http://localhost/api/units/MB500SEL_MRSILMY/master-panels/10", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          section: "Interior",
+          name: "Console Tengah Revisi",
+          category: "Interior",
+          sortOrder: 3,
+          isActive: true,
+        }),
+      }),
+    );
+    const updateBody = await updateResponse.json();
+
+    expect(updateResponse.status).toBe(200);
+    expect(updateBody.data.record.sortOrder).toBe(3);
+
+    const deleteResponse = await fetchHandler(
+      new Request("http://localhost/api/units/MB500SEL_MRSILMY/master-panels/10", {
+        method: "DELETE",
+      }),
+    );
+    const deleteBody = await deleteResponse.json();
+
+    expect(deleteResponse.status).toBe(200);
+    expect(deleteBody.data.deletedId).toBe(10);
+  });
+
+  test("blocks unit master panel mutation when manage permission is missing", async () => {
+    const fetchHandler = createApiFetchHandler({
+      authService: createStubAuthService({
+        async getCurrentSession() {
+          return {
+            ...sampleSession,
+            user: {
+              ...sampleUser,
+              permissions: [permissionCodes.viewUnits, permissionCodes.unitDetailView],
+            },
+          };
+        },
+      }),
+      unitsService: createStubUnitsService(),
+    });
+
+    const response = await fetchHandler(
+      new Request("http://localhost/api/units/MB500SEL_MRSILMY/master-panels", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          parentId: null,
+          section: "Interior",
+          name: "Console Tengah",
+          category: "Interior",
+          sortOrder: 2,
+          isActive: true,
+        }),
+      }),
     );
 
     expect(response.status).toBe(403);

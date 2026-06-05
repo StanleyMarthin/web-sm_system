@@ -8,7 +8,6 @@ import type {
   MonitoringSummary,
   MonitoringTaskRecord,
 } from "@smsystem/contracts/monitoring";
-import type { GridFilter } from "@smsystem/contracts/grid";
 import type { Pool, RowDataPacket } from "mysql2/promise";
 import { getMySqlPool } from "@/db/mysql";
 
@@ -47,15 +46,27 @@ interface MonitoringTaskRow extends RowDataPacket {
   employeeName: string | null;
   taskDate: string;
   panelName: string | null;
+  masterJobName: string | null;
   jobDescription: string;
+  instructionText: string;
+  targetDailyHours: number | null;
+  targetTotalHours: number | null;
   planStatus: string;
   actualStatus: string | null;
+  executionStatus: MonitoringTaskRecord["executionStatus"];
   countdownStatus: string | null;
   progressPercent: number | null;
   totalActualHours: number | null;
   remainingHours: number | null;
   latestStartTime: string | null;
   latestFinishTime: string | null;
+  latestBreakDurationMinutes: number | null;
+  actualDurationHours: number | null;
+  qcStatus: MonitoringTaskRecord["qcStatus"];
+  qcResult: string | null;
+  qcNotes: string | null;
+  monitoringStatus: string | null;
+  monitoringResult: string | null;
   isOvertime: number | boolean;
   isStarted: number | boolean;
   isSubmitted: number | boolean;
@@ -124,7 +135,7 @@ interface OptionRow extends RowDataPacket {
 
 export interface MonitoringRepository {
   listTasks(params: MonitoringListParams): Promise<MonitoringListPayload>;
-  getSummary(params: ScopeParams & { date: string }): Promise<MonitoringSummary>;
+  getSummary(params: ScopeParams & { date: string; dateTo?: string }): Promise<MonitoringSummary>;
   listDivisionLoad(params: ScopeParams & { date: string; mode: "all" | "normal" | "overtime"; span: "daily" | "weekly"; dateTo: string }): Promise<MonitoringDivisionLoadRecord[]>;
   getDivisionDetail(params: ScopeParams & { divisionId: number; date: string; mode: "all" | "normal" | "overtime"; span: "daily" | "weekly"; dateTo: string }): Promise<{
     divisionName: string | null;
@@ -193,7 +204,22 @@ function buildScopeWhereClause(
   return `(${clauses.join(" OR ")})`;
 }
 
-function buildMonitoringBaseSql(asOfDate: string): string {
+function executionStatusSql(): string {
+  return `
+    CASE
+      WHEN COALESCE(cd.status, '') IN ('DONE') OR actual.actualStatus = 'done' THEN 'DONE'
+      WHEN COALESCE(cd.status, '') IN ('READY_QC', 'QC_READY') OR COALESCE(p.status, '') = 'READY_QC' THEN 'READY_QC'
+      WHEN actual.actualStatus = 'pending'
+        OR (actual.actualStatus = 'onprogress' AND actual.finishTime IS NOT NULL)
+      THEN 'SUBMITTED'
+      WHEN actual.actualStatus = 'onprogress' THEN 'ONPROGRESS'
+      WHEN actual.actualStatus = 'cancel' THEN 'CANCEL'
+      ELSE 'PLAN'
+    END
+  `;
+}
+
+function buildMonitoringBaseSql(): string {
   return `
     SELECT
       p.id AS planId,
@@ -206,16 +232,46 @@ function buildMonitoringBaseSql(asOfDate: string): string {
       p.assigned_user_id AS employeeId,
       e.full_name AS employeeName,
       DATE_FORMAT(p.task_date, '%Y-%m-%d') AS taskDate,
-      COALESCE(cd.section_name, p.jobdescription) AS panelName,
-      COALESCE(NULLIF(TRIM(p.jobdescription), ''), cd.section_name, '-') AS jobDescription,
+      COALESCE(mp.name, cd.section_name, p.jobdescription) AS panelName,
+      COALESCE(mjt.job_name, wo.job_detail, cd.section_name, p.jobdescription, cd.task_category) AS masterJobName,
+      COALESCE(
+        NULLIF(TRIM(p.jobdescription), ''),
+        NULLIF(TRIM(actual.dailyNotes), ''),
+        wo.job_detail,
+        mjt.job_name,
+        cd.section_name,
+        cd.task_category,
+        '-'
+      ) AS jobDescription,
+      COALESCE(
+        NULLIF(TRIM(p.jobdescription), ''),
+        NULLIF(TRIM(actual.dailyNotes), ''),
+        wo.job_detail,
+        mjt.job_name,
+        cd.section_name,
+        cd.task_category,
+        ''
+      ) AS instructionText,
+      ROUND(TIME_TO_SEC(p.dailyTargetHours) / 3600, 2) AS targetDailyHours,
+      ROUND(COALESCE(cd.target_hours_revised, cd.target_hours_initial, 0), 2) AS targetTotalHours,
       COALESCE(p.status, 'PLAN') AS planStatus,
       actual.actualStatus AS actualStatus,
+      ${executionStatusSql()} AS executionStatus,
       cd.status AS countdownStatus,
       ROUND(COALESCE(actual.progres, cd.actual_progress_percent, 0), 2) AS progressPercent,
       ROUND(COALESCE(cd.total_actual_hours, 0), 2) AS totalActualHours,
       ROUND(COALESCE(cd.remaining_hours, 0), 2) AS remainingHours,
       DATE_FORMAT(actual.startTime, '%Y-%m-%d %H:%i:%s') AS latestStartTime,
       DATE_FORMAT(actual.finishTime, '%Y-%m-%d %H:%i:%s') AS latestFinishTime,
+      actual.breakDurationMinutes AS latestBreakDurationMinutes,
+      actual.durationHours AS actualDurationHours,
+      DATE_FORMAT(p.target_start_hours, '%H:%i') AS planStartTime,
+      DATE_FORMAT(p.target_finish_hours, '%H:%i') AS planFinishTime,
+      COALESCE(qc.resultStatus, cd.qc_last_status, 'BELUM_QC') AS qcStatus,
+      COALESCE(qc.resultStatus, cd.qc_last_status) AS qcResult,
+      qc.qcNotes AS qcNotes,
+      validation.validationStatus AS monitoringStatus,
+      validation.monitoringResult AS monitoringResult,
       COALESCE(p.is_overtime, 0) AS isOvertime,
       CASE WHEN actual.latestActualId IS NULL THEN 0 ELSE 1 END AS isStarted,
       CASE WHEN actual.actualStatus IN ('pending', 'done') THEN 1 ELSE 0 END AS isSubmitted,
@@ -229,15 +285,21 @@ function buildMonitoringBaseSql(asOfDate: string): string {
     JOIN sm_jobdesc_countdown cd ON cd.id = p.core_id
     JOIN cars c ON c.id = cd.car_id
     LEFT JOIN sm_divisi d ON d.id = cd.division_id
+    LEFT JOIN master_panels mp ON mp.id = cd.panel_id
+    LEFT JOIN master_job_types mjt ON mjt.id = cd.job_type_id
+    LEFT JOIN sm_jobdesc_wo wo ON wo.id = cd.ref_taks_id
     LEFT JOIN sm_employee e ON e.employee_id = p.assigned_user_id
     LEFT JOIN (
       SELECT
         a.plandaily_id,
         a.id AS latestActualId,
-        a.status AS actualStatus,
+        CASE WHEN a.status = 'onprogress' AND a.finish_time IS NOT NULL THEN 'pending' ELSE a.status END AS actualStatus,
         a.progres AS progres,
         a.start_time AS startTime,
-        a.finish_time AS finishTime
+        a.finish_time AS finishTime,
+        a.break_duration_minutes AS breakDurationMinutes,
+        a.duration_hours AS durationHours,
+        a.daily_notes AS dailyNotes
       FROM sm_jobdesc_actual a
       JOIN (
         SELECT
@@ -249,48 +311,87 @@ function buildMonitoringBaseSql(asOfDate: string): string {
         ON latest.plandaily_id = a.plandaily_id
        AND latest.latestCreatedAt = a.created_at
     ) actual ON actual.plandaily_id = p.id
+    LEFT JOIN (
+      SELECT q.core_id, q.result_status AS resultStatus, q.qc_notes AS qcNotes
+      FROM sm_qc_inspections q
+      JOIN (
+        SELECT core_id, MAX(inspection_date) AS latestInspectionDate
+        FROM sm_qc_inspections
+        GROUP BY core_id
+      ) latest_qc
+        ON latest_qc.core_id = q.core_id
+       AND latest_qc.latestInspectionDate = q.inspection_date
+    ) qc ON qc.core_id = cd.id
+    LEFT JOIN (
+      SELECT v.plandaily_id, v.status AS validationStatus, v.note AS monitoringResult
+      FROM sm_jobdesc_validation v
+      JOIN (
+        SELECT plandaily_id, MAX(checkpoint_time) AS latestCheckpointTime
+        FROM sm_jobdesc_validation
+        GROUP BY plandaily_id
+      ) latest_validation
+        ON latest_validation.plandaily_id = v.plandaily_id
+       AND latest_validation.latestCheckpointTime = v.checkpoint_time
+    ) validation ON validation.plandaily_id = p.id
   `;
 }
 
 function buildModeClauses(
   mode: MonitoringMode,
   date: string,
+  dateTo: string | undefined,
   params: unknown[],
 ): string[] {
   const clauses: string[] = [];
+  const hasRange = Boolean(dateTo && dateTo !== date);
+  const pushDateClause = () => {
+    if (hasRange) {
+      clauses.push("p.task_date BETWEEN ? AND ?");
+      params.push(date, dateTo);
+      return;
+    }
+
+    clauses.push("p.task_date = ?");
+    params.push(date);
+  };
 
   if (mode === "today") {
-    clauses.push("p.task_date = ?", "COALESCE(p.is_overtime, 0) = 0");
-    params.push(date);
+    pushDateClause();
+    clauses.push("COALESCE(p.is_overtime, 0) = 0");
     return clauses;
   }
 
   if (mode === "all") {
-    clauses.push("p.task_date = ?");
-    params.push(date);
+    pushDateClause();
     return clauses;
   }
 
   if (mode === "overtime") {
-    clauses.push("p.task_date = ?", "COALESCE(p.is_overtime, 0) = 1");
-    params.push(date);
+    pushDateClause();
+    clauses.push("COALESCE(p.is_overtime, 0) = 1");
     return clauses;
   }
 
   if (mode === "no-start") {
-    clauses.push("p.task_date = ?", "actual.latestActualId IS NULL");
-    params.push(date);
+    pushDateClause();
+    clauses.push("actual.latestActualId IS NULL");
     return clauses;
   }
 
   if (mode === "no-submit") {
-    clauses.push("p.task_date <= ?", "actual.latestActualId IS NOT NULL", "actual.actualStatus = 'onprogress'");
-    params.push(date);
+    if (hasRange) {
+      clauses.push("p.task_date BETWEEN ? AND ?");
+      params.push(date, dateTo);
+    } else {
+      clauses.push("p.task_date <= ?");
+      params.push(date);
+    }
+    clauses.push("actual.latestActualId IS NOT NULL", "actual.actualStatus = 'onprogress'");
     return clauses;
   }
 
   clauses.push("p.task_date <= ?", "actual.actualStatus = 'onprogress'");
-  params.push(date);
+  params.push(dateTo ?? date);
   return clauses;
 }
 
@@ -341,8 +442,8 @@ function buildFilterClauses(
     }
 
     if (filter.field === "actualStatus") {
-      clauses.push("actual.actualStatus = ?");
-      params.push(filter.value);
+      clauses.push(`${executionStatusSql()} = ?`);
+      params.push(filter.value.toUpperCase());
       continue;
     }
   }
@@ -359,7 +460,7 @@ function buildOrderBy(sortBy: string, direction: "asc" | "desc"): string {
     progressPercent: "progressPercent",
     remainingHours: "remainingHours",
     planStatus: "p.status",
-    actualStatus: "actual.actualStatus",
+    actualStatus: "executionStatus",
   };
 
   const column = columnMap[sortBy] ?? "p.task_date";
@@ -379,15 +480,42 @@ function mapTaskRow(row: MonitoringTaskRow): MonitoringTaskRecord {
     employeeName: row.employeeName,
     taskDate: row.taskDate,
     panelName: row.panelName,
+    masterJobName: row.masterJobName ?? row.jobDescription ?? row.panelName ?? "-",
     jobDescription: row.jobDescription,
+    instructionText: row.instructionText,
+    targetDailyHours: Number(row.targetDailyHours ?? 0),
+    targetTotalHours:
+      row.targetTotalHours === null || row.targetTotalHours === undefined
+        ? null
+        : Number(row.targetTotalHours),
     planStatus: row.planStatus,
     actualStatus: row.actualStatus,
+    executionStatus: row.executionStatus,
     countdownStatus: row.countdownStatus,
     progressPercent: Number(row.progressPercent ?? 0),
     totalActualHours: Number(row.totalActualHours ?? 0),
     remainingHours: Number(row.remainingHours ?? 0),
     latestStartTime: row.latestStartTime,
     latestFinishTime: row.latestFinishTime,
+    latestBreakDurationMinutes:
+      row.latestBreakDurationMinutes === null || row.latestBreakDurationMinutes === undefined
+        ? null
+        : Number(row.latestBreakDurationMinutes),
+    actualStartTime: row.latestStartTime,
+    actualBreakMinutes:
+      row.latestBreakDurationMinutes === null || row.latestBreakDurationMinutes === undefined
+        ? null
+        : Number(row.latestBreakDurationMinutes),
+    actualFinishTime: row.latestFinishTime,
+    actualDurationHours:
+      row.actualDurationHours === null || row.actualDurationHours === undefined
+        ? null
+        : Number(row.actualDurationHours),
+    qcStatus: row.qcStatus,
+    qcResult: row.qcResult,
+    qcNotes: row.qcNotes,
+    monitoringStatus: row.monitoringStatus,
+    monitoringResult: row.monitoringResult,
     isOvertime: Boolean(row.isOvertime),
     isStarted: Boolean(row.isStarted),
     isSubmitted: Boolean(row.isSubmitted),
@@ -455,8 +583,9 @@ export class MySqlMonitoringRepository implements MonitoringRepository {
 
   async listTasks(params: MonitoringListParams): Promise<MonitoringListPayload> {
     const pool = this.poolFactory();
-    const baseParams: unknown[] = [params.query.date, params.query.date];
-    const whereClauses = buildModeClauses(params.mode, params.query.date, baseParams);
+    const asOfDate = params.query.dateTo ?? params.query.date;
+    const baseParams: unknown[] = [asOfDate, asOfDate];
+    const whereClauses = buildModeClauses(params.mode, params.query.date, params.query.dateTo, baseParams);
     const scopeWhere = buildScopeWhereClause(
       params.scope,
       params.employeeId,
@@ -478,7 +607,7 @@ export class MySqlMonitoringRepository implements MonitoringRepository {
 
     const [rows] = (await pool.query(
       `
-        ${buildMonitoringBaseSql(params.query.date)}
+        ${buildMonitoringBaseSql()}
         ${whereSql}
         ORDER BY ${buildOrderBy(params.query.sortBy, params.query.sortDirection)}
         LIMIT ? OFFSET ?
@@ -486,8 +615,8 @@ export class MySqlMonitoringRepository implements MonitoringRepository {
       [...baseParams, limit, offset],
     )) as [MonitoringTaskRow[], unknown];
 
-    const countParams: unknown[] = [params.query.date, params.query.date];
-    const countWhereClauses = buildModeClauses(params.mode, params.query.date, countParams);
+    const countParams: unknown[] = [asOfDate, asOfDate];
+    const countWhereClauses = buildModeClauses(params.mode, params.query.date, params.query.dateTo, countParams);
     const countScopeWhere = buildScopeWhereClause(
       params.scope,
       params.employeeId,
@@ -506,7 +635,7 @@ export class MySqlMonitoringRepository implements MonitoringRepository {
       `
         SELECT COUNT(*) AS total
         FROM (
-          ${buildMonitoringBaseSql(params.query.date)}
+          ${buildMonitoringBaseSql()}
         ) monitoring_base
         JOIN sm_jobdesc_plan p ON p.id = monitoring_base.planId
         JOIN sm_jobdesc_countdown cd ON cd.id = monitoring_base.coreId
@@ -515,7 +644,8 @@ export class MySqlMonitoringRepository implements MonitoringRepository {
           SELECT
             a.plandaily_id,
             a.id AS latestActualId,
-            a.status AS actualStatus
+            CASE WHEN a.status = 'onprogress' AND a.finish_time IS NOT NULL THEN 'pending' ELSE a.status END AS actualStatus,
+            a.finish_time AS finishTime
           FROM sm_jobdesc_actual a
           JOIN (
             SELECT
@@ -544,9 +674,10 @@ export class MySqlMonitoringRepository implements MonitoringRepository {
     };
   }
 
-  async getSummary(params: ScopeParams & { date: string }): Promise<MonitoringSummary> {
+  async getSummary(params: ScopeParams & { date: string; dateTo?: string }): Promise<MonitoringSummary> {
     const pool = this.poolFactory();
-    const queryParams: unknown[] = [params.date, params.date];
+    const asOfDate = params.dateTo ?? params.date;
+    const queryParams: unknown[] = [];
     const whereClauses: string[] = [];
     const scopeWhere = buildScopeWhereClause(
       params.scope,
@@ -565,8 +696,8 @@ export class MySqlMonitoringRepository implements MonitoringRepository {
       `
         SELECT
           SUM(CASE WHEN p.task_date <= ? AND actual.actualStatus = 'onprogress' THEN 1 ELSE 0 END) AS activeWork,
-          SUM(CASE WHEN p.task_date = ? AND actual.latestActualId IS NULL AND COALESCE(p.is_overtime, 0) = 0 THEN 1 ELSE 0 END) AS noStart,
-          SUM(CASE WHEN p.task_date <= ? AND actual.actualStatus = 'onprogress' THEN 1 ELSE 0 END) AS noSubmit,
+          SUM(CASE WHEN p.task_date BETWEEN ? AND ? AND actual.latestActualId IS NULL AND COALESCE(p.is_overtime, 0) = 0 THEN 1 ELSE 0 END) AS noStart,
+          SUM(CASE WHEN p.task_date BETWEEN ? AND ? AND actual.actualStatus = 'onprogress' THEN 1 ELSE 0 END) AS noSubmit,
           SUM(
             CASE
               WHEN (p.task_date < ? AND COALESCE(cd.remaining_hours, 0) > 0)
@@ -575,7 +706,7 @@ export class MySqlMonitoringRepository implements MonitoringRepository {
               ELSE 0
             END
           ) AS delayRisk,
-          SUM(CASE WHEN p.task_date = ? AND COALESCE(p.is_overtime, 0) = 1 THEN 1 ELSE 0 END) AS overtimeCount
+          SUM(CASE WHEN p.task_date BETWEEN ? AND ? AND COALESCE(p.is_overtime, 0) = 1 THEN 1 ELSE 0 END) AS overtimeCount
         FROM sm_jobdesc_plan p
         JOIN sm_jobdesc_countdown cd ON cd.id = p.core_id
         JOIN cars c ON c.id = cd.car_id
@@ -583,7 +714,7 @@ export class MySqlMonitoringRepository implements MonitoringRepository {
           SELECT
             a.plandaily_id,
             a.id AS latestActualId,
-            a.status AS actualStatus
+            CASE WHEN a.status = 'onprogress' AND a.finish_time IS NOT NULL THEN 'pending' ELSE a.status END AS actualStatus
           FROM sm_jobdesc_actual a
           JOIN (
             SELECT
@@ -597,7 +728,18 @@ export class MySqlMonitoringRepository implements MonitoringRepository {
         ) actual ON actual.plandaily_id = p.id
         ${whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : ""}
       `,
-      [params.date, params.date, params.date, params.date, params.date, params.date, ...queryParams.slice(2)],
+      [
+        asOfDate,
+        params.date,
+        asOfDate,
+        params.date,
+        asOfDate,
+        asOfDate,
+        asOfDate,
+        params.date,
+        asOfDate,
+        ...queryParams,
+      ],
     )) as [SummaryRow[], unknown];
 
     const row = rows[0];
@@ -637,7 +779,7 @@ export class MySqlMonitoringRepository implements MonitoringRepository {
           SELECT
             a.plandaily_id,
             a.id AS latestActualId,
-            a.status AS actualStatus,
+            CASE WHEN a.status = 'onprogress' AND a.finish_time IS NOT NULL THEN 'pending' ELSE a.status END AS actualStatus,
             a.progres AS progres
           FROM sm_jobdesc_actual a
           JOIN (
@@ -709,7 +851,7 @@ export class MySqlMonitoringRepository implements MonitoringRepository {
             SELECT
               a.plandaily_id,
               a.id AS latestActualId,
-              a.status AS actualStatus,
+              CASE WHEN a.status = 'onprogress' AND a.finish_time IS NOT NULL THEN 'pending' ELSE a.status END AS actualStatus,
               a.progres AS progres
             FROM sm_jobdesc_actual a
             JOIN (
@@ -749,7 +891,7 @@ export class MySqlMonitoringRepository implements MonitoringRepository {
             SELECT
               a.plandaily_id,
               a.id AS latestActualId,
-              a.status AS actualStatus,
+              CASE WHEN a.status = 'onprogress' AND a.finish_time IS NOT NULL THEN 'pending' ELSE a.status END AS actualStatus,
               a.progres AS progres
             FROM sm_jobdesc_actual a
             JOIN (
@@ -916,11 +1058,26 @@ export class MySqlMonitoringRepository implements MonitoringRepository {
           c.id AS carId,
           c.unit_name AS unitName,
           COALESCE(p.is_overtime, 0) AS isOvertime,
-          ROUND(SUM(COALESCE(cd.total_actual_hours, 0)), 2) AS totalActualHours
+          ROUND(SUM(COALESCE(actual.durationHours, 0)), 2) AS totalActualHours
         FROM sm_jobdesc_plan p
         JOIN sm_jobdesc_countdown cd ON cd.id = p.core_id
         JOIN cars c ON c.id = cd.car_id
         LEFT JOIN sm_employee e ON e.employee_id = p.assigned_user_id
+        LEFT JOIN (
+          SELECT
+            a.plandaily_id,
+            a.duration_hours AS durationHours
+          FROM sm_jobdesc_actual a
+          JOIN (
+            SELECT
+              plandaily_id,
+              MAX(created_at) AS latestCreatedAt
+            FROM sm_jobdesc_actual
+            GROUP BY plandaily_id
+          ) latest
+            ON latest.plandaily_id = a.plandaily_id
+           AND latest.latestCreatedAt = a.created_at
+        ) actual ON actual.plandaily_id = p.id
         WHERE ${whereClauses.join(" AND ")}
         GROUP BY p.assigned_user_id, e.full_name, c.id, c.unit_name, COALESCE(p.is_overtime, 0)
         ORDER BY e.full_name ASC

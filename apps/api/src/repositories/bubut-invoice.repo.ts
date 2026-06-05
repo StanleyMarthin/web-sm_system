@@ -157,6 +157,12 @@ export interface BubutInvoiceRepository {
     actorName: string;
     reason: string;
   }): Promise<boolean>;
+  updateInvoice(
+    invoiceId: number,
+    snapshot: BubutInvoiceSnapshot,
+    actorId: string,
+    actorName: string,
+  ): Promise<boolean>;
   getNextInvoiceSequence(month: string, year: string): Promise<number>;
   markPrinted(invoiceId: number): Promise<void>;
 }
@@ -287,6 +293,10 @@ export class MySqlBubutInvoiceRepository implements BubutInvoiceRepository {
       conditions.push("wo.car_id = ?");
       queryParams.push(query.carId);
     }
+    if (query.sparepartName) {
+      conditions.push("wo.panel_name = ?");
+      queryParams.push(query.sparepartName);
+    }
     if (query.operatorId) {
       conditions.push("operator.employee_id = ?");
       queryParams.push(query.operatorId);
@@ -386,11 +396,11 @@ export class MySqlBubutInvoiceRepository implements BubutInvoiceRepository {
         GROUP BY core.ref_taks_id
       ) material_summary ON material_summary.source_wo_id = wo.id
       LEFT JOIN ${tables.invoice} direksi_invoice
-        ON direksi_invoice.source_wo_id = wo.id
+        ON (direksi_invoice.source_wo_id = wo.id OR JSON_CONTAINS(direksi_invoice.source_snapshot_json, JSON_QUOTE(CAST(wo.id AS CHAR)), '$.mergedWoIds'))
        AND direksi_invoice.invoice_type = 'DIREKSI'
        AND direksi_invoice.status = 'RELEASED'
       LEFT JOIN ${tables.invoice} customer_invoice
-        ON customer_invoice.source_wo_id = wo.id
+        ON (customer_invoice.source_wo_id = wo.id OR JSON_CONTAINS(customer_invoice.source_snapshot_json, JSON_QUOTE(CAST(wo.id AS CHAR)), '$.mergedWoIds'))
        AND customer_invoice.invoice_type = 'CUSTOMER'
        AND customer_invoice.status = 'RELEASED'
       LEFT JOIN ${tables.invoice} cancelled_invoice
@@ -937,6 +947,36 @@ export class MySqlBubutInvoiceRepository implements BubutInvoiceRepository {
           AND status = 'RELEASED'
       `,
       [params.actorId, params.actorName, params.reason, params.invoiceId],
+    );
+
+    return result.affectedRows > 0;
+  }
+
+  async updateInvoice(
+    invoiceId: number,
+    snapshot: BubutInvoiceSnapshot,
+    actorId: string,
+    actorName: string,
+  ): Promise<boolean> {
+    const [result] = await this.pool.execute<ResultSetHeader>(
+      `
+        UPDATE ${this.tables.invoice}
+        SET sales_invoice_date = ?,
+            po_no = ?,
+            po_date = ?,
+            picture_urls_json = ?,
+            source_snapshot_json = ?
+        WHERE id = ?
+          AND status = 'RELEASED'
+      `,
+      [
+        snapshot.salesInvoiceDate,
+        snapshot.poNo,
+        snapshot.poDate,
+        JSON.stringify(snapshot.pictures),
+        JSON.stringify(snapshot.sourceSnapshot),
+        invoiceId,
+      ],
     );
 
     return result.affectedRows > 0;

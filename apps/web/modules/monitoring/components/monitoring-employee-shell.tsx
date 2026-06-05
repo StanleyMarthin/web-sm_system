@@ -2,7 +2,7 @@
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import React, { useMemo, useState } from "react";
-import { ActionButton, CompactInput } from "@/shared/ui/compact";
+import { ActionButton, CompactDateInput, CompactDateRangeInput } from "@/shared/ui/compact";
 import { RefreshCcw, ChevronDown, ChevronUp } from "lucide-react";
 
 interface EmployeeTimesheetRecord {
@@ -93,27 +93,28 @@ export function MonitoringEmployeeShell({
 
   const resolvedDateTo = dateTo ?? (activeSpan === "weekly" ? addDaysIso(date, 6) : date);
 
-  function pushWeeklyRange(start: string, end: string) {
-    const nextParams = new URLSearchParams(searchParams.toString());
-    const range = clampWeeklyRange(start, end);
-    nextParams.set("date", range.start);
-    nextParams.set("dateTo", range.end);
-    nextParams.set("span", "weekly");
-    router.push(`${pathname}?${nextParams.toString()}`);
-  }
-
-  function updateWeeklyStart(value: string) {
-    pushWeeklyRange(value, resolvedDateTo);
-  }
-
-  function updateWeeklyEnd(value: string) {
-    pushWeeklyRange(date, value);
-  }
-
   function pushDailyDate(value: string) {
     const nextParams = new URLSearchParams(searchParams.toString());
     nextParams.set("date", value);
     nextParams.delete("dateTo");
+    router.push(`${pathname}?${nextParams.toString()}`);
+  }
+
+  function applyRangeSelection(range: { from: string; to: string }) {
+    const nextParams = new URLSearchParams(searchParams.toString());
+
+    if (range.from === range.to) {
+      nextParams.set("date", range.from);
+      nextParams.delete("dateTo");
+      nextParams.set("span", "daily");
+      router.push(`${pathname}?${nextParams.toString()}`);
+      return;
+    }
+
+    const normalized = clampWeeklyRange(range.from, range.to);
+    nextParams.set("date", normalized.start);
+    nextParams.set("dateTo", normalized.end);
+    nextParams.set("span", "weekly");
     router.push(`${pathname}?${nextParams.toString()}`);
   }
 
@@ -211,27 +212,18 @@ export function MonitoringEmployeeShell({
 
           <div className="flex items-center gap-2 rounded-lg border border-white/[0.06] bg-white/[0.03] px-2 py-1">
             {activeSpan === "weekly" ? (
-              <>
-                <CompactInput
-                  type="date"
-                  value={date}
-                  onChange={(e) => updateWeeklyStart(e.target.value)}
-                  className="w-[115px] border-none bg-transparent px-1"
-                />
-                <span className="text-[10px] text-white/30">-</span>
-                <CompactInput
-                  type="date"
-                  value={resolvedDateTo}
-                  onChange={(e) => updateWeeklyEnd(e.target.value)}
-                  className="w-[115px] border-none bg-transparent px-1"
-                />
-              </>
+              <CompactDateRangeInput
+                from={date}
+                to={resolvedDateTo}
+                onChange={applyRangeSelection}
+                selectionBehavior="single-or-range"
+                className="w-64"
+              />
             ) : (
-              <CompactInput
-                type="date"
+              <CompactDateInput
                 value={date}
-                onChange={(e) => pushDailyDate(e.target.value)}
-                className="w-[115px] border-none bg-transparent px-1"
+                onChange={pushDailyDate}
+                className="w-64"
               />
             )}
           </div>

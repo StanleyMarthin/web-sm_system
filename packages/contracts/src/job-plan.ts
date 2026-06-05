@@ -28,6 +28,10 @@ export const jobPlanWorkspaceSourceSchema = z.enum(["countdown", "wo", "addition
 export const jobPlanReferenceOptionSchema = z.object({
   value: z.string(),
   label: z.string(),
+  code: z.string().nullable().optional(),
+  parentId: z.number().int().nullable().optional(),
+  parentName: z.string().nullable().optional(),
+  parentCode: z.string().nullable().optional(),
 });
 
 export const jobPlanEmployeeOptionSchema = jobPlanReferenceOptionSchema.extend({
@@ -43,6 +47,7 @@ export const jobPlanCountdownOptionSchema = jobPlanReferenceOptionSchema.extend(
   panelName: z.string().nullable().optional(),
   panelSectionName: z.string().nullable().optional(),
   jobName: z.string().nullable().optional(),
+  targetTotalHours: z.number().nullable().optional(),
   remainingHours: z.number(),
   availablePlanHours: z.number().nullable().optional(),
   progressPercent: z.number().nullable().optional(),
@@ -69,10 +74,13 @@ export const jobPlanPanelOptionSchema = jobPlanReferenceOptionSchema.extend({
 export const jobPlanJobTypeOptionSchema = jobPlanReferenceOptionSchema.extend({
   divisionId: z.number().int().nullable(),
   divisionName: z.string().nullable().optional(),
+  divisionParentId: z.number().int().nullable().optional(),
+  divisionParentName: z.string().nullable().optional(),
+  divisionParentCode: z.string().nullable().optional(),
   jobName: z.string(),
 });
 
-export const jobPlanRecordSchema = z.object({
+const jobPlanRecordBaseSchema = z.object({
   planId: z.string(),
   coreId: z.string(),
   taskDate: z.string(),
@@ -82,15 +90,19 @@ export const jobPlanRecordSchema = z.object({
   panelName: z.string().nullable().optional(),
   panelSectionName: z.string().nullable().optional(),
   jobName: z.string().nullable().optional(),
+  masterJobName: z.string().nullable().optional().catch(null),
   assignedUserId: z.string(),
   assignedUserName: z.string(),
   targetHours: z.number(),
+  targetDailyHours: z.number().nullable().catch(null),
+  targetTotalHours: z.number().nullable().catch(null),
   startTime: z.string().nullable(),
   finishTime: z.string().nullable(),
   isOvertime: z.boolean(),
   isPriority: z.boolean(),
   status: jobPlanStatusSchema,
   jobDescription: z.string(),
+  instructionText: z.string().catch(""),
   note: z.string().nullable(),
   draftSourceType: z.string().trim().max(32).nullable().optional(),
   draftCarId: z.string().trim().max(100).nullable().optional(),
@@ -101,7 +113,19 @@ export const jobPlanRecordSchema = z.object({
   availablePlanHours: z.number().nullable().optional(),
   remainingHours: z.number().nullable(),
   progressPercent: z.number().nullable(),
+  actualStartTime: z.string().nullable().optional(),
+  actualFinishTime: z.string().nullable().optional(),
+  actualStatus: z.string().nullable().optional(),
+  actualProgressPercent: z.number().nullable().optional(),
+  actualBreakMinutes: z.number().nullable().optional(),
 });
+
+export const jobPlanRecordSchema = jobPlanRecordBaseSchema.transform((row) => ({
+  ...row,
+  masterJobName: row.masterJobName ?? row.jobName ?? row.jobDescription ?? row.panelName ?? null,
+  instructionText: row.instructionText || row.jobDescription,
+  targetDailyHours: row.targetDailyHours ?? row.targetHours,
+}));
 
 export const jobPlanSummarySchema = z.object({
   totalHours: z.number(),
@@ -209,6 +233,7 @@ export const jobPlanWorkspaceDraftRowSchema = z.object({
   source: jobPlanWorkspaceSourceSchema,
   referenceId: z.string().trim().max(100).nullable().optional().default(null),
   carId: z.string().trim().max(100).nullable().optional().default(null),
+  divisionId: z.number().int().positive().nullable().optional(),
   panelId: z.number().int().positive().nullable().optional().default(null),
   jobTypeId: z.string().trim().max(100).nullable().optional().default(null),
   assignedUserId: z.string().trim().min(1).max(50),

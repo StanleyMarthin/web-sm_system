@@ -53,9 +53,11 @@ interface JobPlanRow extends RowDataPacket {
   panelName: string | null;
   panelSectionName: string | null;
   jobName: string | null;
+  masterJobName: string | null;
   assignedUserId: string;
   assignedUserName: string;
   targetHours: number;
+  targetTotalHours: number | null;
   startTime: string | null;
   finishTime: string | null;
   isOvertime: number | boolean;
@@ -66,6 +68,11 @@ interface JobPlanRow extends RowDataPacket {
   availablePlanHours: number | null;
   remainingHours: number | null;
   progressPercent: number | null;
+  actualStartTime: string | null;
+  actualFinishTime: string | null;
+  actualStatus: string | null;
+  actualProgressPercent: number | null;
+  actualBreakMinutes: number | null;
 }
 
 interface CountRow extends RowDataPacket {
@@ -84,6 +91,10 @@ interface ReferenceRow extends RowDataPacket {
   label: string;
   divisionId?: number | null;
   divisionName?: string | null;
+  code?: string | null;
+  parentId?: number | null;
+  parentName?: string | null;
+  parentCode?: string | null;
 }
 
 interface CountdownReferenceRow extends RowDataPacket {
@@ -95,6 +106,7 @@ interface CountdownReferenceRow extends RowDataPacket {
   divisionName: string;
   panelName?: string | null;
   jobName?: string | null;
+  targetTotalHours: number | null;
   remainingHours: number | null;
   availablePlanHours: number | null;
   progressPercent: number | null;
@@ -129,6 +141,9 @@ interface JobTypeReferenceRow extends RowDataPacket {
   label: string;
   divisionId: number | null;
   divisionName: string | null;
+  divisionParentId: number | null;
+  divisionParentName: string | null;
+  divisionParentCode: string | null;
   jobName: string;
 }
 
@@ -188,21 +203,39 @@ function mapJobPlanRow(row: JobPlanRow): JobPlanRecord {
     panelName: row.panelName,
     panelSectionName: row.panelSectionName,
     jobName: row.jobName,
+    masterJobName: row.masterJobName ?? row.jobName ?? row.jobDescription ?? row.panelName ?? "-",
     assignedUserId: row.assignedUserId,
     assignedUserName: row.assignedUserName,
     targetHours: Number(row.targetHours),
+    targetDailyHours: Number(row.targetHours),
+    targetTotalHours:
+      row.targetTotalHours === null || row.targetTotalHours === undefined
+        ? null
+        : Number(row.targetTotalHours),
     startTime: row.startTime,
     finishTime: row.finishTime,
     isOvertime: toBoolean(row.isOvertime),
     isPriority: toBoolean(row.isPriority),
     status: row.status as JobPlanStatus,
     jobDescription: row.jobDescription,
+    instructionText: row.jobDescription,
     note: row.note,
     availablePlanHours:
       row.availablePlanHours === null ? null : Number(row.availablePlanHours),
     remainingHours: row.remainingHours === null ? null : Number(row.remainingHours),
     progressPercent:
       row.progressPercent === null ? null : Number(row.progressPercent),
+    actualStartTime: row.actualStartTime ?? null,
+    actualFinishTime: row.actualFinishTime ?? null,
+    actualStatus: row.actualStatus ?? null,
+    actualProgressPercent:
+      row.actualProgressPercent === null || row.actualProgressPercent === undefined
+        ? null
+        : Number(row.actualProgressPercent),
+    actualBreakMinutes:
+      row.actualBreakMinutes === null || row.actualBreakMinutes === undefined
+        ? null
+        : Number(row.actualBreakMinutes),
   };
 }
 
@@ -312,9 +345,9 @@ async function hasScopeAccess(
 
 async function hasActiveAdvisor(
   connection: Pick<PoolConnection, "query">,
-  divisionId: number | null,
+  carId: string | null,
 ): Promise<boolean> {
-  if (divisionId === null) {
+  if (!carId) {
     return false;
   }
 
@@ -322,12 +355,12 @@ async function hasActiveAdvisor(
     `
       SELECT 1 AS ok
       FROM car_project_assignment
-      WHERE division_id = ?
+      WHERE car_id = ?
         AND ended_at IS NULL
         AND advisor_id IS NOT NULL
       LIMIT 1
     `,
-    [divisionId],
+    [carId],
   )) as [Array<RowDataPacket & { ok: number }>, unknown];
 
   return rows.length > 0;
@@ -335,9 +368,9 @@ async function hasActiveAdvisor(
 
 async function resolveInitialSubmittedStatus(
   connection: Pick<PoolConnection, "query">,
-  divisionId: number | null,
+  carId: string | null,
 ): Promise<JobPlanStatus> {
-  return (await hasActiveAdvisor(connection, divisionId)) ? "PENDING_ADV" : "PENDING_KP";
+  return (await hasActiveAdvisor(connection, carId)) ? "PENDING_ADV" : "PENDING_KP";
 }
 
 async function isPlanLocked(
@@ -446,10 +479,12 @@ function buildListSelectSql(): string {
       d.name AS divisionName,
       COALESCE(mp.name, jc.section_name) AS panelName,
       jc.section_name AS panelSectionName,
-      mjt.job_name AS jobName,
+      COALESCE(mjt.job_name, wo.job_detail, jc.section_name, jc.task_category) AS jobName,
+      COALESCE(mjt.job_name, wo.job_detail, jc.section_name, p.jobdescription, jc.task_category) AS masterJobName,
       p.assigned_user_id AS assignedUserId,
       COALESCE(e.full_name, p.assigned_user_id) AS assignedUserName,
       ROUND(TIME_TO_SEC(p.dailyTargetHours) / 3600, 2) AS targetHours,
+      ROUND(COALESCE(jc.target_hours_revised, jc.target_hours_initial, 0), 2) AS targetTotalHours,
       IFNULL(TIME_FORMAT(p.target_start_hours, '%H:%i'), NULL) AS startTime,
       IFNULL(TIME_FORMAT(p.target_finish_hours, '%H:%i'), NULL) AS finishTime,
       p.is_overtime AS isOvertime,
@@ -459,13 +494,24 @@ function buildListSelectSql(): string {
       p.note AS note,
       ROUND(GREATEST(COALESCE(jc.remaining_hours, 0) - COALESCE(planCapacity.reservedPlanHours, 0), 0), 2) AS availablePlanHours,
       ROUND(COALESCE(jc.remaining_hours, 0), 2) AS remainingHours,
-      ROUND(COALESCE(jc.actual_progress_percent, 0), 2) AS progressPercent
+      ROUND(COALESCE(jc.actual_progress_percent, 0), 2) AS progressPercent,
+      DATE_FORMAT(latest_actual.start_time, '%H:%i') AS actualStartTime,
+      DATE_FORMAT(latest_actual.finish_time, '%H:%i') AS actualFinishTime,
+      CASE
+        WHEN latest_actual.status = 'onprogress' AND latest_actual.finish_time IS NOT NULL THEN 'DONE'
+        WHEN latest_actual.status = 'done' THEN 'DONE'
+        WHEN latest_actual.status = 'onprogress' THEN 'ONPROGRESS'
+        ELSE latest_actual.status
+      END AS actualStatus,
+      latest_actual.progres AS actualProgressPercent,
+      latest_actual.break_duration_minutes AS actualBreakMinutes
     FROM sm_jobdesc_plan p
     JOIN sm_jobdesc_countdown jc ON jc.id = p.core_id
     LEFT JOIN cars c ON c.id = jc.car_id
     LEFT JOIN sm_divisi d ON d.id = jc.division_id
     LEFT JOIN master_panels mp ON mp.id = jc.panel_id
     LEFT JOIN master_job_types mjt ON mjt.id = jc.job_type_id
+    LEFT JOIN sm_jobdesc_wo wo ON wo.id = jc.ref_taks_id
     LEFT JOIN sm_employee e ON e.employee_id = p.assigned_user_id
     LEFT JOIN (
       SELECT
@@ -495,6 +541,15 @@ function buildListSelectSql(): string {
       LEFT JOIN sm_jobdesc_actual a ON a.id = latest.latestActualId
       GROUP BY p.core_id
     ) planCapacity ON planCapacity.core_id = jc.id
+    LEFT JOIN (
+      SELECT a.plandaily_id, a.start_time, a.finish_time, a.status, a.progres, a.break_duration_minutes
+      FROM sm_jobdesc_actual a
+      JOIN (
+        SELECT plandaily_id, MAX(created_at) AS latestCreatedAt
+        FROM sm_jobdesc_actual
+        GROUP BY plandaily_id
+      ) la ON la.plandaily_id = a.plandaily_id AND la.latestCreatedAt = a.created_at
+    ) latest_actual ON latest_actual.plandaily_id = p.id
   `;
 }
 
@@ -695,9 +750,15 @@ async function assertCountdownCapacity(
 async function getAdditionalContext(
   connection: Pick<PoolConnection, "query">,
   carId: string,
+  divisionId: number,
   panelId: number,
   jobTypeId: string,
 ): Promise<AdditionalContextRow | null> {
+  const allowed = await checkAllowedJobTypeForDivision(connection, jobTypeId, divisionId);
+  if (!allowed) {
+    return null;
+  }
+
   const [rows] = (await connection.query(
     `
       SELECT
@@ -705,24 +766,56 @@ async function getAdditionalContext(
         COALESCE(c.unit_name, c.id) AS unitName,
         mp.id AS panelId,
         mp.name AS panelName,
-        mjt.division_id AS divisionId,
-        d.name AS divisionName,
+        selected_division.id AS divisionId,
+        selected_division.name AS divisionName,
         mjt.id AS jobTypeId,
         mjt.job_name AS jobName
       FROM cars c
+      JOIN sm_divisi selected_division
+        ON selected_division.id = ?
       JOIN master_panels mp
         ON mp.id = ?
        AND (mp.car_id IS NULL OR mp.car_id = c.id)
       JOIN master_job_types mjt
         ON mjt.id = ?
-      LEFT JOIN sm_divisi d ON d.id = mjt.division_id
       WHERE c.id = ?
       LIMIT 1
     `,
-    [panelId, jobTypeId, carId],
+    [divisionId, panelId, jobTypeId, carId],
   )) as [AdditionalContextRow[], unknown];
 
   return rows[0] ?? null;
+}
+
+async function checkAllowedJobTypeForDivision(
+  connection: Pick<PoolConnection, "query">,
+  jobTypeId: string,
+  divisionId: number,
+): Promise<boolean> {
+  const [rows] = (await connection.query(
+    `
+      SELECT mjt.id
+      FROM master_job_types mjt
+      LEFT JOIN sm_divisi selected_division ON selected_division.id = ?
+      LEFT JOIN sm_divisi parent_division ON parent_division.id = selected_division.parent_id
+      WHERE mjt.id = ?
+        AND (
+          mjt.division_id IS NULL
+          OR mjt.division_id = ?
+          OR (
+            mjt.division_id = selected_division.parent_id
+            AND (
+              UPPER(COALESCE(parent_division.name, '')) = 'MECHANIC'
+              OR UPPER(COALESCE(parent_division.code, '')) = 'MECHANIC'
+            )
+          )
+        )
+      LIMIT 1
+    `,
+    [divisionId, jobTypeId, divisionId],
+  )) as [Array<RowDataPacket & { id: string }>, unknown];
+
+  return rows.length > 0;
 }
 
 async function findExistingWorkOrderCountdown(
@@ -870,13 +963,14 @@ async function resolveWorkspaceCountdown(
     return assertCountdownAccessible(connection, params, existingCountdown.coreId);
   }
 
-  if (!row.carId || !row.panelId || !row.jobTypeId) {
+  if (!row.carId || !row.divisionId || !row.panelId || !row.jobTypeId) {
     throw new Error("ADDITIONAL_REFERENCE_INCOMPLETE");
   }
 
   const additional = await getAdditionalContext(
     connection,
     row.carId,
+    row.divisionId,
     row.panelId,
     row.jobTypeId,
   );
@@ -933,6 +1027,9 @@ export interface JobPlanRepository {
     input: UpdateJobPlanStatusRequest,
   ): Promise<{ planId: string; status: JobPlanStatus }>;
   delete(params: JobPlanMutationParams): Promise<void>;
+  getApproversForCars(
+    carIds: string[],
+  ): Promise<Array<{ carId: string; kpId: string | null; advisorId: string | null; kdId: string | null }>>;
 }
 
 export class MySqlJobPlanRepository implements JobPlanRepository {
@@ -1155,8 +1252,30 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
       }
     }
 
+    const jobTypeScopeSql = params.scope.canViewAllUnits
+      ? ""
+      : params.scope.divisionIds.length > 0
+        ? `
+          AND (
+            mjt.division_id IS NULL
+            OR mjt.division_id IN (${params.scope.divisionIds.map(() => "?").join(", ")})
+            OR EXISTS (
+              SELECT 1
+              FROM sm_divisi selected_division
+              JOIN sm_divisi parent_division ON parent_division.id = selected_division.parent_id
+              WHERE selected_division.id IN (${params.scope.divisionIds.map(() => "?").join(", ")})
+                AND mjt.division_id = selected_division.parent_id
+                AND (
+                  UPPER(COALESCE(parent_division.name, '')) = 'MECHANIC'
+                  OR UPPER(COALESCE(parent_division.code, '')) = 'MECHANIC'
+                )
+            )
+          )
+        `
+        : "AND 1 = 0";
+
     if (!params.scope.canViewAllUnits && params.scope.divisionIds.length > 0) {
-      jobTypeParams.push(...params.scope.divisionIds);
+      jobTypeParams.push(...params.scope.divisionIds, ...params.scope.divisionIds);
     }
 
     const [
@@ -1188,8 +1307,13 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
         `
           SELECT
             CAST(d.id AS CHAR) AS value,
-            d.name AS label
+            d.name AS label,
+            d.code AS code,
+            d.parent_id AS parentId,
+            parent.name AS parentName,
+            parent.code AS parentCode
           FROM sm_divisi d
+          LEFT JOIN sm_divisi parent ON parent.id = d.parent_id
           WHERE 1 = 1
             ${
               params.scope.canViewAllUnits
@@ -1239,6 +1363,7 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
             COALESCE(d.name, '-') AS divisionName,
             COALESCE(mp.name, jc.section_name) AS panelName,
             mjt.job_name AS jobName,
+            ROUND(COALESCE(jc.target_hours_revised, jc.target_hours_initial, 0), 2) AS targetTotalHours,
             ROUND(COALESCE(jc.remaining_hours, 0), 2) AS remainingHours,
             ROUND(GREATEST(COALESCE(jc.remaining_hours, 0) - COALESCE(planCapacity.reservedPlanHours, 0), 0), 2) AS availablePlanHours,
             ROUND(COALESCE(jc.actual_progress_percent, 0), 2) AS progressPercent
@@ -1354,17 +1479,15 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
             COALESCE(mjt.job_name, mjt.id) AS label,
             mjt.division_id AS divisionId,
             d.name AS divisionName,
+            d.parent_id AS divisionParentId,
+            parent.name AS divisionParentName,
+            parent.code AS divisionParentCode,
             COALESCE(mjt.job_name, mjt.id) AS jobName
           FROM master_job_types mjt
           LEFT JOIN sm_divisi d ON d.id = mjt.division_id
-          WHERE mjt.division_id IS NOT NULL
-            ${
-              params.scope.canViewAllUnits
-                ? ""
-                : params.scope.divisionIds.length > 0
-                  ? `AND mjt.division_id IN (${params.scope.divisionIds.map(() => "?").join(", ")})`
-                  : "AND 1 = 0"
-            }
+          LEFT JOIN sm_divisi parent ON parent.id = d.parent_id
+          WHERE mjt.job_name IS NOT NULL
+            ${jobTypeScopeSql}
           ORDER BY label ASC
           LIMIT 300
         `,
@@ -1390,6 +1513,10 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
       divisions: divisionRows.map((row) => ({
         value: row.value,
         label: row.label,
+        code: row.code ?? null,
+        parentId: row.parentId ?? null,
+        parentName: row.parentName ?? null,
+        parentCode: row.parentCode ?? null,
       })),
       units: unitRows.map((row) => ({
         value: row.value,
@@ -1405,6 +1532,8 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
         divisionName: row.divisionName,
         panelName: row.panelName,
         jobName: row.jobName,
+        targetTotalHours:
+          row.targetTotalHours === null ? null : Number(row.targetTotalHours),
         remainingHours: Number(row.remainingHours ?? 0),
         availablePlanHours:
           row.availablePlanHours === null ? null : Number(row.availablePlanHours),
@@ -1432,6 +1561,9 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
         label: row.label,
         divisionId: row.divisionId,
         divisionName: row.divisionName,
+        divisionParentId: row.divisionParentId,
+        divisionParentName: row.divisionParentName,
+        divisionParentCode: row.divisionParentCode,
         jobName: row.jobName,
       })),
       statuses: [
@@ -1507,7 +1639,7 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
         await assertCountdownCapacity(connection, countdown, plan.targetHours);
         const initialStatus = await resolveInitialSubmittedStatus(
           connection,
-          countdown.divisionId,
+          countdown.carId,
         );
 
         const planId = `PLAN-${randomUUID().replace(/-/gu, "").slice(0, 20).toUpperCase()}`;
@@ -1584,7 +1716,7 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
         });
         const initialStatus = await resolveInitialSubmittedStatus(
           connection,
-          countdown.divisionId,
+          countdown.carId,
         );
         const scheduleSegments = buildJobPlanScheduleSegments({
           taskDate: input.taskDate,
@@ -1666,6 +1798,7 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
             source: "additional",
             referenceId: null,
             carId: draft.carId,
+            divisionId: draft.divisionId,
             panelId: draft.panelId,
             jobTypeId: draft.jobTypeId,
             assignedUserId: draft.assignedUserId,
@@ -1683,7 +1816,7 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
           });
           const initialStatus = await resolveInitialSubmittedStatus(
             connection,
-            countdown.divisionId,
+            countdown.carId,
           );
           const scheduleSegments = buildJobPlanScheduleSegments({
             taskDate: draft.taskDate,
@@ -1745,7 +1878,7 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
         const countdown = await assertCountdownAccessible(connection, params, draft.coreId);
         const initialStatus = await resolveInitialSubmittedStatus(
           connection,
-          countdown.divisionId,
+          countdown.carId,
         );
         const scheduleSegments = buildJobPlanScheduleSegments({
           taskDate: draft.taskDate,
@@ -1964,5 +2097,39 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
     } finally {
       connection.release();
     }
+  }
+
+  async getApproversForCars(
+    carIds: string[],
+  ): Promise<Array<{ carId: string; kpId: string | null; advisorId: string | null; kdId: string | null }>> {
+    if (carIds.length === 0) {
+      return [];
+    }
+
+    const pool = this.poolFactory();
+    const placeholders = carIds.map(() => "?").join(", ");
+
+    interface ApproverRow extends RowDataPacket {
+      carId: string;
+      kpId: string | null;
+      advisorId: string | null;
+      kdId: string | null;
+    }
+
+    const [rows] = (await pool.query(
+      `
+        SELECT
+          car_id AS carId,
+          kp_id AS kpId,
+          advisor_id AS advisorId,
+          kd_id AS kdId
+        FROM car_project_assignment
+        WHERE car_id IN (${placeholders})
+          AND ended_at IS NULL
+      `,
+      carIds,
+    )) as [ApproverRow[], unknown];
+
+    return rows;
   }
 }

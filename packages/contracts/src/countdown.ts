@@ -26,6 +26,8 @@ export const countdownBoardRowSchema = z.object({
   prerequisiteCoreId: z.string().nullable().optional(),
   refWoId: z.string().nullable().optional(),
   note: z.string().nullable().optional(),
+  temuanAwal: z.string().nullable().optional(),
+  keterangan: z.string().nullable().optional(),
   targetHoursInitial: z.number(),
   timeExtensionHours: z.number(),
   targetHoursRevised: z.number(),
@@ -50,6 +52,10 @@ export const countdownBoardEnvelopeSchema = z.object({
       z.object({
         label: z.string(),
         value: z.string(),
+        code: z.string().nullable().optional(),
+        parentId: z.number().int().nullable().optional(),
+        parentName: z.string().nullable().optional(),
+        parentCode: z.string().nullable().optional(),
       }),
     ),
     units: z.array(
@@ -62,6 +68,9 @@ export const countdownBoardEnvelopeSchema = z.object({
       z.object({
         label: z.string(),
         value: z.string(),
+        carId: z.string().nullable().optional(),
+        section: z.string().nullable().optional(),
+        category: z.string().nullable().optional(),
       }),
     ),
     sections: z.array(
@@ -74,6 +83,11 @@ export const countdownBoardEnvelopeSchema = z.object({
       z.object({
         label: z.string(),
         value: z.string(),
+        divisionId: z.number().int().nullable().optional(),
+        divisionName: z.string().nullable().optional(),
+        divisionParentId: z.number().int().nullable().optional(),
+        divisionParentName: z.string().nullable().optional(),
+        divisionParentCode: z.string().nullable().optional(),
       }),
     ),
     taskCategories: z.array(
@@ -152,6 +166,8 @@ export const countdownTemplateRowSchema = z.object({
   prerequisiteCoreId: z.string().optional(),
   refWoId: z.string().optional(),
   note: z.string().optional(),
+  temuanAwal: z.string().optional(),
+  keterangan: z.string().optional(),
 });
 
 export const countdownCreateRequestSchema = z.object({
@@ -167,6 +183,8 @@ export const countdownCreateRequestSchema = z.object({
   prerequisiteCoreId: z.string().trim().min(1).max(100).nullable().optional(),
   refWoId: z.string().trim().min(1).max(100).nullable().optional(),
   note: z.string().trim().max(500).nullable().optional(),
+  temuanAwal: z.string().trim().max(1000).nullable().optional(),
+  keterangan: z.string().trim().max(1000).nullable().optional(),
   status: countdownStatusSchema.optional(),
 });
 

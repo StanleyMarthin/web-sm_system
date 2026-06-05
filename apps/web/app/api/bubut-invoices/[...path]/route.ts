@@ -37,3 +37,7 @@ export async function POST(request: Request, props: RouteProps) {
 export async function PATCH(request: Request, props: RouteProps) {
   return proxy(request, props);
 }
+
+export async function PUT(request: Request, props: RouteProps) {
+  return proxy(request, props);
+}

@@ -18,21 +18,32 @@ import type {
   SmartDataGridSortOption,
 } from "@/shared/datagrid/types";
 import {
-  ActionButton, CompactInput, CompactSelect, CompactTextarea,
-  FieldLabel, MetricBar, PageHeader,
+  ActionButton, MetricBar, PageHeader,
 } from "@/shared/ui/compact";
 import { CountdownBoardForm, type CountdownFormValues } from "./forms/countdown-board-form";
-import { Download, FileUp, Pencil, Plus, RefreshCcw, Save, Trash2, Upload, X } from "lucide-react";
+import { Download, FileUp, Pencil, Plus, RefreshCcw, Trash2, Upload, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSweetAlert } from "@/shared/ui/sweet-alert";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                               */
 /* ------------------------------------------------------------------ */
 
-interface ReferenceOption { label: string; value: string; }
+interface ReferenceOption {
+  label: string;
+  value: string;
+  code?: string | null;
+  parentId?: number | null;
+  parentName?: string | null;
+  parentCode?: string | null;
+  divisionId?: number | null;
+  divisionName?: string | null;
+  divisionParentId?: number | null;
+  divisionParentName?: string | null;
+  divisionParentCode?: string | null;
+}
 
 interface CountdownReferences {
   divisions: ReferenceOption[];
@@ -172,13 +183,22 @@ function buildCountdownColumns(
       key: "panelName", label: "Panel", kind: "text",
       filterKey: "panelId",
       filterOptions: references.panels,
-      renderCell: (value, row) => (
+      renderCell: (value) => (
         <div className="space-y-0.5">
           <p className="text-[12px] text-white">{String(value ?? "-")}</p>
         </div>
       ),
     },
-    { key: "jobTypeName", label: "Jobdesc", kind: "text", filterKey: "jobTypeId", filterOptions: references.jobTypes },
+    {
+      key: "jobTypeName",
+      label: "Jobdesc",
+      kind: "text",
+      filterKey: "jobTypeId",
+      filterOptions: references.jobTypes,
+      renderCell: (value, row) => String(value ?? row.sectionName ?? "-"),
+    },
+    { key: "temuanAwal", label: "Temuan Awal", kind: "text" },
+    { key: "keterangan", label: "Keterangan", kind: "text" },
     { 
       key: "targetHoursInitial", label: "Target", kind: "text", align: "right",
       renderCell: (v) => <span className="tabular-nums">{formatDecimalToHHMM(Number(v)) || "00:00"}</span>
@@ -280,6 +300,7 @@ export function CountdownBoardShell({ rows, references, canManage, meta, state }
   const [editorMode, setEditorMode] = useState<"create" | "edit" | null>(null);
   const [initialFormValues, setInitialFormValues] = useState<CountdownFormValues | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const saveInFlightRef = useRef(false);
 
   const summary = useMemo(() => ({
     total: rows.length,
@@ -328,6 +349,8 @@ export function CountdownBoardShell({ rows, references, canManage, meta, state }
       prerequisiteCoreId: row.prerequisiteCoreId ?? "",
       refWoId: row.refWoId ?? "",
       note: row.note ?? "",
+      temuanAwal: row.temuanAwal ?? "",
+      keterangan: row.keterangan ?? "",
       status: row.status ?? "PLAN",
     });
   }
@@ -357,6 +380,10 @@ export function CountdownBoardShell({ rows, references, canManage, meta, state }
   }
 
   async function handleSaveCountdown(data: CountdownFormValues) {
+    if (saveInFlightRef.current) {
+      return;
+    }
+
     const payload = {
       carId: data.carId.trim(),
       divisionId: Number(data.divisionId),
@@ -370,6 +397,8 @@ export function CountdownBoardShell({ rows, references, canManage, meta, state }
       prerequisiteCoreId: normalizeTextInput(data.prerequisiteCoreId ?? ""),
       refWoId: normalizeTextInput(data.refWoId ?? ""),
       note: normalizeTextInput(data.note ?? ""),
+      temuanAwal: normalizeTextInput(data.temuanAwal ?? ""),
+      keterangan: normalizeTextInput(data.keterangan ?? ""),
       status: data.status,
     };
 
@@ -377,11 +406,13 @@ export function CountdownBoardShell({ rows, references, canManage, meta, state }
       setError("Unit dan divisi wajib diisi."); return;
     }
     if (!payload.sectionName) { setError("Section wajib dipilih dari master."); return; }
+    if (!payload.jobTypeId) { setError("Jobdesc wajib dipilih dari master jobdesc."); return; }
     if (!Number.isFinite(payload.targetHoursInitial) || payload.targetHoursInitial < 0) {
       setError("Target jam awal tidak valid."); return;
     }
     if (!payload.deadlineDate) { setError("Tanggal deadline wajib diisi."); return; }
 
+    saveInFlightRef.current = true;
     setIsSaving(true); setError(null); setMessage(null); setImportResult(null);
     try {
       if (editorMode === "edit" && data.countdownId) {
@@ -393,9 +424,13 @@ export function CountdownBoardShell({ rows, references, canManage, meta, state }
       const result = await createCountdownRecord(payload);
       if (!result.success) { setError(result.message); return; }
       setMessage("Countdown berhasil dibuat.");
-      setInitialFormValues(null); setEditorMode("create"); router.refresh();
+      closeEditor();
+      router.refresh();
     } catch { setError("Form countdown tidak valid."); }
-    finally { setIsSaving(false); }
+    finally {
+      saveInFlightRef.current = false;
+      setIsSaving(false);
+    }
   }
 
   async function handleDeleteCountdown(row: CountdownBoardRow) {

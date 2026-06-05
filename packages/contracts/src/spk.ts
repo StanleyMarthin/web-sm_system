@@ -41,6 +41,7 @@ export const spkPlannerAllocationSchema = z.object({
 export const spkPlannerMetaSchema = z.object({
   source: z.literal("WEEKLY_PLANNER"),
   weeklyPlanId: z.string(),
+  planningTargetId: z.string().nullable().optional(),
   weekStartDate: z.string(),
   generatedOvertimeRows: z.number().int().nonnegative(),
   allocations: z.array(spkPlannerAllocationSchema),
@@ -82,7 +83,14 @@ export const spkDetailRecordSchema = z.object({
 });
 
 export const spkGridQuerySchema = gridQueryStateSchema.extend({
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u).default("2026-01-01"),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u).default(() => {
+    const d = new Date();
+    return [
+      d.getFullYear(),
+      String(d.getMonth() + 1).padStart(2, "0"),
+      String(d.getDate()).padStart(2, "0")
+    ].join("-");
+  }),
 });
 
 export const spkSummarySchema = z.object({

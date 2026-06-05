@@ -43,6 +43,7 @@ import {
 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { CompactDateRangeInput } from "@/shared/ui/compact";
 import { type WarehouseSectionId } from "@/modules/warehouse/config/workspace";
 import {
   approveWarehouseRequest,
@@ -214,9 +215,6 @@ interface LocationModalState {
   isOpen: boolean;
   initialValues: LocationFormValues | null;
 }
-
-const inputCls =
-  "h-8 border border-gray-300 dark:border-white/[0.05] bg-slate-50 dark:bg-[#0a0a0c] px-2.5 font-mono text-[11px] text-gray-950 dark:text-white outline-none transition-colors focus:border-amber-500/30 [color-scheme:dark]";
 
 const darkSelectStyle = {
   backgroundColor: "#111111",
@@ -1290,25 +1288,12 @@ export function WarehouseShell({
 
                 <div className="flex flex-wrap items-end gap-3 border border-gray-300 dark:border-white/[0.05] bg-slate-50 dark:bg-[#0a0a0c] px-3 py-3">
                   <div className="space-y-1">
-                    <p className="text-[10px] uppercase tracking-[0.16em] text-gray-500 dark:text-white/35">Dari tanggal</p>
-                    <input
-                      type="date"
-                      value={transactionDate}
-                      onChange={(event) =>
-                        setTransactionDateRange(event.target.value, transactionDateEnd)
-                      }
-                      className={inputCls}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-[10px] uppercase tracking-[0.16em] text-gray-500 dark:text-white/35">Sampai tanggal</p>
-                    <input
-                      type="date"
-                      value={transactionDateEnd}
-                      onChange={(event) =>
-                        setTransactionDateRange(transactionDate, event.target.value)
-                      }
-                      className={inputCls}
+                    <p className="text-[10px] uppercase tracking-[0.16em] text-gray-500 dark:text-white/35">Rentang tanggal</p>
+                    <CompactDateRangeInput
+                      from={transactionDate}
+                      to={transactionDateEnd}
+                      onChange={(range) => setTransactionDateRange(range.from, range.to)}
+                      className="w-64"
                     />
                   </div>
                   <div className="min-w-[120px] border border-gray-300 dark:border-white/[0.05] bg-white dark:bg-[#111114] px-3 py-2">

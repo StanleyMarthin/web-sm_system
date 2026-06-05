@@ -68,11 +68,9 @@ export function buildSpkGridQueryString(
   searchParams: Record<string, string | string[] | undefined>,
 ): string {
   const params = toUrlSearchParams(searchParams);
-
-  if (!params.has("date")) {
+  if (!params.get("date")) {
     params.set("date", getTodayIsoDate());
   }
-
   return params.toString();
 }
 
@@ -91,6 +89,7 @@ export async function fetchSpkGrid(
           }
         : undefined,
       cache: "no-store",
+      credentials: "include",
     });
 
     if (!response.ok) {

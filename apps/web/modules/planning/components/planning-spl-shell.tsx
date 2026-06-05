@@ -1,16 +1,17 @@
 "use client";
 
-import type { WeeklyPlanRecord } from "@smsystem/contracts/calendar";
+/* Hallmark · pre-emit critique: P4 H4 E4 S4 R4 V4 */
+/* Hallmark · genre: modern-minimal · macrostructure: Workbench · design-system: design.md · designed-as-app */
+
 import { RefreshCcw } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import type { WeeklyPlanOvertimeRecord } from "@/shared/api/planning";
+import type { PlanningSplRecommendation } from "@/shared/api/work-control";
 import { ActionButton, CompactInput, MetricBar, PageHeader, SectionCard } from "@/shared/ui/compact";
 
 interface PlanningSplShellProps {
   asOfDate: string;
   weekStartDate: string;
-  plan: WeeklyPlanRecord | null;
-  rows: WeeklyPlanOvertimeRecord[];
+  rows: PlanningSplRecommendation[];
 }
 
 function addDaysIso(baseDate: string, days: number): string {
@@ -27,7 +28,10 @@ function formatHours(value: number): string {
   return `${value.toFixed(1)}j`;
 }
 
-function formatDisplayDate(value: string): string {
+function formatDisplayDate(value: string | null): string {
+  if (!value) {
+    return "-";
+  }
   return new Intl.DateTimeFormat("id-ID", {
     day: "2-digit",
     month: "short",
@@ -36,63 +40,19 @@ function formatDisplayDate(value: string): string {
   }).format(new Date(`${value}T00:00:00.000Z`));
 }
 
-function uniqueValues<T>(values: readonly T[]) {
-  return Array.from(new Set(values));
-}
-
 export function PlanningSplShell({
   asOfDate,
   weekStartDate,
-  plan,
   rows,
 }: PlanningSplShellProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const weekEndDate = addDaysIso(weekStartDate, 6);
-  const totalHours = rows.reduce((sum, row) => {
-    const memberTotal = row.memberCount + (row.includeHead ? 1 : 0);
-    return sum + memberTotal * row.overtimeHours;
-  }, 0);
-  const totalSlots = rows.reduce(
-    (sum, row) => sum + row.memberCount + (row.includeHead ? 1 : 0),
-    0,
-  );
-  const totalDays = new Set(rows.map((row) => row.overtimeDate)).size;
-  const totalDivisions = new Set(rows.map((row) => row.divisionId)).size;
-  const weeklyDivisionRows = uniqueValues(rows.map((row) => row.divisionId)).map((divisionId) => {
-    const divisionRows = rows.filter((row) => row.divisionId === divisionId);
-    const divisionName = divisionRows[0]?.divisionName ?? "-";
-    const activeDays = uniqueValues(divisionRows.map((row) => row.overtimeDate)).length;
-    const slotCount = divisionRows.reduce(
-      (sum, row) => sum + row.memberCount + (row.includeHead ? 1 : 0),
-      0,
-    );
-    const totalDivisionHours = divisionRows.reduce((sum, row) => {
-      const memberTotal = row.memberCount + (row.includeHead ? 1 : 0);
-      return sum + memberTotal * row.overtimeHours;
-    }, 0);
-    const perPersonHours = uniqueValues(divisionRows.map((row) => row.overtimeHours))
-      .sort((left, right) => left - right)
-      .map((value) => value.toFixed(1));
-    const includeHeadDays = divisionRows.filter((row) => row.includeHead).length;
-    const notes = uniqueValues(
-      divisionRows
-        .map((row) => row.notes?.trim())
-        .filter((note): note is string => Boolean(note)),
-    );
-
-    return {
-      divisionId,
-      divisionName,
-      activeDays,
-      slotCount,
-      totalDivisionHours,
-      perPersonHours,
-      includeHeadDays,
-      notes,
-    };
-  });
+  const totalShortageHours = rows.reduce((sum, row) => sum + row.shortageHours, 0);
+  const totalRecommendedHours = rows.reduce((sum, row) => sum + row.recommendedOvertimeHours, 0);
+  const totalUnits = rows.reduce((sum, row) => sum + row.unitCount, 0);
+  const totalTargets = rows.reduce((sum, row) => sum + row.targetCount, 0);
 
   function pushReferenceDate(value: string) {
     const nextParams = new URLSearchParams(searchParams.toString());
@@ -101,18 +61,33 @@ export function PlanningSplShell({
     router.push(`${pathname}?${nextParams.toString()}`);
   }
 
+  function openLinkedSpk() {
+    router.push(`/spk?date=${weekStartDate}`);
+  }
+
+  function openLinkedPlanning() {
+    router.push(`/planning?date=${asOfDate}`);
+  }
+
   return (
     <div className="space-y-2">
       <div className="grid gap-2 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
-        <SectionCard
-          label="Planning"
-          className="space-y-2"
-        >
+        <SectionCard label="Planning" className="space-y-2">
           <PageHeader
-            title="SPL mingguan"
-            eyebrow="Baseline lembur"
+            title="Rekomendasi SPL Planning"
+            eyebrow="Tersambung dari target planning yang dirilis"
           />
+          <p className="max-w-2xl text-[12px] leading-5 text-white/45">
+            Halaman ini membaca kekurangan jam dari target planning yang sudah dirilis ke SPK.
+            Jadi angka di sini, SPK, ETA unit, dan review plan sekarang memakai alur sumber yang sama.
+          </p>
           <div className="flex flex-wrap items-center gap-2">
+            <ActionButton onClick={openLinkedPlanning}>
+              Buka Planning
+            </ActionButton>
+            <ActionButton onClick={openLinkedSpk}>
+              Buka SPK
+            </ActionButton>
             <div className="w-40">
               <CompactInput
                 type="date"
@@ -120,26 +95,23 @@ export function PlanningSplShell({
                 onChange={(event) => pushReferenceDate(event.target.value)}
               />
             </div>
-            <span className="border border-gray-300 dark:border-white/[0.08] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/55">
+            <span className="border border-white/5 bg-[#0a0a0c] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-white/55">
               {formatDisplayDate(weekStartDate)} s.d. {formatDisplayDate(weekEndDate)}
             </span>
-            <span className="border border-gray-300 dark:border-white/[0.08] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-gray-400 dark:text-white/40">
-              {plan?.status === "PUBLISHED" ? "Sudah dipublish" : "Masih draft"}
+            <span className="border border-white/5 bg-[#0a0a0c] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-white/40">
+              Basis: planning_targets + overtime_recommendations
             </span>
           </div>
         </SectionCard>
 
-        <SectionCard
-          label="Ringkasan"
-          className="space-y-2"
-        >
+        <SectionCard label="Ringkasan" className="space-y-2">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <MetricBar
               items={[
-                { label: "Jam Bundle", value: formatHours(totalHours), tone: totalHours > 0 ? "warn" : "muted" },
-                { label: "Hari Lembur", value: totalDays, tone: "muted" },
-                { label: "Divisi Aktif", value: totalDivisions, tone: "muted" },
-                { label: "Slot Orang", value: totalSlots, tone: "muted" },
+                { label: "Jam Kurang", value: formatHours(totalShortageHours), tone: totalShortageHours > 0 ? "warn" : "muted" },
+                { label: "Jam Direkomendasikan", value: formatHours(totalRecommendedHours), tone: totalRecommendedHours > 0 ? "warn" : "muted" },
+                { label: "Unit Terdampak", value: totalUnits, tone: "muted" },
+                { label: "Target Terdampak", value: totalTargets, tone: "muted" },
               ]}
             />
             <ActionButton onClick={() => router.refresh()}>
@@ -150,99 +122,66 @@ export function PlanningSplShell({
         </SectionCard>
       </div>
 
-      <SectionCard label="Bundle mingguan" count={weeklyDivisionRows.length}>
+      <div className="border border-amber-500/20 bg-amber-500/[0.03] px-4 py-2 text-[11px] font-mono text-amber-400">
+        SPL di sini adalah kebutuhan tambahan jam dari target planning yang melebihi kapasitas normal,
+        bukan bundle lembur mingguan manual dari modul planning lama.
+      </div>
+
+      <SectionCard label="Per Divisi & Target Planning" count={rows.length}>
+        <div className="flex flex-wrap items-center justify-between gap-2 border border-white/[0.05] bg-[#0a0a0c] px-3 py-2">
+          <p className="text-[12px] text-white/50">
+            Semua rekomendasi di bawah ini berasal dari target planning yang sudah dirilis ke SPK minggu
+            <span className="ml-1 font-mono text-white/70">{weekStartDate}</span>.
+          </p>
+          <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-white/35">
+            Linked to release target
+          </span>
+        </div>
         <div className="overflow-x-auto">
-          <table className="min-w-full text-[12px] text-gray-800 dark:text-white/70">
-            <thead className="sticky top-0 z-10 bg-white dark:bg-[#111114]">
-              <tr className="border-b border-gray-300 dark:border-white/[0.06] text-left font-mono text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/30">
+          <table className="min-w-full text-[12px] text-white/70">
+            <thead className="sticky top-0 z-10 bg-[#111114]">
+              <tr className="border-b border-white/[0.06] text-left font-mono text-[10px] uppercase tracking-[0.12em] text-white/30">
+                <th className="px-3 py-2">Periode</th>
                 <th className="px-3 py-2">Divisi</th>
-                <th className="px-3 py-2 text-right">Hari Aktif</th>
-                <th className="px-3 py-2 text-right">Slot Orang</th>
-                <th className="px-3 py-2">Jam / Orang</th>
-                <th className="px-3 py-2 text-right">Total Jam Tim</th>
-                <th className="px-3 py-2 text-right">KD Ikut</th>
-                <th className="px-3 py-2">Catatan</th>
+                <th className="px-3 py-2 text-right">Jam Kurang</th>
+                <th className="px-3 py-2 text-right">Rekomendasi SPL</th>
+                <th className="px-3 py-2 text-right">Unit</th>
+                <th className="px-3 py-2 text-right">Target</th>
+                <th className="px-3 py-2">Rentang Butuh</th>
+                <th className="px-3 py-2">Alasan</th>
               </tr>
             </thead>
             <tbody>
-              {weeklyDivisionRows.length > 0 ? weeklyDivisionRows.map((row) => (
+              {rows.length > 0 ? rows.map((row) => (
                 <tr
-                  key={`weekly-division-${row.divisionId}`}
-                  className="border-b border-white/[0.04] hover:bg-gray-100 dark:hover:bg-white/[0.02]"
+                  key={`${row.planningTargetId}:${row.divisionId}`}
+                  className="border-b border-white/[0.04] hover:bg-white/[0.02]"
                 >
-                  <td className="px-3 py-2 text-gray-950 dark:text-white">{row.divisionName}</td>
-                  <td className="px-3 py-2 text-right font-mono tabular-nums">{row.activeDays}</td>
-                  <td className="px-3 py-2 text-right font-mono tabular-nums">{row.slotCount}</td>
-                  <td className="px-3 py-2 font-mono">
-                    {row.perPersonHours.length > 1
-                      ? `${row.perPersonHours[0]}j - ${row.perPersonHours[row.perPersonHours.length - 1]}j`
-                      : `${row.perPersonHours[0] ?? "0.0"}j`}
+                  <td className="px-3 py-2 font-mono text-white/50">
+                    {row.periodStart}
+                    <span className="block text-[9px] text-white/25">{row.planningTargetId.slice(0, 8)}</span>
                   </td>
-                  <td className="px-3 py-2 text-right font-mono tabular-nums text-amber-300">
-                    {formatHours(row.totalDivisionHours)}
+                  <td className="px-3 py-2 text-white">{row.divisionName}</td>
+                  <td className="px-3 py-2 text-right font-mono tabular-nums text-red-300">
+                    {formatHours(row.shortageHours)}
                   </td>
-                  <td className="px-3 py-2 text-right font-mono tabular-nums">{row.includeHeadDays}</td>
-                  <td className="px-3 py-2 text-gray-600 dark:text-white/45">
-                    {row.notes.length > 0 ? row.notes.join(" • ") : "-"}
+                  <td className="px-3 py-2 text-right font-mono tabular-nums text-amber-400">
+                    {formatHours(row.recommendedOvertimeHours)}
                   </td>
+                  <td className="px-3 py-2 text-right font-mono tabular-nums">{row.unitCount}</td>
+                  <td className="px-3 py-2 text-right font-mono tabular-nums">{row.targetCount}</td>
+                  <td className="px-3 py-2 font-mono text-white/45">
+                    {formatDisplayDate(row.firstNeedDate)}
+                    <span className="block text-[9px] text-white/25">
+                      s.d. {formatDisplayDate(row.lastNeedDate)}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2 text-white/50">{row.reason ?? "-"}</td>
                 </tr>
               )) : (
                 <tr>
-                  <td colSpan={7} className="px-3 py-10 text-center text-sm text-gray-500 dark:text-white/35">
-                    Belum ada baseline lembur mingguan untuk minggu ini.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </SectionCard>
-
-      <SectionCard label="Rincian harian lembur" count={rows.length}>
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-[12px] text-gray-800 dark:text-white/70">
-            <thead className="sticky top-0 z-10 bg-white dark:bg-[#111114]">
-              <tr className="border-b border-gray-300 dark:border-white/[0.06] text-left font-mono text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/30">
-                <th className="px-3 py-2">Tanggal</th>
-                <th className="px-3 py-2">Divisi</th>
-                <th className="px-3 py-2">Hari</th>
-                <th className="px-3 py-2 text-right">Jam / Orang</th>
-                <th className="px-3 py-2 text-right">Jumlah Orang</th>
-                <th className="px-3 py-2 text-center">KD Ikut</th>
-                <th className="px-3 py-2 text-right">Total Jam</th>
-                <th className="px-3 py-2">Keterangan</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.length > 0 ? rows.map((row) => {
-                const memberTotal = row.memberCount + (row.includeHead ? 1 : 0);
-                return (
-                  <tr
-                    key={`${row.divisionId}-${row.overtimeDate}`}
-                    className="border-b border-white/[0.04] hover:bg-gray-100 dark:hover:bg-white/[0.02]"
-                  >
-                    <td className="px-3 py-2 font-mono">{row.overtimeDate}</td>
-                    <td className="px-3 py-2 text-gray-950 dark:text-white">{row.divisionName}</td>
-                    <td className="px-3 py-2">
-                      {row.dayType === "SATURDAY"
-                        ? "Sabtu"
-                        : row.dayType === "SUNDAY"
-                          ? "Minggu"
-                          : "Hari kerja"}
-                    </td>
-                    <td className="px-3 py-2 text-right font-mono tabular-nums">{formatHours(row.overtimeHours)}</td>
-                    <td className="px-3 py-2 text-right font-mono tabular-nums">{memberTotal}</td>
-                    <td className="px-3 py-2 text-center font-mono">{row.includeHead ? "Ya" : "-"}</td>
-                    <td className="px-3 py-2 text-right font-mono tabular-nums">
-                      {formatHours(memberTotal * row.overtimeHours)}
-                    </td>
-                    <td className="px-3 py-2 text-gray-600 dark:text-white/45">{row.notes ?? "-"}</td>
-                  </tr>
-                );
-              }) : (
-                <tr>
-                  <td colSpan={8} className="px-3 py-10 text-center text-sm text-gray-500 dark:text-white/35">
-                    Belum ada rincian lembur harian untuk minggu ini.
+                  <td colSpan={8} className="px-3 py-10 text-center text-sm text-white/35">
+                    Belum ada kebutuhan SPL dari planning yang dirilis pada minggu ini.
                   </td>
                 </tr>
               )}

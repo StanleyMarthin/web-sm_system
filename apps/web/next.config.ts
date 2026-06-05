@@ -37,9 +37,7 @@ export default withSentryConfig(nextConfig, {
   project: process.env.SENTRY_PROJECT || "sm-system",
   silent: !process.env.CI,
   tunnelRoute: "/monitoring",
-  disableLogger: true,
   sourcemaps: {
     disable: true,
   },
-  automaticVercelMonitors: true,
 });

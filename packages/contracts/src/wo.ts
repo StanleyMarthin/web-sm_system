@@ -7,6 +7,10 @@ import {
 export const woStatusSchema = z.enum([
   "OPEN",
   "SUBMITTED",
+  "PENDING_TARGET_KD_APPROVAL",
+  "PENDING_ADVISOR_APPROVAL",
+  "PENDING_KP_APPROVAL",
+  "PENDING_PM_APPROVAL",
   "APPROVED",
   "REJECTED",
   "DONE",
@@ -99,6 +103,7 @@ export const woDetailEnvelopeSchema = z.object({
 export const woMutationResultSchema = z.object({
   woId: z.string(),
   status: woStatusSchema,
+  linkedCountdownId: z.string().nullable().optional(),
 });
 
 export const woMutationEnvelopeSchema = z.object({
@@ -133,6 +138,12 @@ export const woRejectRequestSchema = z.object({
   reason: z.string().trim().min(1).max(1000),
 });
 
+export const woApproveRequestSchema = z.object({
+  picId: z.string().trim().min(1).max(50).nullable().optional().default(null),
+  estimatedHours: z.number().positive().max(72).nullable().optional().default(null),
+  notes: z.string().trim().max(1000).nullable().optional().default(null),
+});
+
 export type WoStatus = z.infer<typeof woStatusSchema>;
 export type WoViewMode = z.infer<typeof woViewModeSchema>;
 export type WoRecord = z.infer<typeof woRecordSchema>;
@@ -141,4 +152,5 @@ export type WoGridReference = z.infer<typeof woGridReferenceSchema>;
 export type WoLinkedCountdown = z.infer<typeof woLinkedCountdownSchema>;
 export type WoGridQuery = z.infer<typeof woGridQuerySchema>;
 export type WoCreateRequest = z.infer<typeof woCreateRequestSchema>;
+export type WoApproveRequest = z.infer<typeof woApproveRequestSchema>;
 export type WoRejectRequest = z.infer<typeof woRejectRequestSchema>;

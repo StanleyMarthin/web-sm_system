@@ -88,22 +88,22 @@ interface GalleryPhotoState {
 
 function triageMeta(node: UnitBomNode | null): { label: string; tone: TriageTone; className: string } {
   if (!node) {
-    return { label: "Belum Ada Data", tone: "unknown", className: "bg-white/[0.06] text-white/45 ring-white/[0.10]" };
+    return { label: "Belum Ada Data", tone: "unknown", className: "border-white/10 text-white/40" };
   }
 
   if (node.physicalStatus === "INSTALLED" || node.logisticStatus === "READY_GUDANG") {
-    return { label: "BAGUS", tone: "good", className: "bg-emerald-500/12 text-emerald-300 ring-emerald-500/25" };
+    return { label: "BAGUS", tone: "good", className: "border-emerald-500/20 bg-emerald-500/[0.04] text-emerald-400" };
   }
 
   if (node.physicalStatus === "IN_DIVISION" || node.logisticStatus === "AT_VENDOR") {
-    return { label: "REPAIR", tone: "repair", className: "bg-amber-500/12 text-amber-300 ring-amber-500/25" };
+    return { label: "REPAIR", tone: "repair", className: "border-amber-500/30 bg-amber-500/[0.04] text-amber-500" };
   }
 
   if (node.physicalStatus === "DISASSEMBLED" || node.logisticStatus === "ORDER_PR") {
-    return { label: "REPLACE", tone: "replace", className: "bg-rose-500/12 text-rose-300 ring-rose-500/25" };
+    return { label: "REPLACE", tone: "replace", className: "border-red-500/20 bg-red-500/[0.04] text-red-400" };
   }
 
-  return { label: "PERLU CEK", tone: "unknown", className: "bg-white/[0.06] text-white/50 ring-white/[0.10]" };
+  return { label: "PERLU CEK", tone: "unknown", className: "border-white/10 text-white/40" };
 }
 
 function workStatusLabel(node: UnitBomNode): string {
@@ -136,8 +136,8 @@ function buildTimeline(node: UnitBomNode): TimelineItem[] {
   } else {
     const divisionName = node.divisionName ?? "Divisi terkait";
     items.push({
-      title: "Serah terima fisik",
-      detail: `Diserahkan ke ${divisionName}`,
+      title: "Pendataan awal",
+      detail: `Didata untuk ${divisionName}`,
       date: "12 Mei",
       icon: Truck,
       tone: "border-sky-400/30 bg-sky-400/10 text-sky-300",
@@ -240,7 +240,7 @@ const tabs: Array<{ id: DrawerTab; label: string }> = [
 
 function Badge({ children, className }: { children: ReactNode; className: string }) {
   return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium ring-1 ${className}`}>
+    <span className={`inline-flex items-center gap-1.5 border px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.08em] ${className}`}>
       {children}
     </span>
   );
@@ -633,20 +633,20 @@ export function PanelDetailDrawer({ node, isOpen, canManagePhotos, canDownloadPh
   const location = triage.tone === "good" ? "Gudang" : node.divisionName ?? "Belum ditentukan";
 
   return (
-    <div className="fixed inset-0 z-[85] flex justify-end bg-black/70 backdrop-blur-sm" role="dialog" aria-modal="true">
+    <div className="fixed inset-0 z-[85] flex items-center justify-center bg-black/75 px-4 py-6" role="dialog" aria-modal="true">
       <button type="button" aria-label="Tutup panel detail" className="absolute inset-0 cursor-default" onClick={onClose} />
-      <aside className="relative flex h-full w-full max-w-[620px] flex-col border-l border-white/[0.08] bg-[#0a0a0a] shadow-2xl shadow-black/60">
-        <header className="sticky top-0 z-10 border-b border-white/[0.06] bg-[#0a0a0a]/95 px-5 py-5 backdrop-blur">
+      <aside className="relative flex w-full max-w-[900px] max-h-[90vh] flex-col border border-white/10 bg-[#0a0a0c]">
+        <header className="sticky top-0 z-10 border-b border-white/5 bg-[#0a0a0c] px-5 py-4">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
-              <p className="text-[10px] uppercase tracking-[0.2em] text-amber-400/70">Rekam Medis Part</p>
-              <h2 className="mt-2 truncate text-2xl font-light text-white">{node.label}</h2>
-              <p className="mt-1 text-sm text-white/45">{hierarchyLabel(node)}</p>
+              <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">Panel Detail</p>
+              <h2 className="mt-2 truncate text-[16px] font-mono text-white/90">{node.label}</h2>
+              <p className="mt-1 text-[11px] font-mono text-white/35">{hierarchyLabel(node)}</p>
             </div>
             <button
               type="button"
               onClick={onClose}
-              className="rounded-full border border-white/[0.08] p-2 text-white/45 transition-colors hover:border-white/[0.16] hover:text-white"
+              className="border border-white/10 p-1.5 text-white/45 transition-colors hover:border-white/[0.16] hover:text-white"
               aria-label="Tutup"
             >
               <X className="h-4 w-4" />
@@ -658,17 +658,17 @@ export function PanelDetailDrawer({ node, isOpen, canManagePhotos, canDownloadPh
               <Archive className="h-3.5 w-3.5" />
               Kondisi: {triage.label}
             </Badge>
-            <Badge className="bg-white/[0.04] text-white/65 ring-white/[0.10]">
+            <Badge className="border-white/10 text-white/50">
               <MapPin className="h-3.5 w-3.5" />
               Lokasi: {location}
             </Badge>
-            <Badge className="bg-sky-500/10 text-sky-300 ring-sky-500/20">
+            <Badge className="border-white/10 text-white/60">
               <Wrench className="h-3.5 w-3.5" />
               Status: {node.detail?.workStatusLabel ?? workStatusLabel(node)}
             </Badge>
           </div>
 
-          <nav className="mt-5 grid grid-cols-3 gap-1 rounded-full border border-white/[0.06] bg-white/[0.03] p-1">
+          <nav className="mt-3 flex border-b border-white/5">
             {tabs.map((tab) => {
               const isActive = activeTab === tab.id;
               return (
@@ -676,9 +676,11 @@ export function PanelDetailDrawer({ node, isOpen, canManagePhotos, canDownloadPh
                   key={tab.id}
                   type="button"
                   onClick={() => setActiveTab(tab.id)}
-                  className={`rounded-full px-3 py-2 text-xs font-medium transition-colors ${
-                    isActive ? "bg-white text-black" : "text-white/45 hover:text-white"
-                  }`}
+                  className={["px-4 py-2 text-[10px] font-mono uppercase tracking-[0.12em] border-b-2 -mb-px transition-colors",
+                    isActive
+                      ? "border-amber-500 text-amber-500"
+                      : "border-transparent text-white/40 hover:text-white/70"
+                  ].join(" ")}
                 >
                   {tab.label}
                 </button>
@@ -687,12 +689,12 @@ export function PanelDetailDrawer({ node, isOpen, canManagePhotos, canDownloadPh
           </nav>
         </header>
 
-        <div className="flex-1 overflow-y-auto px-5 py-5">
+        <div className="flex-1 overflow-y-auto px-5 py-4">
           {activeTab === "timeline" ? (
-            <div className="overflow-x-auto rounded-2xl border border-white/[0.06] bg-white/[0.03]">
-              <table className="min-w-full text-left text-sm text-white">
+            <div className="overflow-x-auto border border-white/5 bg-[#111114]">
+              <table className="min-w-full text-left text-[12px] text-white">
                 <thead>
-                  <tr className="border-b border-white/[0.06] bg-white/[0.02] text-[11px] uppercase tracking-[0.15em] text-white/45">
+                  <tr className="border-b border-white/[0.06] bg-[#0a0a0c] font-mono text-[10px] uppercase tracking-[0.12em] text-white/30">
                     <th className="px-4 py-3 font-medium">Tanggal</th>
                     <th className="px-4 py-3 font-medium">Riwayat</th>
                     <th className="px-4 py-3 font-medium">Keterangan</th>
@@ -702,8 +704,8 @@ export function PanelDetailDrawer({ node, isOpen, canManagePhotos, canDownloadPh
                   {timeline.length > 0 ? (
                     timeline.map((item, index) => {
                       return (
-                        <tr key={`${item.eventType ?? "event"}-${item.title}-${item.date ?? "no-date"}-${index}`} className="transition-colors hover:bg-white/[0.02]">
-                          <td className="whitespace-nowrap px-4 py-4 align-top text-xs text-white/45">
+                        <tr key={`${item.eventType ?? "event"}-${item.title}-${item.date ?? "no-date"}-${index}`} className="transition-colors hover:bg-white/[0.015]">
+                          <td className="whitespace-nowrap px-4 py-4 align-top text-[12px] text-white/35">
                             {item.date ?? "-"}
                           </td>
                           <td className="px-4 py-4 align-top">
@@ -717,7 +719,7 @@ export function PanelDetailDrawer({ node, isOpen, canManagePhotos, canDownloadPh
                     })
                   ) : (
                     <tr>
-                      <td colSpan={3} className="px-4 py-6 text-center text-white/35">
+                      <td colSpan={3} className="px-4 py-6 text-center text-[11px] font-mono text-white/25">
                         Belum ada riwayat tercatat.
                       </td>
                     </tr>
@@ -730,13 +732,13 @@ export function PanelDetailDrawer({ node, isOpen, canManagePhotos, canDownloadPh
           {activeTab === "photos" ? (
             <div className="space-y-4">
               {galleryState.actualId === node.actualId && galleryState.isLoading ? (
-                <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] px-4 py-3 text-sm text-white/50">
+                <div className="border border-white/5 bg-[#111114] px-4 py-3 text-[11px] font-mono text-white/35">
                   Memuat foto pengerjaan...
                 </div>
               ) : null}
 
               {galleryState.actualId === node.actualId && galleryState.error ? (
-                <div className="rounded-2xl border border-amber-400/20 bg-amber-400/[0.06] px-4 py-3 text-sm text-amber-100/80">
+                <div className="border border-amber-500/20 bg-amber-500/[0.04] px-4 py-3 text-[11px] font-mono text-amber-400">
                   {galleryState.error}
                 </div>
               ) : null}
@@ -747,28 +749,28 @@ export function PanelDetailDrawer({ node, isOpen, canManagePhotos, canDownloadPh
                   return (
                     <div
                       key={slot.label}
-                      className="min-h-[150px] rounded-3xl border border-white/[0.06] bg-white/[0.03] p-4"
+                      className="min-h-[150px] border border-white/5 bg-[#111114] p-3"
                     >
                       <div className="flex h-full flex-col justify-between">
                         {slot.latestPhotoUrl ? (
                           <button
                             type="button"
                             onClick={() => window.open(getProxiedImageUrl(slot.latestPhotoUrl), "_blank", "noopener,noreferrer")}
-                            className="h-16 w-full rounded-2xl bg-cover bg-center ring-1 ring-white/[0.08]"
+                            className="h-16 w-full bg-cover bg-center border border-white/5"
                             style={{ backgroundImage: `url(${getProxiedImageUrl(slot.latestPhotoUrl)})` }}
                             aria-label={slot.caption}
                           />
                         ) : (
-                          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-black/30 text-white/70 ring-1 ring-white/[0.08]">
+                          <div className="flex h-10 w-10 items-center justify-center border border-white/5 bg-[#0a0a0c] text-white/70">
                             <Icon className="h-5 w-5" />
                           </div>
                         )}
                         <div>
                           <div className="flex items-center justify-between gap-2">
-                            <p className="text-sm font-medium text-white">{slot.label}</p>
-                            <span className="rounded-full bg-black/35 px-2 py-0.5 text-[10px] text-white/55">{slot.photoCount} foto</span>
+                            <p className="text-[12px] font-mono text-white/80">{slot.label}</p>
+                            <span className="border border-white/10 px-1.5 py-0.5 text-[10px] text-white/55">{slot.photoCount} foto</span>
                           </div>
-                          <p className="mt-1 text-xs text-white/45">{slot.caption}</p>
+                          <p className="mt-1 text-[11px] text-white/30">{slot.caption}</p>
                           {slot.latestPhotoAt ? <p className="mt-1 text-[10px] text-white/30">{formatShortDate(slot.latestPhotoAt)}</p> : null}
                         </div>
                       </div>
@@ -778,10 +780,10 @@ export function PanelDetailDrawer({ node, isOpen, canManagePhotos, canDownloadPh
               </div>
 
               {canMutatePhotos ? (
-                <div className="rounded-3xl border border-white/[0.06] bg-white/[0.03] p-4">
+                <div className="border border-white/5 bg-[#111114] px-4 py-3">
                   <div className="flex items-center gap-2">
                     <Upload className="h-4 w-4 text-amber-400" />
-                    <h3 className="text-sm font-medium text-white">Tambah Foto</h3>
+                    <h3 className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">Tambah Foto</h3>
                   </div>
                   <GalleryUploadForm
                     isUploading={isUploading}
@@ -798,13 +800,13 @@ export function PanelDetailDrawer({ node, isOpen, canManagePhotos, canDownloadPh
               {canManagePhotos && galleryState.submittedToLedger ? null : null}
 
               {galleryPhotos.length > 0 ? (
-                <div className="rounded-3xl border border-white/[0.06] bg-white/[0.025] p-4">
+                <div className="border border-white/5 bg-[#111114] p-3">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <h3 className="text-sm font-medium text-white">Foto Tersimpan</h3>
+                      <h3 className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">Foto Tersimpan</h3>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="rounded-full border border-white/[0.08] px-2.5 py-1 text-[11px] text-white/45">
+                      <span className="border border-white/10 px-2 py-0.5 font-mono text-[10px] text-white/45">
                         {galleryPhotos.length} foto
                       </span>
                       {canDownloadPhotos ? (
@@ -814,7 +816,7 @@ export function PanelDetailDrawer({ node, isOpen, canManagePhotos, canDownloadPh
                             void handleDownloadSelected();
                           }}
                           disabled={selectedPhotos.length === 0}
-                          className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.08] px-3 py-1 text-[11px] text-white/60 hover:text-white disabled:cursor-not-allowed disabled:opacity-35"
+                          className="inline-flex items-center gap-1.5 border border-white/10 px-2.5 py-1 font-mono text-[10px] text-white/60 hover:text-white disabled:cursor-not-allowed disabled:opacity-35"
                         >
                           <Download className="h-3.5 w-3.5" />
                           Unduh Terpilih ({selectedPhotos.length})
@@ -832,12 +834,11 @@ export function PanelDetailDrawer({ node, isOpen, canManagePhotos, canDownloadPh
                       return (
                         <article
                           key={photo.photoId}
-                          className={`overflow-hidden rounded-2xl border bg-black/20 transition-colors ${
-                            isSelected ? "border-amber-400/35" : "border-white/[0.06]"
-                          }`}
+                          className={`overflow-hidden border bg-[#111114] transition-colors ${isSelected ? "border-amber-400/35" : "border-white/[0.06]"
+                            }`}
                         >
                           <div className="relative">
-                            <label className="absolute left-2.5 top-2.5 z-[1] flex h-6 w-6 cursor-pointer items-center justify-center rounded-full border border-white/20 bg-black/55 backdrop-blur-sm">
+                            <label className="absolute left-2.5 top-2.5 z-[1] flex h-6 w-6 cursor-pointer items-center justify-center border border-white/20 bg-black/55">
                               <input
                                 type="checkbox"
                                 checked={isSelected}
@@ -851,7 +852,7 @@ export function PanelDetailDrawer({ node, isOpen, canManagePhotos, canDownloadPh
                                 className="h-3 w-3 rounded accent-amber-500"
                               />
                             </label>
-                            <span className="absolute right-2.5 top-2.5 z-[1] rounded-full bg-black/60 px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-white/70">
+                            <span className="absolute right-2.5 top-2.5 z-[1] bg-[#0a0a0c] border border-white/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-white/70">
                               {humanizePhotoType(photo.photoType)}
                             </span>
                             <button
@@ -891,7 +892,7 @@ export function PanelDetailDrawer({ node, isOpen, canManagePhotos, canDownloadPh
                               <button
                                 type="button"
                                 onClick={() => window.open(photoUrl, "_blank", "noopener,noreferrer")}
-                                className="inline-flex items-center gap-1 rounded-full border border-white/[0.08] px-2.5 py-1 text-[11px] text-white/60 hover:text-white"
+                                className="inline-flex items-center gap-1 border border-white/10 px-2 py-0.5 font-mono text-[10px] text-white/60 hover:text-white"
                               >
                                 <Eye className="h-3 w-3" />
                                 Lihat
@@ -903,7 +904,7 @@ export function PanelDetailDrawer({ node, isOpen, canManagePhotos, canDownloadPh
                                   onClick={() => {
                                     void downloadUrl(photoUrl, buildDownloadFileName(node.label, photo));
                                   }}
-                                  className="inline-flex items-center gap-1 rounded-full border border-white/[0.08] px-2.5 py-1 text-[11px] text-white/60 hover:text-white"
+                                  className="inline-flex items-center gap-1 border border-white/10 px-2 py-0.5 font-mono text-[10px] text-white/60 hover:text-white"
                                 >
                                   <Download className="h-3 w-3" />
                                   Unduh
@@ -919,7 +920,7 @@ export function PanelDetailDrawer({ node, isOpen, canManagePhotos, canDownloadPh
                                       setReplaceTarget(photo);
                                       replaceInputRef.current?.click();
                                     }}
-                                    className="rounded-full border border-white/[0.08] px-2.5 py-1 text-[11px] text-white/60 hover:text-white disabled:opacity-35"
+                                    className="border border-white/10 px-2 py-0.5 font-mono text-[10px] text-white/60 hover:text-white disabled:opacity-35"
                                   >
                                     Ganti
                                   </button>
@@ -929,14 +930,14 @@ export function PanelDetailDrawer({ node, isOpen, canManagePhotos, canDownloadPh
                                     onClick={() => {
                                       void handleDeletePhoto(photo.photoId);
                                     }}
-                                    className="inline-flex items-center gap-1 rounded-full bg-red-500/10 px-2.5 py-1 text-[11px] text-red-300 ring-1 ring-red-500/20 disabled:opacity-35"
+                                    className="inline-flex items-center gap-1 border border-red-500/20 bg-red-500/[0.04] px-2 py-0.5 font-mono text-[10px] text-red-400 disabled:opacity-35"
                                   >
                                     <Trash2 className="h-3 w-3" />
                                     Hapus
                                   </button>
                                 </>
                               ) : (
-                                <span className="rounded-full border border-white/[0.06] px-2.5 py-1 text-[11px] text-white/25">
+                                <span className="border border-white/5 px-2 py-0.5 font-mono text-[10px] text-white/20">
                                   Foto final
                                 </span>
                               )}
@@ -971,24 +972,23 @@ export function PanelDetailDrawer({ node, isOpen, canManagePhotos, canDownloadPh
                 documents.map((document) => {
                   const Icon = document.icon;
                   return (
-                    <article key={document.title} className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-4">
+                    <article key={document.title} className="border border-white/5 bg-[#111114] px-4 py-3">
                       <div className="flex items-start gap-3">
-                        <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border ${document.tone}`}>
-                          <Icon className="h-5 w-5" />
+                        <div className={`flex h-7 w-7 shrink-0 items-center justify-center border ${document.tone}`}>
+                          <Icon className="h-3.5 w-3.5" />
                         </div>
                         <div>
-                          <h3 className="text-sm font-medium text-white">{document.title}</h3>
-                          <p className="mt-1 text-sm text-white/55">{document.detail}</p>
+                          <h3 className="text-[12px] font-mono text-white/80">{document.title}</h3>
+                          <p className="mt-1 text-[11px] text-white/40">{document.detail}</p>
                         </div>
                       </div>
                     </article>
                   );
                 })
               ) : (
-                <div className="rounded-3xl border border-dashed border-white/[0.10] bg-white/[0.025] px-6 py-10 text-center">
-                  <FolderOpen className="mx-auto h-9 w-9 text-white/25" />
-                  <h3 className="mt-4 text-base font-medium text-white">Tidak ada data logistik</h3>
-                  <p className="mt-2 text-sm text-white/45">Belum ada PR parts atau catatan pemakaian bahan/alat terkait part ini.</p>
+                <div className="border border-dashed border-white/10 px-4 py-8 text-center">
+                  <FolderOpen className="mx-auto h-5 w-5 text-white/20" />
+                  <h3 className="mt-4 text-[11px] font-mono text-white/30">Tidak ada data logistik</h3>
                 </div>
               )}
             </div>

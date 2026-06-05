@@ -3,9 +3,7 @@
 import type { QaReferences } from "@smsystem/contracts/qa";
 import { RefreshCcw } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-
-const inputCls =
-  "h-10 rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 text-sm text-white outline-none transition-colors focus:border-amber-500/30 [color-scheme:dark]";
+import { CompactDateRangeInput } from "@/shared/ui/compact";
 
 function updateParams(
   router: ReturnType<typeof useRouter>,
@@ -128,21 +126,15 @@ export function QaHistoryFilterBar({
 
       <div className="h-4 w-px bg-white/[0.08]" />
 
-      <div className="flex items-center gap-1.5">
-        <input
-          type="date"
-          value={dateFrom}
-          onChange={(event) => updateParams(router, pathname, searchParams, { dateFrom: event.target.value })}
-          className="h-8 rounded-lg bg-transparent border border-white/[0.06] px-2 text-[11px] text-white outline-none focus:border-amber-500/30 [color-scheme:dark]"
-        />
-        <span className="text-white/30 text-[10px]">–</span>
-        <input
-          type="date"
-          value={dateTo}
-          onChange={(event) => updateParams(router, pathname, searchParams, { dateTo: event.target.value })}
-          className="h-8 rounded-lg bg-transparent border border-white/[0.06] px-2 text-[11px] text-white outline-none focus:border-amber-500/30 [color-scheme:dark]"
-        />
-      </div>
+      <CompactDateRangeInput
+        from={dateFrom}
+        to={dateTo}
+        onChange={(range) => updateParams(router, pathname, searchParams, {
+          dateFrom: range.from,
+          dateTo: range.to,
+        })}
+        className="w-64"
+      />
 
       <div className="h-4 w-px bg-white/[0.08] ml-auto" />
 

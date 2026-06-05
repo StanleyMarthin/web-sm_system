@@ -12,14 +12,28 @@ import {
   Users,
   Menu,
   UserCircle,
+  ClipboardList,
+  Activity,
+  Image as ImageIcon,
+  CheckCircle,
+  AlertTriangle,
+  FileText,
+  Receipt,
+  BarChart,
+  Package,
+  ChevronDown,
+  Sun,
+  Moon,
+  Lock,
+  User,
 } from "lucide-react";
 import Link from "next/link";
+import { useTheme } from "next-themes";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useState, useRef, useEffect, useMemo } from "react";
 import { SERIF_STYLE } from "@/lib/constants";
 import type { NavigationItem, NavigationSubItem } from "@/shared/navigation/modules";
 import { logoutFromWeb } from "@/shared/auth/client";
-import { ThemeToggle } from "@/shared/components/theme-toggle";
 
 interface AppShellProps {
   user: AuthUser;
@@ -88,6 +102,17 @@ export function AppShell({ user, navigation, children }: AppShellProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement>(null);
+  const { theme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const isDark = mounted && theme === "dark";
+
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+
   const idlePrefetchRoutes = useMemo(() => {
     const seen = new Set<string>();
 
@@ -111,6 +136,18 @@ export function AppShell({ user, navigation, children }: AppShellProps) {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    setExpandedGroups(prev => {
+      const next = new Set(prev);
+      for (const item of navigation) {
+        if (item.subItems?.length && isNodeActive(item)) {
+          next.add(item.id);
+        }
+      }
+      return next;
+    });
+  }, [navigation, pathname, searchParams]);
 
   useEffect(() => {
     if (idlePrefetchRoutes.length === 0) return;
@@ -167,12 +204,18 @@ export function AppShell({ user, navigation, children }: AppShellProps) {
     return (item.subItems ?? []).some((subItem) => isNodeActive(subItem));
   }
 
+  function toggleExpanded(id: string) {
+    setExpandedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
   function renderSubItems(items: NavigationSubItem[], depth = 0): React.ReactNode {
     return (
-      <div className={[
-        "border-l border-gray-300 dark:border-white/[0.05]",
-        depth === 0 ? "ml-[26px] pl-2.5 pr-1 py-0.5" : "ml-2 pl-2",
-      ].join(" ")}>
+      <div className="flex flex-col space-y-0.5 mt-0.5 pb-1">
         {items.map((subItem) => {
           const hasChildren = Boolean(subItem.subItems?.length);
           const active = isNodeActive(subItem);
@@ -180,7 +223,7 @@ export function AppShell({ user, navigation, children }: AppShellProps) {
           if (!subItem.href && hasChildren) {
             return (
               <div key={subItem.id} className="pt-2 first:pt-1 pb-0.5">
-                <p className="px-2 pb-1 font-mono text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/30">
+                <p className="px-2 pb-1 font-mono text-[11px] uppercase tracking-[0.08em] text-gray-600 dark:text-white/45">
                   {subItem.label}
                 </p>
                 {renderSubItems(subItem.subItems!, depth + 1)}
@@ -194,14 +237,18 @@ export function AppShell({ user, navigation, children }: AppShellProps) {
                 href={subItem.href ?? "#"}
                 prefetch={false}
                 className={[
-                  "flex w-full items-center gap-2 px-2 py-1 text-left transition-colors",
-                  depth === 0 ? "text-[11px]" : "text-[10px]",
+                  "flex w-full items-center gap-2 px-2 py-1.5 text-left transition-colors",
+                  depth === 0 ? "text-[13px]" : "text-[12px]",
                   active
-                    ? "border-l border-amber-500 pl-[7px] font-medium text-amber-400"
-                    : "text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:text-white/30 dark:hover:bg-white/[0.02] dark:hover:text-white/55",
+                    ? "font-medium text-amber-500 dark:text-amber-400"
+                    : "text-gray-500 hover:text-gray-800 dark:text-white/45 dark:hover:text-white/75"
                 ].join(" ")}
               >
-                <span className="h-1 w-1 shrink-0 flex-none bg-gray-300 dark:bg-white/[0.18]" />
+                {active ? (
+                  <span className="h-1 w-1 shrink-0 rounded-full bg-amber-500 dark:bg-amber-400" />
+                ) : (
+                  <span className="h-1 w-1 shrink-0 rounded-full bg-gray-300 dark:bg-white/[0.12]" />
+                )}
                 {subItem.label}
               </Link>
               {hasChildren && active ? renderSubItems(subItem.subItems!, depth + 1) : null}
@@ -212,156 +259,243 @@ export function AppShell({ user, navigation, children }: AppShellProps) {
     );
   }
 
+  function renderNavItem(item: NavigationItem) {
+    const Icon = navigationIcons[item.icon];
+    const active = isNodeActive(item);
+    const hasSubItems = Boolean(item.subItems?.length);
+    const isExpanded = expandedGroups.has(item.id);
+
+    if (hasSubItems) {
+      return (
+        <div key={item.id} className="flex flex-col">
+          <button
+            type="button"
+            onClick={() => toggleExpanded(item.id)}
+            className={[
+              "flex w-full items-center gap-2.5 rounded-sm px-2.5 py-2 text-[13px] transition-colors",
+              active
+                ? "font-medium text-gray-900 dark:text-white/80"
+                : "text-gray-600 hover:bg-gray-100 hover:text-gray-800 dark:text-white/48 dark:hover:bg-white/[0.04] dark:hover:text-white/78"
+            ].join(" ")}
+          >
+            <Icon className={active ? "w-3.5 h-3.5 shrink-0 text-amber-500 dark:text-amber-400" : "w-3.5 h-3.5 shrink-0 text-gray-400 dark:text-white/20"} />
+            <span className="flex-1 truncate text-left">{item.label}</span>
+            <ChevronDown className={["w-3 h-3 shrink-0 transition-transform duration-250 ease-in-out", isExpanded ? "rotate-180" : ""].join(" ")} />
+          </button>
+
+          <div className={[
+            "overflow-hidden transition-[max-height] duration-250 ease-in-out ml-3 pl-2 border-l border-gray-200 dark:border-white/[0.06] mt-1",
+            isExpanded ? "max-h-[500px]" : "max-h-0"
+          ].join(" ")}>
+            {renderSubItems(item.subItems!)}
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <Link
+        key={item.id}
+        href={item.href ?? "#"}
+        prefetch={false}
+        className={[
+          "flex w-full items-center gap-2.5 rounded-sm px-2.5 py-2 text-[13px] transition-colors",
+          active
+            ? "font-medium bg-amber-500/10 text-amber-500 dark:bg-amber-500/[0.08] dark:text-amber-400"
+            : "text-gray-600 hover:bg-gray-100 hover:text-gray-800 dark:text-white/48 dark:hover:bg-white/[0.04] dark:hover:text-white/78"
+        ].join(" ")}
+      >
+        <Icon className={active ? "w-3.5 h-3.5 shrink-0 text-amber-500 dark:text-amber-400" : "w-3.5 h-3.5 shrink-0 text-gray-400 dark:text-white/20"} />
+        <span className="flex-1 truncate">{item.label}</span>
+      </Link>
+    );
+  }
+
+  let activeParentLabel = "";
+  let activeChildLabel = "";
+  for (const item of navigation) {
+    if (isNodeActive(item)) {
+      activeParentLabel = item.label;
+      if (item.subItems) {
+        for (const sub of item.subItems) {
+          if (isNodeActive(sub)) {
+            activeChildLabel = sub.label;
+            break;
+          }
+        }
+      }
+      break;
+    }
+  }
+
   return (
     <div className="flex h-screen overflow-hidden bg-gray-50 text-gray-900 dark:bg-[#0a0a0c] dark:text-white print:block print:h-auto print:bg-white print:text-black print:overflow-visible">
 
       {/* ── Sidebar ── */}
       <aside className={[
         "flex shrink-0 flex-col overflow-hidden border-r border-gray-200 bg-white transition-all duration-200 dark:border-white/[0.05] dark:bg-[#111114] print:hidden",
-        isSidebarOpen ? "w-52" : "w-0",
+        isSidebarOpen ? "w-[248px]" : "w-0",
       ].join(" ")}>
 
-        {/* Logo row */}
-        <div className="flex h-11 shrink-0 items-center gap-2 border-b border-gray-200 px-3 dark:border-white/[0.05]">
-          <div className="h-6 w-6 shrink-0 overflow-hidden border border-gray-300 dark:border-white/[0.08]">
-            <Image src="/sm.jpeg" alt="SM" width={24} height={24} className="object-cover w-full h-full" />
+        {/* Brand Header */}
+        <div className="flex h-16 shrink-0 items-center gap-2.5 border-b border-gray-200 px-3 dark:border-white/[0.06]">
+          <div className="h-8 w-8 shrink-0 overflow-hidden border border-gray-300 dark:border-white/[0.10] rounded-sm">
+            <Image src="/sm.jpeg" alt="SM" width={32} height={32} className="object-cover w-full h-full" />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="truncate font-mono text-[10px] uppercase tracking-[0.12em] text-gray-700 leading-none dark:text-white/70" style={SERIF_STYLE}>
-              Stanley Marthin
+            <p className="truncate text-[14px] font-semibold text-gray-900 leading-none dark:text-white/90" style={SERIF_STYLE}>
+              Stanley Marthin System
             </p>
-            <p className="mt-0.5 font-mono text-[9px] uppercase tracking-[0.12em] text-gray-400 leading-none dark:text-white/30">
-              System
+            <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.04em] text-gray-500 leading-tight dark:text-white/45">
+              Classic Restoration<br/>Garage
             </p>
           </div>
         </div>
 
         {/* Nav */}
         <nav className="flex-1 space-y-0.5 overflow-y-auto px-2 py-2">
-          <p className="px-2 pt-1 pb-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/30">
-            Menu Utama
-          </p>
+          {/* Solo Items */}
+          {navigation.filter(item => !item.group).map(item => renderNavItem(item))}
 
-          {navigation.map((item) => {
-            const Icon = navigationIcons[item.icon];
-            const active = isNodeActive(item);
-            const hasSubItems = Boolean(item.subItems?.length);
-
-            return (
-              <div key={item.id}>
-                <Link
-                  href={item.href ?? "#"}
-                  prefetch={false}
-                  className={[
-                    "flex w-full items-center gap-2.5 px-2 py-1.5 text-[12px] transition-colors",
-                    active && !hasSubItems
-                      ? "border-l border-amber-500 bg-amber-500/10 pl-[7px] text-amber-500"
-                      : active && hasSubItems
-                      ? "text-gray-800 dark:text-white/75"
-                      : "text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:text-white/35 dark:hover:bg-white/[0.02] dark:hover:text-white/60",
-                  ].join(" ")}
-                >
-                  <Icon className={[
-                    "w-3.5 h-3.5 shrink-0",
-                    active ? "text-amber-500" : "text-gray-400 dark:text-white/20",
-                  ].join(" ")} />
-                  <span className="flex-1 truncate">{item.label}</span>
-                  {active && !hasSubItems && <span className="h-1 w-1 shrink-0 bg-amber-500" />}
-                </Link>
-                {hasSubItems && active ? renderSubItems(item.subItems!) : null}
+          {/* Grouped Items */}
+          {Array.from(new Set(navigation.map(i => i.group).filter(Boolean))).map(groupName => (
+            <div key={groupName!} className="mt-4 first:mt-0">
+              <div className="flex items-center gap-2 px-2 pt-3 pb-1.5">
+                <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-gray-500 dark:text-white/35">
+                  {groupName}
+                </span>
+                <div className="flex-1 h-px bg-gray-200 dark:bg-white/[0.05]" />
               </div>
-            );
-          })}
+              <div className="space-y-0.5">
+                {navigation.filter(item => item.group === groupName).map(item => renderNavItem(item))}
+              </div>
+            </div>
+          ))}
         </nav>
-
-        {/* Theme toggle */}
-        <div className="border-t border-gray-200 pt-2 mt-2 pb-2 dark:border-white/5">
-          <ThemeToggle />
-        </div>
       </aside>
 
       {/* ── Main ── */}
       <main className="flex-1 min-w-0 flex flex-col h-screen overflow-hidden print:block print:h-auto print:overflow-visible">
 
-        {/* Topbar — 44px ERP style */}
-        <header className="z-20 flex h-11 shrink-0 items-center gap-3 border-b border-gray-200 bg-white px-3 dark:border-white/[0.05] dark:bg-[#111114] print:hidden">
+        {/* Topbar — 56px ERP style */}
+        <header className="z-50 flex h-16 shrink-0 items-center gap-4 border-b border-gray-200 bg-white px-4 dark:border-white/[0.06] dark:bg-[#111114] print:hidden">
 
           {/* Hamburger */}
           <button
             type="button"
             onClick={() => setIsSidebarOpen((v) => !v)}
-            className="flex h-7 w-7 shrink-0 items-center justify-center border border-transparent text-gray-400 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:text-gray-600 dark:text-white/35 dark:hover:border-white/[0.08] dark:hover:bg-white/[0.03] dark:hover:text-white/70"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border border-transparent text-gray-400 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:text-gray-600 dark:text-white/35 dark:hover:border-white/[0.08] dark:hover:bg-white/[0.03] dark:hover:text-white/70"
           >
-            <Menu className="w-3.5 h-3.5" />
+            <Menu className="w-4 h-4" />
           </button>
 
-          <div className="flex-1" />
+          {/* Title & Breadcrumb */}
+          <div className="flex-1 flex flex-col justify-center min-w-0">
+            {activeParentLabel ? (
+              <div className="flex items-center gap-1.5 text-[13px] font-medium tracking-wide text-gray-600 dark:text-white/50">
+                <span>{activeParentLabel}</span>
+                {activeChildLabel ? (
+                  <>
+                    <span className="text-gray-300 dark:text-white/15">/</span>
+                    <span>{activeChildLabel}</span>
+                  </>
+                ) : null}
+              </div>
+            ) : null}
+            <h1 className="text-[20px] font-bold truncate leading-tight text-gray-900 dark:text-white/95">
+              {activeChildLabel || activeParentLabel || "Dashboard"}
+            </h1>
+          </div>
 
-          {/* User profile */}
-          <div className="relative" ref={profileMenuRef}>
+          {/* Right section: User profile dropdown */}
+          <div className="flex items-center relative" ref={profileMenuRef}>
             <button
               type="button"
               onClick={() => setIsProfileMenuOpen((v) => !v)}
-              className="flex items-center gap-2 px-2 py-1 transition-colors hover:bg-gray-100 dark:hover:bg-white/[0.03]"
+              className="flex items-center gap-3 px-3 py-1.5 rounded-lg transition-colors hover:bg-gray-100 dark:hover:bg-white/[0.03]"
             >
-              {/* Name + division */}
               <div className="text-right hidden sm:block">
-                <p className="text-[11px] text-gray-800 font-medium leading-none truncate dark:text-white/80">
+                <p className="text-[14px] font-semibold leading-none truncate text-gray-800 dark:text-white/85">
                   {user.fullName}
                 </p>
-                <p className="mt-0.5 font-mono text-[9px] uppercase tracking-[0.12em] text-gray-400 leading-none dark:text-white/30">
+                <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.08em] leading-none text-gray-500 dark:text-white/45">
                   {user.divisionName}
                 </p>
               </div>
 
-              {/* Avatar */}
-              <div className="relative flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden border border-amber-500/20 bg-slate-50 dark:bg-[#0a0a0c]">
+              <div className="relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-gray-200 bg-slate-50 dark:border-white/[0.05] dark:bg-[#0a0a0c]">
                 {user.photoUrl ? (
-                  <Image src={user.photoUrl} alt={user.fullName} fill sizes="28px" className="object-cover" />
+                  <Image src={user.photoUrl} alt={user.fullName} fill sizes="36px" className="object-cover" />
                 ) : (
-                  <span className="text-[10px] font-semibold text-amber-500">
+                  <span className="text-[12px] font-bold text-gray-400 dark:text-white/40">
                     {initialsFromName(user.fullName)}
                   </span>
                 )}
               </div>
+              <ChevronDown className="w-4 h-4 text-gray-400 dark:text-white/30" />
             </button>
 
             {/* Dropdown */}
             {isProfileMenuOpen && (
-              <div className="absolute right-0 z-50 mt-1.5 w-52 overflow-hidden border border-gray-200 bg-white py-1 dark:border-white/[0.07] dark:bg-[#111114]">
-                <div className="px-3 py-2 border-b border-gray-200 mb-1 dark:border-white/[0.05]">
-                  <p className="text-[12px] text-gray-900 font-medium truncate dark:text-white">{user.fullName}</p>
-                  <p className="text-[10px] text-gray-400 truncate font-mono dark:text-white/35">{user.email || user.employeeId}</p>
+              <div className="absolute right-0 top-full mt-2 w-72 z-50 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-xl py-1 dark:border-white/[0.07] dark:bg-[#111114]">
+                <div className="px-4 py-3 border-b border-gray-200 mb-1 dark:border-white/[0.05]">
+                  <p className="text-[14px] font-semibold truncate leading-tight text-gray-900 dark:text-white">{user.fullName}</p>
+                  <p className="text-[10px] font-mono mt-1 uppercase tracking-[0.08em] leading-snug text-gray-500 dark:text-white/50">{user.divisionName}</p>
                 </div>
 
-                <Link
-                  href="/profile"
-                  onClick={() => setIsProfileMenuOpen(false)}
-                  className="flex items-center gap-2.5 px-3 py-1.5 text-[12px] text-gray-500 hover:text-gray-900 hover:bg-gray-100 transition-colors dark:text-white/55 dark:hover:text-white dark:hover:bg-white/[0.04]"
-                >
-                  <UserCircle className="w-3.5 h-3.5" />
-                  Lihat Profile
-                </Link>
+                <div className="px-2 py-1 space-y-0.5">
+                  <button
+                    onClick={() => setTheme(isDark ? "light" : "dark")}
+                    className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left text-[13px] transition-colors text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-white/[0.04] dark:hover:text-white"
+                  >
+                    {isDark ? (
+                      <Sun className="h-4 w-4 text-gray-500 dark:text-gray-400" />
+                    ) : (
+                      <Moon className="h-4 w-4" />
+                    )}
+                    {isDark ? "Light Mode" : "Dark Mode"}
+                  </button>
 
-                <div className="h-px bg-gray-200 my-1 dark:bg-white/[0.05]" />
+                  <Link
+                    href="/profile"
+                    onClick={() => setIsProfileMenuOpen(false)}
+                    className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-[13px] transition-colors text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-white/[0.04] dark:hover:text-white"
+                  >
+                    <User className="w-4 h-4" />
+                    Profile Settings
+                  </Link>
 
-                <button
-                  type="button"
-                  disabled={isLoggingOut}
-                  onClick={async () => {
-                    setIsLoggingOut(true);
-                    try {
-                      await logoutFromWeb();
-                      window.location.href = "/login";
-                    } catch {
-                      setIsLoggingOut(false);
-                    }
-                  }}
-                  className="w-full flex items-center gap-2.5 px-3 py-1.5 text-[12px] text-red-400/60 hover:text-red-400 hover:bg-red-500/[0.04] transition-colors disabled:opacity-40"
-                >
-                  <LogOut className="w-3.5 h-3.5" />
-                  {isLoggingOut ? "Keluar..." : "Keluar"}
-                </button>
+                  <Link
+                    href="/settings/password"
+                    onClick={() => setIsProfileMenuOpen(false)}
+                    className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-[13px] transition-colors text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-white/[0.04] dark:hover:text-white"
+                  >
+                    <Lock className="w-4 h-4" />
+                    Change Password
+                  </Link>
+                </div>
+
+                <div className="h-px bg-gray-200 my-1 mx-2 dark:bg-white/[0.05]" />
+
+                <div className="px-2 py-1">
+                  <button
+                    type="button"
+                    disabled={isLoggingOut}
+                    onClick={async () => {
+                      setIsLoggingOut(true);
+                      try {
+                        await logoutFromWeb();
+                        window.location.href = "/login";
+                      } catch {
+                        setIsLoggingOut(false);
+                      }
+                    }}
+                    className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-[13px] text-red-500/80 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-40 dark:text-red-400/80 dark:hover:bg-red-500/10 dark:hover:text-red-400"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    {isLoggingOut ? "Signing Out..." : "Sign Out"}
+                  </button>
+                </div>
               </div>
             )}
           </div>

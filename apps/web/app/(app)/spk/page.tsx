@@ -11,6 +11,13 @@ interface SpkPageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
+function getTodayIsoDate(): string {
+  const today = new Date();
+  const month = String(today.getMonth() + 1).padStart(2, "0");
+  const day = String(today.getDate()).padStart(2, "0");
+  return `${today.getFullYear()}-${month}-${day}`;
+}
+
 function SpkUnavailableState({
   title,
   message,
@@ -43,8 +50,11 @@ function SpkUnavailableState({
   );
 }
 
-async function SpkPageContent({ searchParams }: SpkPageProps) {
+export default async function SpkPage({ searchParams }: SpkPageProps) {
   const resolvedSearchParams = await searchParams;
+  if (typeof resolvedSearchParams.date !== "string" || !resolvedSearchParams.date.trim()) {
+    redirect(`/spk?date=${getTodayIsoDate()}`);
+  }
   const requestHeaders = await headers();
   const cookieHeader = requestHeaders.get("cookie") ?? "";
   const [{ payload, status }, { user }] = await Promise.all([
@@ -77,9 +87,4 @@ async function SpkPageContent({ searchParams }: SpkPageProps) {
       summary={payload.summary}
     />
   );
-}
-
-
-export default function SpkPage(props: SpkPageProps) {
-  return <SpkPageContent {...props} />;
 }

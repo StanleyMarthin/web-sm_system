@@ -9,12 +9,13 @@ import type {
   ReportType,
 } from "@smsystem/contracts/reports";
 import { reportTypeOptions } from "@smsystem/contracts/reports";
-import { BarChart3, CalendarRange, Download, RefreshCcw } from "lucide-react";
+import { BarChart3, Download, RefreshCcw } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useState, useTransition } from "react";
 import { SmartDataGrid } from "@/shared/datagrid/smart-data-grid";
 import type { SmartDataGridColumn } from "@/shared/datagrid/types";
+import { CompactDateRangeInput } from "@/shared/ui/compact";
 
 interface ReportsShellProps {
   activeType: ReportType;
@@ -168,38 +169,22 @@ export function ReportsShell({
           ))}
         </div>
 
-        <div className="mt-3 grid gap-2 xl:grid-cols-[repeat(2,minmax(0,220px))_auto_auto]">
+        <div className="mt-3 grid gap-2 xl:grid-cols-[minmax(0,280px)_auto_auto]">
           <label className="space-y-1">
             <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/30">
-              Tanggal Awal
+              Rentang Tanggal
             </span>
-            <div className="flex h-8 items-center border border-gray-300 dark:border-white/[0.05] bg-slate-50 dark:bg-[#0a0a0c] px-2.5">
-              <CalendarRange className="mr-2 h-4 w-4 text-gray-500 dark:text-white/25" />
-              <input
-                type="date"
-                value={dateFrom}
-                onChange={(event) => setDateFrom(event.target.value)}
-                className="w-full bg-transparent font-mono text-[11px] text-gray-950 dark:text-white outline-none"
-              />
-            </div>
+            <CompactDateRangeInput
+              from={dateFrom}
+              to={dateTo}
+              onChange={(range) => {
+                setDateFrom(range.from);
+                setDateTo(range.to);
+              }}
+            />
           </label>
 
-          <label className="space-y-1">
-            <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/30">
-              Tanggal Akhir
-            </span>
-            <div className="flex h-8 items-center border border-gray-300 dark:border-white/[0.05] bg-slate-50 dark:bg-[#0a0a0c] px-2.5">
-              <CalendarRange className="mr-2 h-4 w-4 text-gray-500 dark:text-white/25" />
-              <input
-                type="date"
-                value={dateTo}
-                onChange={(event) => setDateTo(event.target.value)}
-                className="w-full bg-transparent font-mono text-[11px] text-gray-950 dark:text-white outline-none"
-              />
-            </div>
-          </label>
-
-          <div className="flex items-end gap-2 xl:col-span-2 xl:justify-end">
+          <div className="flex items-end gap-2 xl:justify-end">
             <button
               type="button"
               onClick={applyDateRange}

@@ -120,11 +120,14 @@ export async function handleMonitoringTodayRoute(
   try {
     const url = new URL(request.url);
     const mode = resolveDivisionMode(url.searchParams);
+    const date = resolveDate(url.searchParams);
+    const dateTo = resolveDateTo(url.searchParams);
     const result = await monitoringService.listToday(
       sessionResult.session,
       parseGridQueryParams(url.searchParams),
-      resolveDate(url.searchParams),
+      date,
       mode,
+      dateTo,
     );
 
     return withCors(
@@ -138,6 +141,8 @@ export async function handleMonitoringTodayRoute(
         references: result.references,
         summary: result.summary,
         mode,
+        date: result.query.date,
+        dateTo: result.query.dateTo,
       }),
     );
   } catch {
@@ -275,6 +280,7 @@ export async function handleMonitoringOvertimeRoute(
       sessionResult.session,
       parseGridQueryParams(url.searchParams),
       resolveDate(url.searchParams),
+      resolveDateTo(url.searchParams),
     );
 
     return withCors(
@@ -312,7 +318,8 @@ export async function handleMonitoringNoStartRoute(
   try {
     const url = new URL(request.url);
     const date = resolveDate(url.searchParams);
-    const result = await monitoringService.listNoStart(sessionResult.session, date);
+    const dateTo = resolveDateTo(url.searchParams);
+    const result = await monitoringService.listNoStart(sessionResult.session, date, dateTo);
 
     return withCors(
       request,
@@ -321,6 +328,7 @@ export async function handleMonitoringNoStartRoute(
         message: "No-start monitoring ready",
         data: result,
         date: date ?? new Date().toISOString().slice(0, 10),
+        dateTo,
       }),
     );
   } catch {
@@ -346,7 +354,8 @@ export async function handleMonitoringNoSubmitRoute(
   try {
     const url = new URL(request.url);
     const date = resolveDate(url.searchParams);
-    const result = await monitoringService.listNoSubmit(sessionResult.session, date);
+    const dateTo = resolveDateTo(url.searchParams);
+    const result = await monitoringService.listNoSubmit(sessionResult.session, date, dateTo);
 
     return withCors(
       request,
@@ -355,6 +364,7 @@ export async function handleMonitoringNoSubmitRoute(
         message: "No-submit monitoring ready",
         data: result,
         date: date ?? new Date().toISOString().slice(0, 10),
+        dateTo,
       }),
     );
   } catch {

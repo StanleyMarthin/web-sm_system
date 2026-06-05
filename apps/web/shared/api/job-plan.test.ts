@@ -83,6 +83,93 @@ describe("job plan api client", () => {
               unitName: "MB 500 SEL",
               divisionId: 12,
               divisionName: "INTERIOR",
+              panelName: "Dashboard",
+              panelSectionName: "Dashboard",
+              jobName: "Pasang",
+              masterJobName: "Pasang",
+              assignedUserId: "SM-11.002",
+              assignedUserName: "BUDI",
+              targetHours: 4,
+              targetDailyHours: 4,
+              targetTotalHours: 8,
+              startTime: "08:00",
+              finishTime: "12:00",
+              isOvertime: false,
+              isPriority: false,
+              status: "PENDING_MP",
+              jobDescription: "Pasang ke unit",
+              instructionText: "Pasang ke unit",
+              note: null,
+              availablePlanHours: 6,
+              remainingHours: 8,
+              progressPercent: 10,
+            },
+          ],
+          meta: {
+            page: 1,
+            limit: 25,
+            total: 1,
+            totalPages: 1,
+            hasNext: false,
+            hasPrev: false,
+          },
+          references: {
+            employees: [],
+            divisions: [],
+            units: [],
+            countdowns: [],
+            workOrders: [],
+            panels: [],
+            jobTypes: [],
+            statuses: [],
+          },
+          query: {
+            page: 1,
+            limit: 25,
+            search: "",
+            sortBy: "taskDate",
+            sortDirection: "asc",
+            view: null,
+            filters: [],
+            date: "2026-05-14",
+            window: "daily",
+            mode: "normal",
+            dateStart: "2026-05-14",
+            dateEnd: "2026-05-14",
+          },
+          summary: {
+            totalHours: 4,
+            pendingCount: 1,
+            approvedCount: 0,
+            overtimeCount: 0,
+          },
+        }),
+        { status: 200 },
+      );
+    }) as typeof fetch;
+
+    const result = await fetchJobPlanGrid("session=abc", {}, "normal");
+    expect(result.status).toBe(200);
+    expect(result.payload?.data[0]?.planId).toBe("PLAN-1");
+    expect(result.payload?.summary.pendingCount).toBe(1);
+  });
+
+  it("parses legacy job plan payload while API is stale", async () => {
+    process.env.NEXT_PUBLIC_API_BASE_URL = "http://127.0.0.1:3203";
+
+    global.fetch = mock(async () => {
+      return new Response(
+        JSON.stringify({
+          success: true,
+          message: "ok",
+          data: [
+            {
+              planId: "PLAN-1",
+              coreId: "cd-1",
+              taskDate: "2026-05-14",
+              unitName: "MB 500 SEL",
+              divisionId: 12,
+              divisionName: "INTERIOR",
               assignedUserId: "SM-11.002",
               assignedUserName: "BUDI",
               targetHours: 4,
@@ -143,7 +230,8 @@ describe("job plan api client", () => {
 
     const result = await fetchJobPlanGrid("session=abc", {}, "normal");
     expect(result.status).toBe(200);
-    expect(result.payload?.data[0]?.planId).toBe("PLAN-1");
-    expect(result.payload?.summary.pendingCount).toBe(1);
+    expect(result.payload?.data[0]?.targetDailyHours).toBe(4);
+    expect(result.payload?.data[0]?.masterJobName).toBe("Pasang ke unit");
+    expect(result.payload?.data[0]?.targetTotalHours).toBe(null);
   });
 });

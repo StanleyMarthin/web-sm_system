@@ -1,5 +1,14 @@
 import { parseGridQueryParams } from "@smsystem/contracts/grid";
+import {
+  createUnitRequestSchema,
+  updateUnitRequestSchema,
+} from "@smsystem/contracts/unit";
+import {
+  createUnitPanelRequestSchema,
+  updateUnitPanelRequestSchema,
+} from "@smsystem/contracts/unit-panel";
 import { permissionCodes } from "@smsystem/permissions";
+import { parseJsonBody } from "@/http/request";
 import { errorResponse, successResponse, withCors } from "@/http/response";
 import { requireSession } from "@/middleware/auth.middleware";
 import { requirePermission } from "@/middleware/permission.middleware";
@@ -48,6 +57,54 @@ async function requireUnitDetailSession(
   return { session: sessionResult.session };
 }
 
+async function requireUnitPanelManageSession(
+  request: Request,
+  authService: AuthService,
+) {
+  const sessionResult = await requireUnitDetailSession(request, authService);
+  if ("response" in sessionResult) {
+    return sessionResult;
+  }
+
+  const permissionResult = requirePermission(
+    request,
+    sessionResult.session,
+    permissionCodes.unitPanelManage,
+  );
+  if ("response" in permissionResult) {
+    return permissionResult;
+  }
+
+  return { session: sessionResult.session };
+}
+
+async function requireUnitManageSession(
+  request: Request,
+  authService: AuthService,
+) {
+  const sessionResult = await requireViewUnitsSession(request, authService);
+  if ("response" in sessionResult) {
+    return sessionResult;
+  }
+
+  const permissions = sessionResult.session.user.permissions;
+  if (
+    permissions.includes(permissionCodes.manageUsers)
+    || permissions.includes(permissionCodes.unitPanelManage)
+  ) {
+    return { session: sessionResult.session };
+  }
+
+  return {
+    response: errorResponse(
+      request,
+      "Akses kelola unit tidak tersedia untuk user aktif.",
+      403,
+      "UNIT_MANAGE_FORBIDDEN",
+    ),
+  };
+}
+
 function mapUnitsError(request: Request, error: unknown): Response {
   if (error instanceof Error) {
     if (error.message === "SCOPE_FORBIDDEN") {
@@ -56,6 +113,63 @@ function mapUnitsError(request: Request, error: unknown): Response {
         "Akses unit di luar scope user aktif.",
         403,
         "SCOPE_FORBIDDEN",
+      );
+    }
+
+    if (error.message === "UNIT_NOT_FOUND") {
+      return errorResponse(request, "Unit tidak ditemukan.", 404, "UNIT_NOT_FOUND");
+    }
+
+    if (error.message === "UNIT_ALREADY_EXISTS") {
+      return errorResponse(request, "ID unit sudah terdaftar.", 409, "UNIT_ALREADY_EXISTS");
+    }
+
+    if (error.message === "UNIT_IN_USE") {
+      const dependencySummary =
+        "dependencySummary" in error && Array.isArray(error.dependencySummary)
+          ? { dependencySummary: error.dependencySummary }
+          : {};
+      return errorResponse(
+        request,
+        "Unit masih dipakai data operasional sehingga tidak bisa dihapus.",
+        409,
+        "UNIT_IN_USE",
+        dependencySummary,
+      );
+    }
+
+    if (error.message === "UNIT_PANEL_NOT_FOUND") {
+      return errorResponse(request, "Master panel tidak ditemukan.", 404, "UNIT_PANEL_NOT_FOUND");
+    }
+
+    if (error.message === "UNIT_PANEL_PARENT_NOT_FOUND") {
+      return errorResponse(request, "Parent panel tidak ditemukan.", 404, "UNIT_PANEL_PARENT_NOT_FOUND");
+    }
+
+    if (error.message === "UNIT_PANEL_PARENT_INVALID") {
+      return errorResponse(
+        request,
+        "Part hanya boleh ditempatkan di bawah panel utama.",
+        409,
+        "UNIT_PANEL_PARENT_INVALID",
+      );
+    }
+
+    if (error.message === "UNIT_PANEL_HAS_CHILDREN") {
+      return errorResponse(
+        request,
+        "Panel masih memiliki part turunan. Hapus atau pindahkan turunannya dulu.",
+        409,
+        "UNIT_PANEL_HAS_CHILDREN",
+      );
+    }
+
+    if (error.message === "UNIT_PANEL_IN_USE") {
+      return errorResponse(
+        request,
+        "Panel/part sudah dipakai di progress unit sehingga tidak bisa dihapus.",
+        409,
+        "UNIT_PANEL_IN_USE",
       );
     }
   }
@@ -73,12 +187,25 @@ export async function handleUnitsListRoute(
   authService: AuthService,
   unitsService: UnitsService,
 ): Promise<Response> {
-  const sessionResult = await requireViewUnitsSession(request, authService);
+  const sessionResult =
+    request.method === "GET"
+      ? await requireViewUnitsSession(request, authService)
+      : await requireUnitManageSession(request, authService);
   if ("response" in sessionResult) {
     return sessionResult.response;
   }
 
   try {
+    if (request.method === "POST") {
+      const body = await parseJsonBody(request, createUnitRequestSchema);
+      if (!body.success) {
+        return withCors(request, body.response);
+      }
+
+      const unit = await unitsService.createUnit(sessionResult.session, body.data);
+      return successResponse(request, "Unit berhasil dibuat.", { unit }, { status: 201 });
+    }
+
     const query = parseGridQueryParams(new URL(request.url).searchParams);
     const result = await unitsService.listUnits(sessionResult.session, query);
 
@@ -103,12 +230,30 @@ export async function handleUnitDetailRoute(
   authService: AuthService,
   unitsService: UnitsService,
 ): Promise<Response> {
-  const sessionResult = await requireUnitDetailSession(request, authService);
+  const sessionResult =
+    request.method === "GET"
+      ? await requireUnitDetailSession(request, authService)
+      : await requireUnitManageSession(request, authService);
   if ("response" in sessionResult) {
     return sessionResult.response;
   }
 
   try {
+    if (request.method === "PUT") {
+      const body = await parseJsonBody(request, updateUnitRequestSchema);
+      if (!body.success) {
+        return withCors(request, body.response);
+      }
+
+      const unit = await unitsService.updateUnit(sessionResult.session, unitId, body.data);
+      return successResponse(request, "Unit berhasil diperbarui.", { unit });
+    }
+
+    if (request.method === "DELETE") {
+      const result = await unitsService.deleteUnit(sessionResult.session, unitId);
+      return successResponse(request, "Unit berhasil dihapus.", result);
+    }
+
     const summary = await unitsService.getUnitSummary(sessionResult.session, unitId);
     if (!summary) {
       return errorResponse(request, "Unit tidak ditemukan.", 404, "UNIT_NOT_FOUND");
@@ -163,6 +308,77 @@ export async function handleUnitBomRoute(
     }
 
     return successResponse(request, "Unit BOM ready", workspace);
+  } catch (error) {
+    return mapUnitsError(request, error);
+  }
+}
+
+export async function handleUnitPanelsRoute(
+  request: Request,
+  unitId: string,
+  authService: AuthService,
+  unitsService: UnitsService,
+): Promise<Response> {
+  const sessionResult =
+    request.method === "GET"
+      ? await requireUnitDetailSession(request, authService)
+      : await requireUnitPanelManageSession(request, authService);
+  if ("response" in sessionResult) {
+    return sessionResult.response;
+  }
+
+  try {
+    if (request.method === "GET") {
+      const panels = await unitsService.getUnitPanels(sessionResult.session, unitId);
+      if (!panels) {
+        return errorResponse(request, "Unit tidak ditemukan.", 404, "UNIT_NOT_FOUND");
+      }
+
+      return successResponse(request, "Master panel unit ready", panels);
+    }
+
+    const body = await parseJsonBody(request, createUnitPanelRequestSchema);
+    if (!body.success) {
+      return withCors(request, body.response);
+    }
+
+    const record = await unitsService.createUnitPanel(sessionResult.session, unitId, body.data);
+    return successResponse(request, "Master panel berhasil ditambahkan.", { record }, { status: 201 });
+  } catch (error) {
+    return mapUnitsError(request, error);
+  }
+}
+
+export async function handleUnitPanelDetailRoute(
+  request: Request,
+  unitId: string,
+  panelId: number,
+  authService: AuthService,
+  unitsService: UnitsService,
+): Promise<Response> {
+  const sessionResult = await requireUnitPanelManageSession(request, authService);
+  if ("response" in sessionResult) {
+    return sessionResult.response;
+  }
+
+  try {
+    if (request.method === "PUT") {
+      const body = await parseJsonBody(request, updateUnitPanelRequestSchema);
+      if (!body.success) {
+        return withCors(request, body.response);
+      }
+
+      const record = await unitsService.updateUnitPanel(
+        sessionResult.session,
+        unitId,
+        panelId,
+        body.data,
+      );
+      return successResponse(request, "Master panel berhasil diperbarui.", { record });
+    }
+
+    const result = await unitsService.deleteUnitPanel(sessionResult.session, unitId, panelId);
+    return successResponse(request, "Master panel berhasil dihapus.", result);
   } catch (error) {
     return mapUnitsError(request, error);
   }

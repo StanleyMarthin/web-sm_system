@@ -103,6 +103,8 @@ const templateColumns: TemplateColumn[] = [
   { field: "prerequisiteCoreId", header: "Kode Prasyarat Core", width: 22 },
   { field: "refWoId", header: "Referensi WO", width: 18 },
   { field: "note", header: "Catatan", width: 26 },
+  { field: "temuanAwal", header: "Temuan Awal", width: 32 },
+  { field: "keterangan", header: "Keterangan", width: 32 },
 ];
 
 const templateHeaderAliases: Record<keyof CountdownTemplateRow, string[]> = {
@@ -122,6 +124,8 @@ const templateHeaderAliases: Record<keyof CountdownTemplateRow, string[]> = {
   prerequisiteCoreId: ["Kode Prasyarat Core", "Kode Prasyarat", "Prerequisite"],
   refWoId: ["Referensi WO", "No WO", "Ref WO"],
   note: ["Catatan", "Keterangan"],
+  temuanAwal: ["Temuan Awal", "Initial Finding"],
+  keterangan: ["Keterangan", "Catatan Baru", "Remarks"],
 };
 
 const templateHeaderLookup = new Map<string, keyof CountdownTemplateRow>();
@@ -201,6 +205,8 @@ function normalizeWorkbookRows(rows: Record<string, unknown>[]): ImportRowInput[
         prerequisiteCoreId: toStringValue(normalized.prerequisiteCoreId) || undefined,
         refWoId: toStringValue(normalized.refWoId) || undefined,
         note: toStringValue(normalized.note) || undefined,
+        temuanAwal: toStringValue(normalized.temuanAwal) || undefined,
+        keterangan: toStringValue(normalized.keterangan) || undefined,
       } satisfies ImportRowInput;
     })
     .filter((row) => {
@@ -232,6 +238,8 @@ function buildTemplateRows(): CountdownTemplateRow[] {
       prerequisiteCoreId: "",
       refWoId: "",
       note: "Template MAIN",
+      temuanAwal: "",
+      keterangan: "Contoh keterangan MAIN",
     },
     {
       carId: "MB500SEL_MRSILMY",
@@ -250,6 +258,8 @@ function buildTemplateRows(): CountdownTemplateRow[] {
       prerequisiteCoreId: "",
       refWoId: "",
       note: "Template ADDITIONAL",
+      temuanAwal: "Cek tambahan peredam",
+      keterangan: "Contoh keterangan ADDITIONAL",
     },
   ];
 }
@@ -278,6 +288,8 @@ function buildTemplateReferenceRows(): Array<Array<string | number>> {
     ["Referensi WO", "WO-123", "Tidak", "Opsional."],
     ["Kode Prasyarat Core", "CORE-001", "Tidak", "Opsional."],
     ["Catatan", "Template MAIN", "Tidak", "Opsional."],
+    ["Temuan Awal", "Cek tambahan peredam", "Tidak", "Opsional."],
+    ["Keterangan", "Instruksi bebas", "Tidak", "Opsional."],
   ];
 }
 
@@ -364,6 +376,14 @@ export class DefaultCountdownService implements CountdownService {
         null,
       refWoId: normalizeOptionalString(input.refWoId) ?? existing.refWoId ?? null,
       note: normalizeOptionalString(input.note) ?? existing.note ?? null,
+      temuanAwal:
+        normalizeOptionalString(input.temuanAwal) ??
+        existing.temuanAwal ??
+        null,
+      keterangan:
+        normalizeOptionalString(input.keterangan) ??
+        existing.keterangan ??
+        null,
       status: input.status ?? (existing.status as CountdownCreateRequest["status"]),
     };
 

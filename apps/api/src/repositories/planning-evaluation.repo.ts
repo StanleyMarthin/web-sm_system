@@ -222,12 +222,14 @@ export class MySqlPlanningEvaluationRepository implements PlanningEvaluationRepo
     const pool = this.poolFactory();
     const queryParams: unknown[] = [params.date, params.dateTo];
     const whereClauses = [
-      "ot.overtime_date BETWEEN ? AND ?",
-      "COALESCE(wp.status, 'DRAFT') = 'PUBLISHED'",
+      "ptd.target_finish_date BETWEEN ? AND ?",
+      "pt.status = 'RELEASED'",
+      "COALESCE(ptd.shortage_hours, 0) > 0",
     ];
 
     const scopeClause = buildScopeWhereClause(params.scope, params.employeeId, queryParams, {
-      division: "ot.division_id",
+      car: "ptd.car_id",
+      division: "ptd.division_id",
     });
     if (scopeClause) {
       whereClauses.push(scopeClause);
@@ -236,17 +238,14 @@ export class MySqlPlanningEvaluationRepository implements PlanningEvaluationRepo
     const [rows] = await pool.query<DivisionHoursRow[]>(
       `
         SELECT
-          ot.division_id AS divisionId,
+          ptd.division_id AS divisionId,
           d.name AS divisionName,
-          ROUND(
-            SUM((COALESCE(ot.member_count, 0) + CASE WHEN COALESCE(ot.include_head, 0) = 1 THEN 1 ELSE 0 END) * COALESCE(ot.overtime_hours, 0)),
-            2
-          ) AS hours
-        FROM sm_weekly_plan_overtime ot
-        JOIN sm_weekly_plan wp ON wp.id = ot.plan_id
-        LEFT JOIN sm_divisi d ON d.id = ot.division_id
+          ROUND(SUM(COALESCE(ptd.shortage_hours, 0)), 2) AS hours
+        FROM planning_target_divisions ptd
+        JOIN planning_targets pt ON pt.id = ptd.planning_target_id
+        LEFT JOIN sm_divisi d ON d.id = ptd.division_id
         WHERE ${whereClauses.join(" AND ")}
-        GROUP BY ot.division_id, d.name
+        GROUP BY ptd.division_id, d.name
         ORDER BY d.name ASC
       `,
       queryParams,

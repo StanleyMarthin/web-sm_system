@@ -18,7 +18,7 @@ import type {
   SmartDataGridSavedView,
   SmartDataGridSortOption,
 } from "@/shared/datagrid/types";
-import { ActionButton, EmptyRow, MetricBar, PageHeader, SectionCard } from "@/shared/ui/compact";
+import { ActionButton, CompactDateInput, CompactDateRangeInput, EmptyRow, MetricBar, PageHeader, SectionCard } from "@/shared/ui/compact";
 
 interface MonitoringShellProps {
   activeMode: "all" | "normal" | "overtime";
@@ -40,6 +40,16 @@ interface MonitoringShellProps {
   noSubmitRows: MonitoringTaskRecord[];
 }
 
+function addDaysIso(baseDate: string, days: number): string {
+  const [year, month, day] = baseDate.split("-").map((value) => Number.parseInt(value, 10));
+  const nextDate = new Date(Date.UTC(year, (month || 1) - 1, day || 1));
+  nextDate.setUTCDate(nextDate.getUTCDate() + days);
+  const nextYear = nextDate.getUTCFullYear();
+  const nextMonth = String(nextDate.getUTCMonth() + 1).padStart(2, "0");
+  const nextDay = String(nextDate.getUTCDate()).padStart(2, "0");
+  return `${nextYear}-${nextMonth}-${nextDay}`;
+}
+
 /* ------------------------------------------------------------------ */
 /*  Board list — compact task rows                                      */
 /* ------------------------------------------------------------------ */
@@ -53,7 +63,7 @@ function BoardList({ title, rows, emptyMessage }: {
         {rows.length === 0
           ? <EmptyRow message={emptyMessage} />
           : rows.slice(0, 6).map((row) => (
-            <div key={row.planId} className="border-b border-gray-300 dark:border-white/[0.05] px-2 py-2 last:border-b-0">
+            <div key={row.planId} className="border-b border-white/5 px-2 py-2 last:border-b-0">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="truncate text-[12px] text-gray-950 dark:text-white">{row.unitName}</p>
@@ -94,9 +104,9 @@ const sortOptions: SmartDataGridSortOption[] = [
 const savedViews: SmartDataGridSavedView[] = [
   { id: "all-tasks",      label: "All",           sortBy: "taskDate", sortDirection: "desc", filters: [] },
   { id: "delay-risk",     label: "Delay Risk",    sortBy: "remainingHours", sortDirection: "desc",
-    filters: [{ field: "actualStatus", operator: "eq", value: "onprogress" } satisfies GridFilter] },
+    filters: [{ field: "actualStatus", operator: "eq", value: "ONPROGRESS" } satisfies GridFilter] },
   { id: "pending-submit", label: "Pending Submit", sortBy: "taskDate", sortDirection: "desc",
-    filters: [{ field: "actualStatus", operator: "eq", value: "onprogress" } satisfies GridFilter] },
+    filters: [{ field: "actualStatus", operator: "eq", value: "SUBMITTED" } satisfies GridFilter] },
 ];
 
 /* ------------------------------------------------------------------ */
@@ -109,6 +119,8 @@ export function MonitoringShell({
   const router       = useRouter();
   const pathname     = usePathname();
   const searchParams = useSearchParams();
+  const activeDateTo = state.dateTo ?? state.date;
+  const isRangeMode = Boolean(state.dateTo && state.dateTo !== state.date);
 
   const columns = useMemo<SmartDataGridColumn[]>(
     () => [
@@ -137,23 +149,81 @@ export function MonitoringShell({
         filterKey: "employeeId",
         filterOptions: references.employees,
       },
-      { key: "panelName", label: "Panel" },
-      { key: "jobDescription", label: "Job Desc" },
-      { key: "progressPercent", label: "Progress", kind: "number", align: "right" },
-      { key: "remainingHours", label: "Sisa Jam", kind: "number", align: "right" },
-      { key: "planStatus", label: "Plan", kind: "status" },
+      { key: "panelName", label: "Panel / Part" },
+      { key: "masterJobName", label: "Job Description",
+        renderCell: (_value, row) => String(row.masterJobName ?? row.jobDescription ?? row.panelName ?? "-") },
+      { key: "jobDescription", label: "Instruksi Kerja",
+        renderCell: (_value, row) => String(row.instructionText || row.jobDescription || "-") },
+      { key: "targetDailyHours", label: "Target Hari Ini", align: "right",
+        renderCell: (_value, row) => {
+          const value = row.targetDailyHours as number | null | undefined;
+          return value === null || value === undefined ? "-" : Number(value).toFixed(1);
+        } },
+      { key: "targetTotalHours", label: "Target Total", align: "right",
+        renderCell: (_value, row) => {
+          const value = row.targetTotalHours as number | null | undefined;
+          return value === null || value === undefined ? "-" : Number(value).toFixed(1);
+        } },
+      { key: "progressPercent", label: "% Progress", kind: "number", align: "right" },
+
       {
-        key: "actualStatus",
-        label: "Actual",
+        key: "remainingHours",
+        label: "Sisa Target",
+        kind: "number",
+        align: "right",
+      },
+      {
+        key: "actualTimeRange",
+        label: "Waktu Aktual",
+        widthClassName: "min-w-[200px]",
+        renderCell: (_, row) => {
+          const actualStart = row.actualStartTime ?? row.latestStartTime;
+          const actualFinish = row.actualFinishTime ?? row.latestFinishTime;
+          const start = actualStart
+            ? String(actualStart).split(" ")[1]?.substring(0, 5) ?? "-"
+            : "-";
+          const finish = actualFinish
+            ? String(actualFinish).split(" ")[1]?.substring(0, 5) ?? "-"
+            : "-";
+          const breakMins = Number(row.actualBreakMinutes ?? row.latestBreakDurationMinutes ?? 0);
+          const actualDuration = row.actualDurationHours as number | null | undefined;
+          const totalHours = actualDuration ?? Number(row.totalActualHours ?? 0);
+
+          if (start === "-" && finish === "-") {
+            return <span className="text-[11px] text-white/20">Belum ada aktual</span>;
+          }
+
+          return (
+            <div className="flex flex-col gap-1 text-[11px]">
+              <span className="font-mono text-white/80">
+                {start} — {finish}
+              </span>
+              <div className="flex gap-3 text-white/45">
+                <span>Total: <span className="font-mono text-amber-400/80">{totalHours}j</span></span>
+                {breakMins > 0 && (
+                  <span>Istirahat: <span className="font-mono text-amber-400/80">{breakMins}m</span></span>
+                )}
+              </div>
+            </div>
+          );
+        },
+      },
+      {
+        key: "executionStatus",
+        label: "Status Kerja",
         kind: "status",
         filterKey: "actualStatus",
         filterOptions: [
-          { label: "Pending", value: "pending" },
-          { label: "Onprogress", value: "onprogress" },
-          { label: "Done", value: "done" },
-          { label: "Cancel", value: "cancel" },
+          { label: "Plan", value: "PLAN" },
+          { label: "Onprogress", value: "ONPROGRESS" },
+          { label: "Submitted", value: "SUBMITTED" },
+          { label: "Done", value: "DONE" },
+          { label: "Cancel", value: "CANCEL" },
         ],
       },
+      { key: "monitoringStatus", label: "Monitoring", kind: "status",
+        renderCell: (_value, row) => String(row.monitoringStatus ?? "-") },
+      { key: "monitoringResult", label: "Catatan Monitoring", widthClassName: "min-w-[180px]" },
     ],
     [references],
   );
@@ -163,16 +233,57 @@ export function MonitoringShell({
     { field: "carId",        label: "Unit",    options: references.units },
     { field: "employeeId",   label: "PIC",     options: references.employees },
     { field: "actualStatus", label: "Actual",  options: [
-      { label: "Pending",    value: "pending"    },
-      { label: "Onprogress", value: "onprogress" },
-      { label: "Done",       value: "done"       },
-      { label: "Cancel",     value: "cancel"     },
+      { label: "Plan",       value: "PLAN"       },
+      { label: "Onprogress", value: "ONPROGRESS" },
+      { label: "Submitted",  value: "SUBMITTED"  },
+      { label: "Done",       value: "DONE"       },
+      { label: "Cancel",     value: "CANCEL"     },
     ]},
   ];
 
   function pushDate(value: string) {
     const p = new URLSearchParams(searchParams.toString());
-    p.set("date", value); p.set("page", "1");
+    p.set("date", value);
+    if (isRangeMode) {
+      p.set("dateTo", activeDateTo < value ? value : activeDateTo);
+    } else {
+      p.delete("dateTo");
+    }
+    p.set("page", "1");
+    router.push(`${pathname}?${p.toString()}`);
+  }
+
+  function pushDateRange(range: { from: string; to: string }) {
+    const p = new URLSearchParams(searchParams.toString());
+    const start = range.from;
+    const end = range.to < start ? start : range.to;
+    p.set("date", start);
+    p.set("dateTo", end);
+    p.set("page", "1");
+    router.push(`${pathname}?${p.toString()}`);
+  }
+
+  function applyDateSelection(range: { from: string; to: string }) {
+    if (range.from === range.to) {
+      const p = new URLSearchParams(searchParams.toString());
+      p.set("date", range.from);
+      p.delete("dateTo");
+      p.set("page", "1");
+      router.push(`${pathname}?${p.toString()}`);
+      return;
+    }
+
+    pushDateRange(range);
+  }
+
+  function pushDateMode(value: "daily" | "range") {
+    const p = new URLSearchParams(searchParams.toString());
+    if (value === "range") {
+      p.set("dateTo", state.dateTo && state.dateTo !== state.date ? state.dateTo : addDaysIso(state.date, 1));
+    } else {
+      p.delete("dateTo");
+    }
+    p.set("page", "1");
     router.push(`${pathname}?${p.toString()}`);
   }
 
@@ -193,12 +304,52 @@ export function MonitoringShell({
           <>
             <button
               type="button"
+              onClick={() => pushDateMode("daily")}
+              className={[
+                "border px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] transition-colors",
+                !isRangeMode
+                  ? "border-amber-500/30 bg-amber-500/10 text-amber-400"
+                  : "border-white/10 text-white/40 hover:text-white",
+              ].join(" ")}
+            >
+              Harian
+            </button>
+            <button
+              type="button"
+              onClick={() => pushDateMode("range")}
+              className={[
+                "border px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] transition-colors",
+                isRangeMode
+                  ? "border-amber-500/30 bg-amber-500/10 text-amber-400"
+                  : "border-white/10 text-white/40 hover:text-white",
+              ].join(" ")}
+            >
+              Rentang
+            </button>
+            {isRangeMode ? (
+              <CompactDateRangeInput
+                from={state.date}
+                to={activeDateTo}
+                onChange={applyDateSelection}
+                selectionBehavior="single-or-range"
+                className="w-64"
+              />
+            ) : (
+              <CompactDateInput
+                value={state.date}
+                onChange={pushDate}
+                className="w-40"
+              />
+            )}
+            <span className="mx-1 h-5 w-px bg-white/10" />
+            <button
+              type="button"
               onClick={() => pushMode("all")}
               className={[
                 "border px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] transition-colors",
                 activeMode === "all"
                   ? "border-amber-500/30 bg-amber-500/10 text-amber-400"
-                  : "border-gray-300 dark:border-white/[0.08] text-gray-500 dark:text-white/50 hover:text-gray-950 dark:text-white",
+                  : "border-white/10 text-white/40 hover:text-white",
               ].join(" ")}
             >
               Semua
@@ -210,7 +361,7 @@ export function MonitoringShell({
                 "border px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] transition-colors",
                 activeMode === "normal"
                   ? "border-amber-500/30 bg-amber-500/10 text-amber-400"
-                  : "border-gray-300 dark:border-white/[0.08] text-gray-500 dark:text-white/50 hover:text-gray-950 dark:text-white",
+                  : "border-white/10 text-white/40 hover:text-white",
               ].join(" ")}
             >
               Normal
@@ -222,14 +373,11 @@ export function MonitoringShell({
                 "border px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] transition-colors",
                 activeMode === "overtime"
                   ? "border-amber-500/30 bg-amber-500/10 text-amber-400"
-                  : "border-gray-300 dark:border-white/[0.08] text-gray-500 dark:text-white/50 hover:text-gray-950 dark:text-white",
+                  : "border-white/10 text-white/40 hover:text-white",
               ].join(" ")}
             >
               Lembur
             </button>
-            <input type="date" value={state.date}
-              onChange={(e) => pushDate(e.target.value)}
-              className="h-8 border border-gray-300 dark:border-white/[0.05] bg-slate-50 dark:bg-[#0a0a0c] px-2.5 font-mono text-[11px] text-gray-900 dark:text-white/80 outline-none focus:border-amber-500/30 [color-scheme:dark]" />
             <ActionButton onClick={() => router.refresh()}>
               <RefreshCcw className="h-3 w-3" />Refresh
             </ActionButton>
@@ -249,7 +397,7 @@ export function MonitoringShell({
       {/* ── Grid ── */}
       <SmartDataGrid
         title={title}
-        description="Grid server-side task dari job actual, countdown, dan job plan."
+        description=""
         rows={rows} columns={columns} meta={meta} state={state}
         filters={filters} sortOptions={sortOptions} savedViews={savedViews}
         searchPlaceholder="Cari unit, panel, PIC, atau job desc..."

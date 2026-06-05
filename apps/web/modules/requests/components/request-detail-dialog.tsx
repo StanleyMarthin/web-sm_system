@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useState } from "react";
-import { X, Printer, ArrowRight, CheckCircle, AlertTriangle, HelpCircle, Eye } from "lucide-react";
+import { X, Printer, CheckCircle, AlertTriangle, HelpCircle, Eye } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { approveWo, markWoDone, rejectWo } from "@/shared/api/wo";
 import { permissionCodes } from "@smsystem/permissions";
@@ -36,6 +36,9 @@ export function RequestDetailDialog({
   const [pending, setPending] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
   const [showRejectForm, setShowRejectForm] = useState(false);
+  const [woApprovePicId, setWoApprovePicId] = useState("");
+  const [woApproveHours, setWoApproveHours] = useState("");
+  const [woApproveNotes, setWoApproveNotes] = useState("");
   const [printMode, setPrintMode] = useState<"default" | "pr-submission" | "pr-handover">("default");
 
   // We can fetch the detail records from our parent payloads dynamically
@@ -60,9 +63,37 @@ export function RequestDetailDialog({
     type === "WO" ? `/wo/${id}` : type === "PR" ? `/pr/${id}` : `/vendor/${id}`;
 
   // Actions checks based on roles & permissions
-  const canApproveWo = user.permissions.includes(permissionCodes.woApprove) && ["OPEN", "SUBMITTED"].includes(status);
+  const woKdStatuses = ["OPEN", "SUBMITTED", "PENDING_TARGET_KD_APPROVAL"];
+  const isWoKdStage = woKdStatuses.includes(status);
+  const isWoAdvisorStage = status === "PENDING_ADVISOR_APPROVAL";
+  const isWoKpStage = status === "PENDING_KP_APPROVAL";
+  const isWoPmStage = status === "PENDING_PM_APPROVAL";
+  const canApproveWoKd =
+    user.permissions.includes(permissionCodes.woApprove) &&
+    isWoKdStage &&
+    woRecord?.toDivisionId !== null &&
+    woRecord?.toDivisionId !== undefined &&
+    (
+      user?.divisionId === woRecord.toDivisionId ||
+      user?.scope?.divisionIds?.includes?.(woRecord.toDivisionId) ||
+      user?.scope?.managedDivisionIds?.includes?.(woRecord.toDivisionId)
+    );
+  const canApproveWoAdvisor =
+    user.permissions.includes(permissionCodes.woApproveAdvisor) &&
+    isWoAdvisorStage;
+  const isAssignedWoUnit =
+    !!woRecord?.carId &&
+    user?.scope?.unitIds?.includes?.(woRecord.carId);
+  const canApproveWoKp =
+    (user?.roleProfile?.approvalRank ?? 0) >= 3 &&
+    isWoKpStage &&
+    isAssignedWoUnit;
+  const canApproveWoPm =
+    user.permissions.includes(permissionCodes.woApprovePm) &&
+    isWoPmStage;
+  const canApproveWo = canApproveWoKd || canApproveWoAdvisor || canApproveWoKp || canApproveWoPm;
   const canDoneWo = user.permissions.includes(permissionCodes.woApprove) && status === "APPROVED";
-  const canRejectWo = user.permissions.includes(permissionCodes.woReject) && ["OPEN", "SUBMITTED"].includes(status);
+  const canRejectWo = user.permissions.includes(permissionCodes.woReject) && [...woKdStatuses, "PENDING_ADVISOR_APPROVAL", "PENDING_KP_APPROVAL", "PENDING_PM_APPROVAL"].includes(status);
 
   const canApprovePr = user.permissions.includes(permissionCodes.prApprove) && prRecord?.accTracking !== "APPROVED" && !["REJECTED", "CANCELLED", "ARRIVED"].includes(status);
   const canOrderPr = user.permissions.includes(permissionCodes.prOrder) && prRecord?.accTracking === "APPROVED" && ["OPEN", "HUNTING"].includes(status);
@@ -868,15 +899,73 @@ export function RequestDetailDialog({
                   </>
                 )}
 
+                {/* WO KD assignment */}
+                {type === "WO" && canApproveWoKd && (
+                  <div className="w-full border border-white/5 bg-[#0a0a0c] p-3">
+                    <div className="grid grid-cols-2 gap-2">
+                      <label className="space-y-1">
+                        <span className="block text-[9px] font-mono uppercase tracking-[0.12em] text-white/30">PIC</span>
+                        <input
+                          value={woApprovePicId}
+                          onChange={(event) => setWoApprovePicId(event.target.value)}
+                          placeholder="ID karyawan PIC"
+                          className="h-8 w-full border border-white/10 bg-black px-2 text-[11px] font-mono text-white outline-none focus:border-amber-500/40"
+                        />
+                      </label>
+                      <label className="space-y-1">
+                        <span className="block text-[9px] font-mono uppercase tracking-[0.12em] text-white/30">Jam Kerja</span>
+                        <input
+                          type="number"
+                          min={0.25}
+                          step={0.25}
+                          value={woApproveHours}
+                          onChange={(event) => setWoApproveHours(event.target.value)}
+                          placeholder="Contoh: 6"
+                          className="h-8 w-full border border-white/10 bg-black px-2 text-[11px] font-mono text-white outline-none focus:border-amber-500/40"
+                        />
+                      </label>
+                    </div>
+                    <input
+                      value={woApproveNotes}
+                      onChange={(event) => setWoApproveNotes(event.target.value)}
+                      placeholder="Catatan approval jika ada"
+                      className="mt-2 h-8 w-full border border-white/10 bg-black px-2 text-[11px] font-mono text-white outline-none focus:border-amber-500/40"
+                    />
+                  </div>
+                )}
+
+                {(type === "WO" && (canApproveWoAdvisor || canApproveWoKp || canApproveWoPm)) && (
+                  <input
+                    value={woApproveNotes}
+                    onChange={(event) => setWoApproveNotes(event.target.value)}
+                    placeholder="Catatan approval jika ada"
+                    className="h-8 min-w-[220px] border border-white/10 bg-black px-2 text-[11px] font-mono text-white outline-none focus:border-amber-500/40"
+                  />
+                )}
+
                 {/* WO Approve */}
                 {type === "WO" && canApproveWo && (
                   <button
                     type="button"
                     disabled={pending}
-                    onClick={() => handleAction(() => approveWo(id), "Work order disetujui.")}
+                    onClick={() => {
+                      const estimatedHours = Number(woApproveHours);
+                      if (canApproveWoKd && (!woApprovePicId.trim() || !Number.isFinite(estimatedHours) || estimatedHours <= 0)) {
+                        setError("PIC dan jam kerja wajib diisi oleh KD penerima.");
+                        return;
+                      }
+                      handleAction(
+                        () => approveWo(id, {
+                          picId: canApproveWoKd ? woApprovePicId.trim() : null,
+                          estimatedHours: canApproveWoKd ? estimatedHours : null,
+                          notes: woApproveNotes.trim() || null,
+                        }),
+                        canApproveWoPm ? "WO disetujui PM dan masuk countdown." : "Approval WO diteruskan.",
+                      );
+                    }}
                     className="border border-emerald-500/30 bg-emerald-500/[0.04] text-emerald-400 px-3 py-1.5 text-[10px] font-mono uppercase disabled:opacity-30"
                   >
-                    Setujui WO
+                    {canApproveWoPm ? "Approve PM" : canApproveWoKp ? "Approve KP" : canApproveWoAdvisor ? "Approve Advisor" : "Approve KD"}
                   </button>
                 )}
 
@@ -957,19 +1046,6 @@ export function RequestDetailDialog({
                   </button>
                 )}
 
-                {/* Option to create a Plan Jobdesc for WO assigned to user's division */}
-                {type === "WO" && woRecord?.toDivisionName === user.divisionName && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      router.push(`/job-plan?carId=${woRecord.carId}&woId=${woRecord.woId}&panelName=${encodeURIComponent(woRecord.panelName || "")}`);
-                    }}
-                    className="flex items-center gap-2 border border-amber-500/30 bg-amber-500/[0.04] px-3 py-1.5 text-[10px] font-mono uppercase tracking-[0.12em] text-amber-500 transition-colors"
-                  >
-                    <span>Buatkan Plan Jobdesc</span>
-                    <ArrowRight className="h-3 w-3" />
-                  </button>
-                )}
               </div>
 
               {/* Sub-form Reject */}

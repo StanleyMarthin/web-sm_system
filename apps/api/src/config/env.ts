@@ -39,6 +39,7 @@ export interface ApiEnv {
   REDIS_PORT: number;
   REDIS_DB: number;
   REDIS_PASSWORD?: string;
+  FCM_SERVER_KEY?: string;
 }
 
 let cachedEnv: ApiEnv | null = null;
@@ -164,6 +165,7 @@ export function loadApiEnv(
     REDIS_PORT: parseInteger(merged.REDIS_PORT, 6379, "REDIS_PORT"),
     REDIS_DB: parseInteger(merged.REDIS_DB, 0, "REDIS_DB", 0),
     REDIS_PASSWORD: merged.REDIS_PASSWORD?.trim() || undefined,
+    FCM_SERVER_KEY: merged.FCM_SERVER_KEY?.trim() || undefined,
   };
 }
 

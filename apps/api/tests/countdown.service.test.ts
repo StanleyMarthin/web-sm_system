@@ -108,6 +108,8 @@ describe("DefaultCountdownService", () => {
       "Kode Prasyarat Core",
       "Referensi WO",
       "Catatan",
+      "Temuan Awal",
+      "Keterangan",
     ]);
   });
 

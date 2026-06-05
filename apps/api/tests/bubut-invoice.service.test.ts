@@ -1,7 +1,6 @@
 import type { AuthUser } from "@smsystem/contracts/auth";
 import type {
   BubutInvoiceSnapshot,
-  BubutInvoiceType,
 } from "@smsystem/contracts/bubut-invoice";
 import { describe, expect, test } from "bun:test";
 import type { BubutInvoiceRepository, BubutInvoiceSource } from "@/repositories/bubut-invoice.repo";
@@ -76,6 +75,7 @@ class InMemoryBubutInvoiceRepository implements BubutInvoiceRepository {
       stockCardId: "STOCK-1",
     },
   ];
+  pictureRows: Awaited<ReturnType<BubutInvoiceRepository["findPicturesByWo"]>> = [];
   inserted: BubutInvoiceSnapshot[] = [];
 
   async findCompletedBubutWorkOrders() {
@@ -108,7 +108,7 @@ class InMemoryBubutInvoiceRepository implements BubutInvoiceRepository {
   }
 
   async findPicturesByWo() {
-    return [];
+    return this.pictureRows;
   }
 
   async findWorkHistoryRowsByWo() {
@@ -139,7 +139,7 @@ class InMemoryBubutInvoiceRepository implements BubutInvoiceRepository {
     };
   }
 
-  async findActiveInvoiceBySource(_sourceWobNo: string, _invoiceType: BubutInvoiceType) {
+  async findActiveInvoiceBySource() {
     return this.active ? { id: 1 } : null;
   }
 
@@ -165,6 +165,10 @@ class InMemoryBubutInvoiceRepository implements BubutInvoiceRepository {
   }
 
   async markPrinted() {}
+  
+  async updateInvoice() {
+    return true;
+  }
 }
 
 const silentAudit: AuditService = {
@@ -302,6 +306,8 @@ describe("DefaultBubutInvoiceService", () => {
       poDate: null,
       roundingStep: 1000,
       notes: null,
+      beforePictureUrls: [],
+      afterPictureUrls: [],
     });
 
     expect(result.invoiceId).toBe(10);
@@ -317,12 +323,41 @@ describe("DefaultBubutInvoiceService", () => {
         poDate: null,
         roundingStep: 1000,
         notes: null,
+        beforePictureUrls: [],
+        afterPictureUrls: [],
       });
     } catch (error) {
       errorMessage = error instanceof Error ? error.message : String(error);
     }
 
     expect(errorMessage).toBe("BUBUT_INVOICE_ALREADY_RELEASED");
+  });
+
+  test("stores selected before and after pictures in released invoice snapshot", async () => {
+    const repository = new InMemoryBubutInvoiceRepository();
+    repository.pictureRows = [
+      { url: "https://cdn.local/before.jpg", caption: null, source: "GALLERY" },
+      { url: "https://cdn.local/after.jpg", caption: null, source: "LEDGER" },
+      { url: "https://cdn.local/other.jpg", caption: null, source: "LEDGER" },
+    ];
+    const service = new DefaultBubutInvoiceService(repository, silentAudit);
+
+    await service.releaseInvoice(session, {
+      sourceWoId: "WO-1",
+      invoiceType: "CUSTOMER",
+      salesInvoiceDate: "2026-05-29",
+      poNo: null,
+      poDate: null,
+      roundingStep: 1000,
+      notes: null,
+      beforePictureUrls: ["https://cdn.local/before.jpg"],
+      afterPictureUrls: ["https://cdn.local/after.jpg"],
+    });
+
+    expect(repository.inserted[0]?.pictures).toEqual([
+      { url: "https://cdn.local/before.jpg", caption: "BEFORE", source: "GALLERY" },
+      { url: "https://cdn.local/after.jpg", caption: "AFTER", source: "LEDGER" },
+    ]);
   });
 });
 

@@ -310,6 +310,7 @@ describe("countdown routes", () => {
   });
 
   test("allows countdown manager to create countdown", async () => {
+    const capturedInputs: Array<Parameters<CountdownService["create"]>[1]> = [];
     const fetchHandler = createApiFetchHandler({
       authService: createStubAuthService({
         async getCurrentSession() {
@@ -326,7 +327,16 @@ describe("countdown routes", () => {
           };
         },
       }),
-      countdownService: createStubCountdownService(),
+      countdownService: createStubCountdownService({
+        async create(_session, input) {
+          capturedInputs.push(input);
+          return {
+            ...sampleDetail,
+            temuanAwal: input.temuanAwal ?? null,
+            keterangan: input.keterangan ?? null,
+          };
+        },
+      }),
     });
 
     const response = await fetchHandler(
@@ -346,6 +356,8 @@ describe("countdown routes", () => {
           targetHoursInitial: 8,
           startDate: "2026-05-15",
           deadlineDate: "2026-05-18",
+          temuanAwal: "Baret fender depan",
+          keterangan: "Kerjakan pengecekan awal sebelum bongkar",
           status: "PLAN",
         }),
       }),
@@ -355,6 +367,10 @@ describe("countdown routes", () => {
     const body = await response.json();
     expect(body.success).toBe(true);
     expect(body.canManage).toBe(true);
+    expect(capturedInputs[0]?.temuanAwal).toBe("Baret fender depan");
+    expect(capturedInputs[0]?.keterangan).toBe("Kerjakan pengecekan awal sebelum bongkar");
+    expect(body.data.countdown.temuanAwal).toBe("Baret fender depan");
+    expect(body.data.countdown.keterangan).toBe("Kerjakan pengecekan awal sebelum bongkar");
   });
 
   test("blocks countdown create when global manage access is missing", async () => {

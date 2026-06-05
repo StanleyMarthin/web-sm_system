@@ -9,7 +9,52 @@ const optionSchema = z.object({
   value: z.string(),
 });
 
-export const monitoringTaskRecordSchema = z.object({
+export const monitoringExecutionStatusSchema = z.enum([
+  "PLAN",
+  "ONPROGRESS",
+  "SUBMITTED",
+  "READY_QC",
+  "DONE",
+  "CANCEL",
+]);
+
+export const monitoringQcStatusSchema = z.enum([
+  "BELUM_QC",
+  "LOLOS",
+  "TIDAK_LOLOS",
+]);
+
+function normalizeExecutionStatus(input: {
+  executionStatus?: string | null;
+  actualStatus?: string | null;
+  countdownStatus?: string | null;
+  planStatus?: string | null;
+}): z.infer<typeof monitoringExecutionStatusSchema> {
+  const explicit = input.executionStatus?.toUpperCase();
+  if (monitoringExecutionStatusSchema.safeParse(explicit).success) {
+    return explicit as z.infer<typeof monitoringExecutionStatusSchema>;
+  }
+
+  const actual = input.actualStatus?.toLowerCase();
+  const countdown = input.countdownStatus?.toUpperCase();
+  const plan = input.planStatus?.toUpperCase();
+
+  if (actual === "done" || countdown === "DONE") return "DONE";
+  if (countdown === "READY_QC" || countdown === "QC_READY" || plan === "READY_QC") return "READY_QC";
+  if (actual === "pending") return "SUBMITTED";
+  if (actual === "onprogress") return "ONPROGRESS";
+  if (actual === "cancel") return "CANCEL";
+  return "PLAN";
+}
+
+function normalizeQcStatus(input?: string | null): z.infer<typeof monitoringQcStatusSchema> {
+  const value = input?.toUpperCase();
+  return monitoringQcStatusSchema.safeParse(value).success
+    ? value as z.infer<typeof monitoringQcStatusSchema>
+    : "BELUM_QC";
+}
+
+const monitoringTaskRecordBaseSchema = z.object({
   planId: z.string(),
   coreId: z.string(),
   carId: z.string(),
@@ -21,20 +66,49 @@ export const monitoringTaskRecordSchema = z.object({
   employeeName: z.string().nullable(),
   taskDate: z.string(),
   panelName: z.string().nullable(),
+  masterJobName: z.string().nullable().catch(null),
   jobDescription: z.string(),
+  instructionText: z.string().catch(""),
+  targetDailyHours: z.number().nullable().catch(null),
+  targetTotalHours: z.number().nullable().catch(null),
   planStatus: z.string(),
   actualStatus: z.string().nullable(),
+  executionStatus: z.string().nullable().catch(null),
   countdownStatus: z.string().nullable(),
   progressPercent: z.number(),
   totalActualHours: z.number(),
   remainingHours: z.number(),
   latestStartTime: z.string().nullable(),
   latestFinishTime: z.string().nullable(),
+  latestBreakDurationMinutes: z.number().nullable().optional(),
+  actualStartTime: z.string().nullable().catch(null),
+  actualBreakMinutes: z.number().nullable().catch(null),
+  actualFinishTime: z.string().nullable().catch(null),
+  actualDurationHours: z.number().nullable().catch(null),
+  planStartTime: z.string().nullable().optional(),
+  planFinishTime: z.string().nullable().optional(),
+  qcStatus: z.string().nullable().catch(null),
+  qcResult: z.string().nullable().catch(null),
+  qcNotes: z.string().nullable().catch(null),
+  monitoringStatus: z.string().nullable().catch(null),
+  monitoringResult: z.string().nullable().catch(null),
   isOvertime: z.boolean(),
   isStarted: z.boolean(),
   isSubmitted: z.boolean(),
   hasDelayRisk: z.boolean(),
 });
+
+export const monitoringTaskRecordSchema = monitoringTaskRecordBaseSchema.transform((row) => ({
+  ...row,
+  masterJobName: row.masterJobName ?? row.jobDescription ?? row.panelName,
+  instructionText: row.instructionText || row.jobDescription,
+  executionStatus: normalizeExecutionStatus(row),
+  actualStartTime: row.actualStartTime ?? row.latestStartTime,
+  actualBreakMinutes: row.actualBreakMinutes ?? row.latestBreakDurationMinutes ?? null,
+  actualFinishTime: row.actualFinishTime ?? row.latestFinishTime,
+  qcStatus: normalizeQcStatus(row.qcStatus ?? row.qcResult),
+  qcResult: row.qcResult ?? row.qcStatus,
+}));
 
 export const monitoringDivisionLoadRecordSchema = z.object({
   divisionId: z.number().int().nullable(),
@@ -100,6 +174,7 @@ export const monitoringReferencesSchema = z.object({
 
 export const monitoringQuerySchema = gridQueryStateSchema.extend({
   date: z.string().trim().min(1),
+  dateTo: z.string().trim().min(1).optional(),
 });
 
 export const monitoringGridEnvelopeSchema = z.object({

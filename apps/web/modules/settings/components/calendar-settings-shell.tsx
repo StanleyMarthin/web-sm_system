@@ -693,31 +693,88 @@ export function CalendarSettingsShell({
                 </FormField>
               </div>
 
-              <div className="mt-5 overflow-x-auto">
-                <table className="min-w-full text-sm text-white/70">
-                  <thead>
-                    <tr className="border-b border-white/[0.06] text-left text-[11px] uppercase tracking-[0.16em] text-white/35">
-                      <th className="px-3 py-3">Tanggal</th>
-                      <th className="px-3 py-3">Hari</th>
-                      <th className="px-3 py-3 text-right">Jam kerja</th>
-                      <th className="px-3 py-3 text-right">Jam ekstra</th>
-                      <th className="px-3 py-3 text-right">Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {workingDays.days.map((day) => (
-                      <tr key={day.date} className="border-b border-white/[0.04]">
-                        <td className="px-3 py-3 text-white">{day.date}</td>
-                        <td className="px-3 py-3">{day.dayName}</td>
-                        <td className="px-3 py-3 text-right tabular-nums">{day.workingHours}</td>
-                        <td className="px-3 py-3 text-right tabular-nums">{day.overtimeHours}</td>
-                        <td className="px-3 py-3 text-right tabular-nums">
-                          {day.totalCapacityHours}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              {/* Calendar Grid Visualization */}
+              <div className="mt-6">
+                <div className="grid grid-cols-7 gap-1">
+                  {/* Header Hari */}
+                  {["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"].map((hari) => (
+                    <div key={hari} className="pb-2 text-center font-mono text-[10px] uppercase tracking-[0.1em] text-white/40">
+                      {hari.substring(0, 3)}
+                    </div>
+                  ))}
+                  
+                  {/* Empty cells for offset */}
+                  {workingDays.days.length > 0 && Array.from({
+                    length: {
+                      "Senin": 0,
+                      "Selasa": 1,
+                      "Rabu": 2,
+                      "Kamis": 3,
+                      "Jumat": 4,
+                      "Sabtu": 5,
+                      "Minggu": 6
+                    }[workingDays.days[0].dayName] ?? 0
+                  }).map((_, i) => (
+                    <div key={`empty-${i}`} className="min-h-[80px] rounded-xl bg-white/[0.01]" />
+                  ))}
+
+                  {/* Date cells */}
+                  {workingDays.days.map((day) => {
+                    const isLibur = day.totalCapacityHours === 0;
+                    const isWeekend = day.dayName === "Minggu";
+                    const isOvertime = day.overtimeHours > 0;
+                    const dateNum = day.date.split("-")[2];
+
+                    return (
+                      <div
+                        key={day.date}
+                        className={`group relative flex min-h-[80px] flex-col rounded-xl border p-2 transition-colors hover:border-white/20 ${
+                          isLibur
+                            ? "border-red-500/20 bg-red-500/[0.03]"
+                            : isWeekend
+                              ? "border-amber-500/10 bg-amber-500/[0.02]"
+                              : "border-white/[0.06] bg-white/[0.03]"
+                        }`}
+                      >
+                        {/* Date Number */}
+                        <div className="flex items-center justify-between">
+                          <span
+                            className={`flex h-6 w-6 items-center justify-center rounded-full text-[12px] font-medium ${
+                              isLibur
+                                ? "bg-red-500/20 text-red-300"
+                                : isWeekend
+                                  ? "bg-amber-500/20 text-amber-300"
+                                  : "text-white/80"
+                            }`}
+                          >
+                            {dateNum}
+                          </span>
+                          
+                          {/* Total Hours Badge */}
+                          <span className={`font-mono text-[9px] ${
+                            isLibur ? "text-red-400/50" : "text-white/40"
+                          }`}>
+                            {day.totalCapacityHours}j
+                          </span>
+                        </div>
+
+                        {/* Details */}
+                        <div className="mt-auto pt-2 text-[9px] uppercase tracking-[0.05em]">
+                          {isLibur ? (
+                            <span className="text-red-400">Libur</span>
+                          ) : (
+                            <div className="space-y-0.5">
+                              <p className="text-white/60">{day.workingHours}j Reg</p>
+                              {isOvertime && (
+                                <p className="text-amber-400">+{day.overtimeHours}j Lbr</p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           </section>

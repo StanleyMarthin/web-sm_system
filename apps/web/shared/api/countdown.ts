@@ -66,6 +66,7 @@ export async function fetchCountdownBoard(
             cookie: cookieHeader,
           }
         : undefined,
+      credentials: cookieHeader ? undefined : "include",
       cache: "no-store",
     });
 

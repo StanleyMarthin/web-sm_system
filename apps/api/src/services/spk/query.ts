@@ -4,7 +4,6 @@ import {
   type SpkGridQuery,
 } from "@smsystem/contracts/spk";
 
-const DEFAULT_DATE = "2026-01-01";
 const VALID_SORT_FIELDS = new Set([
   "spkDate",
   "status",
@@ -17,9 +16,9 @@ const VALID_SORT_FIELDS = new Set([
 ]);
 const VALID_FILTER_FIELDS = new Set(["status"]);
 
-function parseIsoDate(value: string | null | undefined): string {
+function parseIsoDate(value: string | null | undefined): string | undefined {
   if (!value || !/^\d{4}-\d{2}-\d{2}$/u.test(value.trim())) {
-    return DEFAULT_DATE;
+    return undefined;
   }
 
   return value.trim();

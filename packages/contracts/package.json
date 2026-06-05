@@ -17,6 +17,7 @@
     "./qc": "./src/qc.ts",
     "./calendar": "./src/calendar.ts",
     "./planning-evaluation": "./src/planning-evaluation.ts",
+    "./planning-work-control": "./src/planning-work-control.ts",
     "./spk": "./src/spk.ts",
     "./wo": "./src/wo.ts",
     "./pr": "./src/pr.ts",
@@ -27,6 +28,7 @@
     "./rbac": "./src/rbac.ts",
     "./user": "./src/user.ts",
     "./unit": "./src/unit.ts",
-    "./unit-bom": "./src/unit-bom.ts"
+    "./unit-bom": "./src/unit-bom.ts",
+    "./unit-panel": "./src/unit-panel.ts"
   }
 }

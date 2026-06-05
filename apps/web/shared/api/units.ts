@@ -1,9 +1,20 @@
 import {
+  unitDeleteEnvelopeSchema,
   unitBoardEnvelopeSchema,
   unitBoardRowSchema,
+  unitMutationEnvelopeSchema,
   unitWorkspaceEnvelopeSchema,
+  type CreateUnitRequest,
+  type UpdateUnitRequest,
 } from "@smsystem/contracts/unit";
 import { unitBomWorkspaceEnvelopeSchema } from "@smsystem/contracts/unit-bom";
+import {
+  unitPanelCollectionEnvelopeSchema,
+  unitPanelDeleteEnvelopeSchema,
+  unitPanelMutationEnvelopeSchema,
+  type CreateUnitPanelRequest,
+  type UpdateUnitPanelRequest,
+} from "@smsystem/contracts/unit-panel";
 import { z } from "zod";
 import { getApiBaseUrl } from "@/shared/api/config";
 
@@ -34,6 +45,42 @@ function toUrlSearchParams(
   return params;
 }
 
+interface ApiFailure {
+  success: false;
+  message: string;
+  errorCode?: string;
+  data?: Record<string, unknown>;
+}
+
+async function parseFailure(response: Response): Promise<ApiFailure> {
+  try {
+    return (await response.json()) as ApiFailure;
+  } catch {
+    return {
+      success: false,
+      message: "Response API tidak valid.",
+      errorCode: "INVALID_RESPONSE",
+      data: {},
+    };
+  }
+}
+
+function buildServerOrBrowserRequestInit(cookieHeader: string) {
+  if (cookieHeader) {
+    return {
+      headers: {
+        cookie: cookieHeader,
+      },
+      cache: "no-store" as const,
+    };
+  }
+
+  return {
+    credentials: "include" as const,
+    cache: "no-store" as const,
+  };
+}
+
 export function buildUnitGridQueryString(
   searchParams: Record<string, string | string[] | undefined>,
 ): string {
@@ -48,14 +95,7 @@ export async function fetchUnitBoard(
   const suffix = queryString ? `?${queryString}` : "";
 
   try {
-    const response = await fetch(`${getApiBaseUrl()}/api/units${suffix}`, {
-      headers: cookieHeader
-        ? {
-            cookie: cookieHeader,
-          }
-        : undefined,
-      cache: "no-store",
-    });
+    const response = await fetch(`${getApiBaseUrl()}/api/units${suffix}`, buildServerOrBrowserRequestInit(cookieHeader));
 
     if (!response.ok) {
       return {
@@ -78,14 +118,7 @@ export async function fetchUnitBoard(
 
 export async function fetchUnitDetail(cookieHeader: string, unitId: string) {
   try {
-    const response = await fetch(`${getApiBaseUrl()}/api/units/${unitId}`, {
-      headers: cookieHeader
-        ? {
-            cookie: cookieHeader,
-          }
-        : undefined,
-      cache: "no-store",
-    });
+    const response = await fetch(`${getApiBaseUrl()}/api/units/${unitId}`, buildServerOrBrowserRequestInit(cookieHeader));
 
     if (!response.ok) {
       return {
@@ -108,14 +141,7 @@ export async function fetchUnitDetail(cookieHeader: string, unitId: string) {
 
 export async function fetchUnitWorkspace(cookieHeader: string, unitId: string) {
   try {
-    const response = await fetch(`${getApiBaseUrl()}/api/units/${unitId}/workspace`, {
-      headers: cookieHeader
-        ? {
-            cookie: cookieHeader,
-          }
-        : undefined,
-      cache: "no-store",
-    });
+    const response = await fetch(`${getApiBaseUrl()}/api/units/${unitId}/workspace`, buildServerOrBrowserRequestInit(cookieHeader));
 
     if (!response.ok) {
       return {
@@ -138,14 +164,7 @@ export async function fetchUnitWorkspace(cookieHeader: string, unitId: string) {
 
 export async function fetchUnitBom(cookieHeader: string, unitId: string) {
   try {
-    const response = await fetch(`${getApiBaseUrl()}/api/units/${unitId}/bom`, {
-      headers: cookieHeader
-        ? {
-            cookie: cookieHeader,
-          }
-        : undefined,
-      cache: "no-store",
-    });
+    const response = await fetch(`${getApiBaseUrl()}/api/units/${unitId}/bom`, buildServerOrBrowserRequestInit(cookieHeader));
 
     if (!response.ok) {
       return {
@@ -164,4 +183,170 @@ export async function fetchUnitBom(cookieHeader: string, unitId: string) {
       status: 503,
     };
   }
+}
+
+export async function createUnit(input: CreateUnitRequest) {
+  const response = await fetch(`${getApiBaseUrl()}/api/units`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(input),
+  });
+
+  if (!response.ok) {
+    return {
+      ...(await parseFailure(response)),
+      success: false as const,
+    };
+  }
+
+  const payload = unitMutationEnvelopeSchema.parse(await response.json());
+  return {
+    success: true as const,
+    result: payload.data.unit,
+  };
+}
+
+export async function updateUnit(unitId: string, input: UpdateUnitRequest) {
+  const response = await fetch(`${getApiBaseUrl()}/api/units/${unitId}`, {
+    method: "PUT",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(input),
+  });
+
+  if (!response.ok) {
+    return {
+      ...(await parseFailure(response)),
+      success: false as const,
+    };
+  }
+
+  const payload = unitMutationEnvelopeSchema.parse(await response.json());
+  return {
+    success: true as const,
+    result: payload.data.unit,
+  };
+}
+
+export async function deleteUnit(unitId: string) {
+  const response = await fetch(`${getApiBaseUrl()}/api/units/${unitId}`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    return {
+      ...(await parseFailure(response)),
+      success: false as const,
+    };
+  }
+
+  const payload = unitDeleteEnvelopeSchema.parse(await response.json());
+  return {
+    success: true as const,
+    result: payload.data,
+  };
+}
+
+export async function fetchUnitPanels(cookieHeader: string, unitId: string) {
+  try {
+    const response = await fetch(
+      `${getApiBaseUrl()}/api/units/${unitId}/master-panels`,
+      buildServerOrBrowserRequestInit(cookieHeader),
+    );
+
+    if (!response.ok) {
+      return {
+        payload: null,
+        status: response.status,
+      };
+    }
+
+    return {
+      payload: unitPanelCollectionEnvelopeSchema.parse(await response.json()),
+      status: response.status,
+    };
+  } catch {
+    return {
+      payload: null,
+      status: 503,
+    };
+  }
+}
+
+export async function createUnitPanel(unitId: string, input: CreateUnitPanelRequest) {
+  const response = await fetch(`${getApiBaseUrl()}/api/units/${unitId}/master-panels`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(input),
+  });
+
+  if (!response.ok) {
+    return {
+      ...(await parseFailure(response)),
+      success: false as const,
+    };
+  }
+
+  const payload = unitPanelMutationEnvelopeSchema.parse(await response.json());
+  return {
+    success: true as const,
+    result: payload.data.record,
+  };
+}
+
+export async function updateUnitPanel(
+  unitId: string,
+  panelId: number,
+  input: UpdateUnitPanelRequest,
+) {
+  const response = await fetch(`${getApiBaseUrl()}/api/units/${unitId}/master-panels/${panelId}`, {
+    method: "PUT",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(input),
+  });
+
+  if (!response.ok) {
+    return {
+      ...(await parseFailure(response)),
+      success: false as const,
+    };
+  }
+
+  const payload = unitPanelMutationEnvelopeSchema.parse(await response.json());
+  return {
+    success: true as const,
+    result: payload.data.record,
+  };
+}
+
+export async function deleteUnitPanel(unitId: string, panelId: number) {
+  const response = await fetch(`${getApiBaseUrl()}/api/units/${unitId}/master-panels/${panelId}`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    return {
+      ...(await parseFailure(response)),
+      success: false as const,
+    };
+  }
+
+  const payload = unitPanelDeleteEnvelopeSchema.parse(await response.json());
+  return {
+    success: true as const,
+    result: payload.data,
+  };
 }

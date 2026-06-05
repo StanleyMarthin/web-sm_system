@@ -137,7 +137,7 @@ function mapHeaderRow(row: HeaderRow): SpkHeaderRecord {
     createdBy: row.createdBy,
     approvedBy: row.approvedBy,
     rejectReason: row.rejectReason,
-    notes: plannerMeta?.note ?? row.notes,
+    notes: plannerMeta ? plannerMeta.note : row.notes,
     createdAt: row.createdAt,
     submittedAt: row.submittedAt,
     approvedAt: row.approvedAt,

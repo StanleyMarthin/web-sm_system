@@ -5,6 +5,7 @@ import type {
   BubutInvoiceType,
   BubutInvoiceWorkHistory,
   BubutInvoiceWorkOrderQuery,
+  BubutInvoiceUpdateRequest,
 } from "@smsystem/contracts/bubut-invoice";
 import { DefaultAuditService, type AuditService } from "@/services/audit/audit.service";
 import { MySqlAuditRepository } from "@/repositories/audit.repo";
@@ -54,6 +55,32 @@ function formatInvoiceNo(date: string, sequence: number): string {
   return `SIB/${String(sequence).padStart(2, "0")}/${month}/${year}`;
 }
 
+function buildSelectedInvoicePictures(
+  pictures: BubutInvoiceSnapshot["pictures"],
+  beforeUrls: string[] = [],
+  afterUrls: string[] = [],
+): BubutInvoiceSnapshot["pictures"] {
+  const byUrl = new Map(pictures.map((picture) => [picture.url, picture]));
+  const selected: BubutInvoiceSnapshot["pictures"] = [];
+  const seen = new Set<string>();
+
+  for (const url of beforeUrls) {
+    const picture = byUrl.get(url);
+    if (!picture || seen.has(`before:${url}`)) continue;
+    selected.push({ ...picture, caption: "BEFORE" });
+    seen.add(`before:${url}`);
+  }
+
+  for (const url of afterUrls) {
+    const picture = byUrl.get(url);
+    if (!picture || seen.has(`after:${url}`)) continue;
+    selected.push({ ...picture, caption: "AFTER" });
+    seen.add(`after:${url}`);
+  }
+
+  return selected.length > 0 ? selected : pictures;
+}
+
 export interface BubutInvoiceService {
   listWorkOrders(
     session: WebSession,
@@ -68,12 +95,19 @@ export interface BubutInvoiceService {
       poNo?: string | null;
       poDate?: string | null;
       roundingStep?: number;
+      mergedWoIds?: string[];
+      materialOverrides?: Array<{ materialName: string; qty: number; price: number }>;
     },
   ): Promise<BubutInvoiceSnapshot>;
   releaseInvoice(
     session: WebSession,
     input: BubutInvoiceReleaseRequest,
   ): Promise<{ invoiceId: number; invoiceNo: string; invoiceType: BubutInvoiceType }>;
+  updateInvoice(
+    session: WebSession,
+    invoiceId: number,
+    input: BubutInvoiceUpdateRequest,
+  ): Promise<{ invoiceId: number; status: "UPDATED" }>;
   getInvoice(session: WebSession, invoiceId: number): Promise<BubutInvoiceSnapshot | null>;
   getWorkHistory(session: WebSession, sourceKey: string): Promise<BubutInvoiceWorkHistory>;
   cancelInvoice(
@@ -118,6 +152,8 @@ export class DefaultBubutInvoiceService implements BubutInvoiceService {
       poNo?: string | null;
       poDate?: string | null;
       roundingStep?: number;
+      mergedWoIds?: string[];
+      materialOverrides?: Array<{ materialName: string; qty: number; price: number }>;
     },
   ): Promise<BubutInvoiceSnapshot> {
     const source = await this.repository.findWorkOrderSource({
@@ -130,11 +166,34 @@ export class DefaultBubutInvoiceService implements BubutInvoiceService {
       throw new Error("BUBUT_WO_NOT_FOUND");
     }
 
-    const [workingSource, materialSource, pictures] = await Promise.all([
-      this.repository.findActualWorkingHoursByWo(params.sourceWoId),
-      this.repository.findWarehouseMaterialsByWo(params.sourceWoId),
-      this.repository.findPicturesByWo(params.sourceWoId),
-    ]);
+    const woIds = [params.sourceWoId, ...(params.mergedWoIds ?? [])];
+    
+    let combinedProcessDetailText = source.processDetailText ?? "";
+    const workingSource: Array<Awaited<ReturnType<BubutInvoiceRepository["findActualWorkingHoursByWo"]>>[number]> = [];
+    const materialSource: Array<Awaited<ReturnType<BubutInvoiceRepository["findWarehouseMaterialsByWo"]>>[number]> = [];
+    const pictures: Array<Awaited<ReturnType<BubutInvoiceRepository["findPicturesByWo"]>>[number]> = [];
+
+    for (const woId of woIds) {
+      const [w, m, p] = await Promise.all([
+        this.repository.findActualWorkingHoursByWo(woId),
+        this.repository.findWarehouseMaterialsByWo(woId),
+        this.repository.findPicturesByWo(woId),
+      ]);
+      workingSource.push(...w);
+      materialSource.push(...m);
+      pictures.push(...p);
+
+      if (woId !== params.sourceWoId) {
+        const otherSource = await this.repository.findWorkOrderSource({
+          employeeId: session.user.employeeId,
+          scope: session.user.scope,
+          sourceWoId: woId,
+        });
+        if (otherSource?.processDetailText) {
+          combinedProcessDetailText += combinedProcessDetailText ? ` + ${otherSource.processDetailText}` : otherSource.processDetailText;
+        }
+      }
+    }
 
     const workingHours = workingSource.map((line, index) => {
       const workMinutes = Math.round(line.workingHourDecimal * 60);
@@ -160,8 +219,18 @@ export class DefaultBubutInvoiceService implements BubutInvoiceService {
       };
     });
 
-    const materials =
-      materialSource.length > 0
+    const materials = params.materialOverrides
+      ? params.materialOverrides.map((line, index) => ({
+          no: index + 1,
+          materialName: line.materialName,
+          qty: line.qty,
+          unit: null,
+          price: line.price,
+          total: line.qty * line.price,
+          warehouseTransactionId: null,
+          stockCardId: null,
+        }))
+      : materialSource.length > 0
         ? materialSource.map((line, index) => ({
             no: index + 1,
             materialName: line.materialName,
@@ -210,13 +279,14 @@ export class DefaultBubutInvoiceService implements BubutInvoiceService {
       qtyUnit: source.qtyUnit,
       operatorName: source.operatorName,
       divisionName: source.divisionName,
-      processDetailText: source.processDetailText,
+      processDetailText: combinedProcessDetailText,
       materials,
       workingHours,
       pictures,
       totals,
       sourceSnapshot: {
         source: "WO_BUBUT",
+        mergedWoIds: params.mergedWoIds ?? [],
         sourceWoId: source.sourceWoId,
         sourceWobNo: source.sourceWobNo,
         carId: source.carId,
@@ -375,9 +445,22 @@ export class DefaultBubutInvoiceService implements BubutInvoiceService {
     const [year, month] = input.salesInvoiceDate.split("-");
     const sequence = await this.repository.getNextInvoiceSequence(month, year);
     const invoiceNo = formatInvoiceNo(input.salesInvoiceDate, sequence);
+    const selectedPictures = buildSelectedInvoicePictures(
+      preview.pictures,
+      input.beforePictureUrls,
+      input.afterPictureUrls,
+    );
     const snapshot: BubutInvoiceSnapshot = {
       ...preview,
       invoiceNo,
+      pictures: selectedPictures,
+      sourceSnapshot: {
+        ...preview.sourceSnapshot,
+        selectedPictures: {
+          before: input.beforePictureUrls,
+          after: input.afterPictureUrls,
+        },
+      },
       releasedBy: session.user.employeeId,
       releasedByName: session.user.fullName,
     };
@@ -416,6 +499,91 @@ export class DefaultBubutInvoiceService implements BubutInvoiceService {
 
       throw error;
     }
+  }
+
+  async updateInvoice(session: WebSession, invoiceId: number, input: BubutInvoiceUpdateRequest) {
+    const existing = await this.getInvoice(session, invoiceId);
+    if (!existing) {
+      throw new Error("BUBUT_INVOICE_NOT_FOUND");
+    }
+
+    if (existing.status !== "RELEASED") {
+      throw new Error("BUBUT_INVOICE_INVALID_STATE");
+    }
+
+    // Re-build preview to get all current photos and possible material/WO updates
+    const preview = await this.buildInvoicePreview(session, {
+      sourceWoId: existing.sourceWoId,
+      invoiceType: existing.invoiceType,
+      salesInvoiceDate: input.salesInvoiceDate,
+      poNo: input.poNo,
+      poDate: input.poDate,
+      roundingStep: input.roundingStep,
+      mergedWoIds: input.mergedWoIds,
+      materialOverrides: input.materialOverrides,
+    });
+
+    const selectedPictures = buildSelectedInvoicePictures(
+      preview.pictures,
+      input.beforePictureUrls,
+      input.afterPictureUrls,
+    );
+
+    const snapshot: BubutInvoiceSnapshot = {
+      ...existing,
+      salesInvoiceDate: input.salesInvoiceDate,
+      poNo: input.poNo ?? null,
+      poDate: input.poDate ?? null,
+      processDetailText: preview.processDetailText,
+      workingHours: preview.workingHours,
+      materials: preview.materials,
+      totals: preview.totals,
+      pictures: selectedPictures,
+      sourceSnapshot: {
+        ...existing.sourceSnapshot,
+        mergedWoIds: input.mergedWoIds ?? [],
+        selectedPictures: {
+          before: input.beforePictureUrls,
+          after: input.afterPictureUrls,
+        },
+      },
+    };
+
+    const updated = await this.repository.updateInvoice(
+      invoiceId,
+      snapshot,
+      session.user.employeeId,
+      session.user.fullName,
+    );
+
+    if (!updated) {
+      throw new Error("BUBUT_INVOICE_INVALID_STATE");
+    }
+
+    await this.auditService.log({
+      actorId: session.user.employeeId,
+      actorName: session.user.fullName,
+      action: "bubut_invoice.update",
+      module: "bubut_invoice",
+      recordId: String(invoiceId),
+      oldValue: {
+        salesInvoiceDate: existing.salesInvoiceDate,
+        poNo: existing.poNo,
+        poDate: existing.poDate,
+        pictures: existing.pictures.length,
+      },
+      newValue: {
+        salesInvoiceDate: snapshot.salesInvoiceDate,
+        poNo: snapshot.poNo,
+        poDate: snapshot.poDate,
+        pictures: snapshot.pictures.length,
+      },
+    });
+
+    return {
+      invoiceId,
+      status: "UPDATED" as const,
+    };
   }
 
   async getInvoice(session: WebSession, invoiceId: number) {

@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable @next/next/no-img-element */
+
 import type {
   BubutInvoiceSnapshot,
   BubutInvoiceType,
@@ -10,6 +12,7 @@ import {
   fetchBubutInvoicePreview,
   releaseBubutInvoice,
 } from "@/shared/api/bubut-invoice";
+import { getProxiedImageUrl } from "@/shared/api/config";
 
 function rupiah(value: number | null | undefined) {
   return new Intl.NumberFormat("id-ID", {
@@ -36,13 +39,14 @@ export function BubutInvoiceReleaseDialog({
   const [poNo, setPoNo] = useState("");
   const [poDate, setPoDate] = useState("");
   const [preview, setPreview] = useState<BubutInvoiceSnapshot | null>(null);
+  const [beforePictureUrls, setBeforePictureUrls] = useState<string[]>([]);
+  const [afterPictureUrls, setAfterPictureUrls] = useState<string[]>([]);
   const [printDraft, setPrintDraft] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   useEffect(() => {
     let alive = true;
-    setError(null);
     fetchBubutInvoicePreview({
       sourceWoId,
       invoiceType,
@@ -62,6 +66,14 @@ export function BubutInvoiceReleaseDialog({
     };
   }, [sourceWoId, invoiceType, salesInvoiceDate, poNo, poDate]);
 
+  function togglePicture(kind: "before" | "after", url: string) {
+    const setter = kind === "before" ? setBeforePictureUrls : setAfterPictureUrls;
+    setter((current) => {
+      if (current.includes(url)) return [];
+      return [url];
+    });
+  }
+
   function confirmRelease() {
     setError(null);
     startTransition(async () => {
@@ -74,6 +86,8 @@ export function BubutInvoiceReleaseDialog({
           poDate: poDate || null,
           roundingStep: 1000,
           notes: null,
+          beforePictureUrls,
+          afterPictureUrls,
         });
         onReleased(result.invoiceId);
       } catch {
@@ -207,6 +221,77 @@ export function BubutInvoiceReleaseDialog({
                   </div>
                 </div>
               ) : null}
+
+              <div className="border border-white/5 bg-[#0a0a0c] p-3">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-white/30">
+                      Dokumentasi Invoice
+                    </p>
+                    <p className="mt-1 text-[11px] text-white/45">
+                      Pilih foto yang akan ditempel sebagai before dan after di invoice.
+                    </p>
+                  </div>
+                  <p className="shrink-0 font-mono text-[10px] uppercase tracking-[0.12em] text-white/25">
+                    Before {beforePictureUrls.length}/1 · After {afterPictureUrls.length}/1
+                  </p>
+                </div>
+                {preview.pictures.length > 0 ? (
+                  <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                    {preview.pictures.map((picture, index) => {
+                      const resolvedUrl = getProxiedImageUrl(picture.url) ?? picture.url;
+                      const isBefore = beforePictureUrls.includes(picture.url);
+                      const isAfter = afterPictureUrls.includes(picture.url);
+
+                      return (
+                        <div
+                          key={`${picture.url}-${index}`}
+                          className={[
+                            "overflow-hidden border bg-[#111114]",
+                            isBefore || isAfter ? "border-amber-500/50" : "border-white/5",
+                          ].join(" ")}
+                        >
+                          <img
+                            src={resolvedUrl}
+                            alt={picture.caption ?? ""}
+                            className="aspect-square w-full object-cover"
+                          />
+                          <div className="grid grid-cols-2 border-t border-white/5">
+                            <button
+                              type="button"
+                              onClick={() => togglePicture("before", picture.url)}
+                              className={[
+                                "h-8 border-r border-white/5 font-mono text-[10px] uppercase tracking-[0.1em] transition-colors",
+                                isBefore
+                                  ? "bg-amber-500/15 text-amber-400"
+                                  : "text-white/45 hover:bg-white/[0.04] hover:text-white/75",
+                              ].join(" ")}
+                            >
+                              Before
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => togglePicture("after", picture.url)}
+                              className={[
+                                "h-8 font-mono text-[10px] uppercase tracking-[0.1em] transition-colors",
+                                isAfter
+                                  ? "bg-sky-500/15 text-sky-300"
+                                  : "text-white/45 hover:bg-white/[0.04] hover:text-white/75",
+                              ].join(" ")}
+                            >
+                              After
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="border border-dashed border-white/10 px-3 py-8 text-center font-mono text-[11px] uppercase tracking-[0.12em] text-white/30">
+                    Belum ada dokumentasi untuk WO ini
+                  </div>
+                )}
+              </div>
             </div>
           ) : (
             <p className="mt-4 font-mono text-[11px] text-white/30">Memuat preview...</p>

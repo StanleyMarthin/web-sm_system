@@ -1,7 +1,11 @@
 import { afterEach, describe, expect, it, mock } from "bun:test";
 import {
+  createUnitPanel,
+  deleteUnitPanel,
   fetchUnitBoard,
   fetchUnitBom,
+  fetchUnitPanels,
+  updateUnitPanel,
   fetchUnitWorkspace,
 } from "@/shared/api/units";
 
@@ -198,5 +202,199 @@ describe("units api client", () => {
     const result = await fetchUnitBom("session=abc", "MB500SEL_MRSILMY");
     expect(result.status).toBe(200);
     expect(result.payload?.data.tree[0]?.children[0]?.children[0]?.logisticStatus).toBe("READY_GUDANG");
+  });
+
+  it("parses unit panel collection payload on success", async () => {
+    process.env.NEXT_PUBLIC_API_BASE_URL = "http://127.0.0.1:3203";
+    global.fetch = mock(async () => {
+      return new Response(
+        JSON.stringify({
+          success: true,
+          message: "ok",
+          data: {
+            unitId: "MB500SEL_MRSILMY",
+            tree: [
+              {
+                id: 1,
+                carId: "MB500SEL_MRSILMY",
+                parentId: null,
+                nodeType: "PANEL",
+                section: "Interior",
+                name: "Dashboard",
+                category: "Interior",
+                isActive: true,
+                sortOrder: 1,
+                qty: 1,
+                defaultLocationType: "UNIT",
+                defaultStockStatus: "INSTALLED",
+                defaultConditionType: "BEKAS",
+                countdownUsageCount: 0,
+                statusUsageCount: 0,
+                childCount: 1,
+                createdAt: "2026-05-30 10:00:00",
+                updatedAt: "2026-05-30 10:00:00",
+                children: [
+                  {
+                    id: 2,
+                    carId: "MB500SEL_MRSILMY",
+                    parentId: 1,
+                    nodeType: "PART",
+                    section: "Interior",
+                    name: "Panel Speedometer",
+                    category: "Interior",
+                    isActive: true,
+                    sortOrder: 1,
+                    qty: 1,
+                    defaultLocationType: "UNIT",
+                    defaultStockStatus: "INSTALLED",
+                    defaultConditionType: "BEKAS",
+                    countdownUsageCount: 0,
+                    statusUsageCount: 0,
+                    childCount: 0,
+                    createdAt: "2026-05-30 10:00:00",
+                    updatedAt: "2026-05-30 10:00:00",
+                    children: [],
+                  },
+                ],
+              },
+            ],
+          },
+        }),
+        { status: 200 },
+      );
+    }) as typeof fetch;
+
+    const result = await fetchUnitPanels("session=abc", "MB500SEL_MRSILMY");
+    expect(result.status).toBe(200);
+    expect(result.payload?.data.tree[0]?.children[0]?.nodeType).toBe("PART");
+  });
+
+  it("creates unit panel on success", async () => {
+    process.env.NEXT_PUBLIC_API_BASE_URL = "http://127.0.0.1:3203";
+    global.fetch = mock(async () => {
+      return new Response(
+        JSON.stringify({
+          success: true,
+          message: "created",
+          data: {
+            record: {
+              id: 10,
+              carId: "MB500SEL_MRSILMY",
+              parentId: null,
+              nodeType: "PANEL",
+              section: "Interior",
+              name: "Console Tengah",
+              category: "Interior",
+              isActive: true,
+              sortOrder: 2,
+              qty: 1,
+              defaultLocationType: "UNIT",
+              defaultStockStatus: "INSTALLED",
+              defaultConditionType: "BEKAS",
+              countdownUsageCount: 0,
+              statusUsageCount: 0,
+              childCount: 0,
+              createdAt: "2026-05-30 10:00:00",
+              updatedAt: "2026-05-30 10:00:00",
+              children: [],
+            },
+          },
+        }),
+        { status: 201 },
+      );
+    }) as typeof fetch;
+
+    const result = await createUnitPanel("MB500SEL_MRSILMY", {
+      parentId: null,
+      section: "Interior",
+      name: "Console Tengah",
+      category: "Interior",
+      sortOrder: 2,
+      qty: 1,
+      defaultLocationType: "UNIT",
+      defaultStockStatus: "INSTALLED",
+      defaultConditionType: "BEKAS",
+      isActive: true,
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.result.id).toBe(10);
+    }
+  });
+
+  it("updates unit panel on success", async () => {
+    process.env.NEXT_PUBLIC_API_BASE_URL = "http://127.0.0.1:3203";
+    global.fetch = mock(async () => {
+      return new Response(
+        JSON.stringify({
+          success: true,
+          message: "updated",
+          data: {
+            record: {
+              id: 10,
+              carId: "MB500SEL_MRSILMY",
+              parentId: null,
+              nodeType: "PANEL",
+              section: "Interior",
+              name: "Console Tengah Revisi",
+              category: "Interior",
+              isActive: true,
+              sortOrder: 3,
+              qty: 1,
+              defaultLocationType: "UNIT",
+              defaultStockStatus: "INSTALLED",
+              defaultConditionType: "BEKAS",
+              countdownUsageCount: 0,
+              statusUsageCount: 0,
+              childCount: 0,
+              createdAt: "2026-05-30 10:00:00",
+              updatedAt: "2026-05-30 10:05:00",
+              children: [],
+            },
+          },
+        }),
+        { status: 200 },
+      );
+    }) as typeof fetch;
+
+    const result = await updateUnitPanel("MB500SEL_MRSILMY", 10, {
+      section: "Interior",
+      name: "Console Tengah Revisi",
+      category: "Interior",
+      sortOrder: 3,
+      qty: 1,
+      defaultLocationType: "UNIT",
+      defaultStockStatus: "INSTALLED",
+      defaultConditionType: "BEKAS",
+      isActive: true,
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.result.sortOrder).toBe(3);
+    }
+  });
+
+  it("deletes unit panel on success", async () => {
+    process.env.NEXT_PUBLIC_API_BASE_URL = "http://127.0.0.1:3203";
+    global.fetch = mock(async () => {
+      return new Response(
+        JSON.stringify({
+          success: true,
+          message: "deleted",
+          data: {
+            deletedId: 10,
+          },
+        }),
+        { status: 200 },
+      );
+    }) as typeof fetch;
+
+    const result = await deleteUnitPanel("MB500SEL_MRSILMY", 10);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.result.deletedId).toBe(10);
+    }
   });
 });

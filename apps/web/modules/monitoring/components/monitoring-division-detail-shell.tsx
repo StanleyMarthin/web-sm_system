@@ -7,7 +7,7 @@ import type {
 } from "@smsystem/contracts/monitoring";
 import { ArrowLeft, RefreshCcw } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { ActionButton, CompactInput } from "@/shared/ui/compact";
+import { ActionButton, CompactDateInput, CompactDateRangeInput } from "@/shared/ui/compact";
 
 interface MonitoringDivisionDetailShellProps {
   divisionId: number;
@@ -96,21 +96,22 @@ export function MonitoringDivisionDetailShell({
     router.push(`${pathname}?${nextParams.toString()}`);
   }
 
-  function pushWeeklyRange(start: string, end: string) {
+  function applyRangeSelection(range: { from: string; to: string }) {
     const nextParams = new URLSearchParams(searchParams.toString());
-    const range = clampWeeklyRange(start, end);
-    nextParams.set("date", range.start);
-    nextParams.set("dateTo", range.end);
+
+    if (range.from === range.to) {
+      nextParams.set("date", range.from);
+      nextParams.delete("dateTo");
+      nextParams.set("span", "daily");
+      router.push(`${pathname}?${nextParams.toString()}`);
+      return;
+    }
+
+    const normalized = clampWeeklyRange(range.from, range.to);
+    nextParams.set("date", normalized.start);
+    nextParams.set("dateTo", normalized.end);
     nextParams.set("span", "weekly");
     router.push(`${pathname}?${nextParams.toString()}`);
-  }
-
-  function updateWeeklyStart(value: string) {
-    pushWeeklyRange(value, resolvedDateTo);
-  }
-
-  function updateWeeklyEnd(value: string) {
-    pushWeeklyRange(date, value);
   }
 
   function goBack() {
@@ -202,30 +203,16 @@ export function MonitoringDivisionDetailShell({
             <div className="flex flex-wrap items-center gap-2">
               {activeSpan === "daily" ? (
                 <div className="w-40">
-                  <CompactInput
-                    type="date"
-                    value={date}
-                    onChange={(event) => pushDailyDate(event.target.value)}
-                  />
+                  <CompactDateInput value={date} onChange={pushDailyDate} className="w-64" />
                 </div>
               ) : (
-                <div className="flex flex-wrap items-center gap-2 rounded-lg border border-white/[0.06] bg-white/[0.03] px-2 py-2">
-                  <div className="w-36">
-                    <CompactInput
-                      type="date"
-                      value={date}
-                      onChange={(event) => updateWeeklyStart(event.target.value)}
-                    />
-                  </div>
-                  <span className="text-[11px] text-white/30">s.d.</span>
-                  <div className="w-36">
-                    <CompactInput
-                      type="date"
-                      value={resolvedDateTo}
-                      onChange={(event) => updateWeeklyEnd(event.target.value)}
-                    />
-                  </div>
-                </div>
+                <CompactDateRangeInput
+                  from={date}
+                  to={resolvedDateTo}
+                  onChange={applyRangeSelection}
+                  selectionBehavior="single-or-range"
+                  className="w-64"
+                />
               )}
             </div>
           </div>

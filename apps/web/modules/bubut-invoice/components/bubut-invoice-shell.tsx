@@ -11,6 +11,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useState, useTransition } from "react";
 import { BubutInvoiceReleaseDialog } from "@/modules/bubut-invoice/components/bubut-invoice-release-dialog";
+import { BubutInvoiceEditDialog } from "@/modules/bubut-invoice/components/bubut-invoice-edit-dialog";
 import { BubutInvoiceStatusBadge } from "@/modules/bubut-invoice/components/bubut-invoice-status-badge";
 import { WoBubutWorkHistoryDrawer } from "@/modules/invoice-wo-bubut/components/wo-bubut-work-history-drawer";
 import { SmartDataGrid } from "@/shared/datagrid/smart-data-grid";
@@ -87,6 +88,7 @@ export function BubutInvoiceShell({
     sourceWoId: string;
     invoiceType: BubutInvoiceType;
   } | null>(null);
+  const [editTargetId, setEditTargetId] = useState<number | null>(null);
   const [detailSourceKey, setDetailSourceKey] = useState<string | null>(null);
   const [month, setMonth] = useState(getMonthValue(query));
 
@@ -258,17 +260,13 @@ export function BubutInvoiceShell({
             <input
               type="month"
               value={month}
-              onChange={(event) => setMonth(event.target.value)}
+              onChange={(event) => {
+                setMonth(event.target.value);
+                applyMonthFilter(event.target.value);
+              }}
               className="h-9 border border-white/10 bg-[#0a0a0c] px-3 text-[11px] font-mono text-white/60 outline-none focus:border-amber-500/40 [color-scheme:dark]"
             />
           </label>
-          <button
-            type="button"
-            onClick={() => applyMonthFilter(month)}
-            className="border border-amber-500/30 bg-amber-500/[0.04] h-9 px-3 text-[10px] font-mono uppercase tracking-[0.12em] text-amber-500 hover:bg-amber-500/10 transition-colors"
-          >
-            Filter Bulan
-          </button>
           <button
             type="button"
             onClick={() => {
@@ -321,6 +319,17 @@ export function BubutInvoiceShell({
         />
       ) : null}
 
+      {editTargetId ? (
+        <BubutInvoiceEditDialog
+          invoiceId={editTargetId}
+          onClose={() => setEditTargetId(null)}
+          onUpdated={() => {
+            setEditTargetId(null);
+            router.refresh();
+          }}
+        />
+      ) : null}
+
       {detailSourceKey ? (
         <WoBubutWorkHistoryDrawer
           sourceKey={detailSourceKey}
@@ -330,6 +339,9 @@ export function BubutInvoiceShell({
           onRelease={(sourceWoId, invoiceType) => {
             setDetailSourceKey(null);
             setReleaseTarget({ sourceWoId, invoiceType });
+          }}
+          onEdit={(invoiceId) => {
+            setEditTargetId(invoiceId);
           }}
         />
       ) : null}

@@ -26,6 +26,8 @@ interface CountdownBoardRowPacket extends RowDataPacket {
   prerequisiteCoreId: string | null;
   refWoId: string | null;
   note: string | null;
+  temuanAwal: string | null;
+  keterangan: string | null;
   jobTypeId: string | null;
   jobTypeName: string | null;
   targetHoursInitial: number;
@@ -56,6 +58,8 @@ interface CountdownDetailRowPacket extends RowDataPacket {
   prerequisiteCoreId: string | null;
   refWoId: string | null;
   note: string | null;
+  temuanAwal: string | null;
+  keterangan: string | null;
   jobTypeId: string | null;
   jobTypeName: string | null;
   targetHoursInitial: number;
@@ -97,24 +101,18 @@ interface ValidationPacket extends RowDataPacket {
 interface ReferenceOptionRow extends RowDataPacket {
   value: string | number;
   label: string;
-}
-
-interface CountdownCoreRowPacket extends RowDataPacket {
-  id: string;
-  carId: string;
-  divisionId: number | null;
-  panelId: number | null;
-  taskCategory: string;
-  sectionName: string | null;
-  jobTypeId: string | null;
-  targetHoursInitial: number;
-  timeExtensionHours: number;
-  totalActualHours: number;
-  status: string;
-  startDate: string | null;
-  deadlineDate: string | null;
-  prerequisiteCoreId: string | null;
-  refWoId: string | null;
+  carId?: string | null;
+  section?: string | null;
+  category?: string | null;
+  code?: string | null;
+  parentId?: number | null;
+  parentName?: string | null;
+  parentCode?: string | null;
+  divisionId?: number | null;
+  divisionName?: string | null;
+  divisionParentId?: number | null;
+  divisionParentName?: string | null;
+  divisionParentCode?: string | null;
 }
 
 interface ScopeParams {
@@ -131,11 +129,32 @@ interface ImportRowInput extends CountdownTemplateRow {
 }
 
 export interface CountdownReferenceOptions {
-  divisions: Array<{ label: string; value: string }>;
+  divisions: Array<{
+    label: string;
+    value: string;
+    code?: string | null;
+    parentId?: number | null;
+    parentName?: string | null;
+    parentCode?: string | null;
+  }>;
   units: Array<{ label: string; value: string }>;
-  panels: Array<{ label: string; value: string }>;
+  panels: Array<{
+    label: string;
+    value: string;
+    carId?: string | null;
+    section?: string | null;
+    category?: string | null;
+  }>;
   sections?: Array<{ label: string; value: string }>;
-  jobTypes: Array<{ label: string; value: string }>;
+  jobTypes: Array<{
+    label: string;
+    value: string;
+    divisionId?: number | null;
+    divisionName?: string | null;
+    divisionParentId?: number | null;
+    divisionParentName?: string | null;
+    divisionParentCode?: string | null;
+  }>;
   taskCategories?: Array<{ label: string; value: string }>;
 }
 
@@ -222,11 +241,13 @@ function buildFilterClauses(query: CountdownGridQuery, params: unknown[]): strin
         OR COALESCE(mp.section, '') LIKE ?
         OR COALESCE(mp.name, '') LIKE ?
         OR COALESCE(mjt.job_name, '') LIKE ?
+        OR COALESCE(cd.temuan_awal, '') LIKE ?
+        OR COALESCE(cd.keterangan, '') LIKE ?
         OR COALESCE(cd.task_category, '') LIKE ?
         OR COALESCE(cd.status, '') LIKE ?
       )`,
     );
-    params.push(value, value, value, value, value, value, value, value);
+    params.push(value, value, value, value, value, value, value, value, value, value);
   }
 
   for (const filter of query.filters) {
@@ -286,6 +307,70 @@ function mapReferenceOption(row: ReferenceOptionRow): { label: string; value: st
   };
 }
 
+function mapPanelReference(row: ReferenceOptionRow): CountdownReferenceOptions["panels"][number] {
+  return {
+    label: String(row.label),
+    value: String(row.value),
+    carId: row.carId ?? null,
+    section: row.section ?? null,
+    category: row.category ?? null,
+  };
+}
+
+function mapDivisionReference(row: ReferenceOptionRow): CountdownReferenceOptions["divisions"][number] {
+  return {
+    label: String(row.label),
+    value: String(row.value),
+    code: row.code ?? null,
+    parentId: row.parentId ?? null,
+    parentName: row.parentName ?? null,
+    parentCode: row.parentCode ?? null,
+  };
+}
+
+function mapJobTypeReference(row: ReferenceOptionRow): CountdownReferenceOptions["jobTypes"][number] {
+  return {
+    label: String(row.label),
+    value: String(row.value),
+    divisionId: row.divisionId ?? null,
+    divisionName: row.divisionName ?? null,
+    divisionParentId: row.divisionParentId ?? null,
+    divisionParentName: row.divisionParentName ?? null,
+    divisionParentCode: row.divisionParentCode ?? null,
+  };
+}
+
+async function checkAllowedJobType(
+  connection: Pick<PoolConnection, "query">,
+  jobTypeId: string,
+  divisionId: number,
+): Promise<boolean> {
+  const [rows] = await connection.query<ValidationPacket[]>(
+    `
+      SELECT mjt.id
+      FROM master_job_types mjt
+      LEFT JOIN sm_divisi selected_division ON selected_division.id = ?
+      LEFT JOIN sm_divisi parent_division ON parent_division.id = selected_division.parent_id
+      WHERE mjt.id = ?
+        AND (
+          mjt.division_id IS NULL
+          OR mjt.division_id = ?
+          OR (
+            mjt.division_id = selected_division.parent_id
+            AND (
+              UPPER(COALESCE(parent_division.name, '')) = 'MECHANIC'
+              OR UPPER(COALESCE(parent_division.code, '')) = 'MECHANIC'
+            )
+          )
+        )
+      LIMIT 1
+    `,
+    [divisionId, jobTypeId, divisionId],
+  );
+
+  return rows.length > 0;
+}
+
 function buildOrderBy(sortBy: CountdownGridQuery["sortBy"], direction: "asc" | "desc"): string {
   const columnMap: Record<CountdownGridQuery["sortBy"], string> = {
     updatedAt: "cd.updated_at",
@@ -329,8 +414,10 @@ function countdownSelectSql(): string {
       cd.prerequisite_core_id AS prerequisiteCoreId,
       cd.ref_taks_id AS refWoId,
       cd.revision_reason AS note,
+      cd.temuan_awal AS temuanAwal,
+      cd.keterangan AS keterangan,
       cd.job_type_id AS jobTypeId,
-      mjt.job_name AS jobTypeName,
+      COALESCE(mjt.job_name, cd.section_name) AS jobTypeName,
       ROUND(COALESCE(cd.target_hours_initial, 0), 2) AS targetHoursInitial,
       ROUND(COALESCE(cd.time_extension_hours, 0), 2) AS timeExtensionHours,
       ROUND(COALESCE(cd.target_hours_revised, cd.target_hours_initial + cd.time_extension_hours, cd.target_hours_initial), 2) AS targetHoursRevised,
@@ -365,6 +452,8 @@ function mapCountdownBoardRow(row: CountdownBoardRowPacket): CountdownBoardRow {
     prerequisiteCoreId: row.prerequisiteCoreId,
     refWoId: row.refWoId,
     note: row.note,
+    temuanAwal: row.temuanAwal,
+    keterangan: row.keterangan,
     jobTypeId: row.jobTypeId,
     jobTypeName: row.jobTypeName,
     targetHoursInitial: Number(row.targetHoursInitial ?? 0),
@@ -508,6 +597,8 @@ interface NormalizedCountdownMutationInput {
   prerequisiteCoreId: string | null;
   refWoId: string | null;
   note: string | null;
+  temuanAwal: string | null;
+  keterangan: string | null;
   status: "PLAN" | "PROSES" | "QC_READY" | "DONE";
 }
 
@@ -539,6 +630,8 @@ async function normalizeAndValidateCountdownMutation(
   const prerequisiteCoreId = toNullableString(input.prerequisiteCoreId);
   const refWoId = toNullableString(input.refWoId);
   const note = toNullableString(input.note);
+  const temuanAwal = toNullableString(input.temuanAwal);
+  const keterangan = toNullableString(input.keterangan);
   const status = toStringValue(input.status ?? "PLAN").toUpperCase();
 
   if (!carId) {
@@ -614,11 +707,7 @@ async function normalizeAndValidateCountdownMutation(
   }
 
   if (jobTypeId) {
-    const validJobType = await checkExists(
-      connection,
-      "SELECT id FROM master_job_types WHERE id = ? AND (division_id IS NULL OR division_id = ?) LIMIT 1",
-      [jobTypeId, divisionId],
-    );
+    const validJobType = await checkAllowedJobType(connection, jobTypeId, divisionId);
     if (!validJobType) {
       throw new Error("COUNTDOWN_JOB_TYPE_NOT_FOUND");
     }
@@ -659,6 +748,8 @@ async function normalizeAndValidateCountdownMutation(
     prerequisiteCoreId,
     refWoId,
     note,
+    temuanAwal,
+    keterangan,
     status: status as NormalizedCountdownMutationInput["status"],
   };
 }
@@ -772,7 +863,7 @@ export class CountdownRepository {
     const divisionWhereParams: unknown[] = [];
     let divisionWhere = "";
     if (!params.scope.canViewAllUnits && params.scope.divisionIds.length > 0) {
-      divisionWhere = `WHERE id IN (${params.scope.divisionIds.map(() => "?").join(", ")})`;
+      divisionWhere = `WHERE d.id IN (${params.scope.divisionIds.map(() => "?").join(", ")})`;
       divisionWhereParams.push(...params.scope.divisionIds);
     }
 
@@ -801,10 +892,17 @@ export class CountdownRepository {
     const [divisionRows, unitRows, panelRows, sectionRows, jobTypeRows] = await Promise.all([
       pool.query<ReferenceOptionRow[]>(
         `
-          SELECT id AS value, name AS label
-          FROM sm_divisi
+          SELECT
+            d.id AS value,
+            d.name AS label,
+            d.code AS code,
+            d.parent_id AS parentId,
+            parent.name AS parentName,
+            parent.code AS parentCode
+          FROM sm_divisi d
+          LEFT JOIN sm_divisi parent ON parent.id = d.parent_id
           ${divisionWhere}
-          ORDER BY name ASC
+          ORDER BY d.name ASC
         `,
         divisionWhereParams,
       ),
@@ -819,40 +917,55 @@ export class CountdownRepository {
       ),
       pool.query<ReferenceOptionRow[]>(
         `
-          SELECT id AS value, name AS label
+          SELECT
+            id AS value,
+            name AS label,
+            car_id AS carId,
+            section,
+            category
           FROM master_panels
-          ORDER BY name ASC
+          WHERE is_active = 1
+          ORDER BY section ASC, name ASC
         `,
       ),
       pool.query<ReferenceOptionRow[]>(
         `
           SELECT DISTINCT section AS value, section AS label
           FROM master_panels
-          WHERE section IS NOT NULL AND TRIM(section) <> ''
+          WHERE is_active = 1
+            AND section IS NOT NULL
+            AND TRIM(section) <> ''
           ORDER BY section ASC
         `,
       ),
       pool.query<ReferenceOptionRow[]>(
         `
-          SELECT id AS value, job_name AS label
-          FROM master_job_types
-          WHERE job_name IS NOT NULL
-          ORDER BY job_name ASC
+          SELECT
+            mjt.id AS value,
+            mjt.job_name AS label,
+            mjt.division_id AS divisionId,
+            division.name AS divisionName,
+            division.parent_id AS divisionParentId,
+            parent.name AS divisionParentName,
+            parent.code AS divisionParentCode
+          FROM master_job_types mjt
+          LEFT JOIN sm_divisi division ON division.id = mjt.division_id
+          LEFT JOIN sm_divisi parent ON parent.id = division.parent_id
+          WHERE mjt.job_name IS NOT NULL
+          ORDER BY mjt.job_name ASC
         `,
       ),
     ]);
 
     return {
-      divisions: divisionRows[0].map(mapReferenceOption),
+      divisions: divisionRows[0].map(mapDivisionReference),
       units: unitRows[0].map(mapReferenceOption),
-      panels: panelRows[0].map(mapReferenceOption),
+      panels: panelRows[0].map(mapPanelReference),
       sections: sectionRows[0].map(mapReferenceOption),
-      jobTypes: jobTypeRows[0].map(mapReferenceOption),
+      jobTypes: jobTypeRows[0].map(mapJobTypeReference),
       taskCategories: [
         { label: "Main", value: "MAIN" },
         { label: "Additional", value: "ADDITIONAL" },
-        { label: "WO", value: "WO" },
-        { label: "WOV", value: "WOV" },
       ],
     };
   }
@@ -904,8 +1017,10 @@ export class CountdownRepository {
             requested_extension_hours,
             requested_deadline,
             revision_reason,
+            temuan_awal,
+            keterangan,
             last_qc_level
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 0, ?, NULL, ?, ?, ?, NULL, NULL, 0, ?, ?, NULL, 0, NULL, ?, NULL)
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 0, ?, NULL, ?, ?, ?, NULL, NULL, 0, ?, ?, NULL, 0, NULL, ?, ?, ?, NULL)
         `,
         [
           countdownId,
@@ -928,6 +1043,8 @@ export class CountdownRepository {
           now,
           params.employeeId,
           normalized.note,
+          normalized.temuanAwal,
+          normalized.keterangan,
         ],
       );
 
@@ -1018,7 +1135,9 @@ export class CountdownRepository {
             deadline_date = ?,
             updated_at = ?,
             user_update = ?,
-            revision_reason = ?
+            revision_reason = ?,
+            temuan_awal = ?,
+            keterangan = ?
           WHERE id = ?
         `,
         [
@@ -1040,6 +1159,8 @@ export class CountdownRepository {
           new Date(),
           params.employeeId,
           normalized.note,
+          normalized.temuanAwal,
+          normalized.keterangan,
           countdownId,
         ],
       );
@@ -1120,7 +1241,7 @@ export class CountdownRepository {
     const connection = await this.poolFactory().getConnection();
     const issues: Array<{ rowNumber: number; field: string; message: string; value: string | null }> = [];
     let inserted = 0;
-    let updated = 0;
+    const updated = 0;
     let rejected = 0;
 
     try {
@@ -1139,6 +1260,8 @@ export class CountdownRepository {
         const prerequisiteCoreId = toNullableString(row.prerequisiteCoreId);
         const refWoId = toNullableString(row.refWoId);
         const note = toNullableString(row.note);
+        const temuanAwal = toNullableString(row.temuanAwal);
+        const keterangan = toNullableString(row.keterangan);
 
         if (!carId) {
           issues.push(mapImportIssue(row.rowNumber, "carId", "carId wajib diisi.", row.carId));
@@ -1233,11 +1356,7 @@ export class CountdownRepository {
         }
 
         if (jobTypeId) {
-          const validJobType = await checkExists(
-            connection,
-            "SELECT id FROM master_job_types WHERE id = ? AND (division_id IS NULL OR division_id = ?) LIMIT 1",
-            [jobTypeId, divisionId],
-          );
+          const validJobType = await checkAllowedJobType(connection, jobTypeId, divisionId);
           if (!validJobType) {
             issues.push(mapImportIssue(row.rowNumber, "jobTypeId", "jobTypeId tidak ditemukan atau tidak cocok dengan divisi.", row.jobTypeId));
             rejected += 1;
@@ -1307,8 +1426,10 @@ export class CountdownRepository {
               requested_extension_hours,
               requested_deadline,
               revision_reason,
+              temuan_awal,
+              keterangan,
               last_qc_level
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 0, ?, 0, 'PLAN', NULL, ?, ?, ?, NULL, NULL, 0, ?, ?, NULL, 0, NULL, ?, NULL)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 0, ?, 0, 'PLAN', NULL, ?, ?, ?, NULL, NULL, 0, ?, ?, NULL, 0, NULL, ?, ?, ?, NULL)
           `,
           [
             countdownId,
@@ -1329,6 +1450,8 @@ export class CountdownRepository {
             now,
             params.employeeId,
             note,
+            temuanAwal,
+            keterangan,
           ],
         );
 

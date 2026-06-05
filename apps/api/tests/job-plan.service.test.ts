@@ -156,8 +156,8 @@ class InMemoryJobPlanRepository implements JobPlanRepository {
     return;
   }
 
-  async exportCsv() {
-    return "planId,status\n";
+  async getApproversForCars() {
+    return [];
   }
 }
 

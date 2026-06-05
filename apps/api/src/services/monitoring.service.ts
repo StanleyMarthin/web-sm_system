@@ -40,7 +40,7 @@ function todayIsoDate(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-function sanitizeMonitoringQuery(query: GridQueryState, date?: string): MonitoringQuery {
+function sanitizeMonitoringQuery(query: GridQueryState, date?: string, dateTo?: string): MonitoringQuery {
   const allowedSorts = new Set([
     "taskDate",
     "unitName",
@@ -59,6 +59,9 @@ function sanitizeMonitoringQuery(query: GridQueryState, date?: string): Monitori
     "actualStatus",
   ]);
 
+  const resolvedDate = date?.trim() || todayIsoDate();
+  const resolvedDateTo = dateTo?.trim();
+
   return {
     page: query.page,
     limit: query.limit,
@@ -67,15 +70,18 @@ function sanitizeMonitoringQuery(query: GridQueryState, date?: string): Monitori
     sortDirection: query.sortDirection,
     view: query.view,
     filters: query.filters.filter((filter) => allowedFilters.has(filter.field)),
-    date: date?.trim() || todayIsoDate(),
+    date: resolvedDate,
+    dateTo: resolvedDateTo && resolvedDateTo !== resolvedDate
+      ? resolvedDateTo < resolvedDate ? resolvedDate : resolvedDateTo
+      : undefined,
   };
 }
 
 export interface MonitoringService {
-  listToday(session: WebSession, query: GridQueryState, date?: string, mode?: MonitoringFilterMode): Promise<MonitoringGridResult>;
-  listOvertime(session: WebSession, query: GridQueryState, date?: string): Promise<MonitoringGridResult>;
-  listNoStart(session: WebSession, date?: string): Promise<MonitoringTaskRecord[]>;
-  listNoSubmit(session: WebSession, date?: string): Promise<MonitoringTaskRecord[]>;
+  listToday(session: WebSession, query: GridQueryState, date?: string, mode?: MonitoringFilterMode, dateTo?: string): Promise<MonitoringGridResult>;
+  listOvertime(session: WebSession, query: GridQueryState, date?: string, dateTo?: string): Promise<MonitoringGridResult>;
+  listNoStart(session: WebSession, date?: string, dateTo?: string): Promise<MonitoringTaskRecord[]>;
+  listNoSubmit(session: WebSession, date?: string, dateTo?: string): Promise<MonitoringTaskRecord[]>;
   listDivisionLoad(session: WebSession, date?: string, mode?: MonitoringFilterMode, span?: "daily" | "weekly", dateTo?: string): Promise<MonitoringDivisionLoadRecord[]>;
   getDivisionDetail(session: WebSession, divisionId: number, date?: string, mode?: MonitoringFilterMode, span?: "daily" | "weekly", dateTo?: string): Promise<MonitoringDivisionDetailResult>;
   listEmployeeTimesheet(session: WebSession, date: string, dateTo: string): Promise<Array<{
@@ -111,19 +117,21 @@ export class DefaultMonitoringService implements MonitoringService {
     query: GridQueryState,
     date?: string,
     mode: MonitoringFilterMode = "normal",
+    dateTo?: string,
   ): Promise<MonitoringGridResult> {
-    return this.listByMode(session, query, mode === "overtime" ? "overtime" : mode === "all" ? "all" : "today", date);
+    return this.listByMode(session, query, mode === "overtime" ? "overtime" : mode === "all" ? "all" : "today", date, dateTo);
   }
 
   async listOvertime(
     session: WebSession,
     query: GridQueryState,
     date?: string,
+    dateTo?: string,
   ): Promise<MonitoringGridResult> {
-    return this.listByMode(session, query, "overtime", date);
+    return this.listByMode(session, query, "overtime", date, dateTo);
   }
 
-  async listNoStart(session: WebSession, date?: string): Promise<MonitoringTaskRecord[]> {
+  async listNoStart(session: WebSession, date?: string, dateTo?: string): Promise<MonitoringTaskRecord[]> {
     const normalized = applyDefaultDivisionIdFilter(
       session,
       sanitizeMonitoringQuery(
@@ -137,6 +145,7 @@ export class DefaultMonitoringService implements MonitoringService {
           filters: [],
         },
         date,
+        dateTo,
       ),
     );
 
@@ -150,7 +159,7 @@ export class DefaultMonitoringService implements MonitoringService {
     return payload.rows;
   }
 
-  async listNoSubmit(session: WebSession, date?: string): Promise<MonitoringTaskRecord[]> {
+  async listNoSubmit(session: WebSession, date?: string, dateTo?: string): Promise<MonitoringTaskRecord[]> {
     const normalized = applyDefaultDivisionIdFilter(
       session,
       sanitizeMonitoringQuery(
@@ -164,6 +173,7 @@ export class DefaultMonitoringService implements MonitoringService {
           filters: [],
         },
         date,
+        dateTo,
       ),
     );
 
@@ -244,10 +254,11 @@ export class DefaultMonitoringService implements MonitoringService {
     query: GridQueryState,
     mode: "all" | "today" | "overtime",
     date?: string,
+    dateTo?: string,
   ): Promise<MonitoringGridResult> {
     const normalized = applyDefaultDivisionIdFilter(
       session,
-      sanitizeMonitoringQuery(query, date),
+      sanitizeMonitoringQuery(query, date, dateTo),
     );
     const [payload, references, summary] = await Promise.all([
       this.repository.listTasks({
@@ -266,6 +277,7 @@ export class DefaultMonitoringService implements MonitoringService {
         employeeId: session.user.employeeId,
         scope: session.user.scope,
         date: normalized.date,
+        dateTo: normalized.dateTo,
       }),
     ]);
 

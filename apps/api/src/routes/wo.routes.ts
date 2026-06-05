@@ -1,5 +1,6 @@
 import { permissionCodes } from "@smsystem/permissions";
 import {
+  woApproveRequestSchema,
   woCreateRequestSchema,
   woRejectRequestSchema,
 } from "@smsystem/contracts/wo";
@@ -147,6 +148,42 @@ function mapWoError(request: Request, error: unknown): Response {
         "User aktif tidak memiliki divisi asal untuk membuat WO.",
         400,
         "MISSING_DIVISION",
+      );
+    }
+
+    if (error.message === "MISSING_KD_ASSIGNMENT") {
+      return errorResponse(
+        request,
+        "KD penerima wajib menentukan PIC dan jam kerja WO.",
+        400,
+        "MISSING_KD_ASSIGNMENT",
+      );
+    }
+
+    if (error.message === "WO_APPROVAL_FORBIDDEN") {
+      return errorResponse(
+        request,
+        "User aktif tidak berwenang menyetujui tahap WO ini.",
+        403,
+        "WO_APPROVAL_FORBIDDEN",
+      );
+    }
+
+    if (error.message === "WO_PANEL_REQUIRED") {
+      return errorResponse(
+        request,
+        "WO wajib memilih panel/part dari master panel.",
+        400,
+        "WO_PANEL_REQUIRED",
+      );
+    }
+
+    if (error.message === "WO_PANEL_NOT_FOUND") {
+      return errorResponse(
+        request,
+        "Panel/part WO tidak ditemukan di master panel unit.",
+        400,
+        "WO_PANEL_NOT_FOUND",
       );
     }
   }
@@ -340,9 +377,16 @@ export async function handleWoApproveRoute(
     return sessionResult.response;
   }
 
+  const parsedBody = request.headers.get("content-type")?.includes("application/json")
+    ? await parseJsonBody(request, woApproveRequestSchema)
+    : { success: true as const, data: woApproveRequestSchema.parse({}) };
+  if (!parsedBody.success) {
+    return parsedBody.response;
+  }
+
   try {
     const visibilitySession = applyRequestsVisibilityScope(sessionResult.session);
-    const result = await woService.approve(visibilitySession, woId);
+    const result = await woService.approve(visibilitySession, woId, parsedBody.data);
     return successResponse(request, "WO berhasil diapprove.", { ...result });
   } catch (error) {
     return mapWoError(request, error);

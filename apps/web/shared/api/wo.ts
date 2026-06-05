@@ -1,4 +1,5 @@
 import type {
+  WoApproveRequest,
   WoCreateRequest,
   WoRejectRequest,
 } from "@smsystem/contracts/wo";
@@ -213,8 +214,8 @@ async function mutateWo(path: string, body?: Record<string, unknown>) {
   };
 }
 
-export function approveWo(woId: string) {
-  return mutateWo(`/api/wo/${woId}/approve`);
+export function approveWo(woId: string, input?: WoApproveRequest) {
+  return mutateWo(`/api/wo/${woId}/approve`, input);
 }
 
 export function markWoDone(woId: string) {

@@ -3,7 +3,7 @@
 import { Filter, X } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { SearchableSelect } from "@/shared/ui/compact";
+import { CompactDateRangeInput, SearchableSelect } from "@/shared/ui/compact";
 
 export interface FilterBarDivision {
   id: number;
@@ -129,22 +129,16 @@ export function DashboardFilterBar({
           className="h-7 border border-gray-300 dark:border-white/10 bg-white dark:bg-[#111114] px-2 text-[11px] font-mono text-gray-700 dark:text-white/60 outline-none focus:border-amber-500/40 [color-scheme:dark] cursor-pointer"
         />
       ) : (
-        <div className="flex items-center gap-1.5 text-[12px]">
-          <input
-            type="date"
-            value={dateFrom}
-            onChange={(e) => setDateFrom(e.target.value)}
-            className="h-7 border border-gray-300 dark:border-white/10 bg-white dark:bg-[#111114] px-2 text-[11px] font-mono text-gray-700 dark:text-white/60 outline-none focus:border-amber-500/40 [color-scheme:dark] cursor-pointer"
-          />
-          <span className="text-gray-500 dark:text-white/30">–</span>
-          <input
-            type="date"
-            value={dateTo}
-            min={dateFrom}
-            onChange={(e) => setDateTo(e.target.value)}
-            className="h-7 border border-gray-300 dark:border-white/10 bg-white dark:bg-[#111114] px-2 text-[11px] font-mono text-gray-700 dark:text-white/60 outline-none focus:border-amber-500/40 [color-scheme:dark] cursor-pointer"
-          />
-        </div>
+        <CompactDateRangeInput
+          from={dateFrom}
+          to={dateTo}
+          onChange={(range) => {
+            const nextTo = range.to < range.from ? range.from : range.to;
+            setDateFrom(range.from);
+            setDateTo(nextTo);
+          }}
+          className="w-64"
+        />
       )}
 
       {/* Separator */}

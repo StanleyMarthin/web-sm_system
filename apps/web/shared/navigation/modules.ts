@@ -5,7 +5,6 @@ import {
 } from "@/modules/warehouse/config/workspace";
 
 export type NavigationIcon = "dashboard" | "grid" | "units" | "countdown" | "users" | "roles";
-
 export interface NavigationSubItem {
   id: string;
   label: string;
@@ -21,6 +20,7 @@ export interface NavigationItem {
   permission?: PermissionCode;
   icon: NavigationIcon;
   subItems?: NavigationSubItem[];
+  group?: string;
 }
 
 const warehouseOverview = getWarehouseSectionDefinition("overview");
@@ -42,22 +42,17 @@ const navigationModules: NavigationItem[] = [
     href: "/units",
     permission: permissionCodes.viewUnits,
     icon: "units",
-  },
-  {
-    id: "countdown",
-    label: "Countdown",
-    href: "/countdown",
-    permission: permissionCodes.viewCountdown,
-    icon: "countdown",
+    group: "Production",
   },
   {
     id: "planning",
     label: "Planning",
     icon: "grid",
+    group: "Production",
     subItems: [
       {
         id: "planning-workspace",
-        label: "Rencana & ETA",
+        label: "Planning & ETA",
         href: "/planning",
         permission: permissionCodes.listCarProgress,
       },
@@ -69,7 +64,7 @@ const navigationModules: NavigationItem[] = [
       },
       {
         id: "planning-spl",
-        label: "SPL",
+        label: "Rekomendasi SPL",
         href: "/planning/spl",
         permission: permissionCodes.listCarProgress,
       },
@@ -82,93 +77,12 @@ const navigationModules: NavigationItem[] = [
     ],
   },
   {
-    id: "requests",
-    label: "WO / WOV / PR",
-    href: "/requests/outstanding",
-    permission: permissionCodes.profileView,
-    icon: "grid",
-    subItems: [
-      {
-        id: "requests-outstanding",
-        label: "Dashboard",
-        href: "/requests/outstanding",
-        permission: permissionCodes.profileView,
-      },
-      {
-        id: "requests-board",
-        label: "Request",
-        href: "/requests/board",
-        permission: permissionCodes.profileView,
-      },
-      {
-        id: "requests-list",
-        label: "Monitoring List",
-        href: "/requests/list",
-        permission: permissionCodes.profileView,
-      },
-    ],
-  },
-  {
-    id: "warehouse",
-    label: "Warehouse",
-    href: warehouseOverview.href,
-    permission: permissionCodes.warehouseView,
-    icon: "grid",
-    subItems: [
-      {
-        id: "warehouse-dashboard",
-        label: warehouseOverview.label,
-        href: warehouseOverview.href,
-        permission: warehouseOverview.permission,
-      },
-      {
-        id: "warehouse-transactions",
-        label: warehouseTransactions.label,
-        href: warehouseTransactions.href,
-        permission: warehouseTransactions.permission,
-      },
-      {
-        id: "warehouse-stock-card",
-        label: warehouseStockCard.label,
-        href: warehouseStockCard.href,
-        permission: warehouseStockCard.permission,
-      },
-      {
-        id: "warehouse-locations",
-        label: warehouseLocations.label,
-        href: warehouseLocations.href,
-        permission: warehouseLocations.permission,
-      },
-    ],
-  },
-  {
-    id: "gallery",
-    label: "Gallery",
-    href: "/gallery",
-    permission: permissionCodes.galleryView,
-    icon: "grid",
-  },
-  {
-    id: "invoice",
-    label: "Invoice",
-    href: "/invoice/wo-bubut",
-    permission: permissionCodes.bubutInvoiceView,
-    icon: "grid",
-    subItems: [
-      {
-        id: "invoice-wo-bubut",
-        label: "WO Bubut",
-        href: "/invoice/wo-bubut",
-        permission: permissionCodes.bubutInvoiceView,
-      },
-    ],
-  },
-  {
-    id: "reports",
-    label: "Reports",
-    href: "/reports",
-    permission: permissionCodes.reportView,
-    icon: "grid",
+    id: "countdown",
+    label: "Countdown",
+    href: "/countdown",
+    permission: permissionCodes.viewCountdown,
+    icon: "countdown",
+    group: "Production",
   },
   {
     id: "monitoring",
@@ -176,6 +90,7 @@ const navigationModules: NavigationItem[] = [
     href: "/monitoring",
     permission: permissionCodes.listCarProgress,
     icon: "grid",
+    group: "Operations",
     subItems: [
       {
         id: "job-plan",
@@ -204,11 +119,12 @@ const navigationModules: NavigationItem[] = [
     ],
   },
   {
-    id: "issues",
-    label: "Issue Log",
-    href: "/issues",
-    permission: permissionCodes.qcView,
+    id: "gallery",
+    label: "Gallery",
+    href: "/gallery",
+    permission: permissionCodes.galleryView,
     icon: "grid",
+    group: "Operations",
   },
   {
     id: "qa",
@@ -216,6 +132,7 @@ const navigationModules: NavigationItem[] = [
     href: "/qc/dashboard",
     permission: permissionCodes.qcView,
     icon: "grid",
+    group: "Operations",
     subItems: [
       {
         id: "qa-dashboard",
@@ -232,18 +149,126 @@ const navigationModules: NavigationItem[] = [
     ],
   },
   {
+    id: "issues",
+    label: "Issue Log",
+    href: "/issues",
+    permission: permissionCodes.qcView,
+    icon: "grid",
+    group: "Operations",
+  },
+  {
+    id: "requests",
+    label: "WO / WOV / PR",
+    href: "/requests/outstanding",
+    permission: permissionCodes.profileView,
+    icon: "grid",
+    group: "Procurement",
+    subItems: [
+      {
+        id: "requests-outstanding",
+        label: "Dashboard",
+        href: "/requests/outstanding",
+        permission: permissionCodes.profileView,
+      },
+      {
+        id: "requests-board",
+        label: "Request",
+        href: "/requests/board",
+        permission: permissionCodes.profileView,
+      },
+      {
+        id: "requests-list",
+        label: "Monitoring List",
+        href: "/requests/list",
+        permission: permissionCodes.profileView,
+      },
+    ],
+  },
+  {
+    id: "invoice",
+    label: "Invoice",
+    href: "/invoice/wo-bubut",
+    permission: permissionCodes.bubutInvoiceView,
+    icon: "grid",
+    group: "Procurement",
+    subItems: [
+      {
+        id: "invoice-wo-bubut",
+        label: "WO Bubut",
+        href: "/invoice/wo-bubut",
+        permission: permissionCodes.bubutInvoiceView,
+      },
+    ],
+  },
+  {
+    id: "reports",
+    label: "Reports",
+    href: "/reports",
+    permission: permissionCodes.reportView,
+    icon: "grid",
+    group: "Procurement",
+  },
+  {
+    id: "warehouse",
+    label: "Warehouse",
+    href: warehouseOverview.href,
+    permission: permissionCodes.warehouseView,
+    icon: "grid",
+    group: "Inventory",
+    subItems: [
+      {
+        id: "warehouse-dashboard",
+        label: warehouseOverview.label,
+        href: warehouseOverview.href,
+        permission: warehouseOverview.permission,
+      },
+      {
+        id: "warehouse-transactions",
+        label: warehouseTransactions.label,
+        href: warehouseTransactions.href,
+        permission: warehouseTransactions.permission,
+      },
+      {
+        id: "warehouse-stock-card",
+        label: warehouseStockCard.label,
+        href: warehouseStockCard.href,
+        permission: warehouseStockCard.permission,
+      },
+      {
+        id: "warehouse-locations",
+        label: warehouseLocations.label,
+        href: warehouseLocations.href,
+        permission: warehouseLocations.permission,
+      },
+    ],
+  },
+  {
     id: "users",
     label: "User Management",
     href: "/dashboard/users",
     permission: permissionCodes.manageUsers,
     icon: "users",
-  },
-  {
-    id: "roles",
-    label: "Role Matrix",
-    href: "/dashboard/roles",
-    permission: permissionCodes.manageUsers,
-    icon: "roles",
+    group: "Admin",
+    subItems: [
+      {
+        id: "users-list",
+        label: "Users",
+        href: "/dashboard/users",
+        permission: permissionCodes.manageUsers,
+      },
+      {
+        id: "roles-matrix",
+        label: "Role Matrix",
+        href: "/dashboard/roles",
+        permission: permissionCodes.manageUsers,
+      },
+      {
+        id: "divisions-management",
+        label: "Divisi",
+        href: "/dashboard/divisions",
+        permission: permissionCodes.manageUsers,
+      },
+    ],
   },
 ];
 

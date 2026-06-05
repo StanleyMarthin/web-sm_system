@@ -5,6 +5,7 @@ import { createApiFetchHandler } from "@/app";
 import type { AuthService } from "@/services/auth/auth.service";
 import type { WebSession } from "@/services/auth/session.service";
 import type { MonitoringService } from "@/services/monitoring.service";
+import type { MonitoringTaskRecord } from "@smsystem/contracts/monitoring";
 
 const sampleUser: AuthUser = {
   employeeId: "SM-03.004",
@@ -60,7 +61,7 @@ function createStubAuthService(session: WebSession): AuthService {
 }
 
 function createStubMonitoringService(): MonitoringService {
-  const taskRow = {
+  const taskRow: MonitoringTaskRecord = {
     planId: "PLAN-1",
     coreId: "CD-1",
     carId: "CAR-1",
@@ -72,15 +73,30 @@ function createStubMonitoringService(): MonitoringService {
     employeeName: "Agus Rusmawan",
     taskDate: "2026-05-14",
     panelName: "Dashboard",
+    masterJobName: "Turun Dashboard",
     jobDescription: "Turunkan dashboard",
+    instructionText: "Turunkan dashboard",
+    targetDailyHours: 4,
+    targetTotalHours: 8,
     planStatus: "ONPROGRESS",
     actualStatus: "onprogress",
+    executionStatus: "ONPROGRESS",
     countdownStatus: "PROSES",
     progressPercent: 25,
     totalActualHours: 1.5,
     remainingHours: 6.5,
     latestStartTime: "2026-05-14 08:00:00",
     latestFinishTime: null,
+    latestBreakDurationMinutes: 0,
+    actualStartTime: "2026-05-14 08:00:00",
+    actualBreakMinutes: 0,
+    actualFinishTime: null,
+    actualDurationHours: null,
+    qcStatus: "BELUM_QC",
+    qcResult: null,
+    qcNotes: null,
+    monitoringStatus: null,
+    monitoringResult: null,
     isOvertime: false,
     isStarted: true,
     isSubmitted: false,
@@ -123,7 +139,7 @@ function createStubMonitoringService(): MonitoringService {
         },
       };
     },
-    async listDivisionLoad(_session, _date, _mode = "normal", _span = "daily") {
+    async listDivisionLoad() {
       return [
         {
           divisionId: 12,
@@ -321,7 +337,8 @@ describe("monitoring routes", () => {
       authService: createStubAuthService(sampleSession),
       monitoringService: {
         ...createStubMonitoringService(),
-        async getDivisionDetail(_session, divisionId, _date, _mode = "normal", span = "daily") {
+        async getDivisionDetail(_session, divisionId, _date, mode = "normal", span = "daily") {
+          void mode;
           receivedDivisionId = divisionId;
           receivedSpan = span;
           return {
@@ -416,6 +433,72 @@ describe("monitoring routes", () => {
 
     expect(response.status).toBe(200);
     expect(receivedMode).toBe("all");
+  });
+
+  test("passes date range to main monitoring route", async () => {
+    let receivedDate: string | undefined;
+    let receivedDateTo: string | undefined;
+
+    const fetchHandler = createApiFetchHandler({
+      authService: createStubAuthService(sampleSession),
+      monitoringService: {
+        ...createStubMonitoringService(),
+        async listToday(_session, _query, date, mode = "normal", dateTo) {
+          void mode;
+          receivedDate = date;
+          receivedDateTo = dateTo;
+          return {
+            data: [],
+            meta: {
+              page: 1,
+              limit: 25,
+              total: 0,
+              totalPages: 1,
+              hasNext: false,
+              hasPrev: false,
+            },
+            query: {
+              page: 1,
+              limit: 25,
+              search: "",
+              sortBy: "taskDate",
+              sortDirection: "desc" as const,
+              view: null,
+              filters: [],
+              date: "2026-05-14",
+              dateTo: "2026-05-20",
+            },
+            references: {
+              divisions: [],
+              units: [],
+              employees: [],
+            },
+            summary: {
+              activeWork: 0,
+              noStart: 0,
+              noSubmit: 0,
+              delayRisk: 0,
+              overtimeCount: 0,
+            },
+          };
+        },
+      },
+    });
+
+    const response = await fetchHandler(
+      new Request("http://localhost/api/monitoring/today?date=2026-05-14&dateTo=2026-05-20", {
+        headers: {
+          cookie: `${SESSION_COOKIE_NAME}=session:SM-03.004:session-1`,
+        },
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(receivedDate).toBe("2026-05-14");
+    expect(receivedDateTo).toBe("2026-05-20");
+    expect(body.query.dateTo).toBe("2026-05-20");
+    expect(body.dateTo).toBe("2026-05-20");
   });
 
   test("returns no-start and no-submit task views", async () => {

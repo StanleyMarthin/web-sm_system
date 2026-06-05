@@ -45,6 +45,98 @@ describe("monitoring api client", () => {
               employeeName: "Agus Rusmawan",
               taskDate: "2026-05-14",
               panelName: "Dashboard",
+              masterJobName: "Turun Dashboard",
+              jobDescription: "Turunkan dashboard",
+              instructionText: "Turunkan dashboard",
+              targetDailyHours: 4,
+              targetTotalHours: 8,
+              planStatus: "ONPROGRESS",
+              actualStatus: "onprogress",
+              executionStatus: "ONPROGRESS",
+              countdownStatus: "PROSES",
+              progressPercent: 25,
+              totalActualHours: 1.5,
+              remainingHours: 6.5,
+              latestStartTime: "2026-05-14 08:00:00",
+              latestFinishTime: null,
+              latestBreakDurationMinutes: 0,
+              actualStartTime: "2026-05-14 08:00:00",
+              actualBreakMinutes: 0,
+              actualFinishTime: null,
+              actualDurationHours: null,
+              qcStatus: "BELUM_QC",
+              qcResult: null,
+              qcNotes: null,
+              monitoringStatus: null,
+              monitoringResult: null,
+              isOvertime: false,
+              isStarted: true,
+              isSubmitted: false,
+              hasDelayRisk: true,
+            },
+          ],
+          meta: {
+            page: 1,
+            limit: 25,
+            total: 1,
+            totalPages: 1,
+            hasNext: false,
+            hasPrev: false,
+          },
+          query: {
+            page: 1,
+            limit: 25,
+            search: "",
+            sortBy: "taskDate",
+            sortDirection: "desc",
+            view: null,
+            filters: [],
+            date: "2026-05-14",
+          },
+          references: {
+            divisions: [],
+            units: [],
+            employees: [],
+          },
+          summary: {
+            activeWork: 1,
+            noStart: 0,
+            noSubmit: 1,
+            delayRisk: 1,
+            overtimeCount: 0,
+          },
+        }),
+        { status: 200 },
+      );
+    }) as typeof fetch;
+
+    const result = await fetchMonitoringToday("session=abc", {});
+    expect(result.status).toBe(200);
+    expect(result.payload?.data[0]?.planId).toBe("PLAN-1");
+    expect(result.payload?.summary.noSubmit).toBe(1);
+  });
+
+  it("parses legacy monitoring payload while API is stale", async () => {
+    process.env.NEXT_PUBLIC_API_BASE_URL = "http://127.0.0.1:3203";
+
+    global.fetch = mock(async () => {
+      return new Response(
+        JSON.stringify({
+          success: true,
+          message: "ok",
+          data: [
+            {
+              planId: "PLAN-1",
+              coreId: "CD-1",
+              carId: "CAR-1",
+              unitName: "MB 500 SEL",
+              customerName: "Mr. Silmy",
+              divisionId: 12,
+              divisionName: "INTERIOR",
+              employeeId: "SM-11.002",
+              employeeName: "Agus Rusmawan",
+              taskDate: "2026-05-14",
+              panelName: "Dashboard",
               jobDescription: "Turunkan dashboard",
               planStatus: "ONPROGRESS",
               actualStatus: "onprogress",
@@ -97,8 +189,10 @@ describe("monitoring api client", () => {
 
     const result = await fetchMonitoringToday("session=abc", {});
     expect(result.status).toBe(200);
-    expect(result.payload?.data[0]?.planId).toBe("PLAN-1");
-    expect(result.payload?.summary.noSubmit).toBe(1);
+    expect(result.payload?.data[0]?.executionStatus).toBe("ONPROGRESS");
+    expect(result.payload?.data[0]?.masterJobName).toBe("Turunkan dashboard");
+    expect(result.payload?.data[0]?.actualStartTime).toBe("2026-05-14 08:00:00");
+    expect(result.payload?.data[0]?.qcStatus).toBe("BELUM_QC");
   });
 
   it("preserves division mode on division fetch", async () => {

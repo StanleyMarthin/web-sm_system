@@ -3,7 +3,7 @@
 import type { MonitoringDivisionLoadRecord } from "@smsystem/contracts/monitoring";
 import { RefreshCcw } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { ActionButton, CompactInput } from "@/shared/ui/compact";
+import { ActionButton, CompactDateInput, CompactDateRangeInput } from "@/shared/ui/compact";
 
 interface MonitoringDivisionShellProps {
   date: string;
@@ -21,19 +21,6 @@ function addDaysIso(baseDate: string, days: number): string {
   const nextMonth = String(nextDate.getUTCMonth() + 1).padStart(2, "0");
   const nextDay = String(nextDate.getUTCDate()).padStart(2, "0");
   return `${nextYear}-${nextMonth}-${nextDay}`;
-}
-
-function formatDisplayDate(value: string): string {
-  try {
-    return new Intl.DateTimeFormat("id-ID", {
-      day: "2-digit",
-      month: "long",
-      year: "numeric",
-      timeZone: "UTC",
-    }).format(new Date(`${value}T00:00:00.000Z`));
-  } catch {
-    return value;
-  }
 }
 
 function differenceInDaysInclusive(start: string, end: string): number {
@@ -100,21 +87,22 @@ export function MonitoringDivisionShell({
   }
 
   const resolvedDateTo = dateTo ?? (activeSpan === "weekly" ? addDaysIso(date, 6) : date);
-  function pushWeeklyRange(start: string, end: string) {
+  function applyRangeSelection(range: { from: string; to: string }) {
     const nextParams = new URLSearchParams(searchParams.toString());
-    const range = clampWeeklyRange(start, end);
-    nextParams.set("date", range.start);
-    nextParams.set("dateTo", range.end);
+
+    if (range.from === range.to) {
+      nextParams.set("date", range.from);
+      nextParams.delete("dateTo");
+      nextParams.set("span", "daily");
+      router.push(`${pathname}?${nextParams.toString()}`);
+      return;
+    }
+
+    const normalized = clampWeeklyRange(range.from, range.to);
+    nextParams.set("date", normalized.start);
+    nextParams.set("dateTo", normalized.end);
     nextParams.set("span", "weekly");
     router.push(`${pathname}?${nextParams.toString()}`);
-  }
-
-  function updateWeeklyStart(value: string) {
-    pushWeeklyRange(value, resolvedDateTo);
-  }
-
-  function updateWeeklyEnd(value: string) {
-    pushWeeklyRange(date, value);
   }
 
   function openDivisionDetail(divisionId: number) {
@@ -200,30 +188,16 @@ export function MonitoringDivisionShell({
             <div className="flex flex-wrap items-center gap-2">
               {activeSpan === "daily" ? (
                 <div className="w-40">
-                  <CompactInput
-                    type="date"
-                    value={date}
-                    onChange={(event) => pushDailyDate(event.target.value)}
-                  />
+                  <CompactDateInput value={date} onChange={pushDailyDate} className="w-64" />
                 </div>
               ) : (
-                <div className="flex flex-wrap items-center gap-2 border border-gray-300 dark:border-white/[0.05] bg-slate-50 dark:bg-[#0a0a0c] px-2 py-2">
-                  <div className="w-36">
-                    <CompactInput
-                      type="date"
-                      value={date}
-                      onChange={(event) => updateWeeklyStart(event.target.value)}
-                    />
-                  </div>
-                  <span className="text-[11px] text-gray-500 dark:text-white/30">s.d.</span>
-                  <div className="w-36">
-                    <CompactInput
-                      type="date"
-                      value={resolvedDateTo}
-                      onChange={(event) => updateWeeklyEnd(event.target.value)}
-                    />
-                  </div>
-                </div>
+                <CompactDateRangeInput
+                  from={date}
+                  to={resolvedDateTo}
+                  onChange={applyRangeSelection}
+                  selectionBehavior="single-or-range"
+                  className="w-64"
+                />
               )}
             </div>
           </div>

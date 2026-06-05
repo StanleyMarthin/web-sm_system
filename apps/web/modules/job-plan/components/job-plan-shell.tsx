@@ -27,7 +27,7 @@ import {
   X,
 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
   deleteJobPlanDrafts,
   saveJobPlanDraft,
@@ -42,12 +42,17 @@ import type {
 } from "@/shared/datagrid/types";
 import {
   ActionButton,
+  CompactDateInput,
+  CompactDateRangeInput,
   CompactInput,
   CompactSelect,
   CompactTextarea,
   FieldLabel,
+  MetricBar,
+  PageHeader,
 } from "@/shared/ui/compact";
 import { useSweetAlert } from "@/shared/ui/sweet-alert";
+import { humanizeCodeLabel } from "@/shared/format/humanize";
 
 interface JobPlanShellProps {
   title: string;
@@ -234,6 +239,31 @@ function addDaysIso(date: string, days: number): string {
   return `${current.getFullYear()}-${month}-${day}`;
 }
 
+const weekdayFormatter = new Intl.DateTimeFormat("id-ID", { weekday: "long" });
+const shortDateFormatter = new Intl.DateTimeFormat("id-ID", {
+  day: "2-digit",
+  month: "short",
+  year: "numeric",
+});
+
+function formatTaskDateWithDay(value: unknown): { dateLabel: string; dayLabel: string } {
+  const rawValue = typeof value === "string" ? value : "";
+  const isoDate = rawValue.includes("T") ? rawValue.split("T")[0] : rawValue.slice(0, 10);
+  const parsed = new Date(`${isoDate}T00:00:00`);
+
+  if (!isoDate || Number.isNaN(parsed.getTime())) {
+    return {
+      dateLabel: rawValue || "-",
+      dayLabel: "-",
+    };
+  }
+
+  return {
+    dateLabel: shortDateFormatter.format(parsed),
+    dayLabel: weekdayFormatter.format(parsed),
+  };
+}
+
 function differenceInDaysInclusive(start: string, end: string): number {
   const startDate = new Date(`${start}T00:00:00`).getTime();
   const endDate = new Date(`${end}T00:00:00`).getTime();
@@ -264,13 +294,13 @@ function clampWeeklyRange(start: string, end: string): { start: string; end: str
 function rowHasMeaningfulInput(row: WorkspaceRowState): boolean {
   return Boolean(
     row.referenceId ||
-      row.carId ||
-      row.panelId ||
-      row.jobTypeId ||
-      row.assignedUserId ||
-      row.targetHours ||
-      row.jobDescription.trim() ||
-      row.note.trim(),
+    row.carId ||
+    row.panelId ||
+    row.jobTypeId ||
+    row.assignedUserId ||
+    row.targetHours ||
+    row.jobDescription.trim() ||
+    row.note.trim(),
   );
 }
 
@@ -278,8 +308,8 @@ const sortOptions: SmartDataGridSortOption[] = [
   { label: "Tanggal", value: "taskDate" },
   { label: "Unit", value: "unitName" },
   { label: "PIC", value: "assignedUserName" },
-  { label: "Target Jam", value: "targetHours" },
-  { label: "Status", value: "status" },
+  { label: "Target (Jam)", value: "targetHours" },
+  { label: "Status Plan", value: "status" },
   { label: "Kapasitas", value: "availablePlanHours" },
   { label: "Progress", value: "progressPercent" },
   { label: "Dibuat", value: "createdAt" },
@@ -287,7 +317,6 @@ const sortOptions: SmartDataGridSortOption[] = [
 
 export function JobPlanShell({
   title,
-  description,
   mode,
   rows,
   meta,
@@ -336,7 +365,16 @@ export function JobPlanShell({
   const [exportOpen, setExportOpen] = useState(false);
   const countdownTransferHandledRef = useRef<string | null>(null);
 
-  const filters: SmartDataGridFilterDefinition[] = [];
+  const filters: SmartDataGridFilterDefinition[] = [
+    {
+      field: "isOvertime",
+      label: "Tipe",
+      options: [
+        { label: "Normal", value: "false" },
+        { label: "Lembur", value: "true" },
+      ],
+    },
+  ];
   const divisionFilterValue =
     state.filters.find((filter) => filter.field === "divisionId")?.value ?? "";
   const activeDailyDate = state.dateStart;
@@ -443,63 +481,6 @@ export function JobPlanShell({
     ].join("|");
   }, [mode, searchParams, state.dateStart]);
 
-  useEffect(() => {
-    if (!countdownTransferKey || countdownTransferHandledRef.current === countdownTransferKey) {
-      return;
-    }
-
-    countdownTransferHandledRef.current = countdownTransferKey;
-    const countdownId = searchParams.get("countdownId")?.trim() ?? "";
-    const selectedCountdown = references.countdowns.find(
-      (countdown) => countdown.value === countdownId,
-    );
-
-    if (!selectedCountdown) {
-      setError("Countdown yang dibuka belum tersedia di pilihan Job Plan. Cek filter divisi atau refresh data.");
-      return;
-    }
-
-    const divisionId = String(selectedCountdown.divisionId ?? searchParams.get("divisionId") ?? "");
-    if (!divisionId) {
-      setError("Countdown ini belum memiliki divisi, jadi draft Job Plan belum bisa dibuat.");
-      return;
-    }
-
-    const transferMode = mode === "overtime" ? "overtime" : "normal";
-    const sourceHours =
-      selectedCountdown.availablePlanHours ??
-      selectedCountdown.remainingHours ??
-      0;
-    const targetHours = sourceHours > 0 ? sourceHours : 0;
-    const row = applyInlineSchedule(
-      {
-        ...createEmptyInlineCreateRow(state.dateStart, divisionId),
-        carId: selectedCountdown.carId,
-        panelKey: selectedCountdown.panelName ?? selectedCountdown.panelSectionName ?? "-",
-        referenceId: selectedCountdown.value,
-        targetHours: formatDurationHHMM(targetHours),
-        jobDescription:
-          selectedCountdown.jobName ??
-          selectedCountdown.label ??
-          "",
-        note: `Sumber: Countdown ${selectedCountdown.value}`,
-      },
-      transferMode,
-    );
-
-    setMessage(null);
-    setError(null);
-    setAddMenuOpen(false);
-    setQuickCreateMode(transferMode);
-    setQuickCreateRows([row]);
-    setSelectedQuickCreateRowIds(new Set());
-  }, [
-    countdownTransferKey,
-    references.countdowns,
-    searchParams,
-    state.dateStart,
-  ]);
-
   function pushQuery(mutator: (params: URLSearchParams) => void) {
     const nextParams = new URLSearchParams(searchParams.toString());
     mutator(nextParams);
@@ -557,14 +538,13 @@ export function JobPlanShell({
     });
   }
 
-  function updateWeeklyStart(start: string) {
-    const range = clampWeeklyRange(start, activeRange.end);
-    switchToWeekly(range.start, range.end);
-  }
+  function applyDateSelection(range: { from: string; to: string }) {
+    if (range.from === range.to) {
+      switchToDaily(range.from);
+      return;
+    }
 
-  function updateWeeklyEnd(end: string) {
-    const range = clampWeeklyRange(activeRange.start, end);
-    switchToWeekly(range.start, range.end);
+    switchToWeekly(range.from, range.to);
   }
 
   function buildExportHref(format: "csv" | "xlsx" | "pdf" | "image"): string {
@@ -1022,10 +1002,10 @@ export function JobPlanShell({
     );
   }
 
-  function getInlinePreview(
+  const getInlinePreview = useCallback((
     row: InlineCreateRowState,
     requestedMode: Exclude<AddJobKind, "additional" | null> | null = quickCreateMode === "additional" ? null : quickCreateMode,
-  ) {
+  ) => {
     const targetHours = parseDurationHHMM(row.targetHours);
     if (!targetHours || targetHours <= 0 || !requestedMode) {
       return [];
@@ -1036,12 +1016,12 @@ export function JobPlanShell({
       requestedMode,
       targetHours,
     });
-  }
+  }, [quickCreateMode]);
 
-  function applyInlineSchedule(
+  const applyInlineSchedule = useCallback((
     row: InlineCreateRowState,
     requestedMode: Exclude<AddJobKind, "additional" | null> | null = quickCreateMode === "additional" ? null : quickCreateMode,
-  ): InlineCreateRowState {
+  ): InlineCreateRowState => {
     const preview = getInlinePreview(row, requestedMode);
     if (preview.length === 0) {
       return row;
@@ -1052,7 +1032,66 @@ export function JobPlanShell({
       startTime: row.startTimeTouched ? row.startTime : preview[0].startTime,
       finishTime: row.finishTimeTouched ? row.finishTime : preview[preview.length - 1].finishTime,
     };
-  }
+  }, [getInlinePreview, quickCreateMode]);
+
+  useEffect(() => {
+    if (!countdownTransferKey || countdownTransferHandledRef.current === countdownTransferKey) {
+      return;
+    }
+
+    countdownTransferHandledRef.current = countdownTransferKey;
+    const countdownId = searchParams.get("countdownId")?.trim() ?? "";
+    const selectedCountdown = references.countdowns.find(
+      (countdown) => countdown.value === countdownId,
+    );
+
+    if (!selectedCountdown) {
+      setError("Countdown yang dibuka belum tersedia di pilihan Job Plan. Cek filter divisi atau refresh data.");
+      return;
+    }
+
+    const divisionId = String(selectedCountdown.divisionId ?? searchParams.get("divisionId") ?? "");
+    if (!divisionId) {
+      setError("Countdown ini belum memiliki divisi, jadi draft Job Plan belum bisa dibuat.");
+      return;
+    }
+
+    const transferMode = mode === "overtime" ? "overtime" : "normal";
+    const sourceHours =
+      selectedCountdown.availablePlanHours ??
+      selectedCountdown.remainingHours ??
+      0;
+    const targetHours = sourceHours > 0 ? sourceHours : 0;
+    const row = applyInlineSchedule(
+      {
+        ...createEmptyInlineCreateRow(state.dateStart, divisionId),
+        carId: selectedCountdown.carId,
+        panelKey: selectedCountdown.panelName ?? selectedCountdown.panelSectionName ?? "-",
+        referenceId: selectedCountdown.value,
+        targetHours: formatDurationHHMM(targetHours),
+        jobDescription:
+          selectedCountdown.jobName ??
+          selectedCountdown.label ??
+          "",
+        note: `Sumber: Countdown ${selectedCountdown.value}`,
+      },
+      transferMode,
+    );
+
+    setMessage(null);
+    setError(null);
+    setAddMenuOpen(false);
+    setQuickCreateMode(transferMode);
+    setQuickCreateRows([row]);
+    setSelectedQuickCreateRowIds(new Set());
+  }, [
+    applyInlineSchedule,
+    countdownTransferKey,
+    mode,
+    references.countdowns,
+    searchParams,
+    state.dateStart,
+  ]);
 
   function addInlineCreateRow() {
     setQuickCreateRows((currentValue) => [
@@ -1441,12 +1480,40 @@ export function JobPlanShell({
 
   const columns: SmartDataGridColumn[] = [
     {
-      key: "taskDate",
-      label: "Tanggal",
-      kind: "mono",
+      key: "unitName",
+      label: "Unit",
       sticky: true,
       sortable: true,
+      sortKey: "unitName",
+      widthClassName: "min-w-[180px]",
+    },
+    {
+      key: "taskDate",
+      label: "Tanggal / Hari",
+      kind: "mono",
+      sortable: true,
       sortKey: "taskDate",
+      widthClassName: "min-w-[150px]",
+      renderCell: (value) => {
+        const dateMeta = formatTaskDateWithDay(value);
+        return (
+          <div className="space-y-0.5">
+            <p className="font-mono text-[11px] text-white/80">{dateMeta.dateLabel}</p>
+            <p className="text-[10px] uppercase tracking-[0.12em] text-amber-400/70">
+              {dateMeta.dayLabel}
+            </p>
+          </div>
+        );
+      },
+    },
+    {
+      key: "divisionName",
+      label: "Divisi",
+      sortable: true,
+      sortKey: "divisionName",
+      filterKey: "divisionId",
+      filterOptions: references.divisions,
+      widthClassName: "min-w-[180px]",
     },
     {
       key: "assignedUserName",
@@ -1455,6 +1522,7 @@ export function JobPlanShell({
       sortKey: "assignedUserName",
       filterKey: "assignedUserId",
       filterOptions: references.employees,
+      widthClassName: "min-w-[230px]",
       renderCell: (value, row) => (
         <div className="space-y-1">
           <p className="text-white">{String(value ?? "-")}</p>
@@ -1463,51 +1531,75 @@ export function JobPlanShell({
       ),
     },
     {
-      key: "unitName",
-      label: "Unit",
-      sortable: true,
-      sortKey: "unitName",
-      widthClassName: "min-w-[120px]",
-    },
-    {
       key: "panelName",
-      label: "Panel",
+      label: "Panel / Part",
       sortable: true,
       sortKey: "panelName",
-      widthClassName: "min-w-[180px]",
+      widthClassName: "min-w-[230px]",
     },
     {
       key: "jobName",
-      label: "Jobdesc",
+      label: "Job Description",
       sortable: true,
       sortKey: "jobName",
-      widthClassName: "min-w-[220px]",
+      widthClassName: "min-w-[260px]",
       renderCell: (_value, row) => (
         <span className="font-medium text-amber-300/80">
-          {String(row.jobName ?? row.panelName ?? "-")}
+          {String(row.masterJobName ?? row.jobName ?? row.panelName ?? "-")}
         </span>
       ),
     },
     {
       key: "jobDescription",
-      label: "Instruksi",
-      widthClassName: "min-w-[280px]",
+      label: "Instruksi Kerja",
+      widthClassName: "min-w-[320px]",
+      renderCell: (_value, row) => String(row.instructionText ?? row.jobDescription ?? "-"),
     },
     {
       key: "targetHours",
-      label: "Total Jam",
-      kind: "number",
+      label: "Target Hari Ini",
       align: "right",
       sortable: true,
       sortKey: "targetHours",
+      widthClassName: "min-w-[140px]",
+      renderCell: (_value, row) => {
+        const value =
+          row.targetDailyHours === null || row.targetDailyHours === undefined
+            ? row.targetHours
+            : row.targetDailyHours;
+        return Number(value ?? 0).toFixed(1);
+      },
     },
     {
-      key: "availablePlanHours",
-      label: "Kapasitas",
+      key: "targetTotalHours",
+      label: "Target Total",
       align: "right",
       sortable: true,
       sortKey: "availablePlanHours",
-      widthClassName: "min-w-[156px]",
+      widthClassName: "min-w-[140px]",
+      renderCell: (_value, row) => {
+        const targetTotalHours =
+          row.targetTotalHours === null || row.targetTotalHours === undefined
+            ? null
+            : Number(row.targetTotalHours);
+        return targetTotalHours === null ? "-" : targetTotalHours.toFixed(1);
+      },
+    },
+    {
+      key: "progressPercent",
+      label: "% Progress",
+      kind: "number",
+      align: "right",
+      sortable: true,
+      sortKey: "progressPercent",
+    },
+    {
+      key: "remainingHours",
+      label: "Sisa Target",
+      align: "right",
+      sortable: true,
+      sortKey: "remainingHours",
+      widthClassName: "min-w-[140px]",
       renderCell: (_value, row) => {
         const availablePlanHours =
           row.availablePlanHours === null || row.availablePlanHours === undefined
@@ -1521,13 +1613,13 @@ export function JobPlanShell({
         return (
           <div className="space-y-1 text-right">
             <p className="font-medium text-white">
-              {availablePlanHours !== null
-                ? `${formatDurationHHMM(availablePlanHours)} tersedia`
+              {remainingHours !== null
+                ? remainingHours.toFixed(1)
                 : "-"}
             </p>
             <p className="text-[10px] text-white/35">
-              {remainingHours !== null
-                ? `${formatDurationHHMM(remainingHours)} sisa kerja`
+              {availablePlanHours !== null
+                ? `${availablePlanHours.toFixed(1)} bisa diplan`
                 : "-"}
             </p>
           </div>
@@ -1535,26 +1627,46 @@ export function JobPlanShell({
       },
     },
     {
-      key: "startTime",
-      label: "Jam Mulai",
-      kind: "mono",
+      key: "planTimeRange",
+      label: "Jadwal",
       align: "center",
-      widthClassName: "min-w-[100px]",
+      widthClassName: "min-w-[140px]",
+      renderCell: (_value, row) => {
+        const planStart = row.startTime as string | null | undefined;
+        const planFinish = row.finishTime as string | null | undefined;
+        return (
+          <span className="font-mono text-[11px] text-white/70">
+            {planStart || "-"} — {planFinish || "-"}
+          </span>
+        );
+      },
     },
     {
-      key: "finishTime",
-      label: "Jam Selesai",
-      kind: "mono",
-      align: "center",
-      widthClassName: "min-w-[100px]",
-    },
-    {
-      key: "progressPercent",
-      label: "Progress %",
-      kind: "number",
-      align: "right",
-      sortable: true,
-      sortKey: "progressPercent",
+      key: "actualTimeRange",
+      label: "Waktu Aktual",
+      widthClassName: "min-w-[160px]",
+      renderCell: (_value, row) => {
+        const actualStart = row.actualStartTime as string | null | undefined;
+        const actualFinish = row.actualFinishTime as string | null | undefined;
+        const breakMins = Number(row.actualBreakMinutes ?? 0);
+
+        if (!actualStart && !actualFinish) {
+          return <span className="text-[11px] text-white/20">Belum ada aktual</span>;
+        }
+
+        return (
+          <div className="flex flex-col gap-1 text-[11px]">
+            <span className="font-mono text-white/80">
+              {actualStart || "-"} — {actualFinish || "-"}
+            </span>
+            {breakMins > 0 ? (
+              <span className="text-white/45">
+                Istirahat: <span className="font-mono text-amber-400/80">{breakMins}m</span>
+              </span>
+            ) : null}
+          </div>
+        );
+      },
     },
     {
       key: "status",
@@ -1565,11 +1677,28 @@ export function JobPlanShell({
       filterOptions: references.statuses,
       sortable: true,
       sortKey: "status",
+      renderCell: (_value, row) => {
+        const actualStatus = row.actualStatus as string | null | undefined;
+        const planStatus = row.status as string | null | undefined;
+        if (actualStatus === "DONE") {
+          return (
+            <span className="inline-flex items-center gap-1 border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.1em] text-amber-400">
+              Sudah Dikerjakan
+            </span>
+          );
+        }
+        // default: render plan status badge
+        return (
+          <span className="inline-flex items-center gap-1 border border-white/5 bg-[#111114] px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.1em] text-white/50">
+            {humanizeCodeLabel(planStatus)}
+          </span>
+        );
+      },
     },
     {
       key: "note",
-      label: "Keterangan",
-      widthClassName: "min-w-[200px]",
+      label: "Catatan Tambahan",
+      widthClassName: "min-w-[240px]",
     },
   ];
 
@@ -1583,13 +1712,13 @@ export function JobPlanShell({
   ) {
     const viewportClassName =
       mode === "all"
-        ? "max-h-[clamp(20rem,38vh,30rem)]"
-        : "max-h-[clamp(24rem,58vh,44rem)]";
+        ? "max-h-[clamp(20rem,38vh,30rem)] [&>table]:min-w-[2600px]"
+        : "max-h-[clamp(24rem,58vh,44rem)] [&>table]:min-w-[2600px]";
 
     return (
       <SmartDataGrid
         title={sectionTitle}
-        description={sectionDescription}
+        description=""
         columns={columns}
         rows={sectionRows}
         meta={sectionMeta}
@@ -1619,15 +1748,11 @@ export function JobPlanShell({
     return (
       <>
         <tr>
-          <td colSpan={colSpan} className="border-b border-white/[0.05] bg-[#0d0d0d] px-3 py-2">
+          <td colSpan={colSpan} className="border-b border-white/5 bg-[#0a0a0c] px-3 py-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
-                <p className="text-[11px] text-white/70">
+                <p className="text-[11px] font-mono text-white/70">
                   Tambah job {quickCreateMode === "overtime" ? "lembur" : "normal"}
-                </p>
-                <p className="text-[10px] text-white/35">
-                  Baris baru masuk langsung ke tabel ini. Tab atau Enter di kolom keterangan
-                  terakhir akan menambah baris baru.
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
@@ -1661,13 +1786,13 @@ export function JobPlanShell({
         {quickCreateRows.map((row, index) => {
           const preview = getInlinePreview(row);
           const selectedCountdown = getQuickCreateSelectedCountdown(row);
-          const availablePlanHours = selectedCountdown?.availablePlanHours ?? null;
+          const targetTotalHours = selectedCountdown?.targetTotalHours ?? null;
           const remainingWorkHours = selectedCountdown?.remainingHours ?? null;
           const countdownProgress = selectedCountdown?.progressPercent ?? null;
 
           return (
-            <tr key={row.rowId} className="align-top bg-[#0d0d0d]">
-              <td className="sticky left-0 z-20 border-b border-white/[0.04] bg-[#0d0d0d] px-3 py-2">
+            <tr key={row.rowId} className="align-top bg-[#0a0a0c]">
+              <td className="sticky left-0 z-20 border-b border-white/5 bg-[#0a0a0c] px-3 py-2">
                 <input
                   type="checkbox"
                   checked={selectedQuickCreateRowIds.has(row.rowId)}
@@ -1685,34 +1810,6 @@ export function JobPlanShell({
                   className="h-3.5 w-3.5 rounded border-white/20 bg-white/5 accent-amber-500"
                 />
               </td>
-              <td className="border-b border-white/[0.04] p-2 min-w-[126px]">
-                <CompactInput
-                  type="date"
-                  value={row.taskDate}
-                  onChange={(event) =>
-                    updateInlineCreateRow(row.rowId, (currentValue) => ({
-                      ...currentValue,
-                      taskDate: event.target.value,
-                    }))}
-                />
-              </td>
-              <td className="border-b border-white/[0.04] p-2 min-w-[220px]">
-                <CompactSelect
-                  value={row.assignedUserId}
-                  onChange={(event) =>
-                    updateInlineCreateRow(row.rowId, (currentValue) => ({
-                      ...currentValue,
-                      assignedUserId: event.target.value,
-                    }))}
-                >
-                  <option value="">Pilih PIC</option>
-                  {getInlineEmployees(row).map((employee) => (
-                    <option key={employee.value} value={employee.value}>
-                      {employee.label}
-                    </option>
-                  ))}
-                </CompactSelect>
-              </td>
               <td className="border-b border-white/[0.04] p-2 min-w-[170px]">
                 <CompactSelect
                   value={row.carId}
@@ -1729,6 +1826,56 @@ export function JobPlanShell({
                   {getQuickCreateUnitOptions(row).map((unit) => (
                     <option key={unit.value} value={unit.value}>
                       {unit.label}
+                    </option>
+                  ))}
+                </CompactSelect>
+              </td>
+              <td className="border-b border-white/[0.04] p-2 min-w-[126px]">
+                <CompactInput
+                  type="date"
+                  value={row.taskDate}
+                  onChange={(event) =>
+                    updateInlineCreateRow(row.rowId, (currentValue) => ({
+                      ...currentValue,
+                      taskDate: event.target.value,
+                    }))}
+                />
+              </td>
+              <td className="border-b border-white/[0.04] p-2 min-w-[180px]">
+                <CompactSelect
+                  value={row.divisionId}
+                  onChange={(event) =>
+                    updateInlineCreateRow(row.rowId, (currentValue) => ({
+                      ...currentValue,
+                      divisionId: event.target.value,
+                      assignedUserId: "",
+                      carId: "",
+                      panelKey: "",
+                      referenceId: "",
+                      jobDescription: "",
+                    }))}
+                >
+                  <option value="">Pilih Divisi</option>
+                  {references.divisions.map((division) => (
+                    <option key={division.value} value={division.value}>
+                      {division.label}
+                    </option>
+                  ))}
+                </CompactSelect>
+              </td>
+              <td className="border-b border-white/[0.04] p-2 min-w-[220px]">
+                <CompactSelect
+                  value={row.assignedUserId}
+                  onChange={(event) =>
+                    updateInlineCreateRow(row.rowId, (currentValue) => ({
+                      ...currentValue,
+                      assignedUserId: event.target.value,
+                    }))}
+                >
+                  <option value="">Pilih PIC</option>
+                  {getInlineEmployees(row).map((employee) => (
+                    <option key={employee.value} value={employee.value}>
+                      {employee.label}
                     </option>
                   ))}
                 </CompactSelect>
@@ -1804,58 +1951,49 @@ export function JobPlanShell({
                     }))}
                 />
               </td>
-              <td className="border-b border-white/[0.04] px-3 py-2 min-w-[160px] text-[11px] text-white/55">
-                {availablePlanHours !== null || remainingWorkHours !== null ? (
-                  <div className="space-y-1">
-                    <p className="text-white/75">
-                      {availablePlanHours !== null
-                        ? `${formatDurationHHMM(availablePlanHours)} tersedia`
-                        : "-"}
-                    </p>
-                    <p className="text-[10px] text-white/35">
-                      {remainingWorkHours !== null
-                        ? `${formatDurationHHMM(remainingWorkHours)} sisa kerja`
-                        : "Pilih jobdesc"}
-                    </p>
-                  </div>
-                ) : (
-                  <span className="text-white/25">-</span>
-                )}
+              <td className="border-b border-white/[0.04] px-3 py-2 min-w-[120px] text-right text-[11px] text-white/55">
+                {targetTotalHours !== null ? formatDurationHHMM(targetTotalHours) : "-"}
               </td>
-              <td className="border-b border-white/[0.04] p-2 min-w-[110px]">
-                <CompactInput
-                  type="time"
-                  value={row.startTime}
-                  onChange={(event) =>
-                    updateInlineCreateRow(row.rowId, (currentValue) => ({
-                      ...currentValue,
-                      startTime: event.target.value,
-                      startTimeTouched: true,
-                    }))}
-                />
+              <td className="border-b border-white/[0.04] px-3 py-2 min-w-[90px] text-right text-[11px] text-white/55">
+                {countdownProgress !== null ? countdownProgress.toFixed(0) : 0}
               </td>
-              <td className="border-b border-white/[0.04] p-2 min-w-[120px]">
-                <CompactInput
-                  type="time"
-                  value={row.finishTime}
-                  onChange={(event) =>
-                    updateInlineCreateRow(row.rowId, (currentValue) => ({
-                      ...currentValue,
-                      finishTime: event.target.value,
-                      finishTimeTouched: true,
-                    }))}
-                />
+              <td className="border-b border-white/[0.04] px-3 py-2 min-w-[120px] text-right text-[11px] text-white/55">
+                {remainingWorkHours !== null ? formatDurationHHMM(remainingWorkHours) : "-"}
+              </td>
+              <td className="border-b border-white/[0.04] p-2 min-w-[150px]">
+                <div className="grid grid-cols-2 gap-1">
+                  <CompactInput
+                    type="time"
+                    value={row.startTime}
+                    onChange={(event) =>
+                      updateInlineCreateRow(row.rowId, (currentValue) => ({
+                        ...currentValue,
+                        startTime: event.target.value,
+                        startTimeTouched: true,
+                      }))}
+                  />
+                  <CompactInput
+                    type="time"
+                    value={row.finishTime}
+                    onChange={(event) =>
+                      updateInlineCreateRow(row.rowId, (currentValue) => ({
+                        ...currentValue,
+                        finishTime: event.target.value,
+                        finishTimeTouched: true,
+                      }))}
+                  />
+                </div>
                 {preview.length > 1 ? (
                   <p className="mt-1 text-[10px] text-white/35">
                     Split {preview[0]?.finishTime} lalu lanjut lembur
                   </p>
                 ) : null}
               </td>
-              <td className="border-b border-white/[0.04] px-3 py-2 min-w-[90px] text-right text-[11px] text-white/55">
-                {countdownProgress !== null ? countdownProgress.toFixed(0) : 0}
+              <td className="border-b border-white/[0.04] px-3 py-2 min-w-[120px] text-[11px] text-white/30">
+                Belum ada aktual
               </td>
               <td className="border-b border-white/[0.04] px-3 py-2 min-w-[110px] text-center">
-                <span className="inline-flex rounded-full border border-white/[0.08] bg-white/[0.03] px-2 py-1 text-[10px] uppercase tracking-[0.12em] text-white/55">
+                <span className="inline-flex border border-white/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.12em] text-white/55">
                   Baru
                 </span>
               </td>
@@ -1890,13 +2028,13 @@ export function JobPlanShell({
           value={row.carId}
           onChange={(event) => handleAdditionalUnitChange(row.rowId, event.target.value)}
         >
-            <option value="">Pilih Unit</option>
-            {references.units.map((unit) => (
-              <option key={unit.value} value={unit.value}>
-                {unit.label}
-              </option>
-            ))}
-          </CompactSelect>
+          <option value="">Pilih Unit</option>
+          {references.units.map((unit) => (
+            <option key={unit.value} value={unit.value}>
+              {unit.label}
+            </option>
+          ))}
+        </CompactSelect>
       );
     }
 
@@ -1990,22 +2128,35 @@ export function JobPlanShell({
 
   function renderJobCell(row: WorkspaceRowState) {
     if (row.source === "additional") {
+      const selectedDivision = references.divisions.find(
+        (division) => division.value === workspaceForm.divisionId,
+      );
+      const selectedParentId = selectedDivision?.parentId ?? null;
+      const selectedParentCode = (
+        selectedDivision?.parentCode ??
+        selectedDivision?.parentName ??
+        ""
+      ).trim().toUpperCase();
+      const includeMechanicParent = selectedParentId !== null && selectedParentCode === "MECHANIC";
+
       return (
         <CompactSelect
           value={row.jobTypeId}
           onChange={(event) => handleAdditionalJobTypeChange(row.rowId, event.target.value)}
         >
-            <option value="">Pilih Jobdesc</option>
+          <option value="">Pilih Jobdesc</option>
           {references.jobTypes
             .filter(
               (jobType) =>
                 !workspaceForm.divisionId ||
-                String(jobType.divisionId ?? "") === workspaceForm.divisionId,
+                jobType.divisionId === null ||
+                String(jobType.divisionId ?? "") === workspaceForm.divisionId ||
+                (includeMechanicParent && jobType.divisionId === selectedParentId),
             )
             .map((jobType) => (
-            <option key={jobType.value} value={jobType.value}>
-              {jobType.label}
-            </option>
+              <option key={jobType.value} value={jobType.value}>
+                {jobType.label}
+              </option>
             ))}
         </CompactSelect>
       );
@@ -2044,223 +2195,187 @@ export function JobPlanShell({
     );
   }
 
+  const unifiedRows = mode === "all" && allSections
+    ? [...normalRows, ...overtimeRows]
+    : gridRows;
+
+  const unifiedMeta = mode === "all" && allSections
+    ? allSections.normal.meta
+    : meta;
+
   return (
-    <div className="space-y-3">
-      <div className="grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
-        <div className="rounded-[14px] border border-white/[0.06] bg-[#0a0a0a] px-3 py-3">
-          <div className="space-y-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-[13px] font-medium text-white">{title}</h1>
-              <div className="w-40">
-                <CompactSelect
-                  value={mode}
-                  onChange={(event) => {
-                    const nextMode = event.target.value as JobPlanMode;
-                    pushQuery((params) => {
-                      params.set("mode", nextMode);
-                      params.set("page", "1");
-                    });
-                  }}
-                >
-                  <option value="all">Semua</option>
-                  <option value="normal">Normal</option>
-                  <option value="overtime">Lembur</option>
-                </CompactSelect>
-              </div>
-              <div className="w-52">
-                <CompactSelect
-                  value={divisionFilterValue}
-                  onChange={(event) => setDivisionFilter(event.target.value)}
-                >
-                  <option value="">Semua Divisi</option>
-                  {references.divisions.map((division) => (
-                    <option key={division.value} value={division.value}>
-                      {division.label}
-                    </option>
-                  ))}
-                </CompactSelect>
-              </div>
+    <div className="space-y-2">
+      <PageHeader
+        eyebrow="Job Plan"
+        title={title}
+        actions={
+          <>
+            <div className="flex border-b border-white/5">
+              <button
+                type="button"
+                onClick={() => switchToDaily(activeDailyDate || getTodayIsoDate())}
+                className={[
+                  "px-4 py-2 text-[10px] font-mono uppercase tracking-[0.12em] border-b-2 transition-colors",
+                  state.window === "daily"
+                    ? "border-amber-500 text-amber-500"
+                    : "border-transparent text-white/40 hover:text-white/70",
+                ].join(" ")}
+              >
+                Harian
+              </button>
+              <button
+                type="button"
+                onClick={() => switchToWeekly(activeRange.start, activeRange.end)}
+                className={[
+                  "px-4 py-2 text-[10px] font-mono uppercase tracking-[0.12em] border-b-2 transition-colors",
+                  state.window === "weekly"
+                    ? "border-amber-500 text-amber-500"
+                    : "border-transparent text-white/40 hover:text-white/70",
+                ].join(" ")}
+              >
+                Mingguan
+              </button>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="flex items-center gap-2 rounded-lg border border-white/[0.06] bg-white/[0.03] p-1">
-                <button
-                  type="button"
-                  onClick={() => switchToDaily(activeDailyDate || getTodayIsoDate())}
-                  className={[
-                    "rounded-md px-2.5 py-1 text-[10px] uppercase tracking-wider transition-colors",
-                    state.window === "daily"
-                      ? "bg-amber-500/10 text-amber-500"
-                      : "text-white/40 hover:text-white/70",
-                  ].join(" ")}
-                >
-                  Harian
-                </button>
-                <button
-                  type="button"
-                  onClick={() => switchToWeekly(activeRange.start, activeRange.end)}
-                  className={[
-                    "rounded-md px-2.5 py-1 text-[10px] uppercase tracking-wider transition-colors",
-                    state.window === "weekly"
-                      ? "bg-amber-500/10 text-amber-500"
-                      : "text-white/40 hover:text-white/70",
-                  ].join(" ")}
-                >
-                  Mingguan
-                </button>
-              </div>
+            {state.window === "daily" ? (
+              <CompactDateInput
+                value={activeDailyDate}
+                onChange={updateDailyDate}
+                className="w-64"
+              />
+            ) : (
+              <CompactDateRangeInput
+                from={activeRange.start}
+                to={activeRange.end}
+                onChange={applyDateSelection}
+                selectionBehavior="single-or-range"
+                className="w-64"
+              />
+            )}
 
-              {state.window === "daily" ? (
-                <div className="w-40">
-                  <CompactInput
-                    type="date"
-                    value={activeDailyDate}
-                    onChange={(event) => updateDailyDate(event.target.value)}
-                  />
+            <CompactSelect
+              value={mode}
+              onChange={(event) => {
+                const nextMode = event.target.value as JobPlanMode;
+                pushQuery((params) => {
+                  params.set("mode", nextMode);
+                  params.set("page", "1");
+                });
+              }}
+            >
+              <option value="all">Semua</option>
+              <option value="normal">Normal</option>
+              <option value="overtime">Lembur</option>
+            </CompactSelect>
+
+            <CompactSelect
+              value={divisionFilterValue}
+              onChange={(event) => setDivisionFilter(event.target.value)}
+            >
+              <option value="">Semua Divisi</option>
+              {references.divisions.map((division) => (
+                <option key={division.value} value={division.value}>
+                  {division.label}
+                </option>
+              ))}
+            </CompactSelect>
+
+            <div className="relative">
+              <ActionButton variant="primary" onClick={() => setAddMenuOpen((currentValue) => !currentValue)}>
+                <Plus className="h-3 w-3" />
+                Tambah Job
+                <ChevronDown className="h-3 w-3" />
+              </ActionButton>
+              {addMenuOpen ? (
+                <div className="absolute right-0 top-10 z-40 min-w-40 border border-white/10 bg-[#0a0a0c] py-1">
+                  <button
+                    type="button"
+                    onClick={() => openQuickCreate("normal")}
+                    className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[10px] font-mono text-white/70 transition-colors hover:bg-white/[0.02] hover:text-white"
+                  >
+                    <Plus className="h-3.5 w-3.5 text-amber-400" />
+                    Job Normal
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openQuickCreate("overtime")}
+                    className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[10px] font-mono text-white/70 transition-colors hover:bg-white/[0.02] hover:text-white"
+                  >
+                    <Plus className="h-3.5 w-3.5 text-red-400" />
+                    Job Lembur
+                  </button>
+                  <button
+                    type="button"
+                    onClick={openCreateWorkspace}
+                    className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[10px] font-mono text-white/70 transition-colors hover:bg-white/[0.02] hover:text-white"
+                  >
+                    <Plus className="h-3.5 w-3.5 text-amber-400" />
+                    Job Tambahan
+                  </button>
                 </div>
-              ) : (
-                <div className="flex flex-wrap items-center gap-2 rounded-lg border border-white/[0.06] bg-white/[0.03] px-2 py-2">
-                  <div className="w-36">
-                    <CompactInput
-                      type="date"
-                      value={activeRange.start}
-                      onChange={(event) => updateWeeklyStart(event.target.value)}
-                    />
-                  </div>
-                  <span className="text-[11px] text-white/30">s.d.</span>
-                  <div className="w-36">
-                    <CompactInput
-                      type="date"
-                      value={activeRange.end}
-                      onChange={(event) => updateWeeklyEnd(event.target.value)}
-                    />
-                  </div>
+              ) : null}
+            </div>
+
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setExportOpen((currentValue) => !currentValue)}
+                className="inline-flex items-center gap-1 border border-white/5 bg-[#111114] px-2.5 py-1.5 text-[11px] uppercase tracking-[0.1em] text-white/60 hover:text-white"
+              >
+                <Download className="h-3.5 w-3.5" />
+                Unduh
+                <ChevronDown className="h-3.5 w-3.5" />
+              </button>
+              {exportOpen ? (
+                <div className="absolute right-0 top-9 z-40 min-w-36 border border-white/10 bg-[#0a0a0c] py-1">
+                  <a
+                    href={buildExportHref("csv")}
+                    className="flex items-center gap-2 px-3 py-1.5 text-[10px] font-mono text-white/70 transition-colors hover:bg-white/[0.02] hover:text-white"
+                  >
+                    <Download className="h-3.5 w-3.5 text-amber-400" />
+                    CSV
+                  </a>
+                  <a
+                    href={buildExportHref("xlsx")}
+                    className="flex items-center gap-2 px-3 py-1.5 text-[10px] font-mono text-white/70 transition-colors hover:bg-white/[0.02] hover:text-white"
+                  >
+                    <FileSpreadsheet className="h-3.5 w-3.5 text-white/45" />
+                    Excel
+                  </a>
+                  <a
+                    href={buildExportHref("pdf")}
+                    className="flex items-center gap-2 px-3 py-1.5 text-[10px] font-mono text-white/70 transition-colors hover:bg-white/[0.02] hover:text-white"
+                  >
+                    <FileText className="h-3.5 w-3.5 text-red-400" />
+                    PDF
+                  </a>
+                  <a
+                    href={buildExportHref("image")}
+                    className="flex items-center gap-2 px-3 py-1.5 text-[10px] font-mono text-white/70 transition-colors hover:bg-white/[0.02] hover:text-white"
+                  >
+                    <FileImage className="h-3.5 w-3.5 text-white/45" />
+                    Gambar
+                  </a>
                 </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        <div className="rounded-[14px] border border-white/[0.06] bg-[#0a0a0a] px-3 py-3">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex flex-wrap items-center gap-2.5">
-              <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2">
-                <p className="text-[9px] uppercase tracking-[0.13em] text-white/30">Total Jam</p>
-                <p className="mt-1 text-[16px] font-medium leading-none text-white tabular-nums">
-                  {summary.totalHours.toFixed(1)}j
-                </p>
-              </div>
-              <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2">
-                <p className="text-[9px] uppercase tracking-[0.13em] text-amber-500/70">Pending</p>
-                <p className="mt-1 text-[16px] font-medium leading-none text-amber-500 tabular-nums">
-                  {summary.pendingCount}
-                </p>
-              </div>
-              <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2">
-                <p className="text-[9px] uppercase tracking-[0.13em] text-emerald-500/70">Plan</p>
-                <p className="mt-1 text-[16px] font-medium leading-none text-emerald-500 tabular-nums">
-                  {summary.approvedCount}
-                </p>
-              </div>
-              <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2">
-                <p className="text-[9px] uppercase tracking-[0.13em] text-red-500/70">Lembur</p>
-                <p className="mt-1 text-[16px] font-medium leading-none text-red-500 tabular-nums">
-                  {summary.overtimeCount}
-                </p>
-              </div>
+              ) : null}
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="relative">
-                <ActionButton variant="primary" onClick={() => setAddMenuOpen((currentValue) => !currentValue)}>
-                  <Plus className="h-3 w-3" />
-                  Tambah Job
-                  <ChevronDown className="h-3 w-3" />
-                </ActionButton>
-                {addMenuOpen ? (
-                  <div className="absolute right-0 top-10 z-40 min-w-40 rounded-xl border border-white/[0.08] bg-[#090909] p-1 shadow-2xl">
-                    <button
-                      type="button"
-                      onClick={() => openQuickCreate("normal")}
-                      className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] text-white/70 hover:bg-white/[0.05] hover:text-white"
-                    >
-                      <Plus className="h-3.5 w-3.5 text-emerald-400" />
-                      Job Normal
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => openQuickCreate("overtime")}
-                      className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] text-white/70 hover:bg-white/[0.05] hover:text-white"
-                    >
-                      <Plus className="h-3.5 w-3.5 text-red-400" />
-                      Job Lembur
-                    </button>
-                    <button
-                      type="button"
-                      onClick={openCreateWorkspace}
-                      className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] text-white/70 hover:bg-white/[0.05] hover:text-white"
-                    >
-                      <Plus className="h-3.5 w-3.5 text-amber-400" />
-                      Job Tambahan
-                    </button>
-                  </div>
-                ) : null}
-              </div>
+            <ActionButton onClick={() => router.refresh()}>Refresh</ActionButton>
+          </>
+        }
+      />
 
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => setExportOpen((currentValue) => !currentValue)}
-                  className="inline-flex items-center gap-1 rounded-lg border border-white/[0.08] bg-white/[0.03] px-2.5 py-1.5 text-[11px] uppercase tracking-[0.1em] text-white/60 hover:text-white"
-                >
-                  <Download className="h-3.5 w-3.5" />
-                  Unduh
-                  <ChevronDown className="h-3.5 w-3.5" />
-                </button>
-                {exportOpen ? (
-                  <div className="absolute right-0 top-9 z-40 min-w-36 rounded-xl border border-white/[0.08] bg-[#090909] p-1 shadow-2xl">
-                <a
-                  href={buildExportHref("csv")}
-                  className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-[11px] text-white/70 hover:bg-white/[0.05] hover:text-white"
-                >
-                  <Download className="h-3.5 w-3.5 text-amber-400" />
-                  CSV
-                </a>
-                <a
-                  href={buildExportHref("xlsx")}
-                  className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-[11px] text-white/70 hover:bg-white/[0.05] hover:text-white"
-                >
-                  <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-400" />
-                  Excel
-                </a>
-                <a
-                  href={buildExportHref("pdf")}
-                  className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-[11px] text-white/70 hover:bg-white/[0.05] hover:text-white"
-                >
-                  <FileText className="h-3.5 w-3.5 text-red-400" />
-                  PDF
-                </a>
-                <a
-                  href={buildExportHref("image")}
-                  className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-[11px] text-white/70 hover:bg-white/[0.05] hover:text-white"
-                >
-                  <FileImage className="h-3.5 w-3.5 text-sky-400" />
-                  Gambar
-                </a>
-                  </div>
-                ) : null}
-              </div>
-
-              <ActionButton onClick={() => router.refresh()}>Refresh</ActionButton>
-            </div>
-          </div>
-        </div>
-      </div>
+      <MetricBar items={[
+        { label: "Total Jam", value: `${summary.totalHours.toFixed(1)}j` },
+        { label: "Pending", value: summary.pendingCount, tone: summary.pendingCount > 0 ? "warn" : undefined },
+        { label: "Plan", value: summary.approvedCount, tone: summary.approvedCount > 0 ? "up" : undefined },
+        { label: "Lembur", value: summary.overtimeCount, tone: summary.overtimeCount > 0 ? "warn" : undefined },
+      ]} />
 
       {sweetAlert.alertElement}
 
       {selectedKeys.size > 0 ? (
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-[14px] border border-white/[0.06] bg-[#0a0a0a] px-3 py-2">
+        <div className="flex flex-wrap items-center justify-between gap-2 border border-white/5 bg-[#111114] px-3 py-2">
           <p className="text-[11px] text-white/55">{selectedKeys.size} job plan dipilih</p>
           <div className="flex flex-wrap items-center gap-2">
             {selectedKeys.size === 1 && selectedRows[0] && isDraftStatus(selectedRows[0].status) ? (
@@ -2298,50 +2413,29 @@ export function JobPlanShell({
         </div>
       ) : null}
 
-      {mode === "all" && allSections ? (
-        <div className="space-y-3">
-          {renderGridSection(
-            "Normal",
-            "Daftar job plan normal untuk rentang aktif.",
-            normalRows,
-            allSections.normal.meta,
-            true,
-            "normal",
-          )}
-          {renderGridSection(
-            "Lembur",
-            "Daftar job plan lembur untuk rentang aktif.",
-            overtimeRows,
-            allSections.overtime.meta,
-            false,
-            "overtime",
-          )}
-        </div>
-      ) : (
-        renderGridSection(
-          getModeLabel(mode),
-          description,
-          gridRows,
-          meta,
-          true,
-          mode === "overtime" ? "overtime" : "normal",
-        )
+      {renderGridSection(
+        getModeLabel(mode),
+        "",
+        unifiedRows,
+        unifiedMeta,
+        true,
+        mode === "overtime" ? "overtime" : "normal",
       )}
 
       {workspaceOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-[1px]">
-          <div className="w-full max-w-5xl rounded-[16px] border border-white/[0.06] bg-[#0a0a0a] shadow-2xl">
-            <div className="flex items-start justify-between gap-3 border-b border-white/[0.05] px-4 py-3">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-5xl border border-white/10 bg-[#111114]">
+            <div className="flex items-start justify-between gap-3 border-b border-white/5 px-4 py-3">
               <div>
-                <p className="text-[10px] uppercase tracking-[0.16em] text-amber-500/70">Job Tambahan</p>
-                <h3 className="mt-1 text-sm font-medium text-white">
-                  Form tambahan ini akan membuat countdown baru kategori additional.
+                <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">Job Tambahan</p>
+                <h3 className="mt-0.5 text-[13px] font-mono text-white/80">
+                  Job Tambahan
                 </h3>
               </div>
               <button
                 type="button"
                 onClick={closeCreateWorkspace}
-                className="rounded-lg border border-white/[0.08] p-2 text-white/45 hover:text-white"
+                className="border border-white/10 p-1.5 text-white/40 transition-colors hover:text-white"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -2423,7 +2517,7 @@ export function JobPlanShell({
                 </div>
                 <div>
                   <FieldLabel>Prioritas</FieldLabel>
-                  <label className="flex h-[38px] items-center gap-2 rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 text-[12px] text-white/70">
+                  <label className="flex h-[38px] items-center gap-2 rounded-md border border-white/5 bg-[#111114] px-3 text-[12px] text-white/70">
                     <input
                       type="checkbox"
                       checked={workspaceForm.rows[0]?.isPriority ?? false}
@@ -2442,20 +2536,20 @@ export function JobPlanShell({
               <div className="grid gap-3 md:grid-cols-2">
                 <div>
                   <FieldLabel>Jam Mulai</FieldLabel>
-                  <div className="flex h-[38px] items-center rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 text-[12px] text-amber-300">
+                  <div className="flex h-[38px] items-center rounded-md border border-white/5 bg-[#111114] px-3 text-[12px] text-amber-300">
                     {additionalPreview[0]?.startTime ?? "-"}
                   </div>
                 </div>
                 <div>
                   <FieldLabel>Jam Selesai</FieldLabel>
-                  <div className="flex h-[38px] items-center rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 text-[12px] text-amber-300">
+                  <div className="flex h-[38px] items-center rounded-md border border-white/5 bg-[#111114] px-3 text-[12px] text-amber-300">
                     {additionalPreview[additionalPreview.length - 1]?.finishTime ?? "-"}
                   </div>
                 </div>
               </div>
 
               {additionalPreview.length > 1 ? (
-                <div className="rounded-lg border border-white/[0.06] bg-white/[0.03] px-3 py-2 text-[11px] text-white/55">
+                <div className="border border-white/5 bg-[#0a0a0c] px-3 py-2 text-[11px] text-white/55">
                   Sistem akan memecah tambahan ini menjadi jam normal lalu sisa lembur sesuai hari kerja.
                 </div>
               ) : null}
@@ -2508,14 +2602,14 @@ export function JobPlanShell({
       ) : null}
 
       {editorMode === "edit" && activePlan ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-[1px]">
-          <div className="w-full max-w-2xl rounded-[14px] border border-white/[0.06] bg-[#0a0a0a] p-4 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-2xl border border-white/10 bg-[#111114] p-4">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-[10px] uppercase tracking-[0.16em] text-amber-500/70">
+                <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">
                   {isDraftStatus(activePlan.status) ? "Edit Draft Job Plan" : "Detail Job Plan"}
                 </p>
-                <h3 className="mt-1 text-sm font-medium text-white">{activePlan.planId}</h3>
+                <h3 className="mt-0.5 text-[13px] font-mono text-white/80">{activePlan.planId}</h3>
                 <p className="mt-1 text-[11px] text-white/40">
                   {activePlan.unitName} · {activePlan.divisionName}
                 </p>
@@ -2523,7 +2617,7 @@ export function JobPlanShell({
               <button
                 type="button"
                 onClick={closeEditor}
-                className="rounded-lg border border-white/[0.08] p-2 text-white/45 hover:text-white"
+                className="border border-white/10 p-1.5 text-white/40 transition-colors hover:text-white"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -2630,7 +2724,7 @@ export function JobPlanShell({
               </div>
               <div>
                 <FieldLabel>Prioritas</FieldLabel>
-                <label className="flex h-8 items-center gap-2 rounded-lg border border-white/[0.08] bg-white/[0.03] px-2.5 text-[12px] text-white">
+                <label className="flex h-8 items-center gap-2 rounded-md border border-white/5 bg-[#111114] px-2.5 text-[12px] text-white">
                   <input
                     type="checkbox"
                     checked={editForm.isPriority}
@@ -2673,8 +2767,8 @@ export function JobPlanShell({
       ) : null}
 
       {approvalPlan ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-[1px]">
-          <div className="w-full max-w-sm rounded-[14px] border border-white/[0.06] bg-[#0a0a0a] p-4 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-sm rounded-md border border-white/5 bg-[#0a0a0c] p-4">
             <p className="text-[10px] uppercase tracking-wider text-amber-500/70">Approval Job Plan</p>
             <h3 className="mt-1 text-sm font-medium text-white">{approvalPlan.planId}</h3>
             <p className="mt-1 text-[11px] text-white/45">
@@ -2686,10 +2780,10 @@ export function JobPlanShell({
                 type="button"
                 onClick={() => setApprovalStatus("PLAN")}
                 className={[
-                  "rounded-lg border px-3 py-2 text-[11px] font-medium transition-colors",
+                  "rounded-md border px-3 py-2 text-[11px] font-medium transition-colors",
                   approvalStatus === "PLAN"
-                    ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
-                    : "border-white/[0.06] bg-white/[0.03] text-white/55",
+                    ? "border-amber-500/30 bg-amber-500/10 text-amber-400"
+                    : "border-white/5 bg-[#111114] text-white/55",
                 ].join(" ")}
               >
                 Approve
@@ -2698,10 +2792,10 @@ export function JobPlanShell({
                 type="button"
                 onClick={() => setApprovalStatus("REJECTED")}
                 className={[
-                  "rounded-lg border px-3 py-2 text-[11px] font-medium transition-colors",
+                  "rounded-md border px-3 py-2 text-[11px] font-medium transition-colors",
                   approvalStatus === "REJECTED"
                     ? "border-red-500/30 bg-red-500/10 text-red-300"
-                    : "border-white/[0.06] bg-white/[0.03] text-white/55",
+                    : "border-white/5 bg-[#111114] text-white/55",
                 ].join(" ")}
               >
                 Reject

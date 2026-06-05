@@ -9,7 +9,8 @@ export function ThemeToggle() {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    setMounted(true);
+    const timeoutId = window.setTimeout(() => setMounted(true), 0);
+    return () => window.clearTimeout(timeoutId);
   }, []);
 
   if (!mounted) return null;
@@ -19,7 +20,7 @@ export function ThemeToggle() {
   return (
     <button
       onClick={() => setTheme(isDark ? "light" : "dark")}
-      className="flex w-full items-center gap-2 px-3 py-1.5 text-left font-mono text-[10px] uppercase tracking-[0.12em] text-gray-500 transition-colors hover:text-gray-700 dark:text-white/30 dark:hover:text-gray-600 dark:text-white/60"
+      className="flex w-full items-center gap-2 px-3 py-1.5 text-left font-mono text-[10px] uppercase tracking-[0.1em] text-gray-600 transition-colors hover:text-gray-950 dark:text-white/60 dark:hover:text-white"
     >
       {isDark ? (
         <Sun className="h-3 w-3 text-amber-500" />

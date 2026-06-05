@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { AuthScope } from "@smsystem/contracts/auth";
 import type {
+  WoApproveRequest,
   WoCreateRequest,
   WoGridQuery,
   WoGridReference,
@@ -9,8 +10,18 @@ import type {
   WoStatus,
   WoSummary,
 } from "@smsystem/contracts/wo";
+import { permissionCodes } from "@smsystem/permissions";
 import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
 import { getMySqlPool } from "@/db/mysql";
+
+const WO_KD_STATUSES = new Set<WoStatus | string>([
+  "OPEN",
+  "SUBMITTED",
+  "PENDING_TARGET_KD_APPROVAL",
+]);
+const WO_ADVISOR_STATUS: WoStatus = "PENDING_ADVISOR_APPROVAL";
+const WO_KP_STATUS: WoStatus = "PENDING_KP_APPROVAL";
+const WO_PM_STATUS: WoStatus = "PENDING_PM_APPROVAL";
 
 interface ScopeParams {
   employeeId: string;
@@ -75,6 +86,10 @@ interface LinkedCountdownRow extends RowDataPacket {
   createdAt: string | null;
 }
 
+interface ExistingCountdownRow extends RowDataPacket {
+  coreId: string;
+}
+
 function toBoolean(value: unknown): boolean {
   return value === true || value === 1 || value === "1";
 }
@@ -92,7 +107,7 @@ function computeWoRisk(params: {
 }): { agingScore: number; isUrgent: boolean } {
   let score = Math.min(40, Math.max(0, Math.round(params.agingHours * 2)));
 
-  if (params.status === "OPEN" || params.status === "SUBMITTED") {
+  if (WO_KD_STATUSES.has(params.status) || params.status === WO_ADVISOR_STATUS || params.status === WO_KP_STATUS || params.status === WO_PM_STATUS) {
     score += 20;
   }
 
@@ -112,7 +127,7 @@ function computeWoRisk(params: {
   const isUrgent =
     params.isPriority ||
     agingScore >= 70 ||
-    ((params.status === "OPEN" || params.status === "SUBMITTED") &&
+    ((WO_KD_STATUSES.has(params.status) || params.status === WO_ADVISOR_STATUS || params.status === WO_KP_STATUS || params.status === WO_PM_STATUS) &&
       params.agingHours >= 24);
 
   return {
@@ -377,6 +392,64 @@ async function assertScopeAccess(
   return rows.length > 0;
 }
 
+async function hasAdvisorForDivision(
+  connection: Pick<PoolConnection, "query">,
+  divisionId: number | null,
+): Promise<boolean> {
+  if (divisionId === null) {
+    return false;
+  }
+
+  const [rows] = (await connection.query(
+    `
+      SELECT 1 AS ok
+      FROM employee_managed_divisions emd
+      JOIN sm_employee e ON e.employee_id = emd.employee_id
+      JOIN sys_role_permissions srp ON srp.role_id = e.role_id
+      JOIN sys_permissions sp ON sp.id = srp.permission_id
+      WHERE emd.division_id = ?
+        AND COALESCE(e.is_active, 1) = 1
+        AND sp.permission_code = ?
+      LIMIT 1
+    `,
+    [divisionId, permissionCodes.woApproveAdvisor],
+  )) as [Array<RowDataPacket & { ok: number }>, unknown];
+
+  return rows.length > 0;
+}
+
+async function canApproveKpForUnit(
+  connection: Pick<PoolConnection, "query">,
+  params: ScopeParams & { carId: string | null },
+  approvalRank: number | null,
+): Promise<boolean> {
+  if ((approvalRank ?? 0) < 3 || !params.carId) {
+    return false;
+  }
+
+  if (params.scope.unitIds.includes(params.carId)) {
+    return true;
+  }
+
+  if (!params.scope.canViewAssignedUnits) {
+    return false;
+  }
+
+  const [rows] = (await connection.query(
+    `
+      SELECT 1 AS ok
+      FROM car_project_assignment
+      WHERE car_id = ?
+        AND ended_at IS NULL
+        AND kp_id = ?
+      LIMIT 1
+    `,
+    [params.carId, params.employeeId],
+  )) as [Array<RowDataPacket & { ok: number }>, unknown];
+
+  return rows.length > 0;
+}
+
 export interface WoRepository {
   list(
     params: WoListParams,
@@ -399,6 +472,16 @@ export interface WoRepository {
     status: WoStatus,
     input?: { actorId?: string; reason?: string | null },
   ): Promise<void>;
+  approveStage(
+    params: WoMutationParams,
+    options: {
+      actorId: string;
+      actorDivisionId: number | null;
+      approvalRank: number | null;
+      permissions: string[];
+      input: WoApproveRequest;
+    },
+  ): Promise<{ status: WoStatus; linkedCountdownId: string | null } | null>;
   findLinkedCountdowns(woId: string): Promise<WoLinkedCountdown[]>;
 }
 
@@ -459,12 +542,12 @@ export class MySqlWoRepository implements WoRepository {
       pool.query(
         `
           SELECT
-            SUM(CASE WHEN COALESCE(w.status, 'SUBMITTED') IN ('OPEN', 'SUBMITTED') THEN 1 ELSE 0 END) AS pendingApproval,
+            SUM(CASE WHEN COALESCE(w.status, 'SUBMITTED') IN ('OPEN', 'SUBMITTED', 'PENDING_TARGET_KD_APPROVAL', 'PENDING_ADVISOR_APPROVAL', 'PENDING_KP_APPROVAL', 'PENDING_PM_APPROVAL') THEN 1 ELSE 0 END) AS pendingApproval,
             SUM(CASE WHEN COALESCE(w.status, 'SUBMITTED') = 'APPROVED' THEN 1 ELSE 0 END) AS approvedOpen,
             SUM(
               CASE
                 WHEN COALESCE(w.is_priority, 0) = 1 THEN 1
-                WHEN COALESCE(w.status, 'SUBMITTED') IN ('OPEN', 'SUBMITTED')
+                WHEN COALESCE(w.status, 'SUBMITTED') IN ('OPEN', 'SUBMITTED', 'PENDING_TARGET_KD_APPROVAL', 'PENDING_ADVISOR_APPROVAL', 'PENDING_KP_APPROVAL', 'PENDING_PM_APPROVAL')
                   AND TIMESTAMPDIFF(HOUR, COALESCE(w.created_at, TIMESTAMP(w.request_date)), CURRENT_TIMESTAMP) >= 24
                   THEN 1
                 ELSE 0
@@ -523,7 +606,7 @@ export class MySqlWoRepository implements WoRepository {
         viewMode: "active",
       },
       {
-        extraClauses: ["COALESCE(w.status, 'SUBMITTED') IN ('OPEN', 'SUBMITTED')"],
+        extraClauses: ["COALESCE(w.status, 'SUBMITTED') IN ('OPEN', 'SUBMITTED', 'PENDING_TARGET_KD_APPROVAL', 'PENDING_ADVISOR_APPROVAL', 'PENDING_KP_APPROVAL', 'PENDING_PM_APPROVAL')"],
       },
     );
   }
@@ -630,6 +713,10 @@ export class MySqlWoRepository implements WoRepository {
     const statusRows: Array<{ value: string; label: string }> = [
       { value: "OPEN", label: "Open" },
       { value: "SUBMITTED", label: "Submitted" },
+      { value: "PENDING_TARGET_KD_APPROVAL", label: "Menunggu KD Penerima" },
+      { value: "PENDING_ADVISOR_APPROVAL", label: "Menunggu Advisor" },
+      { value: "PENDING_KP_APPROVAL", label: "Menunggu KP" },
+      { value: "PENDING_PM_APPROVAL", label: "Menunggu PM" },
       { value: "APPROVED", label: "Approved" },
       { value: "REJECTED", label: "Rejected" },
       { value: "DONE", label: "Done" },
@@ -691,7 +778,25 @@ export class MySqlWoRepository implements WoRepository {
         const year = String(requestDate.getUTCFullYear());
         const woNumber = `WO/${sequence}/${month}/${year}`;
 
-        const panelDisplay = item.sectionName || item.panelName || null;
+        const panelDisplay = item.panelName?.trim() || null;
+        if (!panelDisplay) {
+          throw new Error("WO_PANEL_REQUIRED");
+        }
+
+        const [panelRows] = (await connection.query(
+          `
+            SELECT id
+            FROM master_panels
+            WHERE name = ?
+              AND (car_id = ? OR car_id IS NULL)
+            ORDER BY CASE WHEN car_id = ? THEN 0 ELSE 1 END ASC
+            LIMIT 1
+          `,
+          [panelDisplay, input.carId, input.carId],
+        )) as [Array<RowDataPacket & { id: number }>, unknown];
+        if (!panelRows[0]) {
+          throw new Error("WO_PANEL_NOT_FOUND");
+        }
 
         await connection.execute(
           `
@@ -710,7 +815,7 @@ export class MySqlWoRepository implements WoRepository {
               status,
               acc_tracking,
               notes
-            ) VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, 'SUBMITTED', 0, ?)
+            ) VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, 'PENDING_TARGET_KD_APPROVAL', 0, ?)
           `,
           [
             woId,
@@ -726,27 +831,6 @@ export class MySqlWoRepository implements WoRepository {
             item.notes,
           ],
         );
-
-        if (item.addPanelToMaster && panelDisplay) {
-          const pName = panelDisplay.trim();
-          if (pName) {
-            const [existing] = await connection.query(
-              "SELECT id FROM master_panels WHERE name = ? AND (car_id = ? OR car_id IS NULL) LIMIT 1",
-              [pName, input.carId],
-            ) as [unknown[], unknown];
-            if (existing.length === 0) {
-              await connection.execute(
-                "INSERT INTO master_panels (car_id, section, name, category, is_active) VALUES (?, ?, ?, ?, 1)",
-                [
-                  input.carId,
-                  item.panelCategory || null,
-                  pName,
-                  item.panelCategory || null,
-                ],
-              );
-            }
-          }
-        }
 
         createdIds.push(woId);
       }
@@ -845,6 +929,266 @@ export class MySqlWoRepository implements WoRepository {
       `,
       [status, woId],
     );
+  }
+
+  async approveStage(
+    params: WoMutationParams,
+    options: {
+      actorId: string;
+      actorDivisionId: number | null;
+      approvalRank: number | null;
+      permissions: string[];
+      input: WoApproveRequest;
+    },
+  ): Promise<{ status: WoStatus; linkedCountdownId: string | null } | null> {
+    const pool = this.poolFactory();
+    const connection = await pool.getConnection();
+
+    try {
+      await connection.beginTransaction();
+
+      const [rows] = (await connection.query(
+        `
+          ${buildWoSelectSql()}
+          WHERE w.id = ?
+          LIMIT 1
+        `,
+        [params.woId],
+      )) as [WoRow[], unknown];
+      const row = rows[0];
+      if (!row) {
+        await connection.rollback();
+        return null;
+      }
+
+      const canAccess = await assertScopeAccess(connection, {
+        employeeId: params.employeeId,
+        scope: params.scope,
+        carId: row.carId,
+        fromDivisionId: row.fromDivisionId,
+        toDivisionId: row.toDivisionId,
+      });
+      if (!canAccess) {
+        await connection.rollback();
+        return null;
+      }
+
+      const status = (row.status ?? "SUBMITTED") as WoStatus;
+      const notes = options.input.notes?.trim() || null;
+      const noteSql = notes
+        ? ", notes = CONCAT(COALESCE(notes,''), IF(notes IS NULL OR notes = '', '', ' | '), ?)"
+        : "";
+      const noteParams = notes ? [notes] : [];
+
+      if (WO_KD_STATUSES.has(status)) {
+        const canApproveKd =
+          options.permissions.includes(permissionCodes.woApprove) &&
+          row.toDivisionId !== null &&
+          (
+            options.actorDivisionId === row.toDivisionId ||
+            params.scope.divisionIds.includes(row.toDivisionId) ||
+            params.scope.managedDivisionIds.includes(row.toDivisionId)
+          );
+        if (!canApproveKd) {
+          throw new Error("WO_APPROVAL_FORBIDDEN");
+        }
+        if (!options.input.picId || !options.input.estimatedHours || options.input.estimatedHours <= 0) {
+          throw new Error("MISSING_KD_ASSIGNMENT");
+        }
+
+        const nextStatus = (await hasAdvisorForDivision(connection, row.toDivisionId))
+          ? WO_ADVISOR_STATUS
+          : WO_KP_STATUS;
+
+        await connection.execute(
+          `
+            UPDATE sm_jobdesc_wo
+            SET
+              status = ?,
+              pic_id = ?,
+              estimated_hours = ?,
+              updated_at = CURRENT_TIMESTAMP
+              ${noteSql}
+            WHERE id = ?
+          `,
+          [
+            nextStatus,
+            options.input.picId,
+            options.input.estimatedHours,
+            ...noteParams,
+            params.woId,
+          ],
+        );
+        await connection.commit();
+        return { status: nextStatus, linkedCountdownId: null };
+      }
+
+      if (status === WO_ADVISOR_STATUS) {
+        if (!options.permissions.includes(permissionCodes.woApproveAdvisor)) {
+          throw new Error("WO_APPROVAL_FORBIDDEN");
+        }
+        await connection.execute(
+          `
+            UPDATE sm_jobdesc_wo
+            SET
+              status = ?,
+              acc_tracking = 1,
+              estimated_hours = COALESCE(?, estimated_hours),
+              updated_at = CURRENT_TIMESTAMP
+              ${noteSql}
+            WHERE id = ?
+          `,
+          [
+            WO_KP_STATUS,
+            options.input.estimatedHours,
+            ...noteParams,
+            params.woId,
+          ],
+        );
+        await connection.commit();
+        return { status: WO_KP_STATUS, linkedCountdownId: null };
+      }
+
+      if (status === WO_KP_STATUS) {
+        const canApproveKp = await canApproveKpForUnit(
+          connection,
+          {
+            employeeId: params.employeeId,
+            scope: params.scope,
+            carId: row.carId,
+          },
+          options.approvalRank,
+        );
+        if (!canApproveKp) {
+          throw new Error("WO_APPROVAL_FORBIDDEN");
+        }
+        await connection.execute(
+          `
+            UPDATE sm_jobdesc_wo
+            SET
+              status = ?,
+              estimated_hours = COALESCE(?, estimated_hours),
+              updated_at = CURRENT_TIMESTAMP
+              ${noteSql}
+            WHERE id = ?
+          `,
+          [
+            WO_PM_STATUS,
+            options.input.estimatedHours,
+            ...noteParams,
+            params.woId,
+          ],
+        );
+        await connection.commit();
+        return { status: WO_PM_STATUS, linkedCountdownId: null };
+      }
+
+      if (status === WO_PM_STATUS) {
+        if (!options.permissions.includes(permissionCodes.woApprovePm)) {
+          throw new Error("WO_APPROVAL_FORBIDDEN");
+        }
+
+        const targetHours = Number(options.input.estimatedHours ?? row.estimatedHours ?? 0);
+        if (!Number.isFinite(targetHours) || targetHours <= 0) {
+          throw new Error("MISSING_KD_ASSIGNMENT");
+        }
+
+        const [existingRows] = (await connection.query(
+          `
+            SELECT id AS coreId
+            FROM sm_jobdesc_countdown
+            WHERE ref_taks_id = ?
+            ORDER BY created_at DESC
+            LIMIT 1
+          `,
+          [params.woId],
+        )) as [ExistingCountdownRow[], unknown];
+        let linkedCountdownId = existingRows[0]?.coreId ?? null;
+
+        if (!linkedCountdownId) {
+          const [panelRows] = (await connection.query(
+            `
+              SELECT id
+              FROM master_panels
+              WHERE name = ?
+                AND (car_id = ? OR car_id IS NULL)
+              ORDER BY CASE WHEN car_id = ? THEN 0 ELSE 1 END ASC
+              LIMIT 1
+            `,
+            [row.panelName ?? "", row.carId, row.carId],
+          )) as [Array<RowDataPacket & { id: number }>, unknown];
+          const panelId = panelRows[0]?.id ?? null;
+          linkedCountdownId = randomUUID();
+          const sectionName = row.panelName
+            ? `WO: ${row.panelName} - ${row.woNumber}`
+            : `WO: ${row.woNumber}`;
+          const deadlineDate = row.requestDate || new Date().toISOString().slice(0, 10);
+
+          await connection.execute(
+            `
+              INSERT INTO sm_jobdesc_countdown (
+                id,
+                car_id,
+                division_id,
+                task_category,
+                ref_taks_id,
+                panel_id,
+                section_name,
+                target_hours_initial,
+                target_hours_revised,
+                remaining_hours,
+                status,
+                start_date,
+                deadline_date,
+                user_update
+              ) VALUES (?, ?, ?, 'WO', ?, ?, ?, ?, ?, ?, 'PLAN', CURRENT_DATE, ?, ?)
+            `,
+            [
+              linkedCountdownId,
+              row.carId,
+              row.toDivisionId,
+              params.woId,
+              panelId,
+              sectionName,
+              targetHours,
+              targetHours,
+              targetHours,
+              deadlineDate,
+              options.actorId,
+            ],
+          );
+        }
+
+        await connection.execute(
+          `
+            UPDATE sm_jobdesc_wo
+            SET
+              status = 'APPROVED',
+              estimated_hours = ?,
+              approval_date = CURRENT_TIMESTAMP,
+              approver_id = ?,
+              updated_at = CURRENT_TIMESTAMP
+              ${noteSql}
+            WHERE id = ?
+          `,
+          [
+            targetHours,
+            options.actorId,
+            ...noteParams,
+            params.woId,
+          ],
+        );
+        await connection.commit();
+        return { status: "APPROVED", linkedCountdownId };
+      }
+
+      throw new Error("INVALID_STATUS_TRANSITION");
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
   }
 
   async findLinkedCountdowns(woId: string): Promise<WoLinkedCountdown[]> {

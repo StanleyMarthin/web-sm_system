@@ -131,6 +131,8 @@ export function CountdownDetailShell({ countdown }: CountdownDetailShellProps) {
             <p>Jenis Kerja: {countdown.jobTypeName ?? "-"}</p>
             <p>Customer: {countdown.customerName ?? "-"}</p>
             <p>Terlambat: {countdown.isOverdue ? "Ya" : "Tidak"}</p>
+            <p>Temuan Awal: {countdown.temuanAwal ?? "-"}</p>
+            <p>Keterangan: {countdown.keterangan ?? "-"}</p>
           </div>
         </section>
       </div>

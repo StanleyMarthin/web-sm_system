@@ -11,7 +11,7 @@ const PlanningEvaluationShell = dynamic(
       (mod) => mod.PlanningEvaluationShell,
     ),
   {
-    loading: () => <PageDataSkeleton title="Memuat review planning" />,
+    loading: () => <PageDataSkeleton title="Memuat Review Plan" />,
   },
 );
 
@@ -43,10 +43,11 @@ function resolveDate(searchParams: Record<string, string | string[] | undefined>
   return `${today.getFullYear()}-${month}-${day}`;
 }
 
-export default async function PlanningEvaluationPage({
-  searchParams,
-}: PlanningEvaluationPageProps) {
+async function PlanningEvaluationPageContent({ searchParams }: PlanningEvaluationPageProps) {
   const resolvedSearchParams = await searchParams;
+  if (typeof resolvedSearchParams.date !== "string" || !resolvedSearchParams.date.trim()) {
+    redirect(`/planning/evaluation?date=${resolveDate(resolvedSearchParams)}`);
+  }
   const requestHeaders = await headers();
   const cookieHeader = requestHeaders.get("cookie") ?? "";
   const activeMode = resolveMode(resolvedSearchParams);
@@ -65,7 +66,7 @@ export default async function PlanningEvaluationPage({
     return (
       <ModuleUnavailableState
         module="Planning"
-        title="Review plan belum bisa dimuat"
+        title="Review Plan belum bisa dimuat"
         message="Perbandingan baseline, revisi, dan aktual belum terbaca saat ini. Coba muat ulang beberapa saat lagi."
       />
     );
@@ -81,4 +82,8 @@ export default async function PlanningEvaluationPage({
       rows={payload.data.divisions}
     />
   );
+}
+
+export default function PlanningEvaluationPage(props: PlanningEvaluationPageProps) {
+  return <PlanningEvaluationPageContent {...props} />;
 }

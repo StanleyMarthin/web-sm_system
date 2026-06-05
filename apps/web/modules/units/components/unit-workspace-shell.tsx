@@ -2,18 +2,22 @@
 
 import type { UnitBoardRow, UnitWorkspace } from "@smsystem/contracts/unit";
 import type { UnitBomWorkspace } from "@smsystem/contracts/unit-bom";
+import type { UnitPanelCollection } from "@smsystem/contracts/unit-panel";
 import { AlertTriangle, ArrowLeft, FileText, Wrench } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { BomTrackerTab } from "@/modules/units/components/bom-tracker-tab";
+import { MasterPanelManager } from "@/modules/units/components/master-panel-manager";
 import { humanizeCodeLabel } from "@/shared/format/humanize";
 
 interface UnitWorkspaceShellProps {
   unit: UnitBoardRow;
   workspace: UnitWorkspace;
   bom: UnitBomWorkspace | null;
+  masterPanels: UnitPanelCollection | null;
   canManagePhotos: boolean;
   canDownloadPhotos: boolean;
+  canManagePanels: boolean;
 }
 
 function SummaryCard({
@@ -26,26 +30,29 @@ function SummaryCard({
   helper?: string;
 }) {
   return (
-    <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-5">
-      <p className="text-[10px] uppercase tracking-[0.18em] text-white/35">{label}</p>
-      <p className="mt-3 text-lg text-white">{value}</p>
-      {helper ? <p className="mt-2 text-sm text-white/40">{helper}</p> : null}
+    <div className="border border-white/5 bg-[#111114] px-4 py-3">
+      <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">{label}</p>
+      <p className="mt-1 text-[14px] font-mono text-white">{value}</p>
+      {helper ? <p className="mt-0.5 text-[10px] text-white/30">{helper}</p> : null}
     </div>
   );
 }
 
-type UnitWorkspaceTab = "summary" | "parts-panels";
+type UnitWorkspaceTab = "summary" | "parts-panels" | "master-panel";
 
 function resolveTab(value: string | null): UnitWorkspaceTab {
-  return value === "parts-panels" ? "parts-panels" : "summary";
+  if (value === "parts-panels" || value === "master-panel") return value;
+  return "summary";
 }
 
 export function UnitWorkspaceShell({
   unit,
   workspace,
   bom,
+  masterPanels,
   canManagePhotos,
   canDownloadPhotos,
+  canManagePanels,
 }: UnitWorkspaceShellProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -93,17 +100,17 @@ export function UnitWorkspaceShell({
 
   return (
     <div className="space-y-6">
-      <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-6">
+      <div className="border border-white/5 bg-[#111114] px-4 py-3">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <h1 className="mt-3 text-2xl font-light text-white">{unit.unitName}</h1>
-            <p className="mt-2 text-sm text-white/45">
+            <h1 className="mt-0.5 text-[14px] font-mono text-white">{unit.unitName}</h1>
+            <p className="mt-0.5 text-[11px] font-mono text-white/40">
               {unit.customerName ?? "-"} · {unit.unitId}
             </p>
           </div>
           <Link
             href="/units"
-            className="inline-flex items-center gap-2 rounded-full border border-white/[0.06] px-4 py-2 text-sm text-white/65 hover:text-white"
+            className="inline-flex items-center gap-2 border border-white/10 px-3 py-1.5 text-[10px] font-mono uppercase tracking-[0.12em] text-white/40 hover:text-white transition-colors"
           >
             <ArrowLeft className="h-4 w-4" />
             Kembali ke Daftar Unit
@@ -111,20 +118,21 @@ export function UnitWorkspaceShell({
         </div>
       </div>
 
-      <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-3">
+      <div className="border-b border-white/5">
         <div className="flex flex-wrap items-center gap-2">
           {([
             { id: "summary", label: "Summary" },
             { id: "parts-panels", label: "Parts & Panels" },
+            { id: "master-panel", label: "Master Panel" },
           ] as const).map((tab) => (
             <button
               key={tab.id}
               type="button"
               onClick={() => updateTab(tab.id)}
-              className={`rounded-full px-4 py-2 text-[11px] uppercase tracking-[0.18em] transition-colors ${
+              className={`px-4 py-2 text-[10px] font-mono uppercase tracking-[0.12em] transition-colors ${
                 activeTab === tab.id
-                  ? "bg-amber-500 text-black"
-                  : "border border-white/[0.08] text-white/50 hover:text-white"
+                  ? "border-b-2 border-amber-500 text-amber-500"
+                  : "border-b-2 border-transparent text-white/40 hover:text-white/70"
               }`}
             >
               {tab.label}
@@ -154,14 +162,14 @@ export function UnitWorkspaceShell({
           </div>
 
           <div className="grid gap-4 xl:grid-cols-3">
-            <section className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-6">
+            <section className="border border-white/5 bg-[#111114] px-4 py-3">
               <div className="flex items-center gap-3">
-                <FileText className="h-4 w-4 text-amber-400" />
-                <h2 className="text-sm uppercase tracking-[0.18em] text-white/45">
+                <FileText className="h-3.5 w-3.5 text-amber-500" />
+                <h2 className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">
                   Ringkasan Countdown
                 </h2>
               </div>
-              <div className="mt-4 grid grid-cols-2 gap-3 text-sm text-white/70">
+              <div className="mt-2 grid grid-cols-2 gap-y-1 gap-x-3 text-[11px] font-mono text-white/60">
                 <p>Total: {workspace.countdownSummary.total}</p>
                 <p>Plan: {workspace.countdownSummary.plan}</p>
                 <p>Proses: {workspace.countdownSummary.proses}</p>
@@ -171,14 +179,14 @@ export function UnitWorkspaceShell({
               </div>
             </section>
 
-            <section className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-6">
+            <section className="border border-white/5 bg-[#111114] px-4 py-3">
               <div className="flex items-center gap-3">
-                <FileText className="h-4 w-4 text-amber-400" />
-                <h2 className="text-sm uppercase tracking-[0.18em] text-white/45">
+                <FileText className="h-3.5 w-3.5 text-amber-500" />
+                <h2 className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">
                   Ringkasan WO
                 </h2>
               </div>
-              <div className="mt-4 grid grid-cols-2 gap-3 text-sm text-white/70">
+              <div className="mt-2 grid grid-cols-2 gap-y-1 gap-x-3 text-[11px] font-mono text-white/60">
                 <p>Diajukan: {workspace.woSummary.submitted}</p>
                 <p>Disetujui: {workspace.woSummary.approved}</p>
                 <p>Ditolak: {workspace.woSummary.rejected}</p>
@@ -186,14 +194,14 @@ export function UnitWorkspaceShell({
               </div>
             </section>
 
-            <section className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-6">
+            <section className="border border-white/5 bg-[#111114] px-4 py-3">
               <div className="flex items-center gap-3">
-                <AlertTriangle className="h-4 w-4 text-amber-400" />
-                <h2 className="text-sm uppercase tracking-[0.18em] text-white/45">
+                <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+                <h2 className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">
                   Ringkasan Issue
                 </h2>
               </div>
-              <div className="mt-4 grid grid-cols-2 gap-3 text-sm text-white/70">
+              <div className="mt-2 grid grid-cols-2 gap-y-1 gap-x-3 text-[11px] font-mono text-white/60">
                 <p>Open: {workspace.issueSummary.open}</p>
                 <p>Selesai: {workspace.issueSummary.resolved}</p>
                 <p>High: {workspace.issueSummary.highSeverityOpen}</p>
@@ -202,22 +210,22 @@ export function UnitWorkspaceShell({
             </section>
           </div>
 
-          <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-6">
+          <div className="border border-white/5 bg-[#111114] px-4 py-3">
             <div className="flex items-center gap-3">
-              <Wrench className="h-4 w-4 text-amber-400" />
-              <h2 className="text-sm uppercase tracking-[0.18em] text-white/45">
+              <Wrench className="h-3.5 w-3.5 text-amber-500" />
+              <h2 className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">
                 Ringkasan Risiko Pengiriman
               </h2>
             </div>
-            <p className="mt-4 text-sm text-white/55">{workspace.deliveryRisk.reason}</p>
+            <p className="mt-2 text-[11px] text-white/50">{workspace.deliveryRisk.reason}</p>
           </div>
 
           {/* Progress per Divisi Teknis */}
-          <section className="rounded-2xl border border-white/[0.06] bg-white/[0.03]">
-            <div className="flex items-center justify-between gap-2 border-b border-white/[0.06] px-4 py-3">
+          <section className="border border-white/5 bg-[#111114]">
+            <div className="flex items-center justify-between gap-2 border-b border-white/5 px-4 py-2">
               <div className="flex items-center gap-3">
-                <Wrench className="h-4 w-4 text-amber-400" />
-                <h2 className="text-sm uppercase tracking-[0.18em] text-white/45">
+                <Wrench className="h-3.5 w-3.5 text-amber-500" />
+                <h2 className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">
                   Progress per Divisi
                 </h2>
               </div>
@@ -239,9 +247,9 @@ export function UnitWorkspaceShell({
                         <span>Progress</span>
                         <span className="tabular-nums font-medium text-white/70">{Math.round(div.avgProgress)}%</span>
                       </div>
-                      <div className="h-2 rounded-full bg-white/[0.06]">
+                      <div className="h-1.5 bg-white/[0.06]">
                         <div
-                          className="h-2 rounded-full bg-amber-500 transition-[width]"
+                          className="h-1.5 bg-amber-500 transition-[width]"
                           style={{ width: `${Math.round(div.avgProgress)}%` }}
                         />
                       </div>
@@ -256,11 +264,19 @@ export function UnitWorkspaceShell({
             )}
           </section>
         </div>
-      ) : (
+      ) : activeTab === "parts-panels" ? (
         <BomTrackerTab
+          carId={unit.unitId}
           bom={bom}
           canManagePhotos={canManagePhotos}
           canDownloadPhotos={canDownloadPhotos}
+        />
+      ) : (
+        <MasterPanelManager
+          key={`${unit.unitId}:master-panel:${masterPanels?.tree.length ?? "client"}`}
+          unitId={unit.unitId}
+          canManage={canManagePanels}
+          initialRows={masterPanels?.tree}
         />
       )}
     </div>

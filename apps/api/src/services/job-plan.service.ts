@@ -27,6 +27,7 @@ import {
 } from "@/repositories/job-plan.repo";
 import { getRedisClient } from "@/redis/client";
 import type { WebSession } from "@/services/auth/session.service";
+import { sendPushNotification } from "@/services/push-notification.service";
 
 interface JobPlanListResult {
   data: JobPlanRecord[];
@@ -105,15 +106,19 @@ function mapDraftToRecord(draft: JobPlanDraftRecord): JobPlanRecord {
     panelName: draft.panelName ?? null,
     panelSectionName: draft.panelName ?? null,
     jobName: draft.jobName ?? null,
+    masterJobName: draft.jobName ?? draft.jobDescription,
     assignedUserId: draft.assignedUserId,
     assignedUserName: draft.assignedUserName ?? draft.assignedUserId,
     targetHours: draft.targetHours,
+    targetDailyHours: draft.targetHours,
+    targetTotalHours: draft.targetHours,
     startTime: draft.startTime ?? null,
     finishTime: draft.finishTime ?? null,
     isOvertime: draft.isOvertime,
     isPriority: draft.isPriority,
     status: "DRAFT",
     jobDescription: draft.jobDescription,
+    instructionText: draft.jobDescription,
     note: draft.note ?? null,
     draftSourceType: draft.sourceType,
     draftCarId: draft.carId ?? null,
@@ -773,12 +778,67 @@ export class DefaultJobPlanService implements JobPlanService {
       },
     });
 
+    // Send FCM push notifications to approvers — fire-and-forget
+    void this.notifyApproversForSubmit(draftRows, session.user.fullName);
+
     return {
       createdIds: result.createdIds,
       updatedPlanId: null,
       deletedPlanId: null,
       status: null,
     };
+  }
+
+  /**
+   * Fire-and-forget: resolve approvers for all cars in the submitted drafts,
+   * then send FCM push notifications to KP / advisor / KD.
+   */
+  private async notifyApproversForSubmit(
+    drafts: JobPlanDraftRecord[],
+    actorName: string,
+  ): Promise<void> {
+    try {
+      // Collect unique car IDs from drafts (ADDITIONAL type has carId directly;
+      // COUNTDOWN type may also include carId if the frontend populated it)
+      const carIds = [
+        ...new Set(drafts.map((d) => d.carId).filter((id): id is string => Boolean(id))),
+      ];
+
+      if (carIds.length === 0) {
+        return;
+      }
+
+      const approvers = await this.repository.getApproversForCars(carIds);
+
+      // Collect unique recipient employee IDs (KP, advisor, KD)
+      const recipientIds = [
+        ...new Set(
+          approvers.flatMap(({ kpId, advisorId, kdId }) =>
+            [kpId, advisorId, kdId].filter((id): id is string => Boolean(id)),
+          ),
+        ),
+      ];
+
+      if (recipientIds.length === 0) {
+        return;
+      }
+
+      const planCount = drafts.length;
+      await sendPushNotification(
+        recipientIds,
+        {
+          title: "Job Plan Baru Menunggu Persetujuan",
+          body: `${actorName} mengajukan ${planCount} rencana kerja yang perlu disetujui.`,
+        },
+        {
+          type: "JOB_PLAN_SUBMIT",
+          actorName,
+          planCount: String(planCount),
+        },
+      );
+    } catch (err) {
+      console.error("[job-plan] notifyApproversForSubmit error:", err);
+    }
   }
 
   async deleteDrafts(

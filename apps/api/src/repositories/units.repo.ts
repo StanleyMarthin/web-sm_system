@@ -1,5 +1,10 @@
 import type { AuthScope } from "@smsystem/contracts/auth";
-import type { UnitBoardRow, UnitWorkspace } from "@smsystem/contracts/unit";
+import type {
+  CreateUnitRequest,
+  UnitBoardRow,
+  UnitWorkspace,
+  UpdateUnitRequest,
+} from "@smsystem/contracts/unit";
 import type {
   UnitBomDocument,
   UnitBomLogisticStatus,
@@ -11,7 +16,13 @@ import type {
   UnitBomTimelineItem,
   UnitBomWorkspace,
 } from "@smsystem/contracts/unit-bom";
-import type { Pool, RowDataPacket } from "mysql2/promise";
+import type {
+  CreateUnitPanelRequest,
+  UnitPanelCollection,
+  UnitPanelRecord,
+  UpdateUnitPanelRequest,
+} from "@smsystem/contracts/unit-panel";
+import type { Pool, ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { getApiEnv, type ApiEnv } from "@/config/env";
 import { qualifyTable } from "@/db/identifier";
 import { getMySqlPool } from "@/db/mysql";
@@ -21,7 +32,12 @@ import { _build_workday_alias } from "@/services/workday-alias";
 interface UnitBoardRowPacket extends RowDataPacket {
   unitId: string;
   unitName: string;
+  plateNumber: string | null;
   customerName: string | null;
+  restorationType: string | null;
+  isMargin: number | boolean | null;
+  incomingDate: string | null;
+  revisionContract: string | null;
   kpName: string;
   advisorName: string;
   targetDeliveryDate: string | null;
@@ -37,6 +53,10 @@ interface UnitBoardRowPacket extends RowDataPacket {
 }
 
 interface AggregateCountPacket extends RowDataPacket {
+  total: number;
+}
+
+interface UnitDependencyCountPacket extends RowDataPacket {
   total: number;
 }
 
@@ -158,6 +178,41 @@ interface BomPhotoSlotRow extends RowDataPacket {
   latestPhotoAt: string | null;
 }
 
+interface UnitPanelRow extends RowDataPacket {
+  id: number;
+  carId: string;
+  parentId: number | null;
+  section: string;
+  name: string;
+  category: string | null;
+  isActive: number | boolean | null;
+  sortOrder: number | null;
+  qty: number | string | null;
+  defaultLocationType: "GUDANG" | "WORKSHOP" | "UNIT" | null;
+  defaultStockStatus: "IN_STORAGE" | "RETRIEVED" | "INSTALLED" | "LOST" | null;
+  defaultConditionType: "BARU" | "RESTORE" | "BEKAS" | null;
+  countdownUsageCount: number | null;
+  statusUsageCount: number | null;
+  childCount: number | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
+interface MasterPanelInventorySchemaRow extends RowDataPacket {
+  columnName: string;
+}
+
+interface MasterPanelInventorySchema {
+  hasQty: boolean;
+  hasDefaultLocationType: boolean;
+  hasDefaultStockStatus: boolean;
+  hasDefaultConditionType: boolean;
+}
+
+function mapTinyIntBoolean(value: unknown): boolean {
+  return value === true || value === 1 || value === "1";
+}
+
 export interface UnitBoardListPayload {
   rows: UnitBoardRow[];
   total: number;
@@ -170,6 +225,27 @@ interface ScopeParams {
 
 interface FindUnitsParams extends ScopeParams {
   query: UnitGridQuery;
+}
+
+interface CreateUnitParams {
+  actorId: string;
+  input: CreateUnitRequest;
+}
+
+interface UpdateUnitParams {
+  actorId: string;
+  unitId: string;
+  input: UpdateUnitRequest;
+}
+
+interface DeleteUnitParams {
+  actorId: string;
+  unitId: string;
+}
+
+interface UnitDependencySummary {
+  tableName: string;
+  total: number;
 }
 
 interface BomFlatPart {
@@ -294,6 +370,77 @@ function normalizePartKey(value: string | null | undefined): string {
     .toLowerCase();
 }
 
+function toNullableText(value: string | null | undefined): string | null {
+  const normalized = value?.trim();
+  return normalized ? normalized : null;
+}
+
+function normalizeUnitPanelInventoryInput<T extends CreateUnitPanelRequest | UpdateUnitPanelRequest>(input: T): T {
+  if (input.defaultLocationType !== "UNIT" || input.defaultStockStatus === "INSTALLED") {
+    return input;
+  }
+
+  return {
+    ...input,
+    defaultStockStatus: "INSTALLED",
+  };
+}
+
+function mapUnitPanelRecord(row: UnitPanelRow): UnitPanelRecord {
+  return {
+    id: Number(row.id),
+    carId: row.carId,
+    parentId: row.parentId === null ? null : Number(row.parentId),
+    nodeType: row.parentId === null ? "PANEL" : "PART",
+    section: row.section,
+    name: row.name,
+    category: toNullableText(row.category),
+    isActive: row.isActive === 1 || row.isActive === true || String(row.isActive) === "1",
+    sortOrder: Number(row.sortOrder ?? 0),
+    qty: Number(row.qty ?? 1),
+    defaultLocationType: row.defaultLocationType ?? "UNIT",
+    defaultStockStatus: row.defaultStockStatus ?? "INSTALLED",
+    defaultConditionType: row.defaultConditionType ?? "BEKAS",
+    countdownUsageCount: Number(row.countdownUsageCount ?? 0),
+    statusUsageCount: Number(row.statusUsageCount ?? 0),
+    childCount: Number(row.childCount ?? 0),
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    children: [],
+  };
+}
+
+function buildUnitPanelTree(rows: UnitPanelRow[]): UnitPanelRecord[] {
+  const recordMap = new Map<number, UnitPanelRecord>();
+
+  for (const row of rows) {
+    recordMap.set(Number(row.id), mapUnitPanelRecord(row));
+  }
+
+  const roots: UnitPanelRecord[] = [];
+  for (const row of rows) {
+    const record = recordMap.get(Number(row.id));
+    if (!record) {
+      continue;
+    }
+
+    if (row.parentId === null) {
+      roots.push(record);
+      continue;
+    }
+
+    const parent = recordMap.get(Number(row.parentId));
+    if (parent) {
+      parent.children.push(record);
+      continue;
+    }
+
+    roots.push(record);
+  }
+
+  return roots;
+}
+
 function humanizePrStatus(status: string | null): string {
   switch ((status ?? "").toUpperCase()) {
     case "ORDERED":
@@ -391,8 +538,8 @@ function buildTimeline(row: BomPanelRow, jobRows: BomTimelineRow[]): UnitBomTime
   if (row.divisionName) {
     events.push({
       eventType: "HANDOVER",
-      title: "Serah terima fisik",
-      description: `Diserahkan ke ${row.divisionName}`,
+      title: "Pendataan awal",
+      description: `Didata untuk ${row.divisionName}`,
       occurredAt: row.lockUpdatedAt,
       actorName: null,
       statusLabel: Number(row.isLocked ?? 0) > 0 ? "Aktif" : null,
@@ -569,7 +716,12 @@ function unitBoardBaseSql(): string {
     SELECT
       c.id AS unitId,
       c.unit_name AS unitName,
+      c.plate_number AS plateNumber,
       c.customer_name AS customerName,
+      c.restoration_type AS restorationType,
+      COALESCE(c.is_margin, 1) AS isMargin,
+      DATE_FORMAT(c.incoming_date, '%Y-%m-%d') AS incomingDate,
+      DATE_FORMAT(c.revision_contract, '%Y-%m-%d') AS revisionContract,
       COALESCE(kp.full_name, '-') AS kpName,
       COALESCE(advisor.full_name, '-') AS advisorName,
       DATE_FORMAT(c.contract_delivery_date, '%Y-%m-%d') AS targetDeliveryDate,
@@ -642,7 +794,12 @@ function mapUnitBoardRow(row: UnitBoardRowPacket): UnitBoardRow {
   return {
     unitId: row.unitId,
     unitName: row.unitName,
+    plateNumber: row.plateNumber,
     customerName: row.customerName,
+    restorationType: row.restorationType,
+    isMargin: mapTinyIntBoolean(row.isMargin),
+    incomingDate: row.incomingDate,
+    revisionContract: row.revisionContract,
     kpName: row.kpName,
     advisorName: row.advisorName,
     targetDeliveryDate: row.targetDeliveryDate,
@@ -658,10 +815,34 @@ function mapUnitBoardRow(row: UnitBoardRowPacket): UnitBoardRow {
   };
 }
 
+const UNIT_DELETE_DEPENDENCY_TABLES = [
+  "car_project_assignment",
+  "master_panels",
+  "planning_target_divisions",
+  "sm_bubut_invoice",
+  "sm_car_panel_status",
+  "sm_issue_log",
+  "sm_jobdesc_countdown",
+  "sm_jobdesc_countdown_detail",
+  "sm_jobdesc_wo",
+  "sm_qc_final_approvals",
+  "sm_unit_budgets",
+  "sm_weekly_plan_units",
+  "sm_wo_vendor",
+  "sm_work_ledger",
+  "summary_division_monitoring",
+  `${getApiEnv().PURCHASE_DB_NAME}.pur_pr_header`,
+  `${getApiEnv().PURCHASE_DB_NAME}.vnd_wo_vendor`,
+  `${getApiEnv().WAREHOUSE_DB_NAME}.wh_material_usage`,
+  `${getApiEnv().WAREHOUSE_DB_NAME}.wh_stock_card`,
+  `${getApiEnv().WAREHOUSE_DB_NAME}.wh_transactions`,
+] as const;
+
 export class UnitsRepository {
   private readonly env: ApiEnv;
   private readonly purchaseDb: string;
   private readonly warehouseDb: string;
+  private masterPanelInventorySchemaPromise: Promise<MasterPanelInventorySchema> | null = null;
 
   constructor(
     private readonly poolFactory: () => Pool = getMySqlPool,
@@ -669,6 +850,185 @@ export class UnitsRepository {
     this.env = getApiEnv();
     this.purchaseDb = this.env.PURCHASE_DB_NAME;
     this.warehouseDb = this.env.WAREHOUSE_DB_NAME;
+  }
+
+  private async getMasterPanelInventorySchema(pool: Pick<Pool, "query">): Promise<MasterPanelInventorySchema> {
+    if (!this.masterPanelInventorySchemaPromise) {
+      this.masterPanelInventorySchemaPromise = pool
+        .query<MasterPanelInventorySchemaRow[]>(
+          `
+            SELECT column_name AS columnName
+            FROM information_schema.columns
+            WHERE table_schema = DATABASE()
+              AND table_name = 'master_panels'
+              AND column_name IN (
+                'qty',
+                'default_location_type',
+                'default_stock_status',
+                'default_condition_type'
+              )
+          `,
+        )
+        .then(([rows]) => {
+          const columns = new Set(rows.map((row) => row.columnName));
+          return {
+            hasQty: columns.has("qty"),
+            hasDefaultLocationType: columns.has("default_location_type"),
+            hasDefaultStockStatus: columns.has("default_stock_status"),
+            hasDefaultConditionType: columns.has("default_condition_type"),
+          };
+        });
+    }
+
+    return this.masterPanelInventorySchemaPromise;
+  }
+
+  private async findUnitBoardRowById(unitId: string): Promise<UnitBoardRow | null> {
+    const pool = this.poolFactory();
+    const [rows] = (await pool.query(
+      `
+        SELECT *
+        FROM (${unitBoardBaseSql()}) ub
+        WHERE ub.unitId = ?
+        LIMIT 1
+      `,
+      [unitId],
+    )) as [UnitBoardRowPacket[], unknown];
+
+    return rows[0] ? mapUnitBoardRow(rows[0]) : null;
+  }
+
+  async createUnit(params: {
+    actorId: string;
+    input: CreateUnitRequest;
+  }): Promise<UnitBoardRow> {
+    const pool = this.poolFactory();
+    const existing = await this.findUnitBoardRowById(params.input.unitId);
+    if (existing) {
+      throw new Error("UNIT_ALREADY_EXISTS");
+    }
+
+    await pool.execute<ResultSetHeader>(
+      `
+        INSERT INTO cars (
+          id,
+          unit_name,
+          plate_number,
+          customer_name,
+          restoration_type,
+          is_margin,
+          contract_delivery_date,
+          incoming_date,
+          revision_contract,
+          status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `,
+      [
+        params.input.unitId,
+        params.input.unitName,
+        params.input.plateNumber,
+        params.input.customerName,
+        params.input.restorationType,
+        params.input.isMargin ? 1 : 0,
+        params.input.contractDeliveryDate,
+        params.input.incomingDate,
+        params.input.revisionContract,
+        params.input.status,
+      ],
+    );
+
+    const unit = await this.findUnitBoardRowById(params.input.unitId);
+    if (!unit) {
+      throw new Error("UNIT_NOT_FOUND");
+    }
+
+    return unit;
+  }
+
+  async updateUnit(params: {
+    actorId: string;
+    unitId: string;
+    input: UpdateUnitRequest;
+  }): Promise<{ before: UnitBoardRow; after: UnitBoardRow }> {
+    const before = await this.findUnitBoardRowById(params.unitId);
+    if (!before) {
+      throw new Error("UNIT_NOT_FOUND");
+    }
+
+    const pool = this.poolFactory();
+    await pool.execute<ResultSetHeader>(
+      `
+        UPDATE cars
+        SET
+          unit_name = ?,
+          plate_number = ?,
+          customer_name = ?,
+          restoration_type = ?,
+          is_margin = ?,
+          contract_delivery_date = ?,
+          incoming_date = ?,
+          revision_contract = ?,
+          status = ?
+        WHERE id = ?
+        LIMIT 1
+      `,
+      [
+        params.input.unitName,
+        params.input.plateNumber,
+        params.input.customerName,
+        params.input.restorationType,
+        params.input.isMargin ? 1 : 0,
+        params.input.contractDeliveryDate,
+        params.input.incomingDate,
+        params.input.revisionContract,
+        params.input.status,
+        params.unitId,
+      ],
+    );
+
+    const after = await this.findUnitBoardRowById(params.unitId);
+    if (!after) {
+      throw new Error("UNIT_NOT_FOUND");
+    }
+
+    return { before, after };
+  }
+
+  async deleteUnit(params: {
+    actorId: string;
+    unitId: string;
+  }): Promise<UnitBoardRow> {
+    const current = await this.findUnitBoardRowById(params.unitId);
+    if (!current) {
+      throw new Error("UNIT_NOT_FOUND");
+    }
+
+    const pool = this.poolFactory();
+    for (const tableName of UNIT_DELETE_DEPENDENCY_TABLES) {
+      const [rows] = (await pool.query(
+        `
+          SELECT COUNT(*) AS total
+          FROM ${tableName}
+          WHERE car_id = ?
+        `,
+        [params.unitId],
+      )) as [UnitDependencyCountPacket[], unknown];
+
+      if (Number(rows[0]?.total ?? 0) > 0) {
+        throw new Error("UNIT_IN_USE");
+      }
+    }
+
+    await pool.execute<ResultSetHeader>(
+      `
+        DELETE FROM cars
+        WHERE id = ?
+        LIMIT 1
+      `,
+      [params.unitId],
+    );
+
+    return current;
   }
 
   async findUnitBoard(params: FindUnitsParams): Promise<UnitBoardListPayload> {
@@ -1315,5 +1675,331 @@ export class UnitsRepository {
       },
       tree: buildBomTree(parts),
     };
+  }
+
+  private async findUnitPanelRow(pool: Pick<Pool, "query">, unitId: string, panelId: number) {
+    const schema = await this.getMasterPanelInventorySchema(pool);
+    const qtySelect = schema.hasQty ? "COALESCE(mp.qty, 1)" : "1";
+    const locationSelect = schema.hasDefaultLocationType ? "COALESCE(mp.default_location_type, 'UNIT')" : "'UNIT'";
+    const stockStatusSelect = schema.hasDefaultStockStatus ? "COALESCE(mp.default_stock_status, 'INSTALLED')" : "'INSTALLED'";
+    const conditionSelect = schema.hasDefaultConditionType ? "COALESCE(mp.default_condition_type, 'BEKAS')" : "'BEKAS'";
+    const inventoryGroupBy = [
+      schema.hasQty ? "mp.qty" : null,
+      schema.hasDefaultLocationType ? "mp.default_location_type" : null,
+      schema.hasDefaultStockStatus ? "mp.default_stock_status" : null,
+      schema.hasDefaultConditionType ? "mp.default_condition_type" : null,
+    ].filter(Boolean);
+
+    const [rows] = await pool.query<UnitPanelRow[]>(
+      `
+        SELECT
+          mp.id,
+          mp.car_id AS carId,
+          mp.parent_id AS parentId,
+          mp.section,
+          mp.name,
+          mp.category,
+          COALESCE(mp.is_active, 1) AS isActive,
+          COALESCE(mp.sort_order, 0) AS sortOrder,
+          ${qtySelect} AS qty,
+          ${locationSelect} AS defaultLocationType,
+          ${stockStatusSelect} AS defaultStockStatus,
+          ${conditionSelect} AS defaultConditionType,
+          COUNT(DISTINCT cd.id) AS countdownUsageCount,
+          COUNT(DISTINCT cps.id) AS statusUsageCount,
+          COUNT(DISTINCT child.id) AS childCount,
+          DATE_FORMAT(mp.created_at, '%Y-%m-%d %H:%i:%s') AS createdAt,
+          DATE_FORMAT(mp.updated_at, '%Y-%m-%d %H:%i:%s') AS updatedAt
+        FROM master_panels mp
+        LEFT JOIN sm_jobdesc_countdown cd ON cd.panel_id = mp.id
+        LEFT JOIN sm_car_panel_status cps
+          ON cps.panel_id = mp.id
+         AND cps.car_id = mp.car_id
+        LEFT JOIN master_panels child ON child.parent_id = mp.id
+        WHERE mp.car_id = ?
+          AND mp.id = ?
+        GROUP BY
+          mp.id,
+          mp.car_id,
+          mp.parent_id,
+          mp.section,
+          mp.name,
+          mp.category,
+          mp.is_active,
+          mp.sort_order,
+          ${inventoryGroupBy.length ? `${inventoryGroupBy.join(",\n          ")},` : ""}
+          mp.created_at,
+          mp.updated_at
+        LIMIT 1
+      `,
+      [unitId, panelId],
+    );
+
+    return rows[0] ?? null;
+  }
+
+  async findUnitPanels(params: ScopeParams & { unitId: string }): Promise<UnitPanelCollection | null> {
+    const unitSummary = await this.findUnitSummary(params);
+    if (!unitSummary) {
+      return null;
+    }
+
+    const pool = this.poolFactory();
+    const schema = await this.getMasterPanelInventorySchema(pool);
+    const qtySelect = schema.hasQty ? "COALESCE(mp.qty, 1)" : "1";
+    const locationSelect = schema.hasDefaultLocationType ? "COALESCE(mp.default_location_type, 'UNIT')" : "'UNIT'";
+    const stockStatusSelect = schema.hasDefaultStockStatus ? "COALESCE(mp.default_stock_status, 'INSTALLED')" : "'INSTALLED'";
+    const conditionSelect = schema.hasDefaultConditionType ? "COALESCE(mp.default_condition_type, 'BEKAS')" : "'BEKAS'";
+    const inventoryGroupBy = [
+      schema.hasQty ? "mp.qty" : null,
+      schema.hasDefaultLocationType ? "mp.default_location_type" : null,
+      schema.hasDefaultStockStatus ? "mp.default_stock_status" : null,
+      schema.hasDefaultConditionType ? "mp.default_condition_type" : null,
+    ].filter(Boolean);
+
+    const [rows] = await pool.query<UnitPanelRow[]>(
+      `
+        SELECT
+          mp.id,
+          mp.car_id AS carId,
+          mp.parent_id AS parentId,
+          mp.section,
+          mp.name,
+          mp.category,
+          COALESCE(mp.is_active, 1) AS isActive,
+          COALESCE(mp.sort_order, 0) AS sortOrder,
+          ${qtySelect} AS qty,
+          ${locationSelect} AS defaultLocationType,
+          ${stockStatusSelect} AS defaultStockStatus,
+          ${conditionSelect} AS defaultConditionType,
+          COUNT(DISTINCT cd.id) AS countdownUsageCount,
+          COUNT(DISTINCT cps.id) AS statusUsageCount,
+          COUNT(DISTINCT child.id) AS childCount,
+          DATE_FORMAT(mp.created_at, '%Y-%m-%d %H:%i:%s') AS createdAt,
+          DATE_FORMAT(mp.updated_at, '%Y-%m-%d %H:%i:%s') AS updatedAt
+        FROM master_panels mp
+        LEFT JOIN sm_jobdesc_countdown cd ON cd.panel_id = mp.id
+        LEFT JOIN sm_car_panel_status cps
+          ON cps.panel_id = mp.id
+         AND cps.car_id = mp.car_id
+        LEFT JOIN master_panels child ON child.parent_id = mp.id
+        WHERE mp.car_id = ?
+        GROUP BY
+          mp.id,
+          mp.car_id,
+          mp.parent_id,
+          mp.section,
+          mp.name,
+          mp.category,
+          mp.is_active,
+          mp.sort_order,
+          ${inventoryGroupBy.length ? `${inventoryGroupBy.join(",\n          ")},` : ""}
+          mp.created_at,
+          mp.updated_at
+        ORDER BY
+          COALESCE(mp.parent_id, mp.id) ASC,
+          CASE WHEN mp.parent_id IS NULL THEN 0 ELSE 1 END ASC,
+          COALESCE(mp.sort_order, 0) ASC,
+          mp.section ASC,
+          mp.name ASC
+      `,
+      [params.unitId],
+    );
+
+    return {
+      unitId: params.unitId,
+      tree: buildUnitPanelTree(rows),
+    };
+  }
+
+  async createUnitPanel(
+    params: ScopeParams & {
+      unitId: string;
+      actorId: string;
+      input: CreateUnitPanelRequest;
+    },
+  ): Promise<UnitPanelRecord> {
+    const unitSummary = await this.findUnitSummary(params);
+    if (!unitSummary) {
+      throw new Error("UNIT_NOT_FOUND");
+    }
+
+    const pool = this.poolFactory();
+    const schema = await this.getMasterPanelInventorySchema(pool);
+    const input = normalizeUnitPanelInventoryInput(params.input);
+
+    if (input.parentId !== null) {
+      const parentRow = await this.findUnitPanelRow(pool, params.unitId, input.parentId);
+      if (!parentRow) {
+        throw new Error("UNIT_PANEL_PARENT_NOT_FOUND");
+      }
+      if (parentRow.parentId !== null) {
+        throw new Error("UNIT_PANEL_PARENT_INVALID");
+      }
+    }
+
+    const inventoryColumns = [
+      schema.hasQty ? "qty" : null,
+      schema.hasDefaultLocationType ? "default_location_type" : null,
+      schema.hasDefaultStockStatus ? "default_stock_status" : null,
+      schema.hasDefaultConditionType ? "default_condition_type" : null,
+    ].filter(Boolean);
+    const inventoryValues = [
+      schema.hasQty ? input.qty : undefined,
+      schema.hasDefaultLocationType ? input.defaultLocationType : undefined,
+      schema.hasDefaultStockStatus ? input.defaultStockStatus : undefined,
+      schema.hasDefaultConditionType ? input.defaultConditionType : undefined,
+    ].filter((value) => value !== undefined);
+
+    const [result] = await pool.execute<ResultSetHeader>(
+      `
+        INSERT INTO master_panels (
+          car_id,
+          section,
+          name,
+          category,
+          is_active,
+          parent_id,
+          sort_order,
+          ${inventoryColumns.length ? `${inventoryColumns.join(",\n          ")},` : ""}
+          default_division_id,
+          created_by,
+          updated_by
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ${inventoryColumns.map(() => "?").join(", ")}${inventoryColumns.length ? ", " : ""}NULL, ?, ?)
+      `,
+      [
+        params.unitId,
+        input.section.trim(),
+        input.name.trim(),
+        toNullableText(input.category),
+        input.isActive ? 1 : 0,
+        input.parentId,
+        input.sortOrder,
+        ...inventoryValues,
+        params.actorId,
+        params.actorId,
+      ],
+    );
+
+    const row = await this.findUnitPanelRow(pool, params.unitId, Number(result.insertId));
+    if (!row) {
+      throw new Error("UNIT_PANEL_NOT_FOUND");
+    }
+
+    return mapUnitPanelRecord(row);
+  }
+
+  async updateUnitPanel(
+    params: ScopeParams & {
+      unitId: string;
+      panelId: number;
+      actorId: string;
+      input: UpdateUnitPanelRequest;
+    },
+  ): Promise<{ before: UnitPanelRecord; after: UnitPanelRecord }> {
+    const unitSummary = await this.findUnitSummary(params);
+    if (!unitSummary) {
+      throw new Error("UNIT_NOT_FOUND");
+    }
+
+    const pool = this.poolFactory();
+    const schema = await this.getMasterPanelInventorySchema(pool);
+    const input = normalizeUnitPanelInventoryInput(params.input);
+    const currentRow = await this.findUnitPanelRow(pool, params.unitId, params.panelId);
+    if (!currentRow) {
+      throw new Error("UNIT_PANEL_NOT_FOUND");
+    }
+
+    const before = mapUnitPanelRecord(currentRow);
+    const inventoryAssignments = [
+      schema.hasQty ? "qty = ?" : null,
+      schema.hasDefaultLocationType ? "default_location_type = ?" : null,
+      schema.hasDefaultStockStatus ? "default_stock_status = ?" : null,
+      schema.hasDefaultConditionType ? "default_condition_type = ?" : null,
+    ].filter(Boolean);
+    const inventoryValues = [
+      schema.hasQty ? input.qty : undefined,
+      schema.hasDefaultLocationType ? input.defaultLocationType : undefined,
+      schema.hasDefaultStockStatus ? input.defaultStockStatus : undefined,
+      schema.hasDefaultConditionType ? input.defaultConditionType : undefined,
+    ].filter((value) => value !== undefined);
+
+    await pool.execute(
+      `
+        UPDATE master_panels
+        SET
+          section = ?,
+          name = ?,
+          category = ?,
+          is_active = ?,
+          sort_order = ?,
+          ${inventoryAssignments.length ? `${inventoryAssignments.join(",\n          ")},` : ""}
+          updated_by = ?
+        WHERE id = ?
+          AND car_id = ?
+        LIMIT 1
+      `,
+      [
+        input.section.trim(),
+        input.name.trim(),
+        toNullableText(input.category),
+        input.isActive ? 1 : 0,
+        input.sortOrder,
+        ...inventoryValues,
+        params.actorId,
+        params.panelId,
+        params.unitId,
+      ],
+    );
+
+    const updatedRow = await this.findUnitPanelRow(pool, params.unitId, params.panelId);
+    if (!updatedRow) {
+      throw new Error("UNIT_PANEL_NOT_FOUND");
+    }
+
+    return {
+      before,
+      after: mapUnitPanelRecord(updatedRow),
+    };
+  }
+
+  async deleteUnitPanel(
+    params: ScopeParams & {
+      unitId: string;
+      panelId: number;
+    },
+  ): Promise<UnitPanelRecord> {
+    const unitSummary = await this.findUnitSummary(params);
+    if (!unitSummary) {
+      throw new Error("UNIT_NOT_FOUND");
+    }
+
+    const pool = this.poolFactory();
+    const currentRow = await this.findUnitPanelRow(pool, params.unitId, params.panelId);
+    if (!currentRow) {
+      throw new Error("UNIT_PANEL_NOT_FOUND");
+    }
+
+    const current = mapUnitPanelRecord(currentRow);
+
+    if (current.childCount > 0) {
+      throw new Error("UNIT_PANEL_HAS_CHILDREN");
+    }
+
+    if (current.countdownUsageCount > 0 || current.statusUsageCount > 0) {
+      throw new Error("UNIT_PANEL_IN_USE");
+    }
+
+    await pool.execute(
+      `
+        DELETE FROM master_panels
+        WHERE id = ?
+          AND car_id = ?
+        LIMIT 1
+      `,
+      [params.panelId, params.unitId],
+    );
+
+    return current;
   }
 }

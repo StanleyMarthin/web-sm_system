@@ -1,13 +1,16 @@
 "use client";
 
+/* Hallmark · pre-emit critique: P4 H4 E4 S4 R4 V4 */
+/* Hallmark · genre: modern-minimal · macrostructure: Workbench · design-system: design.md · designed-as-app */
+
 import type { PlanningEvaluationDivisionRecord } from "@smsystem/contracts/planning-evaluation";
 import { RefreshCcw } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   ActionButton,
-  CompactInput,
+  CompactDateInput,
+  CompactDateRangeInput,
   MetricBar,
-  PageHeader,
   SectionCard,
 } from "@/shared/ui/compact";
 
@@ -73,6 +76,16 @@ export function PlanningEvaluationShell({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const resolvedDateTo = activeSpan === "weekly" ? dateTo : date;
+  const spkDate = date;
+  const splDate = date;
+
+  function openLinkedSpk() {
+    router.push(`/spk?date=${spkDate}`);
+  }
+
+  function openLinkedSpl() {
+    router.push(`/planning/spl?date=${splDate}`);
+  }
 
   function pushMode(value: "all" | "normal" | "overtime") {
     const nextParams = new URLSearchParams(searchParams.toString());
@@ -98,125 +111,148 @@ export function PlanningEvaluationShell({
     router.push(`${pathname}?${nextParams.toString()}`);
   }
 
-  function pushWeeklyRange(start: string, end: string) {
+  function applyRangeSelection(range: { from: string; to: string }) {
     const nextParams = new URLSearchParams(searchParams.toString());
-    const range = clampWeeklyRange(start, end);
-    nextParams.set("date", range.start);
-    nextParams.set("dateTo", range.end);
+
+    if (range.from === range.to) {
+      nextParams.set("date", range.from);
+      nextParams.delete("dateTo");
+      nextParams.set("span", "daily");
+      router.push(`${pathname}?${nextParams.toString()}`);
+      return;
+    }
+
+    const normalized = clampWeeklyRange(range.from, range.to);
+    nextParams.set("date", normalized.start);
+    nextParams.set("dateTo", normalized.end);
     nextParams.set("span", "weekly");
     router.push(`${pathname}?${nextParams.toString()}`);
   }
 
   return (
     <div className="space-y-2">
-      <div className="grid gap-2 xl:grid-cols-[minmax(0,1.2fr)_minmax(360px,0.8fr)]">
-        <SectionCard label="Planning" className="space-y-2">
-          <PageHeader title="Review plan" eyebrow="Baseline · revisi · aktual" />
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-1.5 border border-gray-300 dark:border-white/[0.05] bg-slate-50 dark:bg-[#0a0a0c] p-1">
-              {(["daily", "weekly"] as const).map((value) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => pushSpan(value)}
-                  className={[
-                    "px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.12em] transition-colors",
-                    activeSpan === value
-                      ? "bg-amber-500/10 text-amber-500"
-                      : "text-gray-400 dark:text-white/40 hover:text-gray-800 dark:text-white/70",
-                  ].join(" ")}
-                >
-                  {value === "daily" ? "Harian" : "Mingguan"}
-                </button>
-              ))}
+      <section className="border border-white/5 bg-[#111114] px-4 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center gap-4">
+            <div>
+              <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-white/30">
+                Planning
+              </p>
+              <h2 className="text-[13px] font-mono text-white/80">
+                Review Plan & Realisasi
+              </h2>
             </div>
+            
+            <div className="h-6 w-px bg-white/10 hidden sm:block"></div>
 
-            <div className="flex items-center gap-1.5 border border-gray-300 dark:border-white/[0.05] bg-slate-50 dark:bg-[#0a0a0c] p-1">
-              {([
-                { value: "all", label: "Semua" },
-                { value: "normal", label: "Normal" },
-                { value: "overtime", label: "Lembur" },
-              ] as const).map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() => pushMode(option.value)}
-                  className={[
-                    "px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.12em] transition-colors",
-                    activeMode === option.value
-                      ? "bg-amber-500/10 text-amber-500"
-                      : "text-gray-400 dark:text-white/40 hover:text-gray-800 dark:text-white/70",
-                  ].join(" ")}
-                >
-                  {option.label}
-                </button>
-              ))}
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-1.5 border border-white/10 bg-[#0a0a0c] p-1">
+                {(["daily", "weekly"] as const).map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => pushSpan(value)}
+                    className={[
+                      "px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.12em] transition-colors",
+                      activeSpan === value
+                        ? "bg-amber-500/10 text-amber-500"
+                        : "text-white/40 hover:text-white/70",
+                    ].join(" ")}
+                  >
+                    {value === "daily" ? "Harian" : "Mingguan"}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex items-center gap-1.5 border border-white/10 bg-[#0a0a0c] p-1">
+                {([
+                  { value: "all", label: "Semua" },
+                  { value: "normal", label: "Normal" },
+                  { value: "overtime", label: "Lembur" },
+                ] as const).map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => pushMode(option.value)}
+                    className={[
+                      "px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.12em] transition-colors",
+                      activeMode === option.value
+                        ? "bg-amber-500/10 text-amber-500"
+                        : "text-white/40 hover:text-white/70",
+                    ].join(" ")}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            <ActionButton onClick={openLinkedSpk}>
+              Buka SPK
+            </ActionButton>
+            <ActionButton onClick={openLinkedSpl}>
+              Buka SPL
+            </ActionButton>
             {activeSpan === "daily" ? (
               <div className="w-40">
-                <CompactInput
-                  type="date"
-                  value={date}
-                  onChange={(event) => pushDailyDate(event.target.value)}
-                />
+                <CompactDateInput value={date} onChange={pushDailyDate} className="w-64" />
               </div>
             ) : (
-                <div className="flex flex-wrap items-center gap-2 border border-gray-300 dark:border-white/[0.05] bg-slate-50 dark:bg-[#0a0a0c] px-2 py-2">
-                <div className="w-36">
-                  <CompactInput
-                    type="date"
-                    value={date}
-                    onChange={(event) => pushWeeklyRange(event.target.value, resolvedDateTo)}
-                  />
-                </div>
-                <span className="text-[11px] text-gray-500 dark:text-white/30">s.d.</span>
-                <div className="w-36">
-                  <CompactInput
-                    type="date"
-                    value={resolvedDateTo}
-                    onChange={(event) => pushWeeklyRange(date, event.target.value)}
-                  />
-                </div>
-              </div>
+              <CompactDateRangeInput
+                from={date}
+                to={resolvedDateTo}
+                onChange={applyRangeSelection}
+                selectionBehavior="single-or-range"
+                className="w-64"
+              />
             )}
+            <span className="border border-white/5 bg-[#0a0a0c] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-white/45 h-8 flex items-center">
+              {activeSpan === "daily" ? "Review harian" : "Maks 7 hari"}
+            </span>
           </div>
-        </SectionCard>
+        </div>
+      </section>
 
-        <SectionCard label="Ringkasan" className="space-y-2">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <MetricBar
-              items={[
-                { label: "Baseline", value: formatHours(summary.baselineHours) },
-                { label: "Revisi", value: formatHours(summary.revisionHours), tone: "warn" },
-                { label: "Aktual", value: formatHours(summary.actualHours), tone: "up" },
-                {
-                  label: "Perubahan Plan",
-                  value: formatHours(summary.revisionDeltaHours),
-                  tone: summary.revisionDeltaHours > 0 ? "warn" : summary.revisionDeltaHours < 0 ? "down" : "muted",
-                },
-                {
-                  label: "Selisih Aktual",
-                  value: formatHours(summary.actualDeltaHours),
-                  tone: summary.actualDeltaHours > 0 ? "warn" : summary.actualDeltaHours < 0 ? "down" : "muted",
-                },
-              ]}
-            />
-            <ActionButton onClick={() => router.refresh()}>
-              <RefreshCcw className="h-3 w-3" />
-              Refresh
-            </ActionButton>
-          </div>
-        </SectionCard>
-      </div>
+      <section className="border border-white/5 bg-[#111114] px-4 py-3 flex flex-wrap items-center justify-between gap-4">
+        <MetricBar
+          items={[
+            { label: "Baseline", value: formatHours(summary.baselineHours) },
+            { label: "Revisi", value: formatHours(summary.revisionHours), tone: "warn" },
+            { label: "Aktual", value: formatHours(summary.actualHours), tone: "up" },
+            {
+              label: "Perubahan Plan",
+              value: formatHours(summary.revisionDeltaHours),
+              tone: summary.revisionDeltaHours > 0 ? "warn" : summary.revisionDeltaHours < 0 ? "down" : "muted",
+            },
+            {
+              label: "Selisih Aktual",
+              value: formatHours(summary.actualDeltaHours),
+              tone: summary.actualDeltaHours > 0 ? "warn" : summary.actualDeltaHours < 0 ? "down" : "muted",
+            },
+          ]}
+        />
+        <ActionButton onClick={() => router.refresh()}>
+          <RefreshCcw className="h-3 w-3" />
+          Refresh
+        </ActionButton>
+      </section>
 
       <SectionCard label="Per divisi" count={rows.length}>
+        <div className="flex flex-wrap items-center justify-between gap-2 border border-white/[0.05] bg-[#0a0a0c] px-3 py-2">
+          <p className="text-[12px] text-white/50">
+            Review ini tersambung ke SPK tanggal <span className="font-mono text-white/70">{spkDate}</span>
+            {" "}dan SPL periode yang sama.
+          </p>
+          <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-white/35">
+            Sorted by source data
+          </span>
+        </div>
         <div className="overflow-x-auto">
-          <table className="min-w-full text-[12px] text-gray-800 dark:text-white/70">
-            <thead className="sticky top-0 z-10 bg-white dark:bg-[#111114]">
-              <tr className="border-b border-gray-300 dark:border-white/[0.06] text-left font-mono text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/30">
+          <table className="min-w-full text-[12px] text-white/70">
+            <thead className="sticky top-0 z-10 bg-[#111114]">
+              <tr className="border-b border-white/[0.06] text-left font-mono text-[10px] uppercase tracking-[0.12em] text-white/30">
                 <th className="px-3 py-2">Divisi</th>
                 <th className="px-3 py-2 text-right">Baseline</th>
                 <th className="px-3 py-2 text-right">Revisi</th>
@@ -232,12 +268,12 @@ export function PlanningEvaluationShell({
               {rows.length > 0 ? rows.map((row) => (
                 <tr
                   key={`${row.divisionId ?? "unknown"}:${row.divisionName ?? "-"}`}
-                  className="border-b border-white/[0.04] hover:bg-gray-100 dark:hover:bg-white/[0.02]"
+                  className="border-b border-white/[0.04] hover:bg-white/[0.02]"
                 >
-                  <td className="px-3 py-2 text-gray-950 dark:text-white">{row.divisionName ?? "-"}</td>
+                  <td className="px-3 py-2 text-white">{row.divisionName ?? "-"}</td>
                   <td className="px-3 py-2 text-right font-mono tabular-nums">{formatHours(row.baselineHours)}</td>
-                  <td className="px-3 py-2 text-right font-mono tabular-nums text-amber-300">{formatHours(row.revisionHours)}</td>
-                  <td className="px-3 py-2 text-right font-mono tabular-nums text-emerald-300">{formatHours(row.actualHours)}</td>
+                  <td className="px-3 py-2 text-right font-mono tabular-nums text-amber-500">{formatHours(row.revisionHours)}</td>
+                  <td className="px-3 py-2 text-right font-mono tabular-nums text-emerald-400">{formatHours(row.actualHours)}</td>
                   <td className="px-3 py-2 text-right font-mono tabular-nums">{formatHours(row.revisionDeltaHours)}</td>
                   <td className="px-3 py-2 text-right font-mono tabular-nums">{formatHours(row.actualDeltaHours)}</td>
                   <td className="px-3 py-2 text-right font-mono tabular-nums">{row.baselineUnitCount}</td>
@@ -246,7 +282,7 @@ export function PlanningEvaluationShell({
                 </tr>
               )) : (
                 <tr>
-                  <td colSpan={9} className="px-3 py-10 text-center text-sm text-gray-500 dark:text-white/35">
+                  <td colSpan={9} className="px-3 py-10 text-center text-sm text-white/35">
                     Belum ada data evaluasi untuk filter yang dipilih.
                   </td>
                 </tr>
