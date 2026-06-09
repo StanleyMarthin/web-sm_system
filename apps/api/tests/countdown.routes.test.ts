@@ -174,7 +174,7 @@ function createStubCountdownService(overrides: Partial<CountdownService> = {}): 
     async remove(_session, _countdownId) {
       return true;
     },
-    buildTemplateWorkbook() {
+    async buildTemplateWorkbook() {
       return new Uint8Array([0x01, 0x02, 0x03]);
     },
     async importWorkbook() {

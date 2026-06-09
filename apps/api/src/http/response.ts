@@ -9,7 +9,7 @@ function isAllowedDevOrigin(origin: string): boolean {
   return /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/u.test(origin);
 }
 
-function getAllowedOrigin(origin: string | null, env: CorsEnv): string | null {
+export function getAllowedOrigin(origin: string | null, env: CorsEnv): string | null {
   if (!origin) {
     return null;
   }
@@ -19,6 +19,34 @@ function getAllowedOrigin(origin: string | null, env: CorsEnv): string | null {
   }
 
   return env.WEB_ALLOWED_ORIGINS.includes(origin) ? origin : null;
+}
+
+export function withSecurityHeaders(response: Response): Response {
+  response.headers.set(
+    "Content-Security-Policy",
+    [
+      "default-src 'self'",
+      "base-uri 'self'",
+      "frame-ancestors 'none'",
+      "img-src 'self' data: blob:",
+      "object-src 'none'",
+      "script-src 'self'",
+      "style-src 'self' 'unsafe-inline'",
+      "connect-src 'self'",
+    ].join("; "),
+  );
+  response.headers.set("X-Frame-Options", "DENY");
+  response.headers.set("X-Content-Type-Options", "nosniff");
+  response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  response.headers.set(
+    "Permissions-Policy",
+    "camera=(), microphone=(), geolocation=()",
+  );
+  response.headers.set(
+    "Strict-Transport-Security",
+    "max-age=63072000; includeSubDomains; preload",
+  );
+  return response;
 }
 
 export function withCors(
@@ -45,13 +73,13 @@ export function withCors(
 
   const origin = getAllowedOrigin(request.headers.get("origin"), resolvedEnv);
   if (!origin) {
-    return response;
+    return withSecurityHeaders(response);
   }
 
   response.headers.set("Access-Control-Allow-Origin", origin);
   response.headers.set("Access-Control-Allow-Credentials", "true");
   response.headers.set("Vary", "Origin");
-  return response;
+  return withSecurityHeaders(response);
 }
 
 export function successResponse(
@@ -122,7 +150,7 @@ export function preflightResponse(request: Request): Response {
     status: 204,
     headers: {
       "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type",
+      "Access-Control-Allow-Headers": "Content-Type, X-CSRF-Token",
     },
   });
 

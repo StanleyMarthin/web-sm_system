@@ -19,6 +19,7 @@ export interface ApiEnv {
   WEB_ALLOWED_ORIGINS: string[];
   SESSION_TTL_SECONDS: number;
   REFRESH_TTL_SECONDS: number;
+  REFRESH_TOKEN_ENCRYPTION_KEY?: string;
   AUDIT_DB_NAME: string;
   DB_HOST: string;
   DB_PORT: number;
@@ -115,6 +116,17 @@ export function loadApiEnv(
     ...fileEnv,
     ...source,
   };
+  const nodeEnv = merged.NODE_ENV?.trim() || "development";
+  const loginBase =
+    merged.SM_LOGIN_BASE_URL?.trim() ||
+    (nodeEnv === "production" ? "" : "http://108.136.189.225:8085");
+
+  if (nodeEnv === "production" && !loginBase.startsWith("https://")) {
+    throw new Error(
+      "SM_LOGIN_BASE_URL must use HTTPS in production. " +
+        "Current value is insecure or missing.",
+    );
+  }
 
   const missing = REQUIRED_KEYS.filter((key) => {
     const value = merged[key];
@@ -126,11 +138,10 @@ export function loadApiEnv(
   }
 
   return {
-    NODE_ENV: merged.NODE_ENV?.trim() || "development",
+    NODE_ENV: nodeEnv,
     API_HOST: merged.API_HOST?.trim() || "0.0.0.0",
     API_PORT: parseInteger(merged.API_PORT, 3001, "API_PORT"),
-    SM_LOGIN_BASE_URL:
-      merged.SM_LOGIN_BASE_URL?.trim() || "http://108.136.189.225:8085",
+    SM_LOGIN_BASE_URL: loginBase,
     WEB_ALLOWED_ORIGINS: (merged.WEB_ALLOWED_ORIGINS?.trim() || "")
       .split(",")
       .map((value) => value.trim())
@@ -145,6 +156,8 @@ export function loadApiEnv(
       2_592_000,
       "REFRESH_TTL_SECONDS",
     ),
+    REFRESH_TOKEN_ENCRYPTION_KEY:
+      merged.REFRESH_TOKEN_ENCRYPTION_KEY?.trim() || undefined,
     AUDIT_DB_NAME: merged.AUDIT_DB_NAME?.trim() || "sms_log",
     DB_HOST: merged.DB_HOST!.trim(),
     DB_PORT: parseInteger(merged.DB_PORT, 3306, "DB_PORT"),

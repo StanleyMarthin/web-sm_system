@@ -42,6 +42,7 @@ describe("RedisSessionStore", () => {
         }) as never,
       {
         SESSION_TTL_SECONDS: 3600,
+        DB_PASS: "test-secret",
       } as never,
     );
 
@@ -79,6 +80,7 @@ describe("RedisSessionStore", () => {
         }) as never,
       {
         SESSION_TTL_SECONDS: 3600,
+        DB_PASS: "test-secret",
       } as never,
     );
 

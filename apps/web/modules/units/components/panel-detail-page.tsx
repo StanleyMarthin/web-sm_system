@@ -32,7 +32,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { getProxiedImageUrl } from "@/shared/api/config";
 import { GalleryUploadForm, type UploadFormValues } from "@/modules/gallery/components/forms/gallery-upload-form";
 import { GalleryPhotoEditForm, type EditFormValues } from "@/modules/gallery/components/forms/gallery-photo-edit-form";
@@ -44,6 +44,10 @@ import {
   updateGalleryPhoto,
 } from "@/shared/api/gallery";
 import { createCountdownRecord, fetchCountdownBoard } from "@/shared/api/countdown";
+import {
+  fetchWorkflowLayout,
+  saveWorkflowLayout,
+} from "@/shared/api/units";
 import { createWo } from "@/shared/api/wo";
 import { createPr } from "@/shared/api/pr";
 import { createVendor } from "@/shared/api/vendor";
@@ -133,38 +137,43 @@ function buildTimeline(node: UnitBomNode): TimelineItem[] {
 
   if (node.detail?.timeline.length) {
     items.push(
-      ...node.detail.timeline.map((item) => ({
-        eventType: item.eventType,
-        title: item.title,
-        detail: item.description,
-        date: formatShortDate(item.occurredAt),
-        icon: timelineIcon(item.eventType),
-        tone: timelineTone(item.eventType),
-      }))
+      ...node.detail.timeline.map((item) => {
+        const rawItem: TimelineItem = {
+          eventType: item.eventType,
+          title: item.title,
+          detail: item.description,
+          date: formatShortDate(item.occurredAt),
+          icon: timelineIcon(item.eventType),
+          tone: timelineTone(item.eventType),
+        };
+        return normalizeTimelineItem(rawItem, node);
+      })
     );
   } else {
     const divisionName = node.divisionName ?? "Divisi terkait";
     items.push({
       title: "Pendataan awal",
       detail: `Didata untuk ${divisionName}`,
-      date: "12 Mei",
+      date: "-",
       icon: Truck,
       tone: "border-sky-400/30 bg-sky-400/10 text-sky-300",
     });
     items.push({
-      title: "Pekerjaan job plan",
-      detail: "Dempul dasar oleh Budi (4 jam) - Lolos QC",
-      date: "13 Mei",
+      title: node.label ?? "Pekerjaan countdown",
+      detail: `${hierarchyLabel(node)} - ${workStatusLabel(node)}`,
+      date: "-",
       icon: Wrench,
       tone: "border-amber-400/30 bg-amber-400/10 text-amber-300",
     });
-    items.push({
-      title: "Pemeriksaan akhir",
-      detail: `Progress terakhir ${Math.round(node.progressPercent ?? 0)}%`,
-      date: "Hari ini",
-      icon: CheckCircle2,
-      tone: "border-emerald-400/30 bg-emerald-400/10 text-emerald-300",
-    });
+    if (node.physicalStatus === "INSTALLED") {
+      items.push({
+        title: "Pemeriksaan akhir",
+        detail: `Progress terakhir ${Math.round(node.progressPercent ?? 0)}%`,
+        date: "-",
+        icon: CheckCircle2,
+        tone: "border-emerald-400/30 bg-emerald-400/10 text-emerald-300",
+      });
+    }
   }
 
   // Include WOV from documents into timeline (WO/WOV belongs to history)
@@ -193,6 +202,37 @@ function buildTimeline(node: UnitBomNode): TimelineItem[] {
   }
 
   return items;
+}
+
+function normalizeTimelineItem(item: TimelineItem, node: UnitBomNode): TimelineItem {
+  if (item.eventType === "HANDOVER" || item.title.toLowerCase().includes("pendataan")) {
+    return item;
+  }
+
+  const title = deriveTimelineJobTitle(item, node);
+  const detail = stripTimelinePanelText(item.detail, title, node);
+  return {
+    ...item,
+    title,
+    detail,
+  };
+}
+
+function stripTimelinePanelText(detail: string, jobTitle: string, node: UnitBomNode): string {
+  let next = detail.trim();
+  for (const value of [jobTitle, node.label].filter(Boolean)) {
+    next = next.replace(new RegExp(`\\b${escapeRegExp(value)}\\b`, "giu"), " ");
+  }
+  next = next
+    .replace(/\s+-\s+/gu, " - ")
+    .replace(/^\s*[-–:]+\s*/u, "")
+    .replace(/\s+/gu, " ")
+    .trim();
+  return next || detail;
+}
+
+function timelineFlowId(item: TimelineItem, index: number): string {
+  return `timeline-${index}-${item.eventType ?? "event"}`;
 }
 
 function buildDocuments(node: UnitBomNode): DocumentCard[] {
@@ -389,6 +429,11 @@ interface WorkflowNode {
   badge: string;
   status: "done" | "progress" | "plan" | "open";
   statusLabel: string;
+  detail?: string;
+  divisionLabel?: string | null;
+  sourceLabel?: string;
+  hourLabel?: string | null;
+  progressLabel?: string | null;
   hasPhotos?: boolean;
   hasMaterials?: boolean;
 }
@@ -430,113 +475,53 @@ interface WorkflowCountdownReferences {
 }
 
 function buildWorkflowSources(node: UnitBomNode): WorkflowNode[] {
-  const sources: WorkflowNode[] = [];
+  const progressPercent = Math.round(node.progressPercent ?? 0);
+  const progressLabel = `${progressPercent}%`;
+  const divisionLabel = node.divisionName ?? null;
+  const timeline = buildTimeline(node);
+  const hasActualSignal = progressPercent > 0
+    || node.physicalStatus === "INSTALLED"
+    || timeline.some((item) => item.eventType === "QC" || item.title.toLowerCase().includes("aktual"));
+  const countdownHourLabel = node.detail?.workStatusLabel
+    ? null
+    : node.progressPercent !== null && node.progressPercent !== undefined
+    ? `Aktual ${progressLabel}`
+    : null;
+  return timeline.map((item, index) => {
+    const isHandover = item.eventType === "HANDOVER" || item.title.toLowerCase().includes("pendataan");
+    const isQc = item.eventType === "QC" || item.title.toLowerCase().includes("pemeriksaan");
+    const isVendor = item.title.toLowerCase().includes("vendor") || item.detail.toLowerCase().includes("vendor");
+    const jobTitle = deriveTimelineJobTitle(item, node);
+    const type: WorkflowNodeType = isHandover ? "handover" : isVendor ? "wov" : "job";
+    const sourceLabel = isVendor
+      ? "WOV"
+      : isQc
+      ? "COUNTDOWN, AKTUAL"
+      : isHandover
+      ? "PENDATAAN"
+      : node.physicalStatus === "IN_DIVISION" || node.physicalStatus === "INSTALLED"
+      ? "COUNTDOWN, JOBPLAN"
+      : "COUNTDOWN";
+    const isScheduledPlan = !isHandover && !isVendor && !isQc && sourceLabel.includes("JOBPLAN") && !hasActualSignal;
 
-  if (node.detail?.timeline.length) {
-    for (const t of node.detail.timeline) {
-      if (t.eventType === "HANDOVER") {
-        sources.push({
-          id: `handover-${t.occurredAt ?? "0"}`,
-          type: "handover",
-          typeLabel: "Pendataan",
-          title: t.title,
-          meta: t.description,
-          badge: formatShortDate(t.occurredAt) ?? "-",
-          status: "done",
-          statusLabel: t.statusLabel ?? "Aktif",
-        });
-      } else if (t.eventType !== "QC") {
-        sources.push({
-          id: `job-${t.occurredAt ?? Math.random()}`,
-          type: "job",
-          typeLabel: "Job",
-          title: t.title,
-          meta: t.description,
-          badge: t.eventType ?? "Job",
-          status: "done",
-          statusLabel: t.statusLabel ?? t.eventType ?? "Job",
-          hasPhotos: true,
-        });
-      }
-    }
-  } else {
-    sources.push({
-      id: "handover-default",
-      type: "handover",
-      typeLabel: "Pendataan",
-      title: "Pendataan Awal",
-      meta: `Didata untuk ${node.divisionName ?? "divisi terkait"}`,
-      badge: "-",
-      status: "done",
-      statusLabel: node.detail?.workStatusLabel ?? "Pendataan",
-    });
-    sources.push({
-      id: "job-default",
-      type: "job",
-      typeLabel: "Job - Main",
-      title: node.label ?? "Pekerjaan utama",
-      meta: node.divisionName ?? "-",
-      badge: node.physicalStatus === "INSTALLED" ? "Done" : "Plan",
-      status: node.physicalStatus === "INSTALLED" ? "done" : "plan",
-      statusLabel: node.detail?.workStatusLabel ?? workStatusLabel(node),
-      hasPhotos: true,
-    });
-  }
-
-  if (node.detail?.documents.length) {
-    for (const d of node.detail.documents) {
-      if (d.documentType === "PR") {
-        sources.push({
-          id: `pr-${d.title}`,
-          type: "doc",
-          typeLabel: "PR Logistik",
-          title: d.title,
-          meta: d.description,
-          badge: "PR",
-          status: "open",
-          statusLabel: d.statusLabel ?? "PR",
-        });
-      } else if (d.documentType === "WOV") {
-        sources.push({
-          id: `wov-${d.title}`,
-          type: "wov",
-          typeLabel: "WOV - Vendor",
-          title: d.title,
-          meta: d.description,
-          badge: "WOV",
-          status: "progress",
-          statusLabel: d.statusLabel ?? "WOV",
-        });
-      }
-    }
-  } else {
-    if (node.logisticStatus === "ORDER_PR") {
-      sources.push({
-        id: "pr-fallback",
-        type: "doc",
-        typeLabel: "PR Logistik",
-        title: "Purchase Request",
-        meta: node.logisticReference ?? "Menunggu kedatangan parts",
-        badge: "Open",
-        status: "open",
-        statusLabel: node.logisticReference ?? "ORDER_PR",
-      });
-    }
-    if (node.logisticStatus === "AT_VENDOR") {
-      sources.push({
-        id: "wov-fallback",
-        type: "wov",
-        typeLabel: "WOV - Vendor",
-        title: "WO Vendor",
-        meta: node.logisticReference ?? "Sedang di vendor",
-        badge: "At Vendor",
-        status: "progress",
-        statusLabel: node.logisticReference ?? "AT_VENDOR",
-      });
-    }
-  }
-
-  return sources;
+    return {
+      id: timelineFlowId(item, index),
+      type,
+      typeLabel: isHandover ? "Pendataan" : isVendor ? "WOV - Vendor" : sourceLabel.includes("JOBPLAN") ? "Countdown + Job Plan" : "Countdown",
+      title: jobTitle,
+      meta: item.detail,
+      badge: item.date ?? "-",
+      status: isScheduledPlan ? "plan" : isHandover || isQc || node.physicalStatus === "INSTALLED" ? "done" : node.physicalStatus === "IN_DIVISION" || isVendor ? "progress" : "plan",
+      statusLabel: isScheduledPlan ? "Terjadwal" : isHandover ? "Selesai" : isQc ? "Aktual" : isVendor ? "WOV" : workStatusLabel(node),
+      detail: item.detail,
+      divisionLabel,
+      sourceLabel,
+      hourLabel: isHandover ? null : countdownHourLabel,
+      progressLabel: isHandover ? "100%" : progressLabel,
+      hasPhotos: !isHandover && !isVendor,
+      hasMaterials: isVendor,
+    };
+  });
 }
 
 function todayDate() {
@@ -582,6 +567,37 @@ function createWorkflowForm(
   };
 }
 
+function normalizeTextToken(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/gu, " ")
+    .trim();
+}
+
+function deriveTimelineJobTitle(item: TimelineItem, node: UnitBomNode): string {
+  const title = item.title.trim();
+  const detail = item.detail.trim();
+  const panelName = normalizeTextToken(node.label ?? "");
+  const titleToken = normalizeTextToken(title);
+
+  if (!title) return node.label ?? "Jobdesc";
+  if (!panelName || titleToken !== panelName) return title;
+
+  const beforeBy = detail.split(/\boleh\b/iu)[0]?.trim() ?? detail;
+  const withoutPanel = beforeBy
+    .replace(new RegExp(`\\b${escapeRegExp(node.label ?? "")}\\b`, "iu"), "")
+    .replace(/\s+-\s+/gu, " ")
+    .replace(/\s+/gu, " ")
+    .trim();
+
+  const beforeSeparator = withoutPanel.split(/\s[-–]\s/u)[0]?.trim() ?? withoutPanel;
+  return beforeSeparator || "Belum ada jobdesc";
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+}
+
 export function PanelDetailPage({
   carId,
   node,
@@ -595,6 +611,8 @@ export function PanelDetailPage({
   const [activeTab, setActiveTab] = useState<DrawerTab>("timeline");
   type PageMode = "detail" | "workflow";
   const [pageMode, setPageMode] = useState<PageMode>("detail");
+  const workflowScopeId = node.actualId ?? (node.panelId ? `panel-${node.panelId}` : node.nodeId);
+  const [workflowOrderIds, setWorkflowOrderIds] = useState<string[]>([]);
   const [galleryState, setGalleryState] = useState<GalleryPhotoState>({
     actualId: null,
     photos: [],
@@ -608,6 +626,21 @@ export function PanelDetailPage({
   const [replaceTarget, setReplaceTarget] = useState<GalleryPhotoRecord | null>(null);
 
   const timeline = useMemo(() => (node ? buildTimeline(node) : []), [node]);
+  const orderedTimeline = useMemo(() => {
+    if (workflowOrderIds.length === 0) return timeline;
+
+    const byFlowId = new Map(timeline.map((item, index) => [timelineFlowId(item, index), item]));
+    const used = new Set<string>();
+    const ordered = workflowOrderIds
+      .map((id) => {
+        const item = byFlowId.get(id);
+        if (item) used.add(id);
+        return item;
+      })
+      .filter((item): item is TimelineItem => Boolean(item));
+    const remaining = timeline.filter((item, index) => !used.has(timelineFlowId(item, index)));
+    return [...ordered, ...remaining];
+  }, [timeline, workflowOrderIds]);
   const documents = useMemo(() => (node ? buildDocuments(node) : []), [node]);
   const workflowSources = useMemo(() => buildWorkflowSources(node), [node]);
   const galleryPhotos = useMemo(
@@ -624,6 +657,22 @@ export function PanelDetailPage({
   );
   const triage = triageMeta(node);
   const canMutatePhotos = canManagePhotos && !galleryState.submittedToLedger;
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadWorkflowOrder() {
+      const result = await fetchWorkflowLayout("", carId, workflowScopeId);
+      if (cancelled) return;
+      setWorkflowOrderIds(result.payload?.data.layout?.order ?? []);
+    }
+
+    void loadWorkflowOrder();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [carId, workflowScopeId]);
 
   useEffect(() => {
     const actualId = node.actualId ?? null;
@@ -950,7 +999,7 @@ export function PanelDetailPage({
                 </thead>
                 <tbody className="divide-y divide-white/[0.04]">
                   {timeline.length > 0 ? (
-                    timeline.map((item, index) => {
+                    orderedTimeline.map((item, index) => {
                       return (
                         <tr key={`${item.eventType ?? "event"}-${item.title}-${item.date ?? "no-date"}-${index}`} className="transition-colors hover:bg-white/[0.015]">
                           <td className="whitespace-nowrap px-4 py-4 align-top text-[12px] text-white/35">
@@ -1251,6 +1300,7 @@ export function PanelDetailPage({
             workflowSources={workflowSources}
             allowedCreateTypes={allowedWorkflowCreateTypes}
             canSaveCanvas={canSaveWorkflowCanvas}
+            onWorkflowOrderChange={setWorkflowOrderIds}
             onNavigateToPhotos={() => {
               setPageMode("detail");
               setActiveTab("photos");
@@ -1272,6 +1322,7 @@ interface WorkflowBuilderProps {
   workflowSources: WorkflowNode[];
   allowedCreateTypes: WorkflowCreateType[];
   canSaveCanvas: boolean;
+  onWorkflowOrderChange: (order: string[]) => void;
   onNavigateToPhotos: () => void;
   onNavigateToDocuments: () => void;
 }
@@ -1282,6 +1333,7 @@ function WorkflowBuilder({
   workflowSources,
   allowedCreateTypes,
   canSaveCanvas,
+  onWorkflowOrderChange,
   onNavigateToPhotos,
   onNavigateToDocuments,
 }: WorkflowBuilderProps) {
@@ -1323,7 +1375,7 @@ function WorkflowBuilder({
   const connectionDragRef = useRef<{ id: string; axis: "x" | "y" } | null>(null);
   const connectTargetIdRef = useRef<string | null>(null);
 
-  function createEndNode(): FlowCanvasNode {
+  const createEndNode = useCallback((): FlowCanvasNode => {
     return {
       id: "workflow-end",
       type: "job",
@@ -1339,7 +1391,7 @@ function WorkflowBuilder({
       height: 82,
       isEnd: true,
     };
-  }
+  }, []);
 
   const [flowNodes, setFlowNodes] = useState<FlowCanvasNode[]>(() => [createEndNode()]);
   const [connections, setConnections] = useState<FlowConnection[]>([]);
@@ -1363,6 +1415,7 @@ function WorkflowBuilder({
   const [createError, setCreateError] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const workflowScopeId = node.actualId ?? (node.panelId ? `panel-${node.panelId}` : node.nodeId);
   const storageKey = `unit-panel-workflow:${node.nodeId}:${node.panelId ?? "panel"}`;
 
   useEffect(() => {
@@ -1383,37 +1436,105 @@ function WorkflowBuilder({
   }, [node, defaultCreateType]);
 
   useEffect(() => {
-    const saved = window.localStorage.getItem(storageKey);
-    if (!saved) return;
+    let cancelled = false;
 
-    try {
-      const parsed = JSON.parse(saved) as {
-        nodes?: FlowCanvasNode[];
-        connections?: FlowConnection[];
-        sources?: WorkflowNode[];
-      };
-      if (Array.isArray(parsed.nodes)) {
-        const hasEnd = parsed.nodes.some((item) => item.id === "workflow-end");
-        setFlowNodes(hasEnd ? parsed.nodes : [...parsed.nodes, createEndNode()]);
+    function applySavedLayout(saved: {
+      nodeLayouts?: Array<Pick<FlowCanvasNode, "id" | "x" | "y" | "width" | "height">>;
+      nodes?: FlowCanvasNode[];
+      connections?: FlowConnection[];
+      order?: string[];
+      sources?: WorkflowNode[];
+    }) {
+      if (Array.isArray(saved.order)) {
+        onWorkflowOrderChange(saved.order);
       }
-      if (Array.isArray(parsed.connections)) {
-        setConnections(parsed.connections);
-      }
-      if (Array.isArray(parsed.sources)) {
-        setLocalWorkflowSources((current) => {
-          const next = [...current];
-          for (const source of parsed.sources ?? []) {
-            if (!next.some((item) => item.id === source.id)) {
-              next.push(source);
-            }
+      const layoutNodes = saved.nodeLayouts ?? saved.nodes;
+      if (Array.isArray(layoutNodes)) {
+        const sourceById = new Map(workflowSources.map((source) => [source.id, source]));
+        const mergedNodes = layoutNodes.map((savedNode) => {
+          if (savedNode.id === "workflow-end") {
+            return {
+              ...createEndNode(),
+              x: savedNode.x,
+              y: savedNode.y,
+              width: savedNode.width,
+              height: savedNode.height,
+            };
           }
-          return next;
-        });
+          const timelineIndex = savedNode.id.match(/^timeline-(\d+)-/u)?.[1];
+          const latestSource = sourceById.get(savedNode.id)
+            ?? (timelineIndex ? workflowSources[Number.parseInt(timelineIndex, 10)] : undefined);
+          return latestSource
+            ? {
+                ...latestSource,
+                id: savedNode.id,
+                x: savedNode.x,
+                y: savedNode.y,
+                width: savedNode.width,
+                height: savedNode.height,
+              }
+            : null;
+        }).filter((item): item is FlowCanvasNode => Boolean(item));
+        const hasEnd = mergedNodes.some((item) => item.id === "workflow-end");
+        setFlowNodes(hasEnd ? mergedNodes : [...mergedNodes, createEndNode()]);
+        if (Array.isArray(saved.connections)) {
+          const validNodeIds = new Set(mergedNodes.map((item) => item.id));
+          setConnections(saved.connections.filter((connection) =>
+            validNodeIds.has(connection.fromId) && validNodeIds.has(connection.toId),
+          ));
+        }
+      } else if (Array.isArray(saved.connections)) {
+        setConnections(saved.connections);
       }
-    } catch {
-      window.localStorage.removeItem(storageKey);
     }
-  }, [storageKey]);
+
+    function loadLocalFallback() {
+      const saved = window.localStorage.getItem(storageKey);
+      if (!saved) return false;
+
+      try {
+        applySavedLayout(JSON.parse(saved) as {
+          nodeLayouts?: Array<Pick<FlowCanvasNode, "id" | "x" | "y" | "width" | "height">>;
+          nodes?: FlowCanvasNode[];
+          connections?: FlowConnection[];
+        });
+        return true;
+      } catch {
+        window.localStorage.removeItem(storageKey);
+        return false;
+      }
+    }
+
+    async function loadSharedLayout() {
+      setSaveMessage("Memuat canvas");
+      const result = await fetchWorkflowLayout("", carId, workflowScopeId);
+      if (cancelled) return;
+
+      if (result.payload?.data.layout) {
+        applySavedLayout(result.payload.data.layout as {
+          nodeLayouts?: Array<Pick<FlowCanvasNode, "id" | "x" | "y" | "width" | "height">>;
+          connections?: FlowConnection[];
+        });
+        setSaveMessage("Canvas shared siap");
+        window.setTimeout(() => setSaveMessage(null), 1200);
+        return;
+      }
+
+      if (loadLocalFallback()) {
+        setSaveMessage("Canvas lokal dimuat");
+        window.setTimeout(() => setSaveMessage(null), 1600);
+        return;
+      }
+
+      setSaveMessage(null);
+    }
+
+    void loadSharedLayout();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [carId, createEndNode, onWorkflowOrderChange, workflowScopeId, storageKey, workflowSources]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1778,19 +1899,35 @@ function WorkflowBuilder({
     return ordered;
   }
 
-  function handleSaveCanvas() {
-    const manualSources = localWorkflowSources.filter((source) => source.id.startsWith("manual-"));
-    window.localStorage.setItem(
-      storageKey,
-      JSON.stringify({
-        nodes: flowNodes,
-        connections,
-        sources: manualSources,
-        order: getOrderedFlowNodes().map((flowNode) => flowNode.id),
-        savedAt: new Date().toISOString(),
-      }),
-    );
-    setSaveMessage("Canvas tersimpan");
+  async function handleSaveCanvas() {
+    const order = getOrderedFlowNodes().map((flowNode) => flowNode.id);
+    const layout = {
+      version: 2 as const,
+      nodeLayouts: flowNodes.map((flowNode) => ({
+        id: flowNode.id,
+        x: flowNode.x,
+        y: flowNode.y,
+        width: flowNode.width,
+        height: flowNode.height,
+      })),
+      connections,
+      order,
+      savedAt: new Date().toISOString(),
+    };
+
+    setSaveMessage("Menyimpan");
+    const result = await saveWorkflowLayout(carId, workflowScopeId, layout);
+    if (!result.success) {
+      window.localStorage.setItem(storageKey, JSON.stringify(layout));
+      onWorkflowOrderChange(order);
+      setSaveMessage("Redis gagal - disimpan lokal");
+      window.setTimeout(() => setSaveMessage(null), 2400);
+      return;
+    }
+
+    window.localStorage.removeItem(storageKey);
+    onWorkflowOrderChange(order);
+    setSaveMessage("Canvas shared tersimpan");
     window.setTimeout(() => setSaveMessage(null), 1800);
   }
 
@@ -1842,6 +1979,9 @@ function WorkflowBuilder({
       badge: params.type,
       status: params.type === "PR" ? "open" : params.type === "WOV" ? "progress" : "plan",
       statusLabel: params.type === "COUNTDOWN" ? "PLAN" : "Dibuat",
+      detail: params.meta,
+      divisionLabel: params.meta.split(" - ").at(-1) ?? null,
+      sourceLabel: params.type === "COUNTDOWN" ? "COUNTDOWN" : params.type,
       hasPhotos: params.type === "COUNTDOWN" || params.type === "WO",
       hasMaterials: params.type === "PR" || params.type === "WOV",
     };
@@ -2430,10 +2570,16 @@ function WorkflowBuilder({
                         x
                       </button>
                       <p className={`text-[9px] font-mono uppercase tracking-[0.08em] ${typeColorClass[fn.type]}`}>
-                        {fn.typeLabel}
+                        {fn.sourceLabel ?? fn.typeLabel}
                       </p>
                       <p className="mt-0.5 text-[12px] font-mono leading-snug text-white/80">{fn.title}</p>
-                      <p className="mt-0.5 text-[10px] text-white/30">{fn.meta}</p>
+                      <p className="mt-0.5 text-[10px] text-white/30">{fn.divisionLabel ?? fn.meta}</p>
+                      {(fn.hourLabel || fn.progressLabel) ? (
+                        <div className="mt-2 grid grid-cols-2 gap-1 text-[9px] font-mono uppercase tracking-[0.06em] text-white/25">
+                          <span>{fn.hourLabel ?? "Jam -"}</span>
+                          <span>{fn.progressLabel ?? "0%"}</span>
+                        </div>
+                      ) : null}
                       <div className="mt-2 flex items-center gap-2">
                         <span className={`border px-1.5 py-0.5 text-[9px] font-mono uppercase tracking-[0.06em] ${statusClass}`}>
                           {fn.statusLabel}
@@ -2485,10 +2631,34 @@ function WorkflowBuilder({
                 {selectedFlowNode ? (
                   <>
                     <div>
-                      <p className="mb-1 text-[9px] font-mono uppercase tracking-[0.08em] text-white/25">Job</p>
+                      <p className="mb-1 text-[9px] font-mono uppercase tracking-[0.08em] text-white/25">Sumber</p>
+                      <p className="text-[11px] font-mono leading-snug text-white/80">{selectedFlowNode.sourceLabel ?? selectedFlowNode.typeLabel}</p>
+                    </div>
+                    <div>
+                      <p className="mb-1 text-[9px] font-mono uppercase tracking-[0.08em] text-white/25">Master Jobdesc</p>
                       <p className="text-[11px] font-mono leading-snug text-white/80">{selectedFlowNode.title}</p>
                       <p className="mt-1 text-[10px] text-white/30">{selectedFlowNode.meta}</p>
                     </div>
+                    <div>
+                      <p className="mb-1 text-[9px] font-mono uppercase tracking-[0.08em] text-white/25">Divisi</p>
+                      <p className="text-[10px] font-mono text-white/55">{selectedFlowNode.divisionLabel ?? "-"}</p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <p className="mb-1 text-[9px] font-mono uppercase tracking-[0.08em] text-white/25">Jam</p>
+                        <p className="text-[10px] font-mono text-white/55">{selectedFlowNode.hourLabel ?? "-"}</p>
+                      </div>
+                      <div>
+                        <p className="mb-1 text-[9px] font-mono uppercase tracking-[0.08em] text-white/25">Progress</p>
+                        <p className="text-[10px] font-mono text-white/55">{selectedFlowNode.progressLabel ?? "-"}</p>
+                      </div>
+                    </div>
+                    {selectedFlowNode.detail ? (
+                      <div>
+                        <p className="mb-1 text-[9px] font-mono uppercase tracking-[0.08em] text-white/25">Detail</p>
+                        <p className="text-[10px] leading-relaxed text-white/45">{selectedFlowNode.detail}</p>
+                      </div>
+                    ) : null}
                     <div>
                       <p className="mb-1 text-[9px] font-mono uppercase tracking-[0.08em] text-white/25">Status</p>
                       <span className={`border px-2 py-0.5 text-[9px] font-mono uppercase tracking-[0.06em] ${statusConfig[selectedFlowNode.status]}`}>
@@ -2540,7 +2710,7 @@ function WorkflowBuilder({
                           className="w-full border border-white/5 px-2 py-1.5 text-left transition-colors hover:border-amber-500/20"
                         >
                           <p className="text-[9px] font-mono uppercase tracking-[0.08em] text-white/25">
-                            {String(index + 1).padStart(2, "0")} - {flowNode.typeLabel}
+                            {String(index + 1).padStart(2, "0")} - {flowNode.sourceLabel ?? flowNode.typeLabel}
                           </p>
                           <p className="mt-0.5 line-clamp-2 text-[10px] text-white/70">{flowNode.title}</p>
                         </button>

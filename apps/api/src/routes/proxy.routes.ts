@@ -2,6 +2,10 @@ import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
 import { getApiEnv } from "@/config/env";
 import { withCors } from "@/http/response";
 
+function stripTrailingSlash(value: string): string {
+  return value.replace(/\/$/u, "");
+}
+
 export async function handleImageProxyRoute(
   request: Request,
 ): Promise<Response> {
@@ -17,15 +21,33 @@ export async function handleImageProxyRoute(
     return withCors(request, new Response("Storage not configured", { status: 503 }));
   }
 
-  const publicBase = env.R2_PUBLIC_URL.replace(/\/$/u, "");
+  let parsedTargetUrl: URL;
+  let publicBaseUrl: URL;
+  try {
+    parsedTargetUrl = new URL(targetUrl);
+    publicBaseUrl = new URL(stripTrailingSlash(env.R2_PUBLIC_URL));
+  } catch {
+    return withCors(request, new Response("Invalid url parameter", { status: 400 }));
+  }
 
-  if (!targetUrl.startsWith(publicBase)) {
+  if (parsedTargetUrl.protocol !== "https:") {
     return withCors(request, new Response("Forbidden", { status: 403 }));
   }
 
-  // Strip query params (e.g. cache-bust ?t=...) to get the clean S3 key
-  const cleanUrl = targetUrl.split("?")[0];
-  const objectKey = cleanUrl.slice(publicBase.length + 1);
+  const publicBasePath = publicBaseUrl.pathname.replace(/\/$/u, "");
+  const pathAllowed = publicBasePath
+    ? parsedTargetUrl.pathname.startsWith(`${publicBasePath}/`)
+    : parsedTargetUrl.pathname.startsWith("/");
+
+  if (parsedTargetUrl.origin !== publicBaseUrl.origin || !pathAllowed) {
+    return withCors(request, new Response("Forbidden", { status: 403 }));
+  }
+
+  const objectKey = decodeURIComponent(
+    publicBasePath
+      ? parsedTargetUrl.pathname.slice(publicBasePath.length + 1)
+      : parsedTargetUrl.pathname.replace(/^\//u, ""),
+  );
 
   if (!objectKey) {
     return withCors(request, new Response("Invalid key", { status: 400 }));
@@ -48,19 +70,23 @@ export async function handleImageProxyRoute(
     });
 
     const res = await s3.send(command);
+    const contentType = res.ContentType || "image/jpeg";
+    if (!contentType.toLowerCase().startsWith("image/")) {
+      return withCors(request, new Response("Unsupported media type", { status: 415 }));
+    }
+
     const byteArray = await res.Body!.transformToByteArray();
     const body = new ArrayBuffer(byteArray.byteLength);
     new Uint8Array(body).set(byteArray);
 
-    return new Response(body, {
+    return withCors(request, new Response(body, {
       headers: {
-        "Content-Type": res.ContentType || "image/jpeg",
+        "Content-Type": contentType,
         "Cache-Control": "public, max-age=86400",
-        "Access-Control-Allow-Origin": "*",
       },
-    });
+    }));
   } catch (error) {
-    console.error("[proxy] error:", error);
+    console.error("[proxy] image fetch failed");
     return withCors(request, new Response("Failed to fetch image", { status: 500 }));
   }
 }

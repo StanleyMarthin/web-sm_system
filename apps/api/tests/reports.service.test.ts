@@ -4,6 +4,7 @@ import { describe, expect, test } from "bun:test";
 import type { ReportsRepository } from "@/repositories/reports.repo";
 import { DefaultReportsService } from "@/services/reports.service";
 import type { WebSession } from "@/services/auth/session.service";
+import type { AuditService } from "@/services/audit/audit.service";
 
 const reportUser: AuthUser = {
   employeeId: "SM-00.001",
@@ -81,9 +82,18 @@ class InMemoryReportsRepository implements ReportsRepository {
   }
 }
 
+const noopAuditService: AuditService = {
+  async log() {
+    return undefined;
+  },
+};
+
 describe("DefaultReportsService", () => {
   test("returns report grid with definition metadata", async () => {
-    const service = new DefaultReportsService(new InMemoryReportsRepository());
+    const service = new DefaultReportsService(
+      new InMemoryReportsRepository(),
+      noopAuditService,
+    );
     const result = await service.getReport(
       reportSession,
       "delivery-accuracy",
@@ -97,7 +107,10 @@ describe("DefaultReportsService", () => {
   });
 
   test("builds xlsx export payload", async () => {
-    const service = new DefaultReportsService(new InMemoryReportsRepository());
+    const service = new DefaultReportsService(
+      new InMemoryReportsRepository(),
+      noopAuditService,
+    );
     const exported = await service.exportReport(
       reportSession,
       "delivery-accuracy",

@@ -377,11 +377,13 @@ function ScopeDialog({
       return;
     }
 
-    setMode(initialMode);
-    setSelectedIds(initialIds);
-    setSearch("");
-    setPickerValue("");
-    setActiveRowValue("");
+    queueMicrotask(() => {
+      setMode(initialMode);
+      setSelectedIds(initialIds);
+      setSearch("");
+      setPickerValue("");
+      setActiveRowValue("");
+    });
   }, [initialIds, initialMode, open]);
 
   if (!open || !kind) {

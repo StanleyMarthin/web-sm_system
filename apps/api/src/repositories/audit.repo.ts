@@ -12,6 +12,7 @@ export interface AuditLogEntry {
   oldValue?: unknown;
   newValue?: unknown;
   ipAddress?: string | null;
+  userAgent?: string | null;
 }
 
 export interface AuditRepository {
@@ -23,7 +24,7 @@ function getAuditTableName(auditDbName: string): string {
     throw new Error(`Invalid AUDIT_DB_NAME: ${auditDbName}`);
   }
 
-  return `\`${auditDbName}\`.sm_audit_log`;
+  return `\`${auditDbName}\`.log_audit_trails`;
 }
 
 export class MySqlAuditRepository implements AuditRepository {
@@ -39,27 +40,33 @@ export class MySqlAuditRepository implements AuditRepository {
     await pool.execute(
       `
         INSERT INTO ${tableName} (
-          id,
-          actor_id,
-          actor_name,
-          action,
-          module,
+          source_db,
+          table_name,
           record_id,
-          old_value,
-          new_value,
-          ip_address
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          action,
+          performed_by,
+          performed_name,
+          performed_role,
+          old_data,
+          new_data,
+          change_reason,
+          ip_address,
+          user_agent
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
       [
-        randomUUID(),
+        this.env.DB_NAME,
+        entry.module,
+        entry.recordId ?? randomUUID(),
+        entry.action.toUpperCase(),
         entry.actorId,
         entry.actorName,
-        entry.action,
-        entry.module,
-        entry.recordId ?? null,
+        null,
         entry.oldValue ? JSON.stringify(entry.oldValue) : null,
         entry.newValue ? JSON.stringify(entry.newValue) : null,
+        entry.action,
         entry.ipAddress ?? null,
+        entry.userAgent ?? null,
       ],
     );
   }

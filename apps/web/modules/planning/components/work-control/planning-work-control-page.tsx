@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import type { PlanningWorkspacePayload } from "@/shared/api/planning";
+import type { UnitBomWorkspace } from "@smsystem/contracts/unit-bom";
 import {
   createWorkControlTarget,
   fetchDivisionCapacity,
@@ -12,6 +12,7 @@ import {
   createOvertimeRecommendation,
   type WorkControlUnit,
 } from "@/shared/api/work-control";
+import { fetchUnitBom } from "@/shared/api/units";
 import { PlanningWorkControlShell } from "./planning-work-control-shell";
 import type { UnitPriorityItem } from "./unit-priority-step";
 import type { UnitProgressData } from "./unit-progress-step";
@@ -21,8 +22,9 @@ import type { RiskLevel } from "@/modules/planning/helpers/planning-calculations
 
 interface PlanningWorkControlPageProps {
   weekStartDate: string;
-  workspaceData: PlanningWorkspacePayload;
   canManage: boolean;
+  qcBufferDays: number;
+  workingDayNumbers: number[];
 }
 
 function addDays(date: string, amount: number): string {
@@ -58,13 +60,15 @@ function mapPriorityForApi(priority: TargetWorkEntry["priority"]): number {
 
 export function PlanningWorkControlPage({
   weekStartDate,
-  workspaceData: _workspaceData,
   canManage,
+  qcBufferDays,
+  workingDayNumbers,
 }: PlanningWorkControlPageProps) {
   const router = useRouter();
   const [units, setUnits] = useState<UnitPriorityItem[]>([]);
   const [divisionCapacity, setDivisionCapacity] = useState<DivisionCapacityData[]>([]);
   const [unitProgressData, setUnitProgressData] = useState<UnitProgressData[]>([]);
+  const [unitBomById, setUnitBomById] = useState<Record<string, UnitBomWorkspace | null>>({});
   const [planningTargetId, setPlanningTargetId] = useState<string | null>(null);
   const [isLoadingUnits, setIsLoadingUnits] = useState(true);
   const [isLoadingProgress, setIsLoadingProgress] = useState(false);
@@ -143,6 +147,7 @@ export function PlanningWorkControlPage({
     setLoadError(null);
     try {
       const responses = await Promise.all(unitIds.map((unitId) => fetchUnitProgress(unitId)));
+      const bomResponses = await Promise.all(unitIds.map((unitId) => fetchUnitBom("", unitId)));
       const unitMap = new Map(units.map((unit) => [unit.carId, unit]));
       const progressData: UnitProgressData[] = responses.map((response) => {
         const unit = unitMap.get(response.data.unitId);
@@ -160,16 +165,25 @@ export function PlanningWorkControlPage({
             divisionId: Number(division.divisionId),
             divisionName: division.divisionName,
             remainingHours: division.pendingHours,
+            targetHours: division.targetHours,
+            actualHours: division.actualHours,
           })),
           mainConstraint: response.data.mainConstraint,
           roughEstimateDays: response.data.roughEstimateDays,
           jobs: response.data.jobs.map((job) => ({
             jobId: job.jobId,
+            divisionId: job.divisionId,
+            divisionName: job.divisionName,
             jobName: job.jobName,
-            panel: "-",
+            panel: job.panel,
             status: job.status,
             estimatedHours: job.estimatedHours,
             actualHours: job.actualHours,
+            remainingHours: job.remainingHours,
+            dependsOn: job.dependsOn,
+            startDate: job.startDate,
+            deadlineDate: job.deadlineDate,
+            qcLastStatus: job.qcLastStatus,
           })),
         };
       });
@@ -184,6 +198,12 @@ export function PlanningWorkControlPage({
 
       await loadCapacity(relevantDivisionIds);
       setUnitProgressData(progressData);
+      setUnitBomById(
+        bomResponses.reduce<Record<string, UnitBomWorkspace | null>>((accumulator, response, index) => {
+          accumulator[unitIds[index] ?? `unit-${index}`] = response.payload?.data ?? null;
+          return accumulator;
+        }, {}),
+      );
     } catch (error) {
       setLoadError(
         error instanceof Error
@@ -192,6 +212,7 @@ export function PlanningWorkControlPage({
       );
       setDivisionCapacity([]);
       setUnitProgressData([]);
+      setUnitBomById({});
     } finally {
       setIsLoadingProgress(false);
     }
@@ -211,7 +232,7 @@ export function PlanningWorkControlPage({
     } finally {
       setIsSnapshoting(false);
     }
-  }, [loadCapacity, unitProgressData]);
+  }, [loadCapacity]);
 
   const saveDraft = useCallback(async (entries: TargetWorkEntry[]) => {
     if (entries.length === 0) {
@@ -327,8 +348,12 @@ export function PlanningWorkControlPage({
           setPlanningTargetId(null);
           setUnitProgressData([]);
           setDivisionCapacity([]);
+          setUnitBomById({});
         }}
+        unitBomById={unitBomById}
         canManage={canManage}
+        qcBufferDays={qcBufferDays}
+        workingDayNumbers={workingDayNumbers}
         isLoadingUnits={isLoadingUnits}
         isLoadingProgress={isLoadingProgress}
         isSnapshoting={isSnapshoting}

@@ -1,4 +1,3 @@
-import { extname } from "node:path";
 import {
   type CreateGalleryPhotoRequest,
   type GalleryActualSummary,
@@ -16,6 +15,13 @@ import {
 import { getApiEnv } from "@/config/env";
 import type { WebSession } from "@/services/auth/session.service";
 import { S3GalleryUploadTicketProvider } from "@/services/storage/r2-upload.service";
+import {
+  consumeUploadTicketForPublicUrl,
+  createUploadNonce,
+  extensionForImageContentType,
+  normalizeAllowedImageContentType,
+  storeUploadTicket,
+} from "@/security/upload-ticket";
 
 const INDONESIAN_MONTHS = [
   "",
@@ -63,23 +69,6 @@ function buildPhotoSuffix(photoType: GalleryPhotoType): string {
     default:
       return "pro";
   }
-}
-
-function inferFileExtension(filename: string, contentType: string): string {
-  const byName = extname(filename).replace(".", "").trim().toLowerCase();
-  if (byName) {
-    return byName;
-  }
-
-  if (contentType.includes("png")) {
-    return "png";
-  }
-
-  if (contentType.includes("webp")) {
-    return "webp";
-  }
-
-  return "jpg";
 }
 
 export interface GalleryUploadTicketProvider {
@@ -228,16 +217,26 @@ export class DefaultGalleryService implements GalleryService {
     const safePanel = sanitizePath(actual.partName || actual.panelName || "Panel");
     const safeDivision = sanitizePath(actual.divisionName || "DIVISI");
     const safeUnit = sanitizePath(actual.unitName || actual.carId);
-    const safeExtension = inferFileExtension(input.filename, input.contentType);
+    const contentType = normalizeAllowedImageContentType(input.contentType);
+    const safeExtension = extensionForImageContentType(contentType);
+    const nonce = createUploadNonce();
     const suffix = buildPhotoSuffix(input.photoType);
     const objectKey =
       `${safeUnit}/${safeDivision}/${monthFolder}/${actual.workDate}/` +
-      `${safeJob} ${safePanel}_${suffix}_${Date.now()}.${safeExtension}`;
+      `${safeJob} ${safePanel}_${suffix}_${nonce}.${safeExtension}`;
 
-    return this.uploadTicketProvider.createTicket({
+    const ticket = await this.uploadTicketProvider.createTicket({
       objectKey,
-      contentType: input.contentType,
+      contentType,
     });
+
+    await storeUploadTicket({
+      nonce,
+      employeeId: session.user.employeeId,
+      objectKey,
+    });
+
+    return ticket;
   }
 
   async createPhoto(session: WebSession, input: CreateGalleryPhotoRequest) {
@@ -254,6 +253,11 @@ export class DefaultGalleryService implements GalleryService {
     if (actual.submittedToLedger) {
       throw new Error("PHOTO_MUTATION_LOCKED");
     }
+
+    await consumeUploadTicketForPublicUrl({
+      employeeId: session.user.employeeId,
+      publicUrl: input.photoUrl,
+    });
 
     const photo = await this.repository.createPhoto({
       actualId: input.actualId,
@@ -293,6 +297,13 @@ export class DefaultGalleryService implements GalleryService {
 
     if (existing.source !== "TEMP" || !existing.canEdit) {
       throw new Error("PHOTO_MUTATION_LOCKED");
+    }
+
+    if (input.photoUrl) {
+      await consumeUploadTicketForPublicUrl({
+        employeeId: session.user.employeeId,
+        publicUrl: input.photoUrl,
+      });
     }
 
     const updated = await this.repository.updatePhoto(photoId, input);

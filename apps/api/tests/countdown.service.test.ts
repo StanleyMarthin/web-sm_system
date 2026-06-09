@@ -1,10 +1,11 @@
 import type { AuthUser } from "@smsystem/contracts/auth";
 import type { CountdownImportResult, CountdownTemplateRow } from "@smsystem/contracts/countdown";
 import { describe, expect, test } from "bun:test";
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import type { CountdownRepository } from "@/repositories/countdown.repo";
 import { DefaultCountdownService } from "@/services/countdown.service";
 import type { WebSession } from "@/services/auth/session.service";
+import { addRowsWorksheet, loadWorkbookFromBuffer, writeWorkbookBuffer } from "@/services/excel";
 
 const sampleUser: AuthUser = {
   employeeId: "SM-03.004",
@@ -65,30 +66,25 @@ function createStubRepository(
   } as unknown as CountdownRepository;
 }
 
-function buildWorkbook(headers: string[], row: Array<string | number>): Uint8Array {
-  const workbook = XLSX.utils.book_new();
-  const sheet = XLSX.utils.aoa_to_sheet([headers, row]);
-  XLSX.utils.book_append_sheet(workbook, sheet, "countdown-template");
-  return XLSX.write(workbook, {
-    type: "buffer",
-    bookType: "xlsx",
-  }) as Uint8Array;
+async function buildWorkbook(headers: string[], row: Array<string | number>): Promise<Uint8Array> {
+  const workbook = new ExcelJS.Workbook();
+  addRowsWorksheet(workbook, "countdown-template", [headers, row]);
+  return writeWorkbookBuffer(workbook);
 }
 
 describe("DefaultCountdownService", () => {
-  test("builds a human-friendly template workbook", () => {
+  test("builds a human-friendly template workbook", async () => {
     const service = new DefaultCountdownService();
-    const workbook = XLSX.read(service.buildTemplateWorkbook(), {
-      type: "buffer",
-    });
+    const workbook = await loadWorkbookFromBuffer(await service.buildTemplateWorkbook());
 
-    expect(workbook.SheetNames).toEqual(["countdown-template", "panduan"]);
+    expect(workbook.worksheets.map((worksheet) => worksheet.name)).toEqual([
+      "countdown-template",
+      "panduan",
+    ]);
 
-    const sheet = workbook.Sheets["countdown-template"];
-    const rows = XLSX.utils.sheet_to_json<string[]>(sheet, {
-      header: 1,
-      raw: false,
-      defval: "",
+    const sheet = workbook.getWorksheet("countdown-template");
+    const rows = sheet!.getSheetValues().slice(1).map((row) => {
+      return Array.isArray(row) ? row.slice(1).map((value) => value ?? "") : [];
     });
 
     expect(rows[0]).toEqual([
@@ -123,7 +119,7 @@ describe("DefaultCountdownService", () => {
     };
 
     const service = new DefaultCountdownService(createStubRepository(captured));
-    const buffer = buildWorkbook(
+    const buffer = await buildWorkbook(
       [
         "Kode Unit/Mobil",
         "Nama Unit",
@@ -194,7 +190,7 @@ describe("DefaultCountdownService", () => {
     };
 
     const service = new DefaultCountdownService(createStubRepository(captured));
-    const buffer = buildWorkbook(
+    const buffer = await buildWorkbook(
       [
         "carId",
         "unitName",

@@ -5,10 +5,11 @@ import type {
   GalleryPhotoType,
   GalleryPhotoSource,
 } from "@smsystem/contracts/gallery";
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { AuditService } from "@/services/audit/audit.service";
 import type { WebSession } from "@/services/auth/session.service";
 import { DefaultGalleryService, type GalleryUploadTicketProvider } from "@/services/gallery.service";
+import { resetApiEnvForTests } from "@/config/env";
 import type {
   GalleryPhotoContext,
   GalleryReferences,
@@ -64,6 +65,32 @@ const sampleContext: GalleryPhotoContext = {
   countdownStatus: "PROSES",
   submittedToLedger: false,
 };
+
+function installGalleryUploadEnv(): void {
+  process.env.DB_HOST = "127.0.0.1";
+  process.env.DB_PORT = "3306";
+  process.env.DB_USER = "tester";
+  process.env.DB_PASS = "tester";
+  process.env.DB_NAME = "sms_db";
+  process.env.REDIS_HOST = "127.0.0.1";
+  process.env.REDIS_PORT = "6379";
+  process.env.R2_PUBLIC_URL = "https://pub.example";
+  process.env.SM_TEST_MEMORY_UPLOAD_TICKETS = "1";
+  resetApiEnvForTests();
+}
+
+function clearGalleryUploadEnv(): void {
+  delete process.env.DB_HOST;
+  delete process.env.DB_PORT;
+  delete process.env.DB_USER;
+  delete process.env.DB_PASS;
+  delete process.env.DB_NAME;
+  delete process.env.REDIS_HOST;
+  delete process.env.REDIS_PORT;
+  delete process.env.R2_PUBLIC_URL;
+  delete process.env.SM_TEST_MEMORY_UPLOAD_TICKETS;
+  resetApiEnvForTests();
+}
 
 class InMemoryGalleryRepository implements GalleryRepository {
   createdPayload: Record<string, unknown> | null = null;
@@ -210,6 +237,14 @@ class InMemoryGalleryRepository implements GalleryRepository {
 }
 
 describe("DefaultGalleryService", () => {
+  beforeEach(() => {
+    installGalleryUploadEnv();
+  });
+
+  afterEach(() => {
+    clearGalleryUploadEnv();
+  });
+
   test("builds list result and creates upload ticket with sanitized key", async () => {
     const repository = new InMemoryGalleryRepository();
     const service = new DefaultGalleryService(
@@ -267,11 +302,11 @@ describe("DefaultGalleryService", () => {
     const service = new DefaultGalleryService(
       repository,
       {
-        async createTicket() {
+        async createTicket(input) {
           return {
             uploadUrl: "https://signed.example/upload",
-            publicUrl: "https://pub.example/file.jpg",
-            objectKey: "path/file.jpg",
+            publicUrl: `https://pub.example/${input.objectKey}`,
+            objectKey: input.objectKey,
           };
         },
       } satisfies GalleryUploadTicketProvider,
@@ -282,10 +317,16 @@ describe("DefaultGalleryService", () => {
       } satisfies AuditService,
     );
 
+    const createTicket = await service.createUploadTicket(sampleSession, {
+      actualId: "ACT-1",
+      photoType: "AFTER",
+      filename: "after.jpg",
+      contentType: "image/jpeg",
+    });
     const created = await service.createPhoto(sampleSession, {
       actualId: "ACT-1",
       photoType: "AFTER",
-      photoUrl: "https://pub.example/gallery/after-1.jpg",
+      photoUrl: createTicket.publicUrl,
       caption: "Hasil akhir",
     });
 
@@ -296,16 +337,22 @@ describe("DefaultGalleryService", () => {
       uploadedBy: "SM-03.003",
     });
 
+    const updateTicket = await service.createUploadTicket(sampleSession, {
+      actualId: "ACT-1",
+      photoType: "PROCESS",
+      filename: "process.jpg",
+      contentType: "image/jpeg",
+    });
     const updated = await service.updatePhoto(sampleSession, "PHOTO-1", {
       photoType: "PROCESS",
-      photoUrl: "https://pub.example/gallery/process-2.jpg",
+      photoUrl: updateTicket.publicUrl,
       caption: "Foto diganti",
     });
 
     expect(updated.photoId).toBe("PHOTO-1");
     expect(repository.updatedPayload).toMatchObject({
       photoId: "PHOTO-1",
-      photoUrl: "https://pub.example/gallery/process-2.jpg",
+      photoUrl: updateTicket.publicUrl,
     });
 
     const deleted = await service.deletePhoto(sampleSession, "PHOTO-1");

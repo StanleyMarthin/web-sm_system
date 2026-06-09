@@ -15,6 +15,10 @@ import { getApiEnv } from "@/config/env";
 import { qualifyTable } from "@/db/identifier";
 import { getMySqlPool } from "@/db/mysql";
 import {
+  RedisWeeklyPlanningTempStore,
+  type WeeklyPlanningTempStore,
+} from "@/repositories/calendar.repo";
+import {
   MySqlMonitoringRepository,
   type MonitoringRepository,
 } from "@/repositories/monitoring.repo";
@@ -203,10 +207,12 @@ export class MySqlDashboardRepository implements DashboardRepository {
   private readonly pool: Pool;
   private readonly env = getApiEnv();
   private readonly monitoringRepository: MonitoringRepository;
+  private readonly weeklyPlanningTempStore: WeeklyPlanningTempStore;
 
   constructor() {
     this.pool = getMySqlPool(this.env);
     this.monitoringRepository = new MySqlMonitoringRepository();
+    this.weeklyPlanningTempStore = new RedisWeeklyPlanningTempStore();
   }
 
   private get tables() {
@@ -219,7 +225,6 @@ export class MySqlDashboardRepository implements DashboardRepository {
       ledger: qualifyTable(this.env.CORE_DB_NAME, "sm_work_ledger"),
       qcInspections: qualifyTable(this.env.CORE_DB_NAME, "sm_qc_inspections"),
       weeklyPlan: qualifyTable(this.env.CORE_DB_NAME, "sm_weekly_plan"),
-      weeklyCapacity: qualifyTable(this.env.CORE_DB_NAME, "sm_weekly_plan_capacity_cache"),
       divisionSummary: qualifyTable(this.env.CORE_DB_NAME, "summary_division_monitoring"),
       wo: qualifyTable(this.env.CORE_DB_NAME, "sm_jobdesc_wo"),
       employee: qualifyTable(this.env.CORE_DB_NAME, "sm_employee"),
@@ -517,6 +522,12 @@ export class MySqlDashboardRepository implements DashboardRepository {
 
       const plan = planRows[0];
       const planId = plan?.id || null;
+      const cachedCapacityRows = planId
+        ? await this.weeklyPlanningTempStore.getCapacity(planId)
+        : null;
+      const capacityByDivision = new Map(
+        (cachedCapacityRows ?? []).map((row) => [row.divisionId, row]),
+      );
 
       const queryParams: unknown[] = [planId];
       
@@ -561,14 +572,20 @@ export class MySqlDashboardRepository implements DashboardRepository {
           SELECT
             d.id AS divisionId,
             d.name AS divisionName,
-            ROUND(COALESCE(cc.net_capacity_hours, 0), 2) AS capacityHours,
-            ROUND(COALESCE(cc.allocated_hours, 0), 2) AS plannedHours,
+            ROUND(COALESCE(plan_units.allocated_hours, 0), 2) AS plannedHours,
             ROUND(COALESCE(SUM(COALESCE(wl.duration_hours, 0) + COALESCE(wl.overtime_hours, 0)), 0), 2) AS actualHours
           FROM ${this.tables.divisions} d
-          LEFT JOIN ${this.tables.weeklyCapacity} cc ON cc.division_id = d.id AND cc.plan_id = ?
+          LEFT JOIN (
+            SELECT
+              division_id,
+              SUM(COALESCE(allocated_hours, 0)) AS allocated_hours
+            FROM ${qualifyTable(this.env.CORE_DB_NAME, "sm_weekly_plan_units")}
+            WHERE plan_id = ?
+            GROUP BY division_id
+          ) plan_units ON plan_units.division_id = d.id
           LEFT JOIN ${this.tables.ledger} wl ON wl.division_id = d.id AND ${dateCond} ${carCond} ${scopeCarCond}
           WHERE ${whereCond}
-          GROUP BY d.id, d.name, cc.net_capacity_hours, cc.allocated_hours
+          GROUP BY d.id, d.name, plan_units.allocated_hours
           ORDER BY actualHours DESC, d.name ASC
         `,
         queryParams,
@@ -633,10 +650,11 @@ export class MySqlDashboardRepository implements DashboardRepository {
         byDivision: rows.map((row) => {
           const actual = toNumber(row.actualHours);
           const planned = toNumber(row.plannedHours);
+          const cachedCapacity = capacityByDivision.get(Number(row.divisionId));
           return {
             divisionId: row.divisionId,
             divisionName: row.divisionName ?? "-",
-            capacityHours: Number(toNumber(row.capacityHours).toFixed(2)),
+            capacityHours: Number(toNumber(cachedCapacity?.netCapacityHours).toFixed(2)),
             plannedHours: Number(planned.toFixed(2)),
             actualHours: Number(actual.toFixed(2)),
             remainingHours: Number(Math.max(0, planned - actual).toFixed(2)),

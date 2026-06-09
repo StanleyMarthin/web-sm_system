@@ -19,6 +19,12 @@ async function proxy(request: Request, props: RouteProps) {
     method: request.method,
     headers: {
       "Content-Type": request.headers.get("Content-Type") ?? "application/json",
+      ...(request.headers.get("Origin")
+        ? { Origin: request.headers.get("Origin")! }
+        : { Origin: url.origin }),
+      ...(request.headers.get("X-CSRF-Token")
+        ? { "X-CSRF-Token": request.headers.get("X-CSRF-Token")! }
+        : {}),
       ...(cookieHeader ? { cookie: cookieHeader } : {}),
     },
     body: request.method === "GET" || request.method === "HEAD" ? undefined : await request.text(),

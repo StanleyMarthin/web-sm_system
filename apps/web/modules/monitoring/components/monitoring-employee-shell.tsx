@@ -14,6 +14,27 @@ interface EmployeeTimesheetRecord {
   totalActualHours: number;
 }
 
+interface EmployeeUnitSummary {
+  carId: string;
+  unitName: string;
+  normalHours: number;
+  overtimeHours: number;
+  totalHours: number;
+}
+
+interface EmployeeSummary {
+  id: string;
+  Nama: string;
+  _totalNormal: number;
+  _totalOvertime: number;
+  _totalHours: number;
+  units: Map<string, EmployeeUnitSummary>;
+}
+
+type EmployeeSummaryRow = Omit<EmployeeSummary, "units"> & {
+  units: EmployeeUnitSummary[];
+};
+
 interface MonitoringEmployeeShellProps {
   date: string;
   dateTo: string;
@@ -118,8 +139,8 @@ export function MonitoringEmployeeShell({
     router.push(`${pathname}?${nextParams.toString()}`);
   }
 
-  const employeeData = useMemo(() => {
-    const employeeMap = new Map<string, any>();
+  const employeeData = useMemo<EmployeeSummaryRow[]>(() => {
+    const employeeMap = new Map<string, EmployeeSummary>();
 
     for (const row of rows) {
       if (!row.employeeName) continue;
@@ -132,7 +153,7 @@ export function MonitoringEmployeeShell({
           _totalNormal: 0,
           _totalOvertime: 0,
           _totalHours: 0,
-          units: new Map<string, any>()
+          units: new Map<string, EmployeeUnitSummary>(),
         };
         employeeMap.set(row.employeeName, emp);
       }
@@ -167,9 +188,9 @@ export function MonitoringEmployeeShell({
       }
     }
 
-    return Array.from(employeeMap.values()).map(emp => ({
+    return Array.from(employeeMap.values()).map((emp) => ({
       ...emp,
-      units: Array.from(emp.units.values())
+      units: Array.from(emp.units.values()),
     }));
   }, [rows]);
 
@@ -299,7 +320,7 @@ export function MonitoringEmployeeShell({
                                     </tr>
                                   </thead>
                                   <tbody className="divide-y divide-white/[0.02]">
-                                    {emp.units.map((unit: any) => (
+                                    {emp.units.map((unit) => (
                                       <tr key={unit.carId} className="hover:bg-white/[0.01] transition-colors">
                                         <td className="px-4 py-2.5 text-white/70 font-medium">{unit.unitName}</td>
                                         <td className="px-4 py-2.5 text-right tabular-nums text-white/50">{formatHours(unit.normalHours)}</td>

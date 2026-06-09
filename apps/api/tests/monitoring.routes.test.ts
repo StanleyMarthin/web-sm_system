@@ -151,6 +151,7 @@ function createStubMonitoringService(): MonitoringService {
           totalActualHours: 3.5,
           totalRemainingHours: 10.5,
           averageProgressPercent: 45,
+          units: [],
         },
       ];
     },
@@ -306,6 +307,7 @@ describe("monitoring routes", () => {
               totalActualHours: 1,
               totalRemainingHours: 2,
               averageProgressPercent: 50,
+              units: [],
             },
           ];
         },

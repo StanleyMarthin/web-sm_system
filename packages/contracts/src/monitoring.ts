@@ -110,18 +110,6 @@ export const monitoringTaskRecordSchema = monitoringTaskRecordBaseSchema.transfo
   qcResult: row.qcResult ?? row.qcStatus,
 }));
 
-export const monitoringDivisionLoadRecordSchema = z.object({
-  divisionId: z.number().int().nullable(),
-  divisionName: z.string().nullable(),
-  totalTasks: z.number().int().nonnegative(),
-  startedTasks: z.number().int().nonnegative(),
-  pendingSubmitTasks: z.number().int().nonnegative(),
-  doneTasks: z.number().int().nonnegative(),
-  totalActualHours: z.number().nonnegative(),
-  totalRemainingHours: z.number().nonnegative(),
-  averageProgressPercent: z.number().nonnegative(),
-});
-
 export const monitoringDivisionUnitRecordSchema = z.object({
   carId: z.string(),
   unitName: z.string(),
@@ -134,6 +122,19 @@ export const monitoringDivisionUnitRecordSchema = z.object({
   totalActualHours: z.number().nonnegative(),
   totalRemainingHours: z.number().nonnegative(),
   averageProgressPercent: z.number().nonnegative(),
+});
+
+export const monitoringDivisionLoadRecordSchema = z.object({
+  divisionId: z.number().int().nullable(),
+  divisionName: z.string().nullable(),
+  totalTasks: z.number().int().nonnegative(),
+  startedTasks: z.number().int().nonnegative(),
+  pendingSubmitTasks: z.number().int().nonnegative(),
+  doneTasks: z.number().int().nonnegative(),
+  totalActualHours: z.number().nonnegative(),
+  totalRemainingHours: z.number().nonnegative(),
+  averageProgressPercent: z.number().nonnegative(),
+  units: z.array(monitoringDivisionUnitRecordSchema).default([]),
 });
 
 export const monitoringDivisionMemberRecordSchema = z.object({

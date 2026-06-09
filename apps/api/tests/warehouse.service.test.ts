@@ -9,7 +9,7 @@ import type {
   WarehouseTransactionQuery,
   WarehouseTransactionRecord,
 } from "@smsystem/contracts/warehouse";
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { AuditService } from "@/services/audit/audit.service";
 import { DefaultWarehouseService } from "@/services/warehouse.service";
 import type { WarehouseRepository } from "@/repositories/warehouse.repo";
@@ -369,6 +369,13 @@ class InMemoryWarehouseRepository implements WarehouseRepository {
       rows,
       total: 1,
     };
+  }
+
+  async findStockCardById(
+    input: Parameters<WarehouseRepository["findStockCardById"]>[0],
+  ) {
+    const result = await this.listStockCard();
+    return result.rows.find((row) => row.stockCardId === input.stockCardId) ?? null;
   }
 
   async listItems() {
@@ -734,6 +741,14 @@ class InMemoryWarehouseRepository implements WarehouseRepository {
 }
 
 describe("DefaultWarehouseService", () => {
+  beforeEach(() => {
+    process.env.SM_TEST_MEMORY_UPLOAD_TICKETS = "1";
+  });
+
+  afterEach(() => {
+    delete process.env.SM_TEST_MEMORY_UPLOAD_TICKETS;
+  });
+
   test("creates tools request with direct approval stage", async () => {
     const service = createWarehouseService(new InMemoryWarehouseRepository());
 

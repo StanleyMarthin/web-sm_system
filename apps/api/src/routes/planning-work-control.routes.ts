@@ -1,5 +1,8 @@
 import {
+  createServiceIntakeBodySchema,
   createTargetBodySchema,
+  criticalPathSnapshotBodySchema,
+  labourOverrideBodySchema,
   overtimeRecommendationBodySchema,
   releaseSpkBodySchema,
 } from "@smsystem/contracts/planning-work-control";
@@ -325,6 +328,130 @@ export async function handleWorkControlOvertimeRecommendationRoute(
       Response.json({
         success: true,
         message: "Rekomendasi lembur berhasil dibuat.",
+        data,
+      }),
+    );
+  } catch (error) {
+    return mapWorkControlError(request, error);
+  }
+}
+
+export async function handleWorkControlServiceTemplatesRoute(
+  request: Request,
+  authService: AuthService,
+  workControlService: PlanningWorkControlService,
+): Promise<Response> {
+  const sessionResult = await requirePlanningWorkControlReadSession(request, authService);
+  if ("response" in sessionResult) {
+    return sessionResult.response;
+  }
+
+  try {
+    const data = await workControlService.listServiceTemplates();
+    return withCors(
+      request,
+      Response.json({
+        success: true,
+        message: "Template service siap.",
+        data,
+      }),
+    );
+  } catch (error) {
+    return mapWorkControlError(request, error);
+  }
+}
+
+export async function handleWorkControlServiceIntakeRoute(
+  request: Request,
+  authService: AuthService,
+  workControlService: PlanningWorkControlService,
+): Promise<Response> {
+  const sessionResult = await requirePlanningWorkControlWriteSession(request, authService);
+  if ("response" in sessionResult) {
+    return sessionResult.response;
+  }
+
+  const bodyResult = await parseJsonBody(request, createServiceIntakeBodySchema);
+  if (!bodyResult.success) {
+    return withCors(request, bodyResult.response);
+  }
+
+  try {
+    const data = await workControlService.createServiceIntake(
+      sessionResult.session,
+      bodyResult.data,
+    );
+    return withCors(
+      request,
+      Response.json({
+        success: true,
+        message: "Draft SPK Service tersimpan sementara.",
+        data,
+      }),
+    );
+  } catch (error) {
+    return mapWorkControlError(request, error);
+  }
+}
+
+export async function handleWorkControlCriticalPathSnapshotRoute(
+  request: Request,
+  authService: AuthService,
+  workControlService: PlanningWorkControlService,
+): Promise<Response> {
+  const sessionResult = await requirePlanningWorkControlWriteSession(request, authService);
+  if ("response" in sessionResult) {
+    return sessionResult.response;
+  }
+
+  const bodyResult = await parseJsonBody(request, criticalPathSnapshotBodySchema);
+  if (!bodyResult.success) {
+    return withCors(request, bodyResult.response);
+  }
+
+  try {
+    const data = await workControlService.saveCriticalPathSnapshot(
+      sessionResult.session,
+      bodyResult.data,
+    );
+    return withCors(
+      request,
+      Response.json({
+        success: true,
+        message: "Snapshot critical path tersimpan.",
+        data,
+      }),
+    );
+  } catch (error) {
+    return mapWorkControlError(request, error);
+  }
+}
+
+export async function handleWorkControlLabourOverrideRoute(
+  request: Request,
+  authService: AuthService,
+  workControlService: PlanningWorkControlService,
+): Promise<Response> {
+  const sessionResult = await requirePlanningWorkControlWriteSession(request, authService);
+  if ("response" in sessionResult) {
+    return sessionResult.response;
+  }
+
+  const bodyResult = await parseJsonBody(request, labourOverrideBodySchema);
+  if (!bodyResult.success) {
+    return withCors(request, bodyResult.response);
+  }
+
+  try {
+    const data = await workControlService.saveLabourOverride(
+      sessionResult.session,
+      bodyResult.data,
+    );
+    return withCors(
+      request,
+      Response.json({
+        success: true,
+        message: "Kontrol labour tersimpan sementara.",
         data,
       }),
     );

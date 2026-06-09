@@ -17,6 +17,13 @@ import type { PrService } from "@/services/pr.service";
 import { sanitizePrGridQuery } from "@/services/pr/query";
 import { applyDefaultDivisionNameFilter } from "@/services/grid/division-default";
 import { applyRequestsVisibilityScope } from "@/services/requests/scope";
+import { S3GalleryUploadTicketProvider } from "@/services/storage/r2-upload.service";
+import {
+  createUploadNonce,
+  extensionForImageContentType,
+  normalizeAllowedImageContentType,
+  storeUploadTicket,
+} from "@/security/upload-ticket";
 
 async function requirePrSession(
   request: Request,
@@ -50,6 +57,15 @@ function mapPrError(request: Request, error: unknown): Response {
   if (error instanceof Error) {
     if (error.message === "PR_NOT_FOUND") {
       return errorResponse(request, "PR tidak ditemukan.", 404, "PR_NOT_FOUND");
+    }
+
+    if (error.message === "INVALID_UPLOAD_CONTENT_TYPE") {
+      return errorResponse(
+        request,
+        "Tipe file upload tidak diizinkan.",
+        400,
+        "INVALID_UPLOAD_CONTENT_TYPE",
+      );
     }
 
     if (error.message === "MISSING_DIVISION") {
@@ -358,16 +374,21 @@ export async function handlePrUploadTicketRoute(
       return errorResponse(request, "filename wajib diisi.", 400, "MISSING_FILENAME");
     }
 
-    // Clean filename and structure it under 'pr/' prefix
-    const cleanFilename = filename.replaceAll("/", "-").replaceAll(/[^\w\-.]/gu, "_");
-    const objectKey = `pr/${Date.now()}_${cleanFilename}`;
+    const allowedContentType = normalizeAllowedImageContentType(contentType);
+    const extension = extensionForImageContentType(allowedContentType);
+    const nonce = createUploadNonce();
+    const objectKey = `pr/${sessionResult.session.employeeId}/${nonce}.${extension}`;
 
-    const { S3GalleryUploadTicketProvider } = await import("@/services/storage/r2-upload.service");
     const uploadTicketProvider = new S3GalleryUploadTicketProvider(getApiEnv());
 
     const ticket = await uploadTicketProvider.createTicket({
       objectKey,
-      contentType,
+      contentType: allowedContentType,
+    });
+    await storeUploadTicket({
+      nonce,
+      employeeId: sessionResult.session.employeeId,
+      objectKey,
     });
 
     return successResponse(

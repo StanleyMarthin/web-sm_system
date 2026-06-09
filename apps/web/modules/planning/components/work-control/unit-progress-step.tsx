@@ -16,15 +16,24 @@ export interface UnitProgressDivision {
   divisionId: number;
   divisionName: string;
   remainingHours: number;
+  targetHours?: number;
+  actualHours?: number;
 }
 
 export interface UnitProgressJob {
   jobId: string;
+  divisionId: string | null;
+  divisionName: string | null;
   jobName: string;
-  panel: string;
+  panel: string | null;
   status: string;
   estimatedHours: number;
   actualHours: number | null;
+  remainingHours: number;
+  dependsOn: string[];
+  startDate: string | null;
+  deadlineDate: string | null;
+  qcLastStatus: string | null;
 }
 
 export interface UnitProgressData {
@@ -54,12 +63,12 @@ interface UnitProgressStepProps {
 function statusBadge(status: string) {
   const s = status.toLowerCase();
   if (s === "done" || s === "selesai") {
-    return "border-emerald-500/30 text-emerald-600 dark:text-emerald-300";
+    return "border-emerald-500/30 text-emerald-300";
   }
   if (s === "in_progress" || s === "on_progress") {
-    return "border-amber-500/30 text-amber-600 dark:text-amber-300";
+    return "border-amber-500/30 text-amber-400";
   }
-  return "border-gray-300 text-gray-500 dark:border-white/[0.1] dark:text-white/40";
+  return "border-white/10 text-white/40";
 }
 
 function UnitProgressCard({ unit }: { unit: UnitProgressData }) {
@@ -70,15 +79,15 @@ function UnitProgressCard({ unit }: { unit: UnitProgressData }) {
   ).length;
 
   return (
-    <div className="border border-gray-200 bg-white dark:border-white/[0.06] dark:bg-[#111114]">
+    <div className="border border-white/5 bg-[#111114]">
       {/* Card header */}
       <div className="px-4 py-3">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div className="min-w-0">
-            <p className="text-[12px] font-mono text-gray-900 dark:text-white/80">
+            <p className="text-[12px] font-mono text-white/80">
               {unit.unitName}
             </p>
-            <p className="mt-0.5 font-mono text-[10px] text-gray-400 dark:text-white/30">
+            <p className="mt-0.5 font-mono text-[10px] text-white/30">
               {unit.customerName ?? "Customer belum diisi"}
               {unit.targetDeliveryDate
                 ? ` · Target: ${unit.targetDeliveryDate}`
@@ -89,10 +98,10 @@ function UnitProgressCard({ unit }: { unit: UnitProgressData }) {
             className={[
               "border px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.1em]",
               unit.riskLevel === "LOW"
-                ? "border-emerald-500/30 text-emerald-600 dark:text-emerald-300"
+                ? "border-emerald-500/30 text-emerald-300"
                 : unit.riskLevel === "MEDIUM"
-                  ? "border-amber-500/30 text-amber-600 dark:text-amber-300"
-                  : "border-red-500/30 text-red-600 dark:text-red-300",
+                  ? "border-amber-500/30 text-amber-400"
+                  : "border-red-500/30 text-red-300",
             ].join(" ")}
           >
             Risiko {formatRiskLabel(unit.riskLevel)}
@@ -102,12 +111,12 @@ function UnitProgressCard({ unit }: { unit: UnitProgressData }) {
         {/* Progress bar */}
         <div className="mt-3">
           <div className="mb-1.5 flex items-center justify-between text-[11px]">
-            <span className="text-gray-500 dark:text-white/40">Progress keseluruhan</span>
-            <span className="font-mono font-medium text-gray-700 dark:text-white/70">
+            <span className="text-white/40">Progress</span>
+            <span className="font-mono font-medium text-white/70">
               {unit.progressPercent}%
             </span>
           </div>
-          <div className="h-1.5 w-full bg-gray-100 dark:bg-white/[0.06]">
+          <div className="h-1.5 w-full bg-white/[0.06]">
             <div
               className={[
                 "h-full transition-all",
@@ -126,29 +135,29 @@ function UnitProgressCard({ unit }: { unit: UnitProgressData }) {
         <div className="mt-3 grid grid-cols-3 gap-2">
           {[
             {
-              label: "Sisa estimasi",
+              label: "Sisa",
               value: `${unit.remainingHours.toFixed(0)} jam`,
             },
             {
-              label: "Pekerjaan selesai",
+              label: "Selesai",
               value: `${doneJobs} / ${unit.jobs.length}`,
             },
             {
-              label: "Estimasi selesai",
+              label: "ETA",
               value:
                 unit.roughEstimateDays != null
-                  ? `~${unit.roughEstimateDays} hari kerja`
-                  : "Belum bisa dihitung",
+                  ? `~${unit.roughEstimateDays}h kerja`
+                  : "-",
             },
           ].map((m) => (
             <div
               key={m.label}
-              className="border border-gray-200 bg-gray-50 px-3 py-2 dark:border-white/[0.06] dark:bg-[#0a0a0c]"
+              className="border border-white/5 bg-[#0a0a0c] px-3 py-2"
             >
-              <p className="font-mono text-[9px] uppercase tracking-[0.1em] text-gray-400 dark:text-white/25">
+              <p className="font-mono text-[9px] uppercase tracking-[0.1em] text-white/25">
                 {m.label}
               </p>
-              <p className="mt-0.5 font-mono text-[12px] text-gray-700 dark:text-white/70">
+              <p className="mt-0.5 font-mono text-[12px] text-white/70">
                 {m.value}
               </p>
             </div>
@@ -158,17 +167,17 @@ function UnitProgressCard({ unit }: { unit: UnitProgressData }) {
         {/* Divisi terlibat */}
         {unit.involvedDivisions.length > 0 && (
           <div className="mt-3">
-            <p className="mb-1 font-mono text-[10px] uppercase tracking-[0.1em] text-gray-400 dark:text-white/25">
-              Divisi terlibat
+            <p className="mb-1 font-mono text-[10px] uppercase tracking-[0.1em] text-white/25">
+              Divisi
             </p>
             <div className="flex flex-wrap gap-1.5">
               {unit.involvedDivisions.map((d) => (
                 <span
                   key={d.divisionId}
-                  className="border border-gray-200 px-2 py-0.5 font-mono text-[10px] text-gray-500 dark:border-white/[0.08] dark:text-white/40"
+                  className="border border-white/10 px-2 py-0.5 font-mono text-[10px] text-white/40"
                 >
                   {d.divisionName}
-                  <span className="ml-1 font-mono text-gray-400 dark:text-white/25">
+                  <span className="ml-1 font-mono text-white/25">
                     {d.remainingHours.toFixed(0)}j
                   </span>
                 </span>
@@ -189,7 +198,7 @@ function UnitProgressCard({ unit }: { unit: UnitProgressData }) {
       <button
         type="button"
         onClick={() => setShowDetail((v) => !v)}
-        className="flex w-full items-center justify-between border-t border-gray-200 px-4 py-2 font-mono text-[10px] text-gray-500 transition-colors hover:bg-gray-50 dark:border-white/[0.06] dark:text-white/30 dark:hover:bg-white/[0.02]"
+        className="flex w-full items-center justify-between border-t border-white/5 px-4 py-2 font-mono text-[10px] text-white/30 transition-colors hover:bg-white/[0.02]"
       >
         <span>
           {showDetail ? "Sembunyikan detail" : `Lihat Detail (${unit.jobs.length} pekerjaan)`}
@@ -203,11 +212,11 @@ function UnitProgressCard({ unit }: { unit: UnitProgressData }) {
 
       {/* Job detail list */}
       {showDetail && (
-        <div className="border-t border-gray-200 dark:border-white/[0.06]">
-          <div className="overflow-x-auto">
+        <div className="border-t border-white/5">
+          <div className="max-h-[280px] overflow-y-auto overflow-x-auto">
             <table className="min-w-full text-[11px]">
-              <thead className="border-b border-gray-200 bg-gray-50 dark:border-white/[0.06] dark:bg-[#0a0a0c]">
-                <tr className="font-mono text-[9px] uppercase tracking-[0.1em] text-gray-400 dark:text-white/25">
+              <thead className="sticky top-0 border-b border-white/5 bg-[#0a0a0c]">
+                <tr className="font-mono text-[9px] uppercase tracking-[0.1em] text-white/25">
                   <th className="px-4 py-2 text-left">Pekerjaan</th>
                   <th className="px-4 py-2 text-left">Panel</th>
                   <th className="px-4 py-2 text-left">Status</th>
@@ -219,13 +228,13 @@ function UnitProgressCard({ unit }: { unit: UnitProgressData }) {
                 {unit.jobs.map((job) => (
                   <tr
                     key={job.jobId}
-                    className="border-b border-gray-100 transition-colors hover:bg-gray-50 dark:border-white/[0.03] dark:hover:bg-white/[0.015]"
+                    className="border-b border-white/[0.03] transition-colors hover:bg-white/[0.015]"
                   >
-                    <td className="px-4 py-1.5 text-gray-700 dark:text-white/60">
+                    <td className="px-4 py-1.5 text-white/60">
                       {job.jobName}
                     </td>
-                    <td className="px-4 py-1.5 text-gray-400 dark:text-white/30">
-                      {job.panel}
+                    <td className="px-4 py-1.5 text-white/30">
+                      {job.panel ?? "-"}
                     </td>
                     <td className="px-4 py-1.5">
                       <span
@@ -234,10 +243,10 @@ function UnitProgressCard({ unit }: { unit: UnitProgressData }) {
                         {job.status}
                       </span>
                     </td>
-                    <td className="px-4 py-1.5 text-right font-mono tabular-nums text-gray-600 dark:text-white/50">
+                    <td className="px-4 py-1.5 text-right font-mono tabular-nums text-white/50">
                       {job.estimatedHours.toFixed(1)}j
                     </td>
-                    <td className="px-4 py-1.5 text-right font-mono tabular-nums text-gray-600 dark:text-white/50">
+                    <td className="px-4 py-1.5 text-right font-mono tabular-nums text-white/50">
                       {job.actualHours === null ? "-" : `${job.actualHours.toFixed(1)}j`}
                     </td>
                   </tr>
@@ -260,21 +269,17 @@ export function UnitProgressStep({
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="border border-gray-200 bg-white px-4 py-4 dark:border-white/[0.06] dark:bg-[#111114]">
-        <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-gray-400 dark:text-white/30">
+      <div className="border border-white/5 bg-[#111114] px-4 py-4">
+        <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-white/30">
           Langkah 2
         </p>
-        <h2 className="mt-1 text-[15px] font-semibold tracking-[-0.02em] text-gray-950 dark:text-white">
+        <h2 className="mt-1 text-[13px] font-mono text-white/80">
           Lihat Sisa Pekerjaan
         </h2>
-        <p className="mt-2 text-[12px] leading-5 text-gray-500 dark:text-white/40">
-          Baca sisa kerja per unit sebelum bicara kapasitas. Tujuannya supaya yang dipilih di
-          langkah awal benar-benar layak dikejar, bukan sekadar terasa mendesak.
-        </p>
       </div>
 
       {isLoading ? (
-        <div className="border border-gray-200 bg-white px-4 py-10 text-center text-[12px] text-gray-400 dark:border-white/[0.06] dark:bg-[#111114] dark:text-white/25">
+        <div className="border border-white/5 bg-[#111114] px-4 py-10 text-center text-[12px] text-white/25">
           Memuat data progress...
         </div>
       ) : units.length === 0 ? (
@@ -292,7 +297,7 @@ export function UnitProgressStep({
         <button
           type="button"
           onClick={onBack}
-          className="inline-flex h-10 items-center gap-2 border border-gray-200 px-4 font-mono text-[10px] uppercase tracking-[0.12em] text-gray-600 transition-colors hover:bg-gray-50 dark:border-white/[0.08] dark:text-white/50 dark:hover:bg-white/[0.04]"
+          className="inline-flex h-8 items-center gap-2 border border-white/10 px-4 font-mono text-[10px] uppercase tracking-[0.12em] text-white/40 transition-colors hover:text-white"
         >
           ← Kembali
         </button>
@@ -300,7 +305,7 @@ export function UnitProgressStep({
           type="button"
           onClick={onNext}
           disabled={units.length === 0}
-          className="inline-flex h-10 items-center gap-2 border border-amber-500/40 bg-amber-500/[0.08] px-4 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-700 transition-colors hover:bg-amber-500/[0.14] disabled:cursor-not-allowed disabled:opacity-40 dark:text-amber-300"
+          className="inline-flex h-8 items-center gap-2 border border-amber-500/30 bg-amber-500/[0.04] px-4 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-500 transition-colors hover:bg-amber-500/10 disabled:cursor-not-allowed disabled:opacity-40"
         >
           Lanjut ke Kapasitas →
         </button>

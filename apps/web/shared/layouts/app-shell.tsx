@@ -30,7 +30,7 @@ import {
 import Link from "next/link";
 import { useTheme } from "next-themes";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useCallback, useState, useRef, useEffect, useMemo } from "react";
 import { SERIF_STYLE } from "@/lib/constants";
 import type { NavigationItem, NavigationSubItem } from "@/shared/navigation/modules";
 import { logoutFromWeb } from "@/shared/auth/client";
@@ -106,7 +106,7 @@ export function AppShell({ user, navigation, children }: AppShellProps) {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    setMounted(true);
+    queueMicrotask(() => setMounted(true));
   }, []);
 
   const isDark = mounted && theme === "dark";
@@ -137,17 +137,52 @@ export function AppShell({ user, navigation, children }: AppShellProps) {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  const isHrefActive = useCallback((href: string | undefined, id?: string) => {
+    if (!href) return false;
+    const target = new URL(href, "http://localhost");
+    if (!matchesBasePath(pathname, href, id)) return false;
+    const targetSection = target.searchParams.get("section");
+    if (targetSection) {
+      const currentSection = searchParams.get("section") ?? (pathname === "/warehouse" ? "overview" : null);
+      return currentSection === targetSection;
+    }
+    if ([...target.searchParams.keys()].length === 0) return true;
+    for (const key of new Set(target.searchParams.keys())) {
+      const targetValues = target.searchParams.getAll(key).sort().join("|");
+      const currentValues = searchParams.getAll(key).sort().join("|");
+      if (targetValues !== currentValues) return false;
+    }
+    return true;
+  }, [pathname, searchParams]);
+
+  const isNodeActive = useCallback((item: NavigationItem | NavigationSubItem): boolean => {
+    function checkNodeActive(node: NavigationItem | NavigationSubItem): boolean {
+      if (isHrefActive(node.href, node.id)) return true;
+      return (node.subItems ?? []).some((subItem) => checkNodeActive(subItem));
+    }
+
+    return checkNodeActive(item);
+  }, [isHrefActive]);
+
   useEffect(() => {
-    setExpandedGroups(prev => {
-      const next = new Set(prev);
-      for (const item of navigation) {
-        if (item.subItems?.length && isNodeActive(item)) {
-          next.add(item.id);
+    let alive = true;
+    queueMicrotask(() => {
+      if (!alive) return;
+      setExpandedGroups(prev => {
+        const next = new Set(prev);
+        for (const item of navigation) {
+          if (item.subItems?.length && isNodeActive(item)) {
+            next.add(item.id);
+          }
         }
-      }
-      return next;
+        return next;
+      });
     });
-  }, [navigation, pathname, searchParams]);
+
+    return () => {
+      alive = false;
+    };
+  }, [isNodeActive, navigation]);
 
   useEffect(() => {
     if (idlePrefetchRoutes.length === 0) return;
@@ -180,29 +215,6 @@ export function AppShell({ user, navigation, children }: AppShellProps) {
       }
     };
   }, [idlePrefetchRoutes, router]);
-
-  function isHrefActive(href: string | undefined, id?: string) {
-    if (!href) return false;
-    const target = new URL(href, "http://localhost");
-    if (!matchesBasePath(pathname, href, id)) return false;
-    const targetSection = target.searchParams.get("section");
-    if (targetSection) {
-      const currentSection = searchParams.get("section") ?? (pathname === "/warehouse" ? "overview" : null);
-      return currentSection === targetSection;
-    }
-    if ([...target.searchParams.keys()].length === 0) return true;
-    for (const key of new Set(target.searchParams.keys())) {
-      const targetValues = target.searchParams.getAll(key).sort().join("|");
-      const currentValues = searchParams.getAll(key).sort().join("|");
-      if (targetValues !== currentValues) return false;
-    }
-    return true;
-  }
-
-  function isNodeActive(item: NavigationItem | NavigationSubItem): boolean {
-    if (isHrefActive(item.href, item.id)) return true;
-    return (item.subItems ?? []).some((subItem) => isNodeActive(subItem));
-  }
 
   function toggleExpanded(id: string) {
     setExpandedGroups(prev => {

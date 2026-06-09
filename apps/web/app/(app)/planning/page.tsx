@@ -58,9 +58,19 @@ export default async function PlanningWorkspacePage({
   }
 
   const tabs: { id: PlanningTab; label: string }[] = [
-    { id: "work-control", label: "Planning SPK & SPL" },
+    { id: "work-control", label: "Adaptive Planner" },
     { id: "calendar", label: "Kalender Kerja" },
   ];
+  const activeWeeklyConfig = payload.data.weeklyConfigs.find(
+    (config) => config.weekStartDate === payload.data.weekStartDate,
+  );
+  const workingDayNumbers = Array.from(
+    new Set(
+      payload.data.workingDays.days
+        .filter((day) => day.isWorkingDay)
+        .map((day) => new Date(`${day.date}T00:00:00.000Z`).getUTCDay()),
+    ),
+  );
 
   return (
     <div className="space-y-4">
@@ -107,8 +117,9 @@ export default async function PlanningWorkspacePage({
       {activeTab === "work-control" && (
         <PlanningWorkControlPage
           weekStartDate={payload.data.weekStartDate}
-          workspaceData={payload.data}
           canManage={payload.data.canManage}
+          qcBufferDays={activeWeeklyConfig?.qcBufferDays ?? 0}
+          workingDayNumbers={workingDayNumbers}
         />
       )}
 

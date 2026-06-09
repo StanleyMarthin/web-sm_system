@@ -7,13 +7,18 @@ import type {
   CountdownUpdateRequest,
 } from "@smsystem/contracts/countdown";
 import { permissionCodes } from "@smsystem/permissions";
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import type { WebSession } from "@/services/auth/session.service";
 import { buildGridMeta } from "@/services/grid/paginate";
 import { CountdownRepository } from "@/repositories/countdown.repo";
 import { sanitizeCountdownGridQuery } from "@/services/countdown/query";
 import { applyDefaultDivisionIdFilter } from "@/services/grid/division-default";
 import { TtlCache } from "@/lib/ttl-cache";
+import {
+  addRowsWorksheet,
+  readFirstWorksheetRows,
+  writeWorkbookBuffer,
+} from "@/services/excel";
 
 interface ImportRowInput extends CountdownTemplateRow {
   rowNumber: number;
@@ -56,7 +61,7 @@ export interface CountdownService {
     input: CountdownUpdateRequest,
   ): Promise<CountdownDetail | null>;
   remove(session: WebSession, countdownId: string): Promise<boolean>;
-  buildTemplateWorkbook(): Uint8Array;
+  buildTemplateWorkbook(): Promise<Uint8Array>;
   importWorkbook(session: WebSession, fileName: string, buffer: Uint8Array): Promise<CountdownImportResult>;
 }
 
@@ -413,35 +418,27 @@ export class DefaultCountdownService implements CountdownService {
     return removed;
   }
 
-  buildTemplateWorkbook(): Uint8Array {
+  async buildTemplateWorkbook(): Promise<Uint8Array> {
     const templateRows = buildTemplateRows();
-    const workbook = XLSX.utils.book_new();
-    const templateSheet = XLSX.utils.aoa_to_sheet(buildTemplateSheetRows(templateRows));
-    const referenceSheet = XLSX.utils.aoa_to_sheet(buildTemplateReferenceRows());
-
-    templateSheet["!cols"] = templateColumns.map((column) => ({
-      wch: Math.max(column.header.length + 2, column.width),
-    }));
-    templateSheet["!autofilter"] = {
-      ref: XLSX.utils.encode_range({
-        s: { c: 0, r: 0 },
-        e: { c: templateColumns.length - 1, r: templateRows.length },
-      }),
+    const workbook = new ExcelJS.Workbook();
+    const templateSheet = addRowsWorksheet(
+      workbook,
+      "countdown-template",
+      buildTemplateSheetRows(templateRows),
+      templateColumns.map((column) => Math.max(column.header.length + 2, column.width)),
+    );
+    templateSheet.autoFilter = {
+      from: { row: 1, column: 1 },
+      to: { row: templateRows.length + 1, column: templateColumns.length },
     };
-    referenceSheet["!cols"] = [
-      { wch: 22 },
-      { wch: 24 },
-      { wch: 10 },
-      { wch: 42 },
-    ];
+    addRowsWorksheet(workbook, "panduan", buildTemplateReferenceRows(), [
+      22,
+      24,
+      10,
+      42,
+    ]);
 
-    XLSX.utils.book_append_sheet(workbook, templateSheet, "countdown-template");
-    XLSX.utils.book_append_sheet(workbook, referenceSheet, "panduan");
-
-    return XLSX.write(workbook, {
-      type: "buffer",
-      bookType: "xlsx",
-    }) as Uint8Array;
+    return writeWorkbookBuffer(workbook);
   }
 
   async importWorkbook(
@@ -449,13 +446,8 @@ export class DefaultCountdownService implements CountdownService {
     _fileName: string,
     buffer: Uint8Array,
   ): Promise<CountdownImportResult> {
-    const workbook = XLSX.read(buffer, {
-      type: "buffer",
-      cellDates: true,
-    });
-
-    const firstSheetName = workbook.SheetNames[0];
-    if (!firstSheetName) {
+    const sourceRows = await readFirstWorksheetRows(buffer);
+    if (!sourceRows) {
       return {
         inserted: 0,
         updated: 0,
@@ -470,13 +462,6 @@ export class DefaultCountdownService implements CountdownService {
         ],
       };
     }
-
-    const sheet = workbook.Sheets[firstSheetName];
-    const sourceRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
-      defval: "",
-      raw: true,
-      blankrows: false,
-    });
 
     const rows = normalizeWorkbookRows(sourceRows);
     if (rows.length === 0) {

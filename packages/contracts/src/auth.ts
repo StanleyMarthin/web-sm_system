@@ -4,6 +4,7 @@ import { roleProfileSchema } from "@smsystem/contracts/rbac";
 export const SESSION_COOKIE_NAME = "sm_session";
 export const REFRESH_COOKIE_NAME = "sm_refresh";
 export const DEVICE_COOKIE_NAME = "sm_device_id";
+export const CSRF_COOKIE_NAME = "sm_csrf";
 
 export const loginRequestSchema = z.object({
   employeeId: z.string().trim().min(1).max(50),

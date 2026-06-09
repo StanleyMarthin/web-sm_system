@@ -549,17 +549,37 @@ export function WarehouseShell({
   );
   const effectiveStoreLocationOptions =
     storeLocationOptions.length > 0 ? storeLocationOptions : defaultStoreLocationOptions;
+  const requestStockCardOptions = useMemo(
+    () =>
+      requestStockCards.map((stockCard) => ({
+        stockCardId: stockCard.stockCardId,
+        partName: stockCard.partName,
+        partCode: stockCard.partCode ?? "",
+        qty: stockCard.qty,
+        uom: stockCard.uom,
+        unitName: stockCard.unitName,
+      })),
+    [requestStockCards],
+  );
 
 
   useEffect(() => {
-    if (!photoTarget) {
-      setPhotoUrlsDraft([]);
-      setSelectedPhotoUrl(null);
-      return;
-    }
+    let alive = true;
+    queueMicrotask(() => {
+      if (!alive) return;
+      if (!photoTarget) {
+        setPhotoUrlsDraft([]);
+        setSelectedPhotoUrl(null);
+        return;
+      }
 
-    setPhotoUrlsDraft(photoTarget.photoUrls);
-    setSelectedPhotoUrl(photoTarget.photoUrls[0] ?? null);
+      setPhotoUrlsDraft(photoTarget.photoUrls);
+      setSelectedPhotoUrl(photoTarget.photoUrls[0] ?? null);
+    });
+
+    return () => {
+      alive = false;
+    };
   }, [photoTarget]);
 
   async function ensureStoreLocationOptions() {
@@ -1683,8 +1703,8 @@ export function WarehouseShell({
           <WarehouseRequestForm
             divisions={transactions?.references.divisions ?? []}
             employees={requestEmployees}
-            jobs={requestJobs as any}
-            stockCards={requestStockCards as any}
+            jobs={requestJobs}
+            stockCards={requestStockCardOptions}
             isLoading={isLoadingRequestRefs}
             isPending={isSubmittingRequest}
             canChooseRequestDivision={canChooseRequestDivision}

@@ -9,6 +9,10 @@ import {
 } from "@smsystem/contracts/unit";
 import { unitBomWorkspaceEnvelopeSchema } from "@smsystem/contracts/unit-bom";
 import {
+  workflowLayoutEnvelopeSchema,
+  type WorkflowLayoutPayload,
+} from "@smsystem/contracts/workflow-layout";
+import {
   unitPanelCollectionEnvelopeSchema,
   unitPanelDeleteEnvelopeSchema,
   unitPanelMutationEnvelopeSchema,
@@ -183,6 +187,68 @@ export async function fetchUnitBom(cookieHeader: string, unitId: string) {
       status: 503,
     };
   }
+}
+
+export async function fetchWorkflowLayout(
+  cookieHeader: string,
+  unitId: string,
+  scopeId: string,
+) {
+  try {
+    const response = await fetch(
+      `${getApiBaseUrl()}/api/units/${encodeURIComponent(unitId)}/workflow-layout/${encodeURIComponent(scopeId)}`,
+      buildServerOrBrowserRequestInit(cookieHeader),
+    );
+
+    if (!response.ok) {
+      return {
+        payload: null,
+        status: response.status,
+      };
+    }
+
+    return {
+      payload: workflowLayoutEnvelopeSchema.parse(await response.json()),
+      status: response.status,
+    };
+  } catch {
+    return {
+      payload: null,
+      status: 503,
+    };
+  }
+}
+
+export async function saveWorkflowLayout(
+  unitId: string,
+  scopeId: string,
+  layout: WorkflowLayoutPayload,
+) {
+  const response = await fetch(
+    `${getApiBaseUrl()}/api/units/${encodeURIComponent(unitId)}/workflow-layout/${encodeURIComponent(scopeId)}`,
+    {
+      method: "PUT",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(layout),
+    },
+  );
+
+  if (!response.ok) {
+    const failure = await parseFailure(response);
+    return {
+      ...failure,
+      success: false as const,
+    };
+  }
+
+  const payload = workflowLayoutEnvelopeSchema.parse(await response.json());
+  return {
+    success: true as const,
+    result: payload.data.layout,
+  };
 }
 
 export async function createUnit(input: CreateUnitRequest) {

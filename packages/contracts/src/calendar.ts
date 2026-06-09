@@ -39,6 +39,40 @@ export const workingDaySchema = z.object({
   overtimeHours: z.number().nonnegative(),
   totalCapacityHours: z.number().nonnegative(),
   isWorkingDay: z.boolean(),
+  override: z.object({
+    mode: z.enum(["LIBUR", "SETENGAH_HARI", "CUSTOM_HOURS"]),
+    note: z.string().nullable(),
+  }).nullable().optional(),
+});
+
+export const calendarDayOverrideSchema = z.object({
+  date: z.string().trim().min(1),
+  mode: z.enum(["LIBUR", "SETENGAH_HARI", "CUSTOM_HOURS"]),
+  workingHours: z.number().nonnegative(),
+  overtimeHours: z.number().nonnegative(),
+  note: z.string().trim().max(200).nullable().optional(),
+  updatedBy: z.string().nullable().optional(),
+  updatedAt: z.string().nullable().optional(),
+});
+
+export const calendarDayOverrideRequestSchema = z.object({
+  date: z.string().trim().min(1),
+  mode: z.enum(["LIBUR", "SETENGAH_HARI", "CUSTOM_HOURS"]),
+  workingHours: z.number().nonnegative(),
+  overtimeHours: z.number().nonnegative(),
+  note: z.string().trim().max(200).nullable().optional(),
+});
+
+export const calendarDayOverrideEnvelopeSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+  data: calendarDayOverrideSchema,
+});
+
+export const calendarDayOverrideListEnvelopeSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+  data: z.array(calendarDayOverrideSchema),
 });
 
 export const workingDaysRequestSchema = z.object({
@@ -427,6 +461,8 @@ export type WeeklyWorkConfigRequest = z.infer<
 >;
 export type WorkingDay = z.infer<typeof workingDaySchema>;
 export type WorkingDaysRequest = z.infer<typeof workingDaysRequestSchema>;
+export type CalendarDayOverride = z.infer<typeof calendarDayOverrideSchema>;
+export type CalendarDayOverrideRequest = z.infer<typeof calendarDayOverrideRequestSchema>;
 export type CapacityPreviewRequest = z.infer<
   typeof capacityPreviewRequestSchema
 >;

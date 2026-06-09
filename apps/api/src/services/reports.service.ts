@@ -6,13 +6,17 @@ import type {
   ReportSummaryItem,
   ReportType,
 } from "@smsystem/contracts/reports";
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import {
   MySqlReportsRepository,
   type ReportsRepository,
 } from "@/repositories/reports.repo";
 import type { WebSession } from "@/services/auth/session.service";
 import { buildReportDefinition } from "@/services/reports/definitions";
+import type { AuditService } from "@/services/audit/audit.service";
+import { DefaultAuditService } from "@/services/audit/audit.service";
+import { MySqlAuditRepository } from "@/repositories/audit.repo";
+import { addRowsWorksheet, writeWorkbookBuffer } from "@/services/excel";
 
 function buildMeta(page: number, limit: number, total: number) {
   const totalPages = Math.max(1, Math.ceil(total / limit));
@@ -46,36 +50,34 @@ function buildCsv(columns: ReportDefinition["columns"], rows: ReportRow[]): stri
   return `${header}\n${body}`;
 }
 
-function buildWorkbook(
+async function buildWorkbook(
   definition: ReportDefinition,
   summary: ReportSummaryItem[],
   rows: ReportRow[],
-): Uint8Array {
-  const workbook = XLSX.utils.book_new();
+): Promise<Uint8Array> {
+  const workbook = new ExcelJS.Workbook();
   const gridRows = [
     definition.columns.map((column) => column.label),
     ...rows.map((row) => definition.columns.map((column) => row[column.key] ?? "")),
   ];
-  const reportSheet = XLSX.utils.aoa_to_sheet(gridRows);
-  reportSheet["!cols"] = definition.columns.map((column) => ({
-    wch: Math.max(12, column.label.length + 2),
-  }));
-  XLSX.utils.book_append_sheet(workbook, reportSheet, "Report");
+  addRowsWorksheet(
+    workbook,
+    "Report",
+    gridRows,
+    definition.columns.map((column) => Math.max(12, column.label.length + 2)),
+  );
 
-  const summarySheet = XLSX.utils.aoa_to_sheet([
-    ["Label", "Value", "Helper"],
-    ...summary.map((item) => [item.label, item.value, item.helper]),
-  ]);
-  XLSX.utils.book_append_sheet(workbook, summarySheet, "Summary");
+  addRowsWorksheet(
+    workbook,
+    "Summary",
+    [
+      ["Label", "Value", "Helper"],
+      ...summary.map((item) => [item.label, item.value, item.helper]),
+    ],
+    [24, 18, 40],
+  );
 
-  const workbookBytes = XLSX.write(workbook, {
-    bookType: "xlsx",
-    type: "array",
-  }) as ArrayBuffer | Uint8Array;
-
-  return workbookBytes instanceof Uint8Array
-    ? workbookBytes
-    : new Uint8Array(workbookBytes);
+  return writeWorkbookBuffer(workbook);
 }
 
 export interface ReportsListResult {
@@ -109,6 +111,9 @@ export interface ReportsService {
 export class DefaultReportsService implements ReportsService {
   constructor(
     private readonly repository: ReportsRepository = new MySqlReportsRepository(),
+    private readonly auditService: AuditService = new DefaultAuditService(
+      new MySqlAuditRepository(),
+    ),
   ) {}
 
   async getReport(
@@ -149,6 +154,19 @@ export class DefaultReportsService implements ReportsService {
     });
     const definition = buildReportDefinition(type, dataset.filterOptions);
     const dateSuffix = new Date().toISOString().slice(0, 10);
+    await this.auditService.log({
+      actorId: session.user.employeeId,
+      actorName: session.user.fullName,
+      action: "report.export",
+      module: "report",
+      recordId: type,
+      newValue: {
+        type,
+        format,
+        query,
+        rowCount: dataset.rows.length,
+      },
+    });
 
     if (format === "csv") {
       return {
@@ -162,7 +180,7 @@ export class DefaultReportsService implements ReportsService {
       fileName: `${type}-${dateSuffix}.xlsx`,
       contentType:
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      body: buildWorkbook(definition, dataset.summary, dataset.rows),
+      body: await buildWorkbook(definition, dataset.summary, dataset.rows),
     };
   }
 }

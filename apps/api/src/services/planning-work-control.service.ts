@@ -1,5 +1,8 @@
 import type {
+  CreateServiceIntakeBody,
   CreateTargetBody,
+  CriticalPathSnapshotBody,
+  LabourOverrideBody,
   OvertimeRecommendationBody,
 } from "@smsystem/contracts/planning-work-control";
 import type {
@@ -8,6 +11,10 @@ import type {
 import {
   MySqlPlanningWorkControlRepository,
 } from "@/repositories/planning-work-control.repo";
+import {
+  RedisPlanningWorkControlTempStore,
+  type PlanningWorkControlTempStore,
+} from "@/services/planning-work-control-temp.service";
 import type { WebSession } from "@/services/auth/session.service";
 
 export interface WorkControlCapacityParams {
@@ -40,12 +47,28 @@ export interface PlanningWorkControlService {
   createOvertimeRecommendation(
     input: OvertimeRecommendationBody,
   ): ReturnType<PlanningWorkControlRepository["createOvertimeRecommendation"]>;
+  listServiceTemplates(): ReturnType<PlanningWorkControlTempStore["listServiceTemplates"]>;
+  createServiceIntake(
+    session: WebSession,
+    input: CreateServiceIntakeBody,
+  ): ReturnType<PlanningWorkControlTempStore["createServiceIntakeDraft"]>;
+  saveCriticalPathSnapshot(
+    session: WebSession,
+    input: CriticalPathSnapshotBody,
+  ): ReturnType<PlanningWorkControlTempStore["saveCriticalPathSnapshot"]>;
+  getLabourOverride(unitId: string): ReturnType<PlanningWorkControlTempStore["getLabourOverride"]>;
+  saveLabourOverride(
+    session: WebSession,
+    input: LabourOverrideBody,
+  ): ReturnType<PlanningWorkControlTempStore["saveLabourOverride"]>;
 }
 
 export class DefaultPlanningWorkControlService implements PlanningWorkControlService {
   constructor(
     private readonly repository: PlanningWorkControlRepository =
       new MySqlPlanningWorkControlRepository(),
+    private readonly tempStore: PlanningWorkControlTempStore =
+      new RedisPlanningWorkControlTempStore(),
   ) {}
 
   listUnits(session: WebSession) {
@@ -96,5 +119,34 @@ export class DefaultPlanningWorkControlService implements PlanningWorkControlSer
 
   createOvertimeRecommendation(input: OvertimeRecommendationBody) {
     return this.repository.createOvertimeRecommendation(input);
+  }
+
+  listServiceTemplates() {
+    return this.tempStore.listServiceTemplates();
+  }
+
+  createServiceIntake(session: WebSession, input: CreateServiceIntakeBody) {
+    return this.tempStore.createServiceIntakeDraft({
+      ...input,
+      createdBy: session.user.employeeId,
+    });
+  }
+
+  saveCriticalPathSnapshot(session: WebSession, input: CriticalPathSnapshotBody) {
+    return this.tempStore.saveCriticalPathSnapshot({
+      ...input,
+      savedBy: session.user.employeeId,
+    });
+  }
+
+  getLabourOverride(unitId: string) {
+    return this.tempStore.getLabourOverride(unitId);
+  }
+
+  saveLabourOverride(session: WebSession, input: LabourOverrideBody) {
+    return this.tempStore.saveLabourOverride({
+      ...input,
+      savedBy: session.user.employeeId,
+    });
   }
 }

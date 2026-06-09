@@ -267,9 +267,11 @@ export function UnitWorkspaceShell({
       ) : activeTab === "parts-panels" ? (
         <BomTrackerTab
           carId={unit.unitId}
+          unitName={unit.unitName}
           bom={bom}
           canManagePhotos={canManagePhotos}
           canDownloadPhotos={canDownloadPhotos}
+          canManagePanels={canManagePanels}
         />
       ) : (
         <MasterPanelManager

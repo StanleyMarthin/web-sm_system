@@ -49,6 +49,12 @@ describe("DefaultPlanningWorkspaceService", () => {
       async upsertWeeklyConfig() {
         throw new Error("Not implemented");
       },
+      async listDayOverrides() {
+        return [];
+      },
+      async upsertDayOverride() {
+        throw new Error("Not implemented");
+      },
       async getWorkingDays() {
         return {
           startDate: "2026-05-19",

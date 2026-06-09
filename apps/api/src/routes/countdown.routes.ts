@@ -193,7 +193,7 @@ export async function handleCountdownTemplateRoute(
   }
 
   try {
-    const workbook = countdownService.buildTemplateWorkbook();
+    const workbook = await countdownService.buildTemplateWorkbook();
 
     return withCors(
       request,

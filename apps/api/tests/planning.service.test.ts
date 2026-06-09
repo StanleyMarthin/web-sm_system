@@ -685,6 +685,22 @@ describe("DefaultCalendarService planning context", () => {
           return;
         },
       },
+      {
+        async list() {
+          return [];
+        },
+        async upsert(input) {
+          return {
+            date: input.date,
+            mode: input.mode,
+            workingHours: input.workingHours,
+            overtimeHours: input.overtimeHours,
+            note: input.note ?? null,
+            updatedBy: input.updatedBy,
+            updatedAt: "2026-05-18T00:00:00.000Z",
+          };
+        },
+      },
     );
 
     const snapshot: UnitCapacitySnapshot = {

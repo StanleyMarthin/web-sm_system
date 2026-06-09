@@ -470,7 +470,21 @@ export class DefaultBubutInvoiceService implements BubutInvoiceService {
       await this.auditService.log({
         actorId: session.user.employeeId,
         actorName: session.user.fullName,
-        action: "bubut_invoice.release",
+        action: "invoice.create",
+        module: "bubut_invoice",
+        recordId: String(result.invoiceId),
+        newValue: {
+          invoiceNo,
+          invoiceType: input.invoiceType,
+          sourceWoId: input.sourceWoId,
+          sourceWobNo: snapshot.sourceWobNo,
+          totals: snapshot.totals,
+        },
+      });
+      await this.auditService.log({
+        actorId: session.user.employeeId,
+        actorName: session.user.fullName,
+        action: "invoice.release",
         module: "bubut_invoice",
         recordId: String(result.invoiceId),
         newValue: {
@@ -618,7 +632,7 @@ export class DefaultBubutInvoiceService implements BubutInvoiceService {
     await this.auditService.log({
       actorId: session.user.employeeId,
       actorName: session.user.fullName,
-      action: "bubut_invoice.cancel",
+      action: "invoice.cancel",
       module: "bubut_invoice",
       recordId: String(invoiceId),
       oldValue: {

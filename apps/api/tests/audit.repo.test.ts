@@ -55,8 +55,10 @@ describe("MySqlAuditRepository", () => {
       ipAddress: "127.0.0.1",
     });
 
-    expect(executedSql).toContain("INSERT INTO `sms_log`.sm_audit_log");
-    expect(executedParams[1]).toBe("SM-03.004");
-    expect(executedParams[2]).toBe("Sahrul Riswanto");
+    expect(executedSql).toContain("INSERT INTO `sms_log`.log_audit_trails");
+    expect(executedParams[0]).toBe("sms_db");
+    expect(executedParams[1]).toBe("auth");
+    expect(executedParams[4]).toBe("SM-03.004");
+    expect(executedParams[5]).toBe("Sahrul Riswanto");
   });
 });

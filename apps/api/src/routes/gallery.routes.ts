@@ -72,6 +72,24 @@ function mapGalleryError(request: Request, error: unknown): Response {
         "GALLERY_UPLOAD_NOT_CONFIGURED",
       );
     }
+
+    if (error.message === "INVALID_UPLOAD_CONTENT_TYPE") {
+      return errorResponse(
+        request,
+        "Tipe file upload tidak diizinkan.",
+        400,
+        "INVALID_UPLOAD_CONTENT_TYPE",
+      );
+    }
+
+    if (error.message === "INVALID_UPLOAD_TICKET") {
+      return errorResponse(
+        request,
+        "Upload ticket tidak valid atau sudah kedaluwarsa.",
+        400,
+        "INVALID_UPLOAD_TICKET",
+      );
+    }
   }
 
   return errorResponse(

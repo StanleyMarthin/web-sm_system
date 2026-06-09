@@ -1,5 +1,7 @@
 import type { GridQueryState } from "@smsystem/contracts/grid";
 import type {
+  CalendarDayOverride,
+  CalendarDayOverrideRequest,
   CapacityPreviewRecord,
   CapacityPreviewRequest,
   DeliveryRiskQuery,
@@ -127,26 +129,58 @@ function getDayCapacity(
   };
 }
 
+function applyDayOverride(
+  capacity: { workingHours: number; overtimeHours: number; totalCapacityHours: number },
+  override: CalendarDayOverride | undefined,
+  includeOvertime: boolean,
+): { workingHours: number; overtimeHours: number; totalCapacityHours: number } {
+  if (!override) {
+    return capacity;
+  }
+
+  const workingHours = override.workingHours;
+  const overtimeHours = includeOvertime ? override.overtimeHours : 0;
+  return {
+    workingHours,
+    overtimeHours,
+    totalCapacityHours: workingHours + overtimeHours,
+  };
+}
+
 function buildWorkingDays(
   startDate: string,
   endDate: string,
   configs: WeeklyWorkConfigRecord[],
   includeOvertime: boolean,
+  overrides: CalendarDayOverride[] = [],
 ): WorkingDay[] {
   const start = parseIsoDate(startDate);
   const end = parseIsoDate(endDate);
   const days: WorkingDay[] = [];
+  const overrideByDate = new Map(overrides.map((override) => [override.date, override]));
 
   for (let cursor = start; cursor <= end; cursor = addDays(cursor, 1)) {
-    const config = findConfigForDate(configs, formatIsoDate(cursor));
-    const capacity = getDayCapacity(config, cursor, includeOvertime);
+    const date = formatIsoDate(cursor);
+    const config = findConfigForDate(configs, date);
+    const override = overrideByDate.get(date);
+    const capacity = applyDayOverride(
+      getDayCapacity(config, cursor, includeOvertime),
+      override,
+      includeOvertime,
+    );
     days.push({
-      date: formatIsoDate(cursor),
+      date,
       dayName: DAY_NAMES[cursor.getUTCDay()],
       workingHours: capacity.workingHours,
       overtimeHours: capacity.overtimeHours,
       totalCapacityHours: capacity.totalCapacityHours,
       isWorkingDay: capacity.totalCapacityHours > 0,
+      override: override
+        ? {
+            mode: override.mode,
+            note: override.note ?? null,
+          }
+        : null,
     });
   }
 
@@ -157,6 +191,7 @@ function addWorkingDays(
   startDate: string,
   daysToAdd: number,
   configs: WeeklyWorkConfigRecord[],
+  overrides: CalendarDayOverride[] = [],
 ): string {
   if (daysToAdd <= 0) {
     return startDate;
@@ -164,11 +199,17 @@ function addWorkingDays(
 
   let cursor = parseIsoDate(startDate);
   let added = 0;
+  const overrideByDate = new Map(overrides.map((override) => [override.date, override]));
 
   while (added < daysToAdd) {
     cursor = addDays(cursor, 1);
-    const config = findConfigForDate(configs, formatIsoDate(cursor));
-    const capacity = getDayCapacity(config, cursor, false);
+    const date = formatIsoDate(cursor);
+    const config = findConfigForDate(configs, date);
+    const capacity = applyDayOverride(
+      getDayCapacity(config, cursor, false),
+      overrideByDate.get(date),
+      false,
+    );
     if (capacity.totalCapacityHours > 0) {
       added += 1;
     }
@@ -186,6 +227,12 @@ function diffCalendarDays(fromDate: string, toDate: string): number {
 export interface EtaCacheStore {
   get(key: string): Promise<string | null>;
   set(key: string, value: string): Promise<void>;
+  deleteByPattern?(pattern: string): Promise<void>;
+}
+
+export interface CalendarOverrideStore {
+  list(startDate: string, endDate: string): Promise<CalendarDayOverride[]>;
+  upsert(input: CalendarDayOverrideRequest & { updatedBy: string }): Promise<CalendarDayOverride>;
 }
 
 class RedisEtaCacheStore implements EtaCacheStore {
@@ -207,11 +254,75 @@ class RedisEtaCacheStore implements EtaCacheStore {
       },
     });
   }
+
+  async deleteByPattern(pattern: string): Promise<void> {
+    const client = await this.clientFactory();
+    const keys = await client.keys(pattern);
+    if (keys.length > 0) {
+      await client.del(keys);
+    }
+  }
+}
+
+class RedisCalendarOverrideStore implements CalendarOverrideStore {
+  constructor(
+    private readonly clientFactory: () => Promise<RedisClientType> = getRedisClient,
+  ) {}
+
+  async list(startDate: string, endDate: string): Promise<CalendarDayOverride[]> {
+    let client: RedisClientType;
+    try {
+      client = await this.clientFactory();
+    } catch (error) {
+      if (process.env.NODE_ENV === "production") {
+        throw error;
+      }
+      return [];
+    }
+
+    const keys = await client.keys("planning:calendar:day-override:*");
+    if (keys.length === 0) {
+      return [];
+    }
+
+    const raws = await client.mGet(keys);
+    return raws
+      .filter((raw): raw is string => Boolean(raw))
+      .map((raw) => JSON.parse(raw) as CalendarDayOverride)
+      .filter((override) => override.date >= startDate && override.date <= endDate)
+      .sort((left, right) => left.date.localeCompare(right.date));
+  }
+
+  async upsert(input: CalendarDayOverrideRequest & { updatedBy: string }): Promise<CalendarDayOverride> {
+    const override: CalendarDayOverride = {
+      date: input.date,
+      mode: input.mode,
+      workingHours: input.workingHours,
+      overtimeHours: input.overtimeHours,
+      note: input.note?.trim() || null,
+      updatedBy: input.updatedBy,
+      updatedAt: new Date().toISOString(),
+    };
+    let client: RedisClientType;
+    try {
+      client = await this.clientFactory();
+    } catch (error) {
+      if (process.env.NODE_ENV === "production") {
+        throw error;
+      }
+      return override;
+    }
+
+    await client.set(`planning:calendar:day-override:${override.date}`, JSON.stringify(override));
+    return override;
+  }
 }
 
 export interface CalendarService {
   listWeeklyConfigs(session: WebSession): Promise<WeeklyWorkConfigRecord[]>;
   upsertWeeklyConfig(session: WebSession, input: WeeklyWorkConfigRequest): Promise<WeeklyWorkConfigRecord>;
+  listDayOverrides(session: WebSession, input: { startDate: string; endDate: string }): Promise<CalendarDayOverride[]>;
+  upsertDayOverride(session: WebSession, input: CalendarDayOverrideRequest): Promise<CalendarDayOverride>;
   getWorkingDays(session: WebSession, input: WorkingDaysRequest): Promise<{
     startDate: string;
     endDate: string;
@@ -238,6 +349,7 @@ export class DefaultCalendarService implements CalendarService {
   constructor(
     private readonly repository: CalendarRepository = new MySqlCalendarRepository(),
     private readonly cache: EtaCacheStore = new RedisEtaCacheStore(),
+    private readonly overrideStore: CalendarOverrideStore = new RedisCalendarOverrideStore(),
   ) {}
 
   async listWeeklyConfigs(): Promise<WeeklyWorkConfigRecord[]> {
@@ -254,6 +366,25 @@ export class DefaultCalendarService implements CalendarService {
     });
   }
 
+  async listDayOverrides(
+    _session: WebSession,
+    input: { startDate: string; endDate: string },
+  ): Promise<CalendarDayOverride[]> {
+    return this.overrideStore.list(input.startDate, input.endDate);
+  }
+
+  async upsertDayOverride(
+    session: WebSession,
+    input: CalendarDayOverrideRequest,
+  ): Promise<CalendarDayOverride> {
+    const override = await this.overrideStore.upsert({
+      ...input,
+      updatedBy: session.user.employeeId,
+    });
+    await this.cache.deleteByPattern?.("eta:*");
+    return override;
+  }
+
   async getWorkingDays(
     _session: WebSession,
     input: WorkingDaysRequest,
@@ -263,7 +394,10 @@ export class DefaultCalendarService implements CalendarService {
     includeOvertime: boolean;
     days: WorkingDay[];
   }> {
-    const configs = await this.repository.listWeeklyConfigs(input.startDate, input.endDate);
+    const [configs, overrides] = await Promise.all([
+      this.repository.listWeeklyConfigs(input.startDate, input.endDate),
+      this.overrideStore.list(input.startDate, input.endDate),
+    ]);
     return {
       startDate: input.startDate,
       endDate: input.endDate,
@@ -273,6 +407,7 @@ export class DefaultCalendarService implements CalendarService {
         input.endDate,
         configs,
         input.includeOvertime,
+        overrides,
       ),
     };
   }
@@ -281,15 +416,20 @@ export class DefaultCalendarService implements CalendarService {
     _session: WebSession,
     input: CapacityPreviewRequest,
   ): Promise<CapacityPreviewRecord> {
-    const [configs, divisionName, activePicCount] = await Promise.all([
+    const [configs, overrides, divisionName, activePicCount] = await Promise.all([
       this.repository.listWeeklyConfigs(input.date, input.date),
+      this.overrideStore.list(input.date, input.date),
       this.repository.findDivisionName?.(input.divisionId) ?? Promise.resolve(`Division ${input.divisionId}`),
       input.activePicCount > 0
         ? Promise.resolve(input.activePicCount)
         : this.repository.countActivePicByDivision?.(input.divisionId, input.date) ?? Promise.resolve(0),
     ]);
     const config = findConfigForDate(configs, input.date);
-    const dayCapacity = getDayCapacity(config, parseIsoDate(input.date), input.includeOvertime);
+    const dayCapacity = applyDayOverride(
+      getDayCapacity(config, parseIsoDate(input.date), input.includeOvertime),
+      overrides[0],
+      input.includeOvertime,
+    );
     const effectiveDailyCapacity =
       activePicCount * dayCapacity.totalCapacityHours * config.efficiencyFactor;
 
@@ -426,9 +566,17 @@ export class DefaultCalendarService implements CalendarService {
       netCapacityThisWeek: number;
     },
   ): Promise<UnitEtaRecord> {
-    const configs = await this.repository.listWeeklyConfigs(asOfDate, addDays(parseIsoDate(asOfDate), 30).toISOString().slice(0, 10));
+    const horizonDate = formatIsoDate(addDays(parseIsoDate(asOfDate), 180));
+    const [configs, overrides] = await Promise.all([
+      this.repository.listWeeklyConfigs(asOfDate, horizonDate),
+      this.overrideStore.list(asOfDate, horizonDate),
+    ]);
     const config = findConfigForDate(configs, asOfDate);
-    const dayCapacity = getDayCapacity(config, parseIsoDate(asOfDate), false);
+    const dayCapacity = applyDayOverride(
+      getDayCapacity(config, parseIsoDate(asOfDate), false),
+      overrides.find((override) => override.date === asOfDate),
+      false,
+    );
     const baselineCapacity =
       snapshot.activePicCount * dayCapacity.totalCapacityHours * config.efficiencyFactor;
     const hasPlanContext =
@@ -468,6 +616,7 @@ export class DefaultCalendarService implements CalendarService {
       asOfDate,
       etaDays + blockerDelayDays + config.qcBufferDays,
       configs,
+      overrides,
     );
 
     const deltaDays = diffCalendarDays(snapshot.targetDeliveryDate, predictedDeliveryDate);

@@ -30,14 +30,24 @@ export const divisionSummarySchema = z.object({
   divisionId: z.string(),
   divisionName: z.string(),
   pendingHours: z.number().nonnegative(),
+  targetHours: z.number().nonnegative().optional().default(0),
+  actualHours: z.number().nonnegative().optional().default(0),
 });
 
 export const jobItemSchema = z.object({
   jobId: z.string(),
+  divisionId: z.string().nullable().optional().default(null),
+  divisionName: z.string().nullable().optional().default(null),
   jobName: z.string(),
+  panel: z.string().nullable().optional().default(null),
   status: z.string(),
   estimatedHours: z.number().nonnegative(),
   actualHours: z.number().nullable(),
+  remainingHours: z.number().nonnegative().optional().default(0),
+  dependsOn: z.array(z.string()).optional().default([]),
+  startDate: z.string().nullable().optional().default(null),
+  deadlineDate: z.string().nullable().optional().default(null),
+  qcLastStatus: z.string().nullable().optional().default(null),
 });
 
 export const unitProgressSchema = z.object({
@@ -130,6 +140,68 @@ export const overtimeRecommendationBodySchema = z.object({
   reason: z.string().trim().min(1),
 });
 
+export const serviceTemplateSchema = z.object({
+  id: z.string().trim().min(1),
+  name: z.string().trim().min(1),
+  divisionId: z.string().trim().min(1),
+  estimatedHours: z.number().positive(),
+  applicableConditions: z.array(z.string()),
+});
+
+export const serviceTemplateListResponseSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+  data: z.array(serviceTemplateSchema),
+});
+
+export const createServiceIntakeBodySchema = z.object({
+  unitId: z.string().trim().min(1),
+  diagnosis: z.string().trim().min(1),
+  templateIds: z.array(z.string().trim().min(1)).min(1),
+  totalEstimatedHours: z.number().nonnegative(),
+  capacityStatus: z.enum(["SPK_READY", "SPK_WITH_SPL", "TARGET_PERLU_DIREVISI"]),
+  targetFinishDate: z.string().trim().min(1),
+});
+
+export const serviceIntakeResponseSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+  data: z.object({
+    intakeId: z.string(),
+    status: z.literal("DRAFT"),
+  }),
+});
+
+export const criticalPathSnapshotBodySchema = z.object({
+  unitId: z.string().trim().min(1),
+  summary: z.unknown(),
+});
+
+export const criticalPathSnapshotResponseSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+  data: z.object({
+    unitId: z.string(),
+    savedAt: z.string(),
+  }),
+});
+
+export const labourOverrideBodySchema = z.object({
+  unitId: z.string().trim().min(1),
+  billableHours: z.number().nonnegative(),
+  nonBillableHours: z.number().nonnegative().optional().default(0),
+  warrantyHours: z.number().nonnegative().optional().default(0),
+});
+
+export const labourOverrideResponseSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+  data: z.object({
+    unitId: z.string(),
+    savedAt: z.string(),
+  }),
+});
+
 export const overtimeRecommendationResponseSchema = z.object({
   success: z.boolean(),
   message: z.string(),
@@ -172,3 +244,7 @@ export type CreateTargetBody = z.infer<typeof createTargetBodySchema>;
 export type ReleaseSpkBody = z.infer<typeof releaseSpkBodySchema>;
 export type OvertimeRecommendationBody = z.infer<typeof overtimeRecommendationBodySchema>;
 export type PlanningSplRecommendationRecord = z.infer<typeof planningSplRecommendationRecordSchema>;
+export type ServiceTemplate = z.infer<typeof serviceTemplateSchema>;
+export type CreateServiceIntakeBody = z.infer<typeof createServiceIntakeBodySchema>;
+export type CriticalPathSnapshotBody = z.infer<typeof criticalPathSnapshotBodySchema>;
+export type LabourOverrideBody = z.infer<typeof labourOverrideBodySchema>;

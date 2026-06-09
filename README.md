@@ -26,6 +26,7 @@ Browser
 
 - `apps/web/app/`: route page/layout.
 - `apps/web/modules/`: UI shell per domain bisnis (units, countdown, spk, wo, pr, vendor, warehouse, reports, dll).
+  - `apps/web/modules/units/components/bom-tracker-tab.tsx`: interactive BOM node canvas untuk Unit Workspace (`Unit -> Category -> Section -> Panel/Part`), termasuk pan/zoom/fullscreen, posisi node tersimpan per unit di `localStorage`, dan CRUD Master Panel kontekstual via sidebar kanan.
 - `apps/web/shared/api/`: client API per modul + parser query/response.
 - `apps/web/shared/auth/`: helper auth/session web.
 - `apps/web/shared/datagrid/`: SmartDataGrid server-side.

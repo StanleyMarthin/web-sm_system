@@ -372,7 +372,7 @@ export class DefaultWoService implements WoService {
     await this.auditService.log({
       actorId: session.user.employeeId,
       actorName: session.user.fullName,
-      action: "wo.done",
+      action: "wo.close",
       module: "wo",
       recordId: woId,
       oldValue: {

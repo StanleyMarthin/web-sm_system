@@ -654,6 +654,9 @@ export interface WarehouseRepository {
     rows: WarehouseStockCardRecord[];
     total: number;
   }>;
+  findStockCardById(
+    params: ScopeParams & { stockCardId: string },
+  ): Promise<WarehouseStockCardRecord | null>;
   listItems(params: GridListParams): Promise<{
     rows: WarehouseItemRecord[];
     total: number;
@@ -1870,6 +1873,61 @@ export class MySqlWarehouseRepository implements WarehouseRepository {
       rows: rows.map(mapStockCardRow),
       total: toInteger(countRows[0]?.total),
     };
+  }
+
+  async findStockCardById(params: ScopeParams & { stockCardId: string }) {
+    const queryParams: unknown[] = [params.stockCardId];
+    const scopeClause = this.buildCarScopeClause(
+      params.scope,
+      params.employeeId,
+      queryParams,
+      "c",
+    );
+    const conditions = ["sc.id = ?"];
+    if (scopeClause) {
+      conditions.push(scopeClause);
+    }
+
+    const [rows] = await this.pool.query<StockCardRow[]>(
+      `
+        SELECT
+          sc.id AS stockCardId,
+          sc.entry_no AS entryNo,
+          sc.car_id AS carId,
+          COALESCE(c.unit_name, sc.car_name, sc.car_id) AS unitName,
+          sc.part_code AS partCode,
+          sc.panel_section AS panelSection,
+          sc.part_name AS partName,
+          sc.condition_type AS conditionType,
+          sc.qty AS qty,
+          sc.uom AS uom,
+          sc.storage_location_id AS storageLocationId,
+          sl.label AS locationLabel,
+          sc.location_detail AS locationDetail,
+          DATE_FORMAT(sc.date_in, '%Y-%m-%d') AS dateIn,
+          DATE_FORMAT(sc.date_out, '%Y-%m-%d') AS dateOut,
+          sc.taken_by_name AS takenByName,
+          sc.status AS status,
+          sc.is_labeled AS isLabeled,
+          (
+            SELECT m.item_category
+            FROM ${this.tables.itemMaster} m
+            WHERE (m.item_code IS NOT NULL AND m.item_code = sc.part_code)
+               OR m.item_name = sc.part_name
+            ORDER BY m.updated_at DESC
+            LIMIT 1
+          ) AS itemCategory,
+          sc.photo_urls AS photoUrls
+        FROM ${this.tables.stockCard} sc
+        LEFT JOIN ${this.tables.storageLocations} sl ON sl.id = sc.storage_location_id
+        LEFT JOIN ${this.tables.cars} c ON c.id = sc.car_id
+        WHERE ${conditions.join(" AND ")}
+        LIMIT 1
+      `,
+      queryParams,
+    );
+
+    return rows[0] ? mapStockCardRow(rows[0]) : null;
   }
 
   async listItems(params: GridListParams) {

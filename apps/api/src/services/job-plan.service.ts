@@ -17,7 +17,7 @@ import type {
 import { jobPlanDraftRecordSchema } from "@smsystem/contracts/job-plan";
 import { buildJobPlanScheduleSegments } from "@smsystem/contracts/job-plan-schedule";
 import type { RedisClientType } from "redis";
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import type { AuditService } from "@/services/audit/audit.service";
 import { DefaultAuditService } from "@/services/audit/audit.service";
 import { MySqlAuditRepository } from "@/repositories/audit.repo";
@@ -28,6 +28,7 @@ import {
 import { getRedisClient } from "@/redis/client";
 import type { WebSession } from "@/services/auth/session.service";
 import { sendPushNotification } from "@/services/push-notification.service";
+import { addRowsWorksheet, writeWorkbookBuffer } from "@/services/excel";
 
 interface JobPlanListResult {
   data: JobPlanRecord[];
@@ -358,28 +359,22 @@ function buildCsv(rows: JobPlanRecord[]): string {
   return [header, ...body].join("\n");
 }
 
-function buildWorkbook(rows: JobPlanRecord[]): Uint8Array {
+async function buildWorkbook(rows: JobPlanRecord[]): Promise<Uint8Array> {
   const columns = buildExportColumns();
-  const workbook = XLSX.utils.book_new();
+  const workbook = new ExcelJS.Workbook();
   const exportRows = rows.map(mapExportRow);
   const sheetRows = [
     columns.map((column) => column.label),
     ...exportRows.map((row) => columns.map((column) => row[column.key] ?? "")),
   ];
-  const sheet = XLSX.utils.aoa_to_sheet(sheetRows);
-  sheet["!cols"] = columns.map((column) => ({
-    wch: Math.max(12, column.label.length + 4),
-  }));
-  XLSX.utils.book_append_sheet(workbook, sheet, "JobPlan");
+  addRowsWorksheet(
+    workbook,
+    "JobPlan",
+    sheetRows,
+    columns.map((column) => Math.max(12, column.label.length + 4)),
+  );
 
-  const workbookBytes = XLSX.write(workbook, {
-    bookType: "xlsx",
-    type: "array",
-  }) as ArrayBuffer | Uint8Array;
-
-  return workbookBytes instanceof Uint8Array
-    ? workbookBytes
-    : new Uint8Array(workbookBytes);
+  return writeWorkbookBuffer(workbook);
 }
 
 function clampText(value: string, limit: number): string {
@@ -1112,7 +1107,7 @@ export class DefaultJobPlanService implements JobPlanService {
         fileName: `job-plan-${dateSuffix}.xlsx`,
         contentType:
           "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        body: buildWorkbook(result.data),
+        body: await buildWorkbook(result.data),
       };
     }
 

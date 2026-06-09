@@ -3,13 +3,20 @@
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import type { QaUpdateInspectionRequest, QaReferences } from "@smsystem/contracts/qa";
+import {
+  qaFollowupStatusSchema,
+  qaIssueAreaSchema,
+  qaIssueTypeSchema,
+  qaPriorityLevelSchema,
+  type QaUpdateInspectionRequest,
+  type QaReferences,
+} from "@smsystem/contracts/qa";
 
 const qaInspectionSchema = z.object({
-  issueType: z.string().nullable().optional(),
-  issueArea: z.string().nullable().optional(),
-  priorityLevel: z.string().nullable().optional(),
-  followupStatus: z.string().nullable().optional(),
+  issueType: z.union([qaIssueTypeSchema, z.literal("")]).nullable().optional(),
+  issueArea: z.union([qaIssueAreaSchema, z.literal("")]).nullable().optional(),
+  priorityLevel: z.union([qaPriorityLevelSchema, z.literal("")]).nullable().optional(),
+  followupStatus: z.union([qaFollowupStatusSchema, z.literal("")]).nullable().optional(),
   issueCause: z.string().nullable().optional(),
   recommendation: z.string().nullable().optional(),
 });
@@ -49,7 +56,7 @@ export function QaInspectionForm({ initialValues, references, canEdit, isPending
       followupStatus: data.followupStatus || null,
       issueCause: data.issueCause || null,
       recommendation: data.recommendation || null,
-    } as any);
+    });
   };
 
   return (

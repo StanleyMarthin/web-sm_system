@@ -11,10 +11,12 @@ import type {
   WeeklyWorkConfigRequest,
 } from "@smsystem/contracts/calendar";
 import type { Pool, ResultSetHeader, RowDataPacket } from "mysql2/promise";
+import type { RedisClientType } from "redis";
 import { randomUUID } from "node:crypto";
 import { getApiEnv, type ApiEnv } from "@/config/env";
 import { qualifyTable } from "@/db/identifier";
 import { getMySqlPool } from "@/db/mysql";
+import { getRedisClient } from "@/redis/client";
 
 interface ScopeParams {
   employeeId: string;
@@ -126,25 +128,14 @@ interface DivisionCountRow extends RowDataPacket {
   count: number;
 }
 
-interface DivisionLossRow extends RowDataPacket {
-  divisionId: number;
-  lostHours: number;
-}
-
 interface TechnicalDivisionRow extends RowDataPacket {
   divisionId: number;
   divisionName: string;
 }
 
-interface CapacityCacheRow extends RowDataPacket {
-  divisionId: number;
-  divisionName: string | null;
-  memberCountActive: number;
-  normalCapacityHours: number;
-  overtimeCapacityHours: number;
-  absenceLostHours: number;
-  netCapacityHours: number;
-  allocatedHours: number;
+interface CachedAbsenceLoss {
+  count: number;
+  rows: Array<{ divisionId: number; lostHours: number }>;
 }
 
 interface NonMarginUnitRow extends RowDataPacket {
@@ -280,9 +271,17 @@ export interface CalendarRepository {
   listPlanningDivisionDemand(params: ScopeParams & { weekStartDate: string; weekEndDate: string }): Promise<PlanningDivisionDemandRow[]>;
 }
 
+export interface WeeklyPlanningTempStore {
+  getAbsenceLoss(planId: string): Promise<CachedAbsenceLoss | null>;
+  setAbsenceLoss(planId: string, value: CachedAbsenceLoss): Promise<void>;
+  getCapacity(planId: string): Promise<DivisionCapacitySummary[] | null>;
+  setCapacity(planId: string, rows: DivisionCapacitySummary[]): Promise<void>;
+}
+
 const DEFAULT_WEEKDAY_HOURS = 8;
 const DEFAULT_SATURDAY_HOURS = 5;
 const DEFAULT_SUNDAY_HOURS = 0;
+const WEEKLY_PLANNING_TEMP_TTL_SECONDS = 60 * 60 * 24 * 30;
 
 function parseIsoDate(date: string): Date {
   const [year, month, day] = date.split("-").map((value) => Number.parseInt(value, 10));
@@ -589,10 +588,54 @@ function buildPlanningMaterialNoteSql(): string {
   `;
 }
 
+function buildWeeklyPlanningTempKey(kind: "absence-loss" | "capacity", planId: string): string {
+  return `planning:weekly:${kind}:${planId}`;
+}
+
+export class RedisWeeklyPlanningTempStore implements WeeklyPlanningTempStore {
+  constructor(
+    private readonly clientFactory: () => Promise<RedisClientType> = getRedisClient,
+    private readonly ttlSeconds: number = WEEKLY_PLANNING_TEMP_TTL_SECONDS,
+  ) {}
+
+  async getAbsenceLoss(planId: string): Promise<CachedAbsenceLoss | null> {
+    return this.getJson<CachedAbsenceLoss>(buildWeeklyPlanningTempKey("absence-loss", planId));
+  }
+
+  async setAbsenceLoss(planId: string, value: CachedAbsenceLoss): Promise<void> {
+    await this.setJson(buildWeeklyPlanningTempKey("absence-loss", planId), value);
+  }
+
+  async getCapacity(planId: string): Promise<DivisionCapacitySummary[] | null> {
+    return this.getJson<DivisionCapacitySummary[]>(buildWeeklyPlanningTempKey("capacity", planId));
+  }
+
+  async setCapacity(planId: string, rows: DivisionCapacitySummary[]): Promise<void> {
+    await this.setJson(buildWeeklyPlanningTempKey("capacity", planId), rows);
+  }
+
+  private async getJson<T>(key: string): Promise<T | null> {
+    const client = await this.clientFactory();
+    const raw = await client.get(key);
+    return raw ? (JSON.parse(raw) as T) : null;
+  }
+
+  private async setJson(key: string, value: unknown): Promise<void> {
+    const client = await this.clientFactory();
+    await client.set(key, JSON.stringify(value), {
+      expiration: {
+        type: "EX",
+        value: this.ttlSeconds,
+      },
+    });
+  }
+}
+
 export class MySqlCalendarRepository implements CalendarRepository {
   constructor(
     private readonly poolFactory: () => Pool = getMySqlPool,
     private readonly env: ApiEnv = getApiEnv(),
+    private readonly tempStore: WeeklyPlanningTempStore = new RedisWeeklyPlanningTempStore(),
   ) {}
 
   async listWeeklyConfigs(
@@ -1116,8 +1159,8 @@ export class MySqlCalendarRepository implements CalendarRepository {
     weekEndDate: string,
   ): Promise<number> {
     const pool = this.poolFactory();
-    const connection = await pool.getConnection();
     let snapshotCount = 0;
+    const lossByDivision = new Map<number, number>();
 
     const configs = await this.listWeeklyConfigs(weekStartDate, weekEndDate);
 
@@ -1140,132 +1183,70 @@ export class MySqlCalendarRepository implements CalendarRepository {
       return Number(config.weekdayHours ?? DEFAULT_WEEKDAY_HOURS);
     };
 
-    try {
-      await connection.beginTransaction();
-
-      await connection.query<ResultSetHeader>(
-        `
-          DELETE FROM sm_weekly_plan_absence_snapshot
-          WHERE plan_id = ?
-            AND source IN ('LEAVE_REQUEST', 'ATTENDANCE_LOG')
-        `,
-        [planId],
+    const addLoss = (divisionId: number, hours: number) => {
+      lossByDivision.set(
+        divisionId,
+        Number(((lossByDivision.get(divisionId) ?? 0) + hours).toFixed(2)),
       );
+    };
 
-      const [leaveRows] = (await connection.query(
-        `
-          SELECT
-            lr.id AS leaveId,
-            lr.employee_id AS employeeId,
-            e.division_id AS divisionId,
-            lr.type AS leaveType,
-            DATE_FORMAT(GREATEST(lr.start_date, ?), '%Y-%m-%d') AS fromDate,
-            DATE_FORMAT(LEAST(lr.end_date, ?), '%Y-%m-%d') AS toDate
-          FROM sm_leave_requests lr
-          JOIN sm_employee e ON e.employee_id = lr.employee_id
-          WHERE lr.status = 'APPROVED'
-            AND lr.start_date <= ?
-            AND lr.end_date >= ?
-            AND e.division_id IS NOT NULL
-        `,
-        [weekStartDate, weekEndDate, weekEndDate, weekStartDate],
-      )) as [LeaveSnapshotSeedRow[], unknown];
+    const [leaveRows] = (await pool.query(
+      `
+        SELECT
+          lr.id AS leaveId,
+          lr.employee_id AS employeeId,
+          e.division_id AS divisionId,
+          lr.type AS leaveType,
+          DATE_FORMAT(GREATEST(lr.start_date, ?), '%Y-%m-%d') AS fromDate,
+          DATE_FORMAT(LEAST(lr.end_date, ?), '%Y-%m-%d') AS toDate
+        FROM sm_leave_requests lr
+        JOIN sm_employee e ON e.employee_id = lr.employee_id
+        WHERE lr.status = 'APPROVED'
+          AND lr.start_date <= ?
+          AND lr.end_date >= ?
+          AND e.division_id IS NOT NULL
+      `,
+      [weekStartDate, weekEndDate, weekEndDate, weekStartDate],
+    )) as [LeaveSnapshotSeedRow[], unknown];
 
-      for (const row of leaveRows) {
-        for (const absenceDate of listIsoDateRange(row.fromDate, row.toDate)) {
-          const leaveType = ["CUTI", "IZIN", "SAKIT"].includes(row.leaveType)
-            ? row.leaveType
-            : "IZIN";
-
-          await connection.query<ResultSetHeader>(
-            `
-              INSERT INTO sm_weekly_plan_absence_snapshot (
-                id,
-                plan_id,
-                employee_id,
-                division_id,
-                absence_date,
-                absence_type,
-                lost_hours,
-                source,
-                ref_id
-              )
-              VALUES (?, ?, ?, ?, ?, ?, ?, 'LEAVE_REQUEST', ?)
-            `,
-            [
-              randomUUID(),
-              planId,
-              row.employeeId,
-              row.divisionId,
-              absenceDate,
-              leaveType,
-              hoursForDate(absenceDate),
-              row.leaveId,
-            ],
-          );
-          snapshotCount += 1;
-        }
-      }
-
-      const [attendanceRows] = (await connection.query(
-        `
-          SELECT
-            al.id AS attendanceId,
-            al.employee_id AS employeeId,
-            e.division_id AS divisionId,
-            al.status AS attendanceStatus,
-            DATE_FORMAT(al.work_date, '%Y-%m-%d') AS absenceDate
-          FROM sm_attendance_logs al
-          JOIN sm_employee e ON e.employee_id = al.employee_id
-          WHERE al.work_date BETWEEN ? AND ?
-            AND al.status IN ('TIDAK_HADIR', 'CUTI', 'IZIN', 'SAKIT')
-            AND e.division_id IS NOT NULL
-        `,
-        [weekStartDate, weekEndDate],
-      )) as [AttendanceSnapshotSeedRow[], unknown];
-
-      for (const row of attendanceRows) {
-        const absenceType = row.attendanceStatus === "CUTI" || row.attendanceStatus === "SAKIT"
-          ? row.attendanceStatus
-          : "IZIN";
-
-        await connection.query<ResultSetHeader>(
-          `
-            INSERT INTO sm_weekly_plan_absence_snapshot (
-              id,
-              plan_id,
-              employee_id,
-              division_id,
-              absence_date,
-              absence_type,
-              lost_hours,
-              source,
-              ref_id
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, 'ATTENDANCE_LOG', ?)
-          `,
-          [
-            randomUUID(),
-            planId,
-            row.employeeId,
-            row.divisionId,
-            row.absenceDate,
-            absenceType,
-            hoursForDate(row.absenceDate),
-            row.attendanceId,
-          ],
-        );
+    for (const row of leaveRows) {
+      for (const absenceDate of listIsoDateRange(row.fromDate, row.toDate)) {
+        addLoss(Number(row.divisionId), hoursForDate(absenceDate));
         snapshotCount += 1;
       }
-
-      await connection.commit();
-      return snapshotCount;
-    } catch (error) {
-      await connection.rollback();
-      throw error;
-    } finally {
-      connection.release();
     }
+
+    const [attendanceRows] = (await pool.query(
+      `
+        SELECT
+          al.id AS attendanceId,
+          al.employee_id AS employeeId,
+          e.division_id AS divisionId,
+          al.status AS attendanceStatus,
+          DATE_FORMAT(al.work_date, '%Y-%m-%d') AS absenceDate
+        FROM sm_attendance_logs al
+        JOIN sm_employee e ON e.employee_id = al.employee_id
+        WHERE al.work_date BETWEEN ? AND ?
+          AND al.status IN ('TIDAK_HADIR', 'CUTI', 'IZIN', 'SAKIT')
+          AND e.division_id IS NOT NULL
+      `,
+      [weekStartDate, weekEndDate],
+    )) as [AttendanceSnapshotSeedRow[], unknown];
+
+    for (const row of attendanceRows) {
+      addLoss(Number(row.divisionId), hoursForDate(row.absenceDate));
+      snapshotCount += 1;
+    }
+
+    await this.tempStore.setAbsenceLoss(planId, {
+      count: snapshotCount,
+      rows: [...lossByDivision.entries()].map(([divisionId, lostHours]) => ({
+        divisionId,
+        lostHours,
+      })),
+    });
+
+    return snapshotCount;
   }
 
   async countActiveMembersByDivision(_weekStartDate: string): Promise<Array<{ divisionId: number; count: number }>> {
@@ -1310,111 +1291,15 @@ export class MySqlCalendarRepository implements CalendarRepository {
   }
 
   async listAbsenceLossByDivision(planId: string): Promise<Array<{ divisionId: number; lostHours: number }>> {
-    const pool = this.poolFactory();
-    const [rows] = (await pool.query(
-      `
-        SELECT
-          division_id AS divisionId,
-          ROUND(SUM(COALESCE(lost_hours, 0)), 2) AS lostHours
-        FROM sm_weekly_plan_absence_snapshot
-        WHERE plan_id = ?
-        GROUP BY division_id
-      `,
-      [planId],
-    )) as [DivisionLossRow[], unknown];
-
-    return rows.map((row) => ({
-      divisionId: Number(row.divisionId),
-      lostHours: Number(row.lostHours ?? 0),
-    }));
+    return (await this.tempStore.getAbsenceLoss(planId))?.rows ?? [];
   }
 
   async upsertCapacityCache(planId: string, rows: DivisionCapacitySummary[]): Promise<void> {
-    const pool = this.poolFactory();
-    const connection = await pool.getConnection();
-
-    try {
-      await connection.beginTransaction();
-      await connection.query<ResultSetHeader>(
-        `DELETE FROM sm_weekly_plan_capacity_cache WHERE plan_id = ?`,
-        [planId],
-      );
-
-      for (const row of rows) {
-        await connection.query<ResultSetHeader>(
-          `
-            INSERT INTO sm_weekly_plan_capacity_cache (
-              id,
-              plan_id,
-              division_id,
-              member_count_active,
-              normal_capacity_hours,
-              overtime_capacity_hours,
-              absence_lost_hours,
-              net_capacity_hours,
-              allocated_hours
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-          `,
-          [
-            randomUUID(),
-            planId,
-            row.divisionId,
-            row.memberCountActive,
-            row.normalCapacityHours,
-            row.overtimeCapacityHours,
-            row.absenceLostHours,
-            row.netCapacityHours,
-            row.allocatedHours,
-          ],
-        );
-      }
-
-      await connection.commit();
-    } catch (error) {
-      await connection.rollback();
-      throw error;
-    } finally {
-      connection.release();
-    }
+    await this.tempStore.setCapacity(planId, rows);
   }
 
   async getCapacityCache(planId: string): Promise<DivisionCapacitySummary[]> {
-    const pool = this.poolFactory();
-    const [rows] = (await pool.query(
-      `
-        SELECT
-          cache.division_id AS divisionId,
-          division_ref.name AS divisionName,
-          cache.member_count_active AS memberCountActive,
-          cache.normal_capacity_hours AS normalCapacityHours,
-          cache.overtime_capacity_hours AS overtimeCapacityHours,
-          cache.absence_lost_hours AS absenceLostHours,
-          cache.net_capacity_hours AS netCapacityHours,
-          cache.allocated_hours AS allocatedHours
-        FROM sm_weekly_plan_capacity_cache cache
-        LEFT JOIN sm_divisi division_ref ON division_ref.id = cache.division_id
-        WHERE cache.plan_id = ?
-        ORDER BY division_ref.name ASC
-      `,
-      [planId],
-    )) as [CapacityCacheRow[], unknown];
-
-    return rows.map((row) => {
-      const net = Number(row.netCapacityHours ?? 0);
-      const allocated = Number(row.allocatedHours ?? 0);
-      return {
-        divisionId: Number(row.divisionId),
-        divisionName: row.divisionName ?? `Division ${row.divisionId}`,
-        memberCountActive: Number(row.memberCountActive ?? 0),
-        normalCapacityHours: Number(row.normalCapacityHours ?? 0),
-        overtimeCapacityHours: Number(row.overtimeCapacityHours ?? 0),
-        absenceLostHours: Number(row.absenceLostHours ?? 0),
-        netCapacityHours: net,
-        allocatedHours: allocated,
-        utilizationPct: net > 0 ? Number(((allocated / net) * 100).toFixed(2)) : 0,
-      };
-    });
+    return (await this.tempStore.getCapacity(planId)) ?? [];
   }
 
   async listPlanningUnitsForRisk(

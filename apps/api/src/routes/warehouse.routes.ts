@@ -66,6 +66,15 @@ function mapWarehouseError(request: Request, error: unknown): Response {
       );
     }
 
+    if (error.message === "INVALID_UPLOAD_CONTENT_TYPE") {
+      return errorResponse(
+        request,
+        "Tipe file upload tidak diizinkan.",
+        400,
+        "INVALID_UPLOAD_CONTENT_TYPE",
+      );
+    }
+
     if (error.message === "MISSING_DIVISION") {
       return errorResponse(
         request,
@@ -81,6 +90,15 @@ function mapWarehouseError(request: Request, error: unknown): Response {
         "Unit di luar scope warehouse user aktif.",
         403,
         "WAREHOUSE_SCOPE_DENIED",
+      );
+    }
+
+    if (error.message === "WAREHOUSE_STOCK_CARD_SCOPE_DENIED") {
+      return errorResponse(
+        request,
+        "Stock card di luar scope warehouse user aktif.",
+        403,
+        "WAREHOUSE_STOCK_CARD_SCOPE_DENIED",
       );
     }
 

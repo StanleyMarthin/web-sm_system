@@ -23,19 +23,16 @@ export interface CapacityResult {
 }
 
 export interface SafeFinishInput {
-  remainingHours: number;
-  /** Efisiensi historis divisi. Default 0.85 jika belum ada data historis. */
-  efficiencyFactor?: number;
-  /** Faktor risiko. Default berdasarkan riskLevel. */
-  riskLevel: RiskLevel;
-  /** P95 error historis. Default 0.30 jika belum ada data historis. */
-  p95ErrorFactor?: number;
+  /** Jam hasil engine, bukan estimasi mentah/fallback. */
+  correctedHours: number;
   /** Kapasitas harian divisi (jam/hari) */
   dailyCapacityHours: number;
+  /** Buffer QA dari konfigurasi kalender minggu aktif. */
+  qcBufferDays: number;
   /** Tanggal mulai kerja (ISO string) */
   startDate: string;
   /** Daftar hari kerja dalam seminggu (0=Minggu, 1=Senin, ..., 6=Sabtu) */
-  workingDayNumbers?: number[];
+  workingDayNumbers: number[];
 }
 
 export interface SafeFinishResult {
@@ -48,17 +45,6 @@ export interface SafeFinishResult {
   /** Nama hari selesai aman dalam bahasa Indonesia */
   safeFinishDayName: string;
 }
-
-const RISK_MULTIPLIER: Record<RiskLevel, number> = {
-  LOW: 1.05,
-  MEDIUM: 1.15,
-  HIGH: 1.30,
-  CRITICAL: 1.50,
-};
-
-const DEFAULT_EFFICIENCY = 0.85;
-const DEFAULT_P95_ERROR = 0.30;
-const DEFAULT_WORKING_DAYS = [1, 2, 3, 4, 5]; // Senin–Jumat
 
 const DAY_NAMES_ID = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
 
@@ -112,29 +98,17 @@ function addWorkingDays(
 }
 
 /**
- * Prediksi tanggal selesai aman berdasarkan sisa pekerjaan, efisiensi, dan risiko.
- *
- * Rumus (backend only):
- *   correctedHours   = remainingHours / efficiencyFactor
- *   predictedHours   = correctedHours × riskMultiplier
- *   safeHours        = predictedHours × (1 + p95ErrorFactor)
- *   safeDays         = ceil(safeHours / dailyCapacityHours)
- *   safeFinishDate   = startDate + safeDays (hari kerja)
+ * Prediksi tanggal selesai aman berdasarkan output engine dan konfigurasi kalender aktif.
  */
 export function calculateSafeFinishDate(input: SafeFinishInput): SafeFinishResult {
-  const efficiency = input.efficiencyFactor ?? DEFAULT_EFFICIENCY;
-  const p95Error = input.p95ErrorFactor ?? DEFAULT_P95_ERROR;
-  const riskMultiplier = RISK_MULTIPLIER[input.riskLevel];
-  const workingDays = input.workingDayNumbers ?? DEFAULT_WORKING_DAYS;
+  if (input.workingDayNumbers.length === 0) {
+    throw new Error("workingDayNumbers wajib diisi dari konfigurasi kalender.");
+  }
 
-  const corrected = input.remainingHours / Math.max(0.01, efficiency);
-  const predicted = corrected * riskMultiplier;
-  const safe = predicted * (1 + p95Error);
+  const normalDays = Math.ceil(input.correctedHours / Math.max(0.01, input.dailyCapacityHours));
+  const safeDays = normalDays + Math.max(0, input.qcBufferDays);
 
-  const normalDays = Math.ceil(input.remainingHours / Math.max(0.01, input.dailyCapacityHours));
-  const safeDays = Math.ceil(safe / Math.max(0.01, input.dailyCapacityHours));
-
-  const safeFinishDate = addWorkingDays(input.startDate, safeDays, workingDays);
+  const safeFinishDate = addWorkingDays(input.startDate, safeDays, input.workingDayNumbers);
   const [fy, fm, fd] = safeFinishDate.split("-").map(Number);
   const finishDateObj = new Date(Date.UTC(fy ?? 2026, (fm ?? 1) - 1, fd ?? 1));
   const safeFinishDayName = DAY_NAMES_ID[finishDateObj.getUTCDay()] ?? "";

@@ -7,19 +7,28 @@
  */
 
 import { useEffect, useState } from "react";
-import type { WorkingDay, UnitEtaRecord } from "@smsystem/contracts/calendar";
-import { X, Car, FileText, AlertTriangle, Loader2 } from "lucide-react";
+import type {
+  CalendarDayOverrideRequest,
+  WorkingDay,
+  UnitEtaRecord,
+} from "@smsystem/contracts/calendar";
+import { useRouter } from "next/navigation";
+import { X, Car, FileText, AlertTriangle, Loader2, Save } from "lucide-react";
 import { fetchSpkGrid } from "@/shared/api/spk";
+import { upsertCalendarDayOverride } from "@/shared/api/calendar";
 import type { SpkHeaderRecord } from "@smsystem/contracts/spk";
 
 interface CalendarDayModalProps {
   date: string;
   day: WorkingDay | null;
   deliveries: UnitEtaRecord[];
+  canManage: boolean;
+  onSaved?: () => void;
   onClose: () => void;
 }
 
 type ActiveTab = "delivery" | "spk" | "spl";
+type OverrideMode = CalendarDayOverrideRequest["mode"];
 
 function riskBadge(level: string) {
   const map: Record<string, string> = {
@@ -44,11 +53,31 @@ function spkStatusBadge(status: string) {
   return map[status] ?? "bg-gray-500/15 text-gray-600";
 }
 
-export function CalendarDayModal({ date, day, deliveries, onClose }: CalendarDayModalProps) {
+export function CalendarDayModal({
+  date,
+  day,
+  deliveries,
+  canManage,
+  onSaved,
+  onClose,
+}: CalendarDayModalProps) {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<ActiveTab>("delivery");
   const [spkList, setSpkList] = useState<SpkHeaderRecord[]>([]);
   const [isLoadingSpk, setIsLoadingSpk] = useState(false);
   const [spkError, setSpkError] = useState<string | null>(null);
+  const [overrideMode, setOverrideMode] = useState<OverrideMode>(
+    day?.override?.mode ?? (day?.isWorkingDay ? "CUSTOM_HOURS" : "LIBUR"),
+  );
+  const [overrideWorkingHours, setOverrideWorkingHours] = useState(
+    String(day?.workingHours ?? 0),
+  );
+  const [overrideOvertimeHours, setOverrideOvertimeHours] = useState(
+    String(day?.overtimeHours ?? 0),
+  );
+  const [overrideNote, setOverrideNote] = useState(day?.override?.note ?? "");
+  const [isSavingOverride, setIsSavingOverride] = useState(false);
+  const [overrideError, setOverrideError] = useState<string | null>(null);
 
   const dateLabel = new Date(date + "T00:00:00").toLocaleDateString("id-ID", {
     weekday: "long", day: "numeric", month: "long", year: "numeric",
@@ -58,15 +87,27 @@ export function CalendarDayModal({ date, day, deliveries, onClose }: CalendarDay
   useEffect(() => {
     if (activeTab !== "spk" && activeTab !== "spl") return;
     if (spkList.length > 0) return; // already fetched
-    setIsLoadingSpk(true);
-    setSpkError(null);
-    fetchSpkGrid("", { date })
-      .then((res) => {
-        if (res.payload) setSpkList(res.payload.data);
-        else setSpkError("Gagal memuat data SPK.");
-      })
-      .catch(() => setSpkError("Gagal memuat data SPK."))
-      .finally(() => setIsLoadingSpk(false));
+    let cancelled = false;
+    const timeoutId = window.setTimeout(() => {
+      setIsLoadingSpk(true);
+      setSpkError(null);
+      fetchSpkGrid("", { date })
+        .then((res) => {
+          if (cancelled) return;
+          if (res.payload) setSpkList(res.payload.data);
+          else setSpkError("Gagal memuat data SPK.");
+        })
+        .catch(() => {
+          if (!cancelled) setSpkError("Gagal memuat data SPK.");
+        })
+        .finally(() => {
+          if (!cancelled) setIsLoadingSpk(false);
+        });
+    }, 0);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeoutId);
+    };
   }, [activeTab, date, spkList.length]);
 
   // SPL = SPK yang punya overtime rows > 0 (via plannerMeta)
@@ -95,6 +136,58 @@ export function CalendarDayModal({ date, day, deliveries, onClose }: CalendarDay
     { id: "spl", label: "SPL", count: splSpkList.length || undefined },
   ];
 
+  function selectOverrideMode(mode: OverrideMode) {
+    setOverrideMode(mode);
+    setOverrideError(null);
+    if (mode === "LIBUR") {
+      setOverrideWorkingHours("0");
+      setOverrideOvertimeHours("0");
+      return;
+    }
+    if (mode === "SETENGAH_HARI") {
+      const halfDayHours = Math.ceil((day?.workingHours ?? 0) / 2);
+      setOverrideWorkingHours(String(halfDayHours));
+      setOverrideOvertimeHours("0");
+      return;
+    }
+    setOverrideWorkingHours(String(day?.workingHours ?? 0));
+    setOverrideOvertimeHours(String(day?.overtimeHours ?? 0));
+  }
+
+  async function handleSaveOverride() {
+    if (!canManage) {
+      setOverrideError("Anda tidak memiliki izin untuk mengubah kalender.");
+      return;
+    }
+
+    const workingHours = overrideMode === "LIBUR" ? 0 : Number(overrideWorkingHours);
+    const overtimeHours = overrideMode === "LIBUR" ? 0 : Number(overrideOvertimeHours);
+    if (!Number.isFinite(workingHours) || !Number.isFinite(overtimeHours)) {
+      setOverrideError("Jam kerja harus berupa angka.");
+      return;
+    }
+
+    setIsSavingOverride(true);
+    setOverrideError(null);
+    try {
+      const result = await upsertCalendarDayOverride({
+        date,
+        mode: overrideMode,
+        workingHours: Math.max(0, workingHours),
+        overtimeHours: Math.max(0, overtimeHours),
+        note: overrideNote.trim() || null,
+      });
+      if (!result.success) {
+        setOverrideError(result.message);
+        return;
+      }
+      onSaved?.();
+      router.refresh();
+    } finally {
+      setIsSavingOverride(false);
+    }
+  }
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
@@ -117,17 +210,115 @@ export function CalendarDayModal({ date, day, deliveries, onClose }: CalendarDay
 
         {/* Jam summary */}
         {day && (
-          <div className="flex flex-shrink-0 gap-3 border-b border-white/[0.04] px-6 py-3">
-            {[
-              { label: "Jam Reguler", value: `${day.workingHours}j`, tone: "normal" },
-              { label: "Jam Lembur", value: `${day.overtimeHours}j`, tone: day.overtimeHours > 0 ? "amber" : "normal" },
-              { label: "Total Kapasitas", value: `${day.totalCapacityHours}j`, tone: "green" },
-            ].map((m) => (
-              <div key={m.label} className={`flex-1 rounded border px-3 py-2 ${m.tone === "green" ? "border-emerald-500/20 bg-emerald-500/[0.04]" : m.tone === "amber" ? "border-amber-500/20 bg-amber-500/[0.03]" : "border-white/[0.04] bg-white/[0.02]"}`}>
-                <p className="font-mono text-[9px] uppercase tracking-[0.1em] text-white/30">{m.label}</p>
-                <p className={`mt-0.5 font-mono text-[15px] font-semibold ${m.tone === "green" ? "text-emerald-400" : m.tone === "amber" && day.overtimeHours > 0 ? "text-amber-400" : "text-white/80"}`}>{m.value}</p>
+          <div className="flex-shrink-0 border-b border-white/[0.04] px-6 py-3">
+            <div className="flex gap-3">
+              {[
+                { label: "Jam Reguler", value: `${day.workingHours}j`, tone: "normal" },
+                { label: "Jam Lembur", value: `${day.overtimeHours}j`, tone: day.overtimeHours > 0 ? "amber" : "normal" },
+                { label: "Total Kapasitas", value: `${day.totalCapacityHours}j`, tone: "green" },
+              ].map((m) => (
+                <div key={m.label} className={`flex-1 rounded border px-3 py-2 ${m.tone === "green" ? "border-emerald-500/20 bg-emerald-500/[0.04]" : m.tone === "amber" ? "border-amber-500/20 bg-amber-500/[0.03]" : "border-white/[0.04] bg-white/[0.02]"}`}>
+                  <p className="font-mono text-[9px] uppercase tracking-[0.1em] text-white/30">{m.label}</p>
+                  <p className={`mt-0.5 font-mono text-[15px] font-semibold ${m.tone === "green" ? "text-emerald-400" : m.tone === "amber" && day.overtimeHours > 0 ? "text-amber-400" : "text-white/80"}`}>{m.value}</p>
+                </div>
+              ))}
+            </div>
+
+            {canManage && (
+              <div className="mt-3 rounded border border-amber-500/15 bg-amber-500/[0.025] p-3">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-400">
+                      Atur tanggal ini
+                    </p>
+                  </div>
+                  {day.override && (
+                    <span className="border border-amber-500/25 bg-amber-500/[0.08] px-2 py-1 font-mono text-[9px] uppercase tracking-[0.1em] text-amber-300">
+                      Override aktif
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid gap-2 sm:grid-cols-3">
+                  {[
+                    { mode: "LIBUR" as const, label: "Libur", hint: "Bengkel tutup" },
+                    { mode: "SETENGAH_HARI" as const, label: "Setengah Hari", hint: "Jam pendek" },
+                    { mode: "CUSTOM_HOURS" as const, label: "Jam Khusus", hint: "Isi manual" },
+                  ].map((option) => (
+                    <button
+                      key={option.mode}
+                      type="button"
+                      onClick={() => selectOverrideMode(option.mode)}
+                      className={[
+                        "border px-3 py-2 text-left transition-colors",
+                        overrideMode === option.mode
+                          ? "border-amber-500/45 bg-amber-500/[0.1] text-amber-200"
+                          : "border-white/[0.06] bg-[#0a0a0c] text-white/55 hover:border-amber-500/25",
+                      ].join(" ")}
+                    >
+                      <span className="block font-mono text-[10px] font-semibold uppercase tracking-[0.1em]">
+                        {option.label}
+                      </span>
+                      <span className="mt-1 block text-[10px] text-white/30">{option.hint}</span>
+                    </button>
+                  ))}
+                </div>
+
+                <div className="mt-3 grid gap-3">
+                  {overrideMode !== "LIBUR" && (
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <label>
+                        <span className="mb-1 block text-[11px] text-white/55">Jam kerja</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.5"
+                          value={overrideWorkingHours}
+                          onChange={(event) => setOverrideWorkingHours(event.target.value)}
+                          className="h-9 w-full border border-white/[0.08] bg-[#111114] px-3 font-mono text-[12px] text-white outline-none focus:border-amber-500/50"
+                          aria-label="Jam kerja"
+                        />
+                      </label>
+                      <label>
+                        <span className="mb-1 block text-[11px] text-white/55">Jam lembur</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.5"
+                          value={overrideOvertimeHours}
+                          onChange={(event) => setOverrideOvertimeHours(event.target.value)}
+                          className="h-9 w-full border border-white/[0.08] bg-[#111114] px-3 font-mono text-[12px] text-white outline-none focus:border-amber-500/50"
+                          aria-label="Jam lembur"
+                        />
+                      </label>
+                    </div>
+                  )}
+                  <label>
+                    <span className="mb-1 block text-[11px] text-white/55">Catatan</span>
+                    <input
+                      type="text"
+                      maxLength={200}
+                      value={overrideNote}
+                      onChange={(event) => setOverrideNote(event.target.value)}
+                      placeholder="Contoh: Cuti bersama"
+                      className="h-9 w-full border border-white/[0.08] bg-[#111114] px-3 text-[12px] text-white outline-none placeholder:text-white/20 focus:border-amber-500/50"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => void handleSaveOverride()}
+                    disabled={isSavingOverride}
+                    className="inline-flex h-9 items-center justify-center gap-2 border border-amber-500/35 bg-amber-500/[0.12] px-4 font-mono text-[10px] font-semibold uppercase tracking-[0.1em] text-amber-300 disabled:opacity-50"
+                  >
+                    <Save className="h-3.5 w-3.5" />
+                    {isSavingOverride ? "Menyimpan..." : "Simpan tanggal"}
+                  </button>
+                </div>
+                {overrideError && (
+                  <p className="mt-2 text-[11px] text-red-300">{overrideError}</p>
+                )}
               </div>
-            ))}
+            )}
           </div>
         )}
 

@@ -45,14 +45,24 @@ interface DivisionProgressRow extends RowDataPacket {
   divisionId: number;
   divisionName: string | null;
   pendingHours: number | null;
+  targetHours: number | null;
+  actualHours: number | null;
 }
 
 interface JobProgressRow extends RowDataPacket {
   jobId: string;
+  divisionId: number | null;
+  divisionName: string | null;
   jobName: string | null;
+  panel: string | null;
   status: string | null;
   estimatedHours: number | null;
   actualHours: number | null;
+  remainingHours: number | null;
+  prerequisiteCoreId: string | null;
+  startDate: string | null;
+  deadlineDate: string | null;
+  qcLastStatus: string | null;
 }
 
 interface DivisionMemberRow extends RowDataPacket {
@@ -75,6 +85,13 @@ interface AbsenceRow extends RowDataPacket {
 interface ScheduledRow extends RowDataPacket {
   divisionId: number;
   scheduledHours: number | null;
+}
+
+interface WeeklyWorkConfigRow extends RowDataPacket {
+  weekStartDate: string;
+  weekdayHours: number | null;
+  saturdayHours: number | null;
+  sundayHours: number | null;
 }
 
 interface TargetRow extends RowDataPacket {
@@ -179,8 +196,6 @@ export interface PlanningWorkControlRepository {
   ): Promise<{ recommendationId: string; status: "RECOMMENDED" }>;
 }
 
-const DEFAULT_WEEKDAY_HOURS = 8;
-const DEFAULT_SATURDAY_HOURS = 5;
 const MILLISECONDS_PER_DAY = 86_400_000;
 
 function toNumber(value: number | string | null | undefined, fallback = 0): number {
@@ -215,19 +230,53 @@ function differenceInDaysInclusive(startDate: string, endDate: string): number {
   return Math.max(1, Math.floor((end - start) / MILLISECONDS_PER_DAY) + 1);
 }
 
-function countNormalHours(periodStart: string, periodEnd: string): number {
+function getWeekKey(isoDate: string): string {
+  const date = parseIsoDate(isoDate);
+  const day = date.getUTCDay();
+  if (day === 0) {
+    date.setUTCDate(date.getUTCDate() - 6);
+    return formatIsoDate(date);
+  }
+  date.setUTCDate(date.getUTCDate() + 1 - day);
+  return formatIsoDate(date);
+}
+
+function hoursForDate(configs: WeeklyWorkConfigRow[], isoDate: string): number {
+  const config = configs.find((row) => row.weekStartDate === getWeekKey(isoDate));
+  const day = parseIsoDate(isoDate).getUTCDay();
+  if (day === 6) {
+    return Number(config?.saturdayHours ?? 0);
+  }
+  if (day === 0) {
+    return Number(config?.sundayHours ?? 0);
+  }
+  return Number(config?.weekdayHours ?? 0);
+}
+
+function listIsoDateRange(startDate: string, endDate: string): string[] {
+  const dates: string[] = [];
+  for (
+    let cursor = parseIsoDate(startDate);
+    cursor <= parseIsoDate(endDate);
+    cursor.setUTCDate(cursor.getUTCDate() + 1)
+  ) {
+    dates.push(formatIsoDate(cursor));
+  }
+  return dates;
+}
+
+function countNormalHours(
+  periodStart: string,
+  periodEnd: string,
+  configs: WeeklyWorkConfigRow[],
+): number {
   let total = 0;
   for (
     let cursor = parseIsoDate(periodStart);
     cursor <= parseIsoDate(periodEnd);
     cursor.setUTCDate(cursor.getUTCDate() + 1)
   ) {
-    const day = cursor.getUTCDay();
-    if (day >= 1 && day <= 5) {
-      total += DEFAULT_WEEKDAY_HOURS;
-    } else if (day === 6) {
-      total += DEFAULT_SATURDAY_HOURS;
-    }
+    total += hoursForDate(configs, formatIsoDate(cursor));
   }
   return total;
 }
@@ -499,7 +548,9 @@ export class MySqlPlanningWorkControlRepository implements PlanningWorkControlRe
         SELECT
           cd.division_id AS divisionId,
           d.name AS divisionName,
-          ROUND(SUM(COALESCE(cd.remaining_hours, 0)), 2) AS pendingHours
+          ROUND(SUM(COALESCE(cd.remaining_hours, 0)), 2) AS pendingHours,
+          ROUND(SUM(COALESCE(cd.target_hours_revised, cd.target_hours_initial + cd.time_extension_hours, cd.target_hours_initial, 0)), 2) AS targetHours,
+          ROUND(SUM(COALESCE(cd.total_actual_hours, 0)), 2) AS actualHours
         FROM sm_jobdesc_countdown cd
         LEFT JOIN sm_divisi d ON d.id = cd.division_id
         WHERE cd.car_id = ?
@@ -516,14 +567,23 @@ export class MySqlPlanningWorkControlRepository implements PlanningWorkControlRe
       `
         SELECT
           cd.id AS jobId,
+          cd.division_id AS divisionId,
+          d.name AS divisionName,
           COALESCE(mjt.job_name, cd.section_name, 'Pekerjaan') AS jobName,
+          cd.section_name AS panel,
           COALESCE(cd.status, 'PLAN') AS status,
           ROUND(COALESCE(cd.target_hours_revised, cd.target_hours_initial + cd.time_extension_hours, cd.target_hours_initial, 0), 2) AS estimatedHours,
           CASE
             WHEN cd.total_actual_hours IS NULL THEN NULL
             ELSE ROUND(cd.total_actual_hours, 2)
-          END AS actualHours
+          END AS actualHours,
+          ROUND(COALESCE(cd.remaining_hours, 0), 2) AS remainingHours,
+          cd.prerequisite_core_id AS prerequisiteCoreId,
+          DATE_FORMAT(cd.start_date, '%Y-%m-%d') AS startDate,
+          DATE_FORMAT(cd.deadline_date, '%Y-%m-%d') AS deadlineDate,
+          cd.qc_last_status AS qcLastStatus
         FROM sm_jobdesc_countdown cd
+        LEFT JOIN sm_divisi d ON d.id = cd.division_id
         LEFT JOIN master_job_types mjt ON mjt.id = cd.job_type_id
         WHERE cd.car_id = ?
           AND COALESCE(cd.status, 'PLAN') <> 'DONE'
@@ -533,7 +593,7 @@ export class MySqlPlanningWorkControlRepository implements PlanningWorkControlRe
     )) as [JobProgressRow[], unknown];
 
     const remainingHours = toNumber(unit.remainingHours);
-    const roughEstimateDays = Math.max(0, Math.ceil(remainingHours / DEFAULT_WEEKDAY_HOURS));
+    const roughEstimateDays = Math.max(0, Math.ceil(remainingHours / Math.max(1, toNumber(unit.totalEstimatedHours) - remainingHours)));
     const highIssueCount = toNumber(unit.highIssueCount);
     const openIssueCount = toNumber(unit.openIssueCount);
     const mainConstraint =
@@ -555,20 +615,42 @@ export class MySqlPlanningWorkControlRepository implements PlanningWorkControlRe
         divisionId: String(row.divisionId),
         divisionName: row.divisionName ?? `Division ${row.divisionId}`,
         pendingHours: toNumber(row.pendingHours),
+        targetHours: toNumber(row.targetHours),
+        actualHours: toNumber(row.actualHours),
       })),
       jobs: jobRows.map((row) => ({
         jobId: row.jobId,
+        divisionId: row.divisionId === null ? null : String(row.divisionId),
+        divisionName: row.divisionName,
         jobName: row.jobName ?? "Pekerjaan",
+        panel: row.panel,
         status: row.status ?? "PLAN",
         estimatedHours: toNumber(row.estimatedHours),
         actualHours: row.actualHours === null ? null : toNumber(row.actualHours),
+        remainingHours: toNumber(row.remainingHours),
+        dependsOn: row.prerequisiteCoreId ? [row.prerequisiteCoreId] : [],
+        startDate: row.startDate,
+        deadlineDate: row.deadlineDate,
+        qcLastStatus: row.qcLastStatus,
       })),
     };
   }
 
   async snapshotCapacity(input: CapacitySnapshotInput): Promise<DivisionCapacity[]> {
     const pool = this.poolFactory();
-    const normalHoursPerMember = countNormalHours(input.periodStart, input.periodEnd);
+    const [configRows] = (await pool.query(
+      `
+        SELECT
+          DATE_FORMAT(week_start_date, '%Y-%m-%d') AS weekStartDate,
+          weekday_hours AS weekdayHours,
+          saturday_hours AS saturdayHours,
+          sunday_hours AS sundayHours
+        FROM sm_weekly_work_config
+        WHERE week_start_date BETWEEN ? AND ?
+      `,
+      [getWeekKey(input.periodStart), getWeekKey(input.periodEnd)],
+    )) as [WeeklyWorkConfigRow[], unknown];
+    const normalHoursPerMember = countNormalHours(input.periodStart, input.periodEnd, configRows);
     
     const queryParams: unknown[] = [];
     const divisionClauses: string[] = ["d.isteknis = 1"];
@@ -681,10 +763,10 @@ export class MySqlPlanningWorkControlRepository implements PlanningWorkControlRe
       const members = membersByDivision.get(divisionId) ?? [];
       const absences = absenceByDivision.get(divisionId) ?? [];
       const absentMemberIds = new Set(absences.map((row) => row.employeeId));
-      const absenceHours = absences.reduce(
-        (total, row) => total + toNumber(row.absenceDays) * DEFAULT_WEEKDAY_HOURS,
-        0,
-      );
+      const absenceHours = absences.reduce((total, row) => {
+        const dates = listIsoDateRange(row.startDate, row.endDate);
+        return total + dates.reduce((sum, date) => sum + hoursForDate(configRows, date), 0);
+      }, 0);
       const scheduledHours = scheduledByDivision.get(divisionId) ?? 0;
       const normalCapacityHours = members.length * normalHoursPerMember;
       const availableCapacityHours = Math.max(
@@ -1087,7 +1169,7 @@ export class MySqlPlanningWorkControlRepository implements PlanningWorkControlRe
             row.unitName ?? row.carId,
             row.divisionName ?? `Division ${row.divisionId}`,
             row.targetOutput,
-            "Belum dibagi",
+            input.actorName,
             row.targetHours,
             row.targetFinishDate,
           ],

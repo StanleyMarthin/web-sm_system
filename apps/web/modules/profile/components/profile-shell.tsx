@@ -116,8 +116,8 @@ export function ProfileShell({ user }: { user: AuthUser }) {
       if (!data.success) throw new Error(data.message || "Gagal upload foto");
       setPhotoUrl(`${data.data.photoUrl}?t=${Date.now()}`);
       showToast("success", "Foto profil berhasil diperbarui!");
-    } catch (err: any) {
-      showToast("error", err.message || "Terjadi kesalahan saat upload");
+    } catch (err: unknown) {
+      showToast("error", err instanceof Error ? err.message : "Terjadi kesalahan saat upload");
     } finally {
       setIsUploading(false);
     }

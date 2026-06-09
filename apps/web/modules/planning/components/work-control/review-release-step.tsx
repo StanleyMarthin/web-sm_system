@@ -34,6 +34,8 @@ export interface ReviewUnit {
   remainingHours: number;
   startDate: string;
   dailyCapacityHours: number;
+  qcBufferDays: number;
+  workingDayNumbers: number[];
 }
 
 interface ReviewReleaseStepProps {
@@ -95,12 +97,15 @@ function ReviewUnitCard({ unit, onRevise }: { unit: ReviewUnit; onRevise: () => 
   const statusLabel = formatPlanningStatusLabel(recommendation);
   const style = recommendationStyle(recommendation);
 
-  const safeFinish = calculateSafeFinishDate({
-    remainingHours: unit.remainingHours,
-    riskLevel: entry.riskLevel,
-    dailyCapacityHours: Math.max(1, unit.dailyCapacityHours),
-    startDate: unit.startDate,
-  });
+  const safeFinish = unit.workingDayNumbers.length > 0
+    ? calculateSafeFinishDate({
+        correctedHours: unit.remainingHours,
+        dailyCapacityHours: Math.max(1, unit.dailyCapacityHours),
+        qcBufferDays: unit.qcBufferDays,
+        startDate: unit.startDate,
+        workingDayNumbers: unit.workingDayNumbers,
+      })
+    : null;
 
   const priorityLabel = {
     NORMAL: "Normal",
@@ -110,6 +115,7 @@ function ReviewUnitCard({ unit, onRevise }: { unit: ReviewUnit; onRevise: () => 
   const isTargetTooTight =
     !entry.isHold &&
     entry.targetFinishDate.trim().length > 0 &&
+    safeFinish !== null &&
     safeFinish.safeFinishDate > entry.targetFinishDate;
   const requestedFinishLabel = entry.targetFinishDate || "Belum diisi";
   const decisionSummary =
@@ -153,7 +159,9 @@ function ReviewUnitCard({ unit, onRevise }: { unit: ReviewUnit; onRevise: () => 
           },
           {
             label: "Perkiraan aman",
-            value: safeFinish.safeFinishDayName
+            value: !safeFinish
+              ? "Kalender belum siap"
+              : safeFinish.safeFinishDayName
               ? `${safeFinish.safeFinishDayName} (${safeFinish.safeDays} hari)`
               : `${safeFinish.safeDays} hari kerja`,
           },
@@ -184,7 +192,7 @@ function ReviewUnitCard({ unit, onRevise }: { unit: ReviewUnit; onRevise: () => 
       {isTargetTooTight && (
         <div className="mx-4 mb-3 border border-red-500/25 px-3 py-2 text-[11px] text-red-600 dark:text-red-300">
           Target terlalu mepet. Permintaan selesai {requestedFinishLabel}, sedangkan prediksi aman
-          {` ${safeFinish.safeFinishDate}`}.
+          {` ${safeFinish?.safeFinishDate ?? "-"}`}.
         </div>
       )}
 

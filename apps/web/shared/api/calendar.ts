@@ -1,5 +1,10 @@
-import type { WeeklyWorkConfigRequest } from "@smsystem/contracts/calendar";
+import type {
+  CalendarDayOverrideRequest,
+  WeeklyWorkConfigRequest,
+} from "@smsystem/contracts/calendar";
 import {
+  calendarDayOverrideEnvelopeSchema,
+  calendarDayOverrideListEnvelopeSchema,
   capacityPreviewEnvelopeSchema,
   deliveryRiskEnvelopeSchema,
   unitEtaEnvelopeSchema,
@@ -157,6 +162,60 @@ export async function fetchWorkingDays(
   return {
     payload: workingDaysEnvelopeSchema.parse(await response.json()),
     status: response.status,
+  };
+}
+
+export async function fetchCalendarDayOverrides(
+  cookieHeader: string,
+  input: {
+    startDate: string;
+    endDate: string;
+  },
+) {
+  const params = new URLSearchParams({
+    startDate: input.startDate,
+    endDate: input.endDate,
+  });
+
+  const response = await fetchWithCookie(
+    `/api/calendar/day-overrides?${params.toString()}`,
+    cookieHeader,
+  );
+
+  if (!response || !response.ok) {
+    return {
+      payload: null,
+      status: response?.status ?? 503,
+    };
+  }
+
+  return {
+    payload: calendarDayOverrideListEnvelopeSchema.parse(await response.json()),
+    status: response.status,
+  };
+}
+
+export async function upsertCalendarDayOverride(input: CalendarDayOverrideRequest) {
+  const response = await fetch(`${getApiBaseUrl()}/api/calendar/day-overrides`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(input),
+  });
+
+  if (!response.ok) {
+    return {
+      ...(await parseFailure(response)),
+      success: false as const,
+    };
+  }
+
+  const payload = calendarDayOverrideEnvelopeSchema.parse(await response.json());
+  return {
+    success: true as const,
+    result: payload.data,
   };
 }
 

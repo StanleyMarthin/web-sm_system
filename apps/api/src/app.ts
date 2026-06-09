@@ -16,7 +16,7 @@ import {
   handleDashboardBootstrapRoute,
   handleDashboardSummaryRoute,
 } from "@/routes/dashboard.routes";
-import { preflightResponse } from "@/http/response";
+import { preflightResponse, withSecurityHeaders } from "@/http/response";
 import {
   handleUsersCreateRoute,
   handleUsersDeactivateRoute,
@@ -86,6 +86,10 @@ import {
   handleJobPlanWorkspaceCreateRoute,
 } from "@/routes/job-plan.routes";
 import {
+  handleWorkflowLayoutGetRoute,
+  handleWorkflowLayoutSaveRoute,
+} from "@/routes/workflow-layout.routes";
+import {
   DefaultCountdownService,
   type CountdownService,
 } from "@/services/countdown.service";
@@ -144,6 +148,8 @@ import {
   type PrService,
 } from "@/services/pr.service";
 import {
+  handleCalendarDayOverrideListRoute,
+  handleCalendarDayOverrideUpsertRoute,
   handleDeliveryRiskRoute,
   handleCapacityPreviewRoute,
   handleUnitEtaRoute,
@@ -170,9 +176,13 @@ import { handlePlanningWorkspaceSummaryRoute } from "@/routes/planning-workspace
 import {
   handleWorkControlCapacityRoute,
   handleWorkControlCreateTargetRoute,
+  handleWorkControlCriticalPathSnapshotRoute,
+  handleWorkControlLabourOverrideRoute,
   handleWorkControlOvertimeRecommendationListRoute,
   handleWorkControlOvertimeRecommendationRoute,
   handleWorkControlReleaseSpkRoute,
+  handleWorkControlServiceIntakeRoute,
+  handleWorkControlServiceTemplatesRoute,
   handleWorkControlUnitProgressRoute,
   handleWorkControlUnitsRoute,
 } from "@/routes/planning-work-control.routes";
@@ -328,9 +338,12 @@ import {
   type DashboardService,
 } from "@/services/dashboard.service";
 import { reportTypeSchema } from "@smsystem/contracts/reports";
+import { enforceSecurityRateLimit } from "@/security/rate-limit";
+import { enforceCsrfProtection } from "@/security/csrf";
+import { enforceRoutePermissionMatrix } from "@/security/route-permissions";
 
 function jsonResponse(body: Record<string, string>, status: number): Response {
-  return Response.json(body, { status });
+  return withSecurityHeaders(Response.json(body, { status }));
 }
 
 export interface AppDependencies extends HealthDependencies {
@@ -510,6 +523,24 @@ export function createApiFetchHandler(dependencies: AppDependencies = {}) {
 
     if (request.method === "GET" && url.pathname === "/health") {
       return handleHealthRequest(dependencies);
+    }
+
+    const rateLimitResponse = await enforceSecurityRateLimit(request, getAuthService());
+    if (rateLimitResponse) {
+      return rateLimitResponse;
+    }
+
+    const csrfResponse = await enforceCsrfProtection(request, getAuthService());
+    if (csrfResponse) {
+      return csrfResponse;
+    }
+
+    const permissionMatrixResponse = await enforceRoutePermissionMatrix(
+      request,
+      getAuthService(),
+    );
+    if (permissionMatrixResponse) {
+      return permissionMatrixResponse;
     }
 
     if (request.method === "POST" && url.pathname === "/api/auth/login") {
@@ -868,6 +899,22 @@ export function createApiFetchHandler(dependencies: AppDependencies = {}) {
       );
     }
 
+    if (request.method === "GET" && url.pathname === "/api/calendar/day-overrides") {
+      return handleCalendarDayOverrideListRoute(
+        request,
+        getAuthService(),
+        getCalendarService(),
+      );
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/calendar/day-overrides") {
+      return handleCalendarDayOverrideUpsertRoute(
+        request,
+        getAuthService(),
+        getCalendarService(),
+      );
+    }
+
     if (request.method === "POST" && url.pathname === "/api/calendar/simulate-capacity") {
       return handleCapacityPreviewRoute(
         request,
@@ -928,6 +975,14 @@ export function createApiFetchHandler(dependencies: AppDependencies = {}) {
       );
     }
 
+    if (request.method === "GET" && url.pathname === "/api/planning/work-control/service-templates") {
+      return handleWorkControlServiceTemplatesRoute(
+        request,
+        getAuthService(),
+        getPlanningWorkControlService(),
+      );
+    }
+
     if (request.method === "POST" && url.pathname === "/api/planning/work-control/targets") {
       return handleWorkControlCreateTargetRoute(
         request,
@@ -955,6 +1010,30 @@ export function createApiFetchHandler(dependencies: AppDependencies = {}) {
       );
     }
 
+    if (request.method === "POST" && url.pathname === "/api/planning/work-control/service-intakes") {
+      return handleWorkControlServiceIntakeRoute(
+        request,
+        getAuthService(),
+        getPlanningWorkControlService(),
+      );
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/planning/work-control/calculation-snapshots") {
+      return handleWorkControlCriticalPathSnapshotRoute(
+        request,
+        getAuthService(),
+        getPlanningWorkControlService(),
+      );
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/planning/work-control/labour-overrides") {
+      return handleWorkControlLabourOverrideRoute(
+        request,
+        getAuthService(),
+        getPlanningWorkControlService(),
+      );
+    }
+
     if (request.method === "GET" && url.pathname === "/api/planning/evaluation") {
       return handlePlanningEvaluationRoute(
         request,
@@ -976,6 +1055,26 @@ export function createApiFetchHandler(dependencies: AppDependencies = {}) {
         request,
         getAuthService(),
         getJobPlanService(),
+      );
+    }
+
+    const workflowLayoutMatch = url.pathname.match(
+      /^\/api\/units\/([^/]+)\/workflow-layout\/([^/]+)$/,
+    );
+    if (workflowLayoutMatch && request.method === "GET") {
+      return handleWorkflowLayoutGetRoute(
+        request,
+        decodeURIComponent(workflowLayoutMatch[1]),
+        decodeURIComponent(workflowLayoutMatch[2]),
+        getAuthService(),
+      );
+    }
+    if (workflowLayoutMatch && request.method === "PUT") {
+      return handleWorkflowLayoutSaveRoute(
+        request,
+        decodeURIComponent(workflowLayoutMatch[1]),
+        decodeURIComponent(workflowLayoutMatch[2]),
+        getAuthService(),
       );
     }
 

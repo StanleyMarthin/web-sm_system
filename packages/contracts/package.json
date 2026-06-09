@@ -29,6 +29,7 @@
     "./user": "./src/user.ts",
     "./unit": "./src/unit.ts",
     "./unit-bom": "./src/unit-bom.ts",
-    "./unit-panel": "./src/unit-panel.ts"
+    "./unit-panel": "./src/unit-panel.ts",
+    "./workflow-layout": "./src/workflow-layout.ts"
   }
 }

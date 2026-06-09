@@ -4,7 +4,7 @@ export interface AuditService {
   log(entry: AuditLogEntry): Promise<void>;
 }
 
-export class DefaultAuditService implements AuditService {
+export class AuditLogService implements AuditService {
   constructor(private readonly repository: AuditRepository) {}
 
   async log(entry: AuditLogEntry): Promise<void> {
@@ -15,3 +15,5 @@ export class DefaultAuditService implements AuditService {
     }
   }
 }
+
+export class DefaultAuditService extends AuditLogService {}

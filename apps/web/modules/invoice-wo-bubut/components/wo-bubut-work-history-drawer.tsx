@@ -1,7 +1,9 @@
 "use client";
 
 import type {
+  BubutInvoiceSnapshot,
   BubutInvoiceType,
+  BubutInvoiceWorkOrderRow,
   BubutInvoiceWorkHistory,
 } from "@smsystem/contracts/bubut-invoice";
 import { CameraOff, ExternalLink, Loader2, PackageX, Pencil, Printer, X } from "lucide-react";
@@ -34,6 +36,18 @@ function statusToBadgeStatus(status: BubutInvoiceWorkHistory["header"]["invoiceS
   if (status === "DIREKSI_RELEASED") return "RILIS_DIREKSI";
   if (status === "CUSTOMER_RELEASED") return "RILIS_CUSTOMER";
   return "BELUM_RILIS";
+}
+
+type BubutInvoiceSourceSnapshot = {
+  selectedPictures?: {
+    before?: string[];
+    after?: string[];
+  };
+  mergedWoIds?: string[];
+};
+
+function asBubutInvoiceSourceSnapshot(value: BubutInvoiceSnapshot["sourceSnapshot"]): BubutInvoiceSourceSnapshot {
+  return value;
 }
 
 function ResultBadge({ status }: { status: string | null | undefined }) {
@@ -70,7 +84,7 @@ export function WoBubutWorkHistoryDrawer({
   const [editSalesDate, setEditSalesDate] = useState("");
   const [editPoNo, setEditPoNo] = useState("");
   const [editPoDate, setEditPoDate] = useState("");
-  const [editPreview, setEditPreview] = useState<import("@smsystem/contracts/bubut-invoice").BubutInvoiceSnapshot | null>(null);
+  const [editPreview, setEditPreview] = useState<BubutInvoiceSnapshot | null>(null);
   const [editBeforeUrls, setEditBeforeUrls] = useState<string[]>([]);
   const [editAfterUrls, setEditAfterUrls] = useState<string[]>([]);
   const [editMergedWoIds, setEditMergedWoIds] = useState<string[]>([]);
@@ -83,9 +97,12 @@ export function WoBubutWorkHistoryDrawer({
 
   useEffect(() => {
     let isMounted = true;
-    setIsLoading(true);
-    setError(null);
-    setData(null);
+    queueMicrotask(() => {
+      if (!isMounted) return;
+      setIsLoading(true);
+      setError(null);
+      setData(null);
+    });
 
     fetchBubutInvoiceWorkHistory(sourceKey)
       .then((result) => {
@@ -122,7 +139,7 @@ export function WoBubutWorkHistoryDrawer({
         setEditPoNo(inv.poNo ?? "");
         setEditPoDate(inv.poDate ?? "");
         
-        const snap = inv.sourceSnapshot as any;
+        const snap = asBubutInvoiceSourceSnapshot(inv.sourceSnapshot);
         setEditBeforeUrls(snap.selectedPictures?.before ?? inv.pictures.filter(p => p.caption?.toUpperCase().includes("BEFORE")).map(p => p.url));
         setEditAfterUrls(snap.selectedPictures?.after ?? inv.pictures.filter(p => p.caption?.toUpperCase().includes("AFTER")).map(p => p.url));
         setEditMergedWoIds(snap.mergedWoIds ?? []);
@@ -162,7 +179,9 @@ export function WoBubutWorkHistoryDrawer({
   useEffect(() => {
     if (!editMode || !data) return;
     let alive = true;
-    setIsLoadingWos(true);
+    queueMicrotask(() => {
+      if (alive) setIsLoadingWos(true);
+    });
     fetchBubutInvoiceWorkOrdersClient({
       carId: data.header.carId ? String(data.header.carId) : undefined,
       sparepartName: data.header.sparepartName ? String(data.header.sparepartName) : undefined,
@@ -172,7 +191,7 @@ export function WoBubutWorkHistoryDrawer({
       .then(res => {
         if (alive) {
           // Filter out the current WO from the suggestions
-          setMergeableWos(res.filter((wo: any) => wo.sourceKey !== data.sourceKey));
+          setMergeableWos(res.filter((wo: BubutInvoiceWorkOrderRow) => wo.sourceKey !== data.sourceKey));
         }
       })
       .catch(console.error)

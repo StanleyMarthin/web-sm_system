@@ -1,4 +1,5 @@
 import {
+  CSRF_COOKIE_NAME,
   DEVICE_COOKIE_NAME,
   REFRESH_COOKIE_NAME,
   SESSION_COOKIE_NAME,
@@ -6,6 +7,7 @@ import {
 import { getApiEnv, type ApiEnv } from "@/config/env";
 
 type CookieName =
+  | typeof CSRF_COOKIE_NAME
   | typeof DEVICE_COOKIE_NAME
   | typeof REFRESH_COOKIE_NAME
   | typeof SESSION_COOKIE_NAME;
@@ -92,9 +94,16 @@ export function buildDeviceCookie(value: string, env: ApiEnv = getApiEnv()): str
   });
 }
 
+export function buildCsrfCookie(value: string, env: ApiEnv = getApiEnv()): string {
+  return serializeCookie(CSRF_COOKIE_NAME, value, env, {
+    httpOnly: false,
+    maxAge: env.SESSION_TTL_SECONDS,
+  });
+}
+
 export function buildExpiredCookie(name: CookieName, env: ApiEnv = getApiEnv()): string {
   return serializeCookie(name, "", env, {
-    httpOnly: name !== DEVICE_COOKIE_NAME,
+    httpOnly: name !== DEVICE_COOKIE_NAME && name !== CSRF_COOKIE_NAME,
     maxAge: 0,
   });
 }

@@ -1,4 +1,3 @@
-import { extname } from "node:path";
 import type {
   CreateWarehouseStockAdjustment,
   CreateWarehouseStockOpname,
@@ -38,6 +37,12 @@ import {
 import { S3GalleryUploadTicketProvider } from "@/services/storage/r2-upload.service";
 import type { WebSession } from "@/services/auth/session.service";
 import { TtlCache } from "@/lib/ttl-cache";
+import {
+  createUploadNonce,
+  extensionForImageContentType,
+  normalizeAllowedImageContentType,
+  storeUploadTicket,
+} from "@/security/upload-ticket";
 
 function buildMeta(page: number, limit: number, total: number) {
   const totalPages = Math.max(1, Math.ceil(total / limit));
@@ -83,23 +88,6 @@ function sanitizePath(value: string): string {
     .replaceAll("/", "-")
     .replaceAll(/[^\w\- ]/gu, "_")
     .trim();
-}
-
-function inferFileExtension(filename: string, contentType: string): string {
-  const byName = extname(filename).replace(".", "").trim().toLowerCase();
-  if (byName) {
-    return byName;
-  }
-
-  if (contentType.includes("png")) {
-    return "png";
-  }
-
-  if (contentType.includes("webp")) {
-    return "webp";
-  }
-
-  return "jpg";
 }
 
 interface WarehouseListResult<T> {
@@ -930,25 +918,53 @@ export class DefaultWarehouseService implements WarehouseService {
     session: WebSession,
     input: { stockCardId: string; filename: string; contentType: string },
   ) {
-    const extension = inferFileExtension(input.filename, input.contentType);
+    const stockCard = await this.repository.findStockCardById({
+      employeeId: session.user.employeeId,
+      scope: session.user.scope,
+      stockCardId: input.stockCardId,
+    });
+    if (!stockCard) {
+      throw new Error("WAREHOUSE_STOCK_CARD_SCOPE_DENIED");
+    }
+
+    const contentType = normalizeAllowedImageContentType(input.contentType);
+    const extension = extensionForImageContentType(contentType);
+    const nonce = createUploadNonce();
     const safeStockCardId = sanitizePath(input.stockCardId);
     const objectKey = [
       "warehouse",
       "stock-card",
       safeStockCardId,
-      `${Date.now()}_${sanitizePath(input.filename || "photo")}.${extension}`,
+      `${nonce}.${extension}`,
     ].join("/");
 
-    return this.uploadTicketProvider.createTicket({
+    const ticket = await this.uploadTicketProvider.createTicket({
       objectKey,
-      contentType: input.contentType,
+      contentType,
     });
+
+    await storeUploadTicket({
+      nonce,
+      employeeId: session.user.employeeId,
+      objectKey,
+    });
+
+    return ticket;
   }
 
   async updateStockCardPhotos(
     session: WebSession,
     input: { stockCardId: string; photoUrls: string[] },
   ) {
+    const stockCard = await this.repository.findStockCardById({
+      employeeId: session.user.employeeId,
+      scope: session.user.scope,
+      stockCardId: input.stockCardId,
+    });
+    if (!stockCard) {
+      throw new Error("WAREHOUSE_STOCK_CARD_SCOPE_DENIED");
+    }
+
     const result = await this.repository.updateStockCardPhotos(
       input.stockCardId,
       input.photoUrls,

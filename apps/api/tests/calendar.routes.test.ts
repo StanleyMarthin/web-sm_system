@@ -97,6 +97,20 @@ function createStubCalendarService(): CalendarService {
         updatedAt: "2026-05-14 10:00:00",
       };
     },
+    async listDayOverrides() {
+      return [];
+    },
+    async upsertDayOverride() {
+      return {
+        date: "2026-05-18",
+        mode: "LIBUR",
+        workingHours: 0,
+        overtimeHours: 0,
+        note: null,
+        updatedBy: "SM-03.004",
+        updatedAt: "2026-05-14T10:00:00.000Z",
+      };
+    },
     async getWorkingDays() {
       return {
         startDate: "2026-05-18",

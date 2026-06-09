@@ -815,7 +815,8 @@ function mapUnitBoardRow(row: UnitBoardRowPacket): UnitBoardRow {
   };
 }
 
-const UNIT_DELETE_DEPENDENCY_TABLES = [
+function getUnitDeleteDependencyTables(env: ApiEnv): readonly string[] {
+  return [
   "car_project_assignment",
   "master_panels",
   "planning_target_divisions",
@@ -831,12 +832,13 @@ const UNIT_DELETE_DEPENDENCY_TABLES = [
   "sm_wo_vendor",
   "sm_work_ledger",
   "summary_division_monitoring",
-  `${getApiEnv().PURCHASE_DB_NAME}.pur_pr_header`,
-  `${getApiEnv().PURCHASE_DB_NAME}.vnd_wo_vendor`,
-  `${getApiEnv().WAREHOUSE_DB_NAME}.wh_material_usage`,
-  `${getApiEnv().WAREHOUSE_DB_NAME}.wh_stock_card`,
-  `${getApiEnv().WAREHOUSE_DB_NAME}.wh_transactions`,
+  `${env.PURCHASE_DB_NAME}.pur_pr_header`,
+  `${env.PURCHASE_DB_NAME}.vnd_wo_vendor`,
+  `${env.WAREHOUSE_DB_NAME}.wh_material_usage`,
+  `${env.WAREHOUSE_DB_NAME}.wh_stock_card`,
+  `${env.WAREHOUSE_DB_NAME}.wh_transactions`,
 ] as const;
+}
 
 export class UnitsRepository {
   private readonly env: ApiEnv;
@@ -1004,7 +1006,7 @@ export class UnitsRepository {
     }
 
     const pool = this.poolFactory();
-    for (const tableName of UNIT_DELETE_DEPENDENCY_TABLES) {
+    for (const tableName of getUnitDeleteDependencyTables(this.env)) {
       const [rows] = (await pool.query(
         `
           SELECT COUNT(*) AS total
@@ -1454,15 +1456,15 @@ export class UnitsRepository {
           `
             SELECT
               cd.panel_id AS panelId,
-              DATE_FORMAT(COALESCE(a.finish_time, a.start_time, a.created_at, p.task_date), '%Y-%m-%d %H:%i:%s') AS occurredAt,
+              DATE_FORMAT(COALESCE(a.finish_time, a.start_time, a.created_at, p.task_date, cd.updated_at, cd.start_date, cd.deadline_date), '%Y-%m-%d %H:%i:%s') AS occurredAt,
               COALESCE(mjt.job_name, cd.section_name, 'Job Plan') AS jobName,
-              COALESCE(NULLIF(TRIM(p.jobdescription), ''), cd.section_name, '-') AS jobDescription,
+              COALESCE(NULLIF(TRIM(p.jobdescription), ''), cd.section_name, mjt.job_name, '-') AS jobDescription,
               COALESCE(e.full_name, p.assigned_user_id) AS employeeName,
-              ROUND(TIME_TO_SEC(p.dailyTargetHours) / 3600, 2) AS targetHours,
+              ROUND(COALESCE(TIME_TO_SEC(p.dailyTargetHours) / 3600, cd.target_hours_revised, cd.target_hours_initial + cd.time_extension_hours, cd.target_hours_initial, 0), 2) AS targetHours,
               COALESCE(a.status, p.status, cd.status, 'PLAN') AS statusLabel,
               ROUND(COALESCE(a.progres, cd.actual_progress_percent, 0), 2) AS progressPercent
             FROM sm_jobdesc_countdown cd
-            JOIN sm_jobdesc_plan p ON p.core_id = cd.id
+            LEFT JOIN sm_jobdesc_plan p ON p.core_id = cd.id
             LEFT JOIN (
               SELECT latest_actual.*
               FROM sm_jobdesc_actual latest_actual
@@ -1478,7 +1480,7 @@ export class UnitsRepository {
             LEFT JOIN sm_employee e ON e.employee_id = p.assigned_user_id
             WHERE cd.car_id = ?
               AND cd.panel_id IS NOT NULL
-            ORDER BY cd.panel_id ASC, COALESCE(a.finish_time, a.start_time, a.created_at, p.task_date) ASC
+            ORDER BY cd.panel_id ASC, COALESCE(a.finish_time, a.start_time, a.created_at, p.task_date, cd.updated_at, cd.start_date, cd.deadline_date) ASC
           `,
           [params.unitId],
         ),

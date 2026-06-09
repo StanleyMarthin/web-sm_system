@@ -68,8 +68,8 @@ export function ProfilePasswordForm({ onSuccess, onError }: ProfilePasswordFormP
         setIsEditing(false);
         reset();
         onSuccess("Password berhasil diperbarui!");
-      } catch (err: any) {
-        onError(err.message || "Terjadi kesalahan");
+      } catch (err: unknown) {
+        onError(err instanceof Error ? err.message : "Terjadi kesalahan");
       }
     });
   };

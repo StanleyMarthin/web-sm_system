@@ -56,8 +56,8 @@ export function ProfileEmailForm({ user, onSuccess, onError }: ProfileEmailFormP
         
         setIsEditing(false);
         onSuccess("Email berhasil diperbarui!");
-      } catch (err: any) {
-        onError(err.message || "Terjadi kesalahan");
+      } catch (err: unknown) {
+        onError(err instanceof Error ? err.message : "Terjadi kesalahan");
       }
     });
   };

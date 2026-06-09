@@ -15,6 +15,9 @@ import {
 import { buildGridMeta } from "@/services/grid/paginate";
 import { sanitizeUserGridQuery } from "@/services/users/query";
 import { TtlCache } from "@/lib/ttl-cache";
+import type { AuditService } from "@/services/audit/audit.service";
+import { DefaultAuditService } from "@/services/audit/audit.service";
+import { MySqlAuditRepository } from "@/repositories/audit.repo";
 
 export interface PasswordHasher {
   hash(password: string): Promise<string>;
@@ -140,6 +143,9 @@ export class DefaultUsersService implements UsersService {
   constructor(
     private readonly repository: UsersRepository = new MySqlUsersRepository(),
     private readonly passwordHasher: PasswordHasher = new BunPasswordHasher(),
+    private readonly auditService: AuditService = new DefaultAuditService(
+      new MySqlAuditRepository(),
+    ),
   ) {}
 
   async list(session: WebSession, query: GridQueryState) {
@@ -206,6 +212,20 @@ export class DefaultUsersService implements UsersService {
     });
     userReferenceCache.clear();
 
+    await this.auditService.log({
+      actorId: session.user.employeeId,
+      actorName: session.user.fullName,
+      action: "user.create",
+      module: "user",
+      recordId: createdRecord.employeeId,
+      newValue: {
+        employeeId: createdRecord.employeeId,
+        roleId: createdRecord.roleId,
+        divisionId: createdRecord.divisionId,
+        managedDivisionIds: createdRecord.managedDivisionIds,
+      },
+    });
+
     return toApiUserRecord(createdRecord);
   }
 
@@ -232,6 +252,25 @@ export class DefaultUsersService implements UsersService {
 
     const updatedRecord = await this.repository.update(employeeId, input);
     userReferenceCache.clear();
+    await this.auditService.log({
+      actorId: session.user.employeeId,
+      actorName: session.user.fullName,
+      action: "user.update",
+      module: "user",
+      recordId: employeeId,
+      oldValue: {
+        roleId: existingRecord.roleId,
+        divisionId: existingRecord.divisionId,
+        managedDivisionIds: existingRecord.managedDivisionIds,
+        isActive: existingRecord.isActive,
+      },
+      newValue: {
+        roleId: updatedRecord.roleId,
+        divisionId: updatedRecord.divisionId,
+        managedDivisionIds: updatedRecord.managedDivisionIds,
+        isActive: updatedRecord.isActive,
+      },
+    });
     return toApiUserRecord(updatedRecord);
   }
 
@@ -250,6 +289,19 @@ export class DefaultUsersService implements UsersService {
     const passwordHash = await this.passwordHasher.hash(input.newPassword);
     await this.repository.resetPassword(employeeId, passwordHash);
     userReferenceCache.clear();
+    await this.auditService.log({
+      actorId: session.user.employeeId,
+      actorName: session.user.fullName,
+      action: "user.reset-password",
+      module: "user",
+      recordId: employeeId,
+      oldValue: {
+        passwordChanged: false,
+      },
+      newValue: {
+        passwordChanged: true,
+      },
+    });
   }
 
   async deactivate(session: WebSession, employeeId: string): Promise<void> {
@@ -265,6 +317,19 @@ export class DefaultUsersService implements UsersService {
     assertManageTarget(session, existingRecord);
     await this.repository.deactivate(employeeId);
     userReferenceCache.clear();
+    await this.auditService.log({
+      actorId: session.user.employeeId,
+      actorName: session.user.fullName,
+      action: "user.deactivate",
+      module: "user",
+      recordId: employeeId,
+      oldValue: {
+        isActive: existingRecord.isActive,
+      },
+      newValue: {
+        isActive: false,
+      },
+    });
   }
 
   async exportCsv(session: WebSession, query: GridQueryState): Promise<string> {
@@ -294,6 +359,18 @@ export class DefaultUsersService implements UsersService {
         .map(escapeCsvValue)
         .join(","),
     );
+
+    await this.auditService.log({
+      actorId: session.user.employeeId,
+      actorName: session.user.fullName,
+      action: "user.export",
+      module: "user",
+      recordId: "users",
+      newValue: {
+        query: sanitizedQuery,
+        rowCount: payload.rows.length,
+      },
+    });
 
     return [
       "employeeId,fullName,email,roleName,divisionName,grade,status,lastLoginAt,deviceCount,createdAt,managedDivisions,activeUnits",

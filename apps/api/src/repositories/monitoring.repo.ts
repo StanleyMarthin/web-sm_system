@@ -111,6 +111,10 @@ interface DivisionUnitRow extends RowDataPacket {
   averageProgressPercent: number | null;
 }
 
+interface DivisionLoadUnitRow extends DivisionUnitRow {
+  divisionId: number | null;
+}
+
 interface DivisionMemberRow extends RowDataPacket {
   employeeId: string | null;
   employeeName: string | null;
@@ -758,48 +762,113 @@ export class MySqlMonitoringRepository implements MonitoringRepository {
     const pool = this.poolFactory();
     const queryParams: unknown[] = [];
     const whereClauses = buildDivisionMonitoringWhere(params, queryParams);
+    const unitParams: unknown[] = [];
+    const unitWhereClauses = buildDivisionMonitoringWhere(params, unitParams);
 
-    const [rows] = (await pool.query(
-      `
-        SELECT
-          cd.division_id AS divisionId,
-          d.name AS divisionName,
-          COUNT(*) AS totalTasks,
-          SUM(CASE WHEN actual.latestActualId IS NOT NULL THEN 1 ELSE 0 END) AS startedTasks,
-          SUM(CASE WHEN actual.actualStatus = 'onprogress' THEN 1 ELSE 0 END) AS pendingSubmitTasks,
-          SUM(CASE WHEN actual.actualStatus = 'done' OR p.status = 'READY_QC' THEN 1 ELSE 0 END) AS doneTasks,
-          ROUND(SUM(COALESCE(cd.total_actual_hours, 0)), 2) AS totalActualHours,
-          ROUND(SUM(COALESCE(cd.remaining_hours, 0)), 2) AS totalRemainingHours,
-          ROUND(AVG(COALESCE(actual.progres, cd.actual_progress_percent, 0)), 2) AS averageProgressPercent
-        FROM sm_jobdesc_plan p
-        JOIN sm_jobdesc_countdown cd ON cd.id = p.core_id
-        JOIN cars c ON c.id = cd.car_id
-        LEFT JOIN sm_divisi d ON d.id = cd.division_id
-        LEFT JOIN (
+    const [rows, unitRows] = await Promise.all([
+      pool.query(
+        `
           SELECT
-            a.plandaily_id,
-            a.id AS latestActualId,
-            CASE WHEN a.status = 'onprogress' AND a.finish_time IS NOT NULL THEN 'pending' ELSE a.status END AS actualStatus,
-            a.progres AS progres
-          FROM sm_jobdesc_actual a
-          JOIN (
+            cd.division_id AS divisionId,
+            d.name AS divisionName,
+            COUNT(*) AS totalTasks,
+            SUM(CASE WHEN actual.latestActualId IS NOT NULL THEN 1 ELSE 0 END) AS startedTasks,
+            SUM(CASE WHEN actual.actualStatus = 'onprogress' THEN 1 ELSE 0 END) AS pendingSubmitTasks,
+            SUM(CASE WHEN actual.actualStatus = 'done' OR p.status = 'READY_QC' THEN 1 ELSE 0 END) AS doneTasks,
+            ROUND(SUM(COALESCE(cd.total_actual_hours, 0)), 2) AS totalActualHours,
+            ROUND(SUM(COALESCE(cd.remaining_hours, 0)), 2) AS totalRemainingHours,
+            ROUND(AVG(COALESCE(actual.progres, cd.actual_progress_percent, 0)), 2) AS averageProgressPercent
+          FROM sm_jobdesc_plan p
+          JOIN sm_jobdesc_countdown cd ON cd.id = p.core_id
+          JOIN cars c ON c.id = cd.car_id
+          LEFT JOIN sm_divisi d ON d.id = cd.division_id
+          LEFT JOIN (
             SELECT
-              plandaily_id,
-              MAX(created_at) AS latestCreatedAt
-            FROM sm_jobdesc_actual
-            GROUP BY plandaily_id
-          ) latest
-            ON latest.plandaily_id = a.plandaily_id
-           AND latest.latestCreatedAt = a.created_at
-        ) actual ON actual.plandaily_id = p.id
-        WHERE ${whereClauses.join(" AND ")}
-        GROUP BY cd.division_id, d.name
-        ORDER BY d.name ASC
-      `,
-      queryParams,
-    )) as [DivisionLoadRow[], unknown];
+              a.plandaily_id,
+              a.id AS latestActualId,
+              CASE WHEN a.status = 'onprogress' AND a.finish_time IS NOT NULL THEN 'pending' ELSE a.status END AS actualStatus,
+              a.progres AS progres
+            FROM sm_jobdesc_actual a
+            JOIN (
+              SELECT
+                plandaily_id,
+                MAX(created_at) AS latestCreatedAt
+              FROM sm_jobdesc_actual
+              GROUP BY plandaily_id
+            ) latest
+              ON latest.plandaily_id = a.plandaily_id
+             AND latest.latestCreatedAt = a.created_at
+          ) actual ON actual.plandaily_id = p.id
+          WHERE ${whereClauses.join(" AND ")}
+          GROUP BY cd.division_id, d.name
+          ORDER BY d.name ASC
+        `,
+        queryParams,
+      ) as Promise<[DivisionLoadRow[], unknown]>,
+      pool.query(
+        `
+          SELECT
+            cd.division_id AS divisionId,
+            c.id AS carId,
+            c.unit_name AS unitName,
+            c.customer_name AS customerName,
+            COUNT(*) AS totalTasks,
+            SUM(CASE WHEN actual.latestActualId IS NOT NULL THEN 1 ELSE 0 END) AS startedTasks,
+            SUM(CASE WHEN actual.actualStatus = 'onprogress' THEN 1 ELSE 0 END) AS pendingSubmitTasks,
+            SUM(CASE WHEN actual.actualStatus = 'done' OR p.status = 'READY_QC' THEN 1 ELSE 0 END) AS doneTasks,
+            ROUND(SUM(COALESCE(p.total_jam, 0)), 2) AS totalPlannedHours,
+            ROUND(SUM(COALESCE(cd.total_actual_hours, 0)), 2) AS totalActualHours,
+            ROUND(SUM(COALESCE(cd.remaining_hours, 0)), 2) AS totalRemainingHours,
+            ROUND(AVG(COALESCE(actual.progres, cd.actual_progress_percent, 0)), 2) AS averageProgressPercent
+          FROM sm_jobdesc_plan p
+          JOIN sm_jobdesc_countdown cd ON cd.id = p.core_id
+          JOIN cars c ON c.id = cd.car_id
+          LEFT JOIN (
+            SELECT
+              a.plandaily_id,
+              a.id AS latestActualId,
+              CASE WHEN a.status = 'onprogress' AND a.finish_time IS NOT NULL THEN 'pending' ELSE a.status END AS actualStatus,
+              a.progres AS progres
+            FROM sm_jobdesc_actual a
+            JOIN (
+              SELECT
+                plandaily_id,
+                MAX(created_at) AS latestCreatedAt
+              FROM sm_jobdesc_actual
+              GROUP BY plandaily_id
+            ) latest
+              ON latest.plandaily_id = a.plandaily_id
+             AND latest.latestCreatedAt = a.created_at
+          ) actual ON actual.plandaily_id = p.id
+          WHERE ${unitWhereClauses.join(" AND ")}
+          GROUP BY cd.division_id, c.id, c.unit_name, c.customer_name
+          ORDER BY c.unit_name ASC
+        `,
+        unitParams,
+      ) as Promise<[DivisionLoadUnitRow[], unknown]>,
+    ]);
 
-    return rows.map((row) => ({
+    const unitsByDivision = new Map<string, MonitoringDivisionUnitRecord[]>();
+    for (const row of unitRows[0]) {
+      const divisionKey = String(row.divisionId ?? "unknown");
+      const units = unitsByDivision.get(divisionKey) ?? [];
+      units.push({
+        carId: row.carId,
+        unitName: row.unitName,
+        customerName: row.customerName,
+        totalTasks: Number(row.totalTasks ?? 0),
+        startedTasks: Number(row.startedTasks ?? 0),
+        pendingSubmitTasks: Number(row.pendingSubmitTasks ?? 0),
+        doneTasks: Number(row.doneTasks ?? 0),
+        totalPlannedHours: Number(row.totalPlannedHours ?? 0),
+        totalActualHours: Number(row.totalActualHours ?? 0),
+        totalRemainingHours: Number(row.totalRemainingHours ?? 0),
+        averageProgressPercent: Number(row.averageProgressPercent ?? 0),
+      });
+      unitsByDivision.set(divisionKey, units);
+    }
+
+    return rows[0].map((row) => ({
       divisionId: row.divisionId,
       divisionName: row.divisionName,
       totalTasks: Number(row.totalTasks ?? 0),
@@ -809,6 +878,7 @@ export class MySqlMonitoringRepository implements MonitoringRepository {
       totalActualHours: Number(row.totalActualHours ?? 0),
       totalRemainingHours: Number(row.totalRemainingHours ?? 0),
       averageProgressPercent: Number(row.averageProgressPercent ?? 0),
+      units: unitsByDivision.get(String(row.divisionId ?? "unknown")) ?? [],
     }));
   }
 

@@ -1,4 +1,5 @@
 import {
+  calendarDayOverrideRequestSchema,
   capacityPreviewRequestSchema,
   weeklyWorkConfigRequestSchema,
   workingDaysRequestSchema,
@@ -153,6 +154,78 @@ export async function handleWorkingDaysRoute(
       Response.json({
         success: true,
         message: "Working day list ready",
+        data,
+      }),
+    );
+  } catch {
+    return errorResponse(
+      request,
+      "Terjadi kesalahan internal pada calendar module.",
+      500,
+      "CALENDAR_FAILED",
+    );
+  }
+}
+
+export async function handleCalendarDayOverrideListRoute(
+  request: Request,
+  authService: AuthService,
+  calendarService: CalendarService,
+): Promise<Response> {
+  const sessionResult = await requirePlanningSession(request, authService);
+  if ("response" in sessionResult) {
+    return sessionResult.response;
+  }
+
+  const url = new URL(request.url);
+  const startDate = url.searchParams.get("startDate")?.trim();
+  const endDate = url.searchParams.get("endDate")?.trim();
+  if (!startDate || !endDate) {
+    return errorResponse(request, "Periode override wajib diisi.", 400, "INVALID_QUERY");
+  }
+
+  try {
+    const data = await calendarService.listDayOverrides(sessionResult.session, { startDate, endDate });
+    return withCors(
+      request,
+      Response.json({
+        success: true,
+        message: "Calendar day override ready",
+        data,
+      }),
+    );
+  } catch {
+    return errorResponse(
+      request,
+      "Terjadi kesalahan internal pada calendar module.",
+      500,
+      "CALENDAR_FAILED",
+    );
+  }
+}
+
+export async function handleCalendarDayOverrideUpsertRoute(
+  request: Request,
+  authService: AuthService,
+  calendarService: CalendarService,
+): Promise<Response> {
+  const sessionResult = await requirePlanningSession(request, authService);
+  if ("response" in sessionResult) {
+    return sessionResult.response;
+  }
+
+  const bodyResult = await parseJsonBody(request, calendarDayOverrideRequestSchema);
+  if (!bodyResult.success) {
+    return withCors(request, bodyResult.response);
+  }
+
+  try {
+    const data = await calendarService.upsertDayOverride(sessionResult.session, bodyResult.data);
+    return withCors(
+      request,
+      Response.json({
+        success: true,
+        message: "Calendar day override updated",
         data,
       }),
     );

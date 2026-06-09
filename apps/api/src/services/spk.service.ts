@@ -181,7 +181,7 @@ export class DefaultSpkService implements SpkService {
     await this.auditService.log({
       actorId: session.user.employeeId,
       actorName: session.user.fullName,
-      action: "spk.generate",
+      action: "spk.create",
       module: "spk",
       recordId: result.spkId,
       newValue: input,

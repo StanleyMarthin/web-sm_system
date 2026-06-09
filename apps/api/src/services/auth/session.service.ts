@@ -1,8 +1,15 @@
-import { randomUUID } from "node:crypto";
+import {
+  createCipheriv,
+  createDecipheriv,
+  createHash,
+  randomBytes,
+  randomUUID,
+} from "node:crypto";
 import type { AuthUser } from "@smsystem/contracts/auth";
 import { createClient, type RedisClientType } from "redis";
 import { getApiEnv, type ApiEnv } from "@/config/env";
 import {
+  buildCsrfCookie,
   buildDeviceCookie,
   buildExpiredCookie,
   buildRefreshCookie,
@@ -17,6 +24,7 @@ export interface WebSession {
   sessionKey: string;
   employeeId: string;
   refreshToken: string;
+  csrfToken?: string;
   mobileSessionKey: string;
   deviceId: string;
   user: AuthUser;
@@ -42,6 +50,51 @@ function getSessionCookieValue(request: Request): string | null {
   return getCookie(request, "sm_session");
 }
 
+function createCsrfToken(): string {
+  return randomBytes(32).toString("base64url");
+}
+
+function getRefreshTokenEncryptionKey(env: ApiEnv): Buffer {
+  const keyMaterial = env.REFRESH_TOKEN_ENCRYPTION_KEY ?? env.DB_PASS;
+  return createHash("sha256").update(keyMaterial).digest();
+}
+
+function encryptRefreshToken(refreshToken: string, env: ApiEnv): string {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", getRefreshTokenEncryptionKey(env), iv);
+  const ciphertext = Buffer.concat([
+    cipher.update(refreshToken, "utf8"),
+    cipher.final(),
+  ]);
+  const authTag = cipher.getAuthTag();
+
+  return [
+    "v1",
+    iv.toString("base64url"),
+    authTag.toString("base64url"),
+    ciphertext.toString("base64url"),
+  ].join(".");
+}
+
+function decryptRefreshToken(refreshToken: string, env: ApiEnv): string {
+  const [version, iv, authTag, ciphertext] = refreshToken.split(".");
+  if (version !== "v1" || !iv || !authTag || !ciphertext) {
+    return refreshToken;
+  }
+
+  const decipher = createDecipheriv(
+    "aes-256-gcm",
+    getRefreshTokenEncryptionKey(env),
+    Buffer.from(iv, "base64url"),
+  );
+  decipher.setAuthTag(Buffer.from(authTag, "base64url"));
+
+  return Buffer.concat([
+    decipher.update(Buffer.from(ciphertext, "base64url")),
+    decipher.final(),
+  ]).toString("utf8");
+}
+
 export class RedisSessionStore implements SessionStore {
   constructor(
     private readonly clientFactory: () => Promise<RedisClientType> = getRedisClient,
@@ -58,14 +111,20 @@ export class RedisSessionStore implements SessionStore {
       sessionKey,
       employeeId: normalizedUser.employeeId,
       refreshToken: input.refreshToken,
+      csrfToken: createCsrfToken(),
       mobileSessionKey: input.mobileSessionKey,
       deviceId: input.deviceId,
       user: normalizedUser,
       createdAt,
     };
 
+    const storedSession: WebSession = {
+      ...session,
+      refreshToken: encryptRefreshToken(session.refreshToken, this.env),
+    };
+
     const client = await this.clientFactory();
-    await client.set(sessionKey, JSON.stringify(session), {
+    await client.set(sessionKey, JSON.stringify(storedSession), {
       expiration: {
         type: "EX",
         value: this.env.SESSION_TTL_SECONDS,
@@ -94,6 +153,7 @@ export class RedisSessionStore implements SessionStore {
 
     return {
       ...session,
+      refreshToken: decryptRefreshToken(session.refreshToken, this.env),
       user: normalizeReservedAuthUser(session.user),
     };
   }
@@ -108,10 +168,13 @@ export class RedisSessionStore implements SessionStore {
   }
 
   buildLoginCookies(session: WebSession): string[] {
+    const csrfToken = session.csrfToken ?? createCsrfToken();
+
     return [
       buildSessionCookie(session.sessionKey, this.env),
       buildRefreshCookie(session.refreshToken, this.env),
       buildDeviceCookie(session.deviceId, this.env),
+      buildCsrfCookie(csrfToken, this.env),
     ];
   }
 
@@ -119,6 +182,7 @@ export class RedisSessionStore implements SessionStore {
     return [
       buildExpiredCookie("sm_session", this.env),
       buildExpiredCookie("sm_refresh", this.env),
+      buildExpiredCookie("sm_csrf", this.env),
     ];
   }
 }

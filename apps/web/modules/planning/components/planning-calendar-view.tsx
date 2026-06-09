@@ -17,7 +17,7 @@ import type {
   WorkingDay,
   UnitEtaRecord,
 } from "@smsystem/contracts/calendar";
-import { ChevronLeft, ChevronRight, Settings2, Save, X, Car } from "lucide-react";
+import { ChevronLeft, ChevronRight, Settings2, Save, Car } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { upsertWeeklyConfig } from "@/shared/api/calendar";
@@ -468,6 +468,7 @@ export function PlanningCalendarView({
             const isMinggu = day?.dayName === "Minggu";
             const isWeekend = isSabtu || isMinggu;
             const hasOvertime = day ? day.overtimeHours > 0 : false;
+            const hasOverride = Boolean(day?.override);
             const today = new Date().toISOString().split("T")[0];
             const isToday = cell.date === today;
             const dateDeliveries = deliveriesByDate.get(cell.date) ?? [];
@@ -523,6 +524,11 @@ export function PlanningCalendarView({
 
                 {/* Status label & Deliveries */}
                 <div className="mt-auto flex flex-col justify-end pt-2">
+                  {hasOverride && (
+                    <div className="mb-1 border border-amber-500/20 bg-amber-500/[0.08] px-1 py-0.5 font-mono text-[8px] font-semibold uppercase tracking-[0.06em] text-amber-500">
+                      Jam khusus
+                    </div>
+                  )}
                   {hasDelivery && (
                     <div className="mb-1 flex items-center gap-1 rounded bg-amber-500/10 px-1 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-[0.05em] text-amber-500">
                       <Car className="h-2.5 w-2.5" />
@@ -587,6 +593,11 @@ export function PlanningCalendarView({
           date={selectedDate}
           day={dayMap.get(selectedDate) ?? null}
           deliveries={deliveriesByDate.get(selectedDate) ?? []}
+          canManage={canManage}
+          onSaved={() => {
+            setMessage("Pengaturan tanggal berhasil disimpan.");
+            setSelectedDate(null);
+          }}
           onClose={() => setSelectedDate(null)}
         />
       )}

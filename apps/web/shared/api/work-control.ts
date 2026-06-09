@@ -38,15 +38,25 @@ const unitProgressResponseSchema = z.object({
         divisionId: z.string(),
         divisionName: z.string(),
         pendingHours: z.number(),
+        targetHours: z.number().optional().default(0),
+        actualHours: z.number().optional().default(0),
       }),
     ),
     jobs: z.array(
       z.object({
         jobId: z.string(),
+        divisionId: z.string().nullable().optional().default(null),
+        divisionName: z.string().nullable().optional().default(null),
         jobName: z.string(),
+        panel: z.string().nullable().optional().default(null),
         status: z.string(),
         estimatedHours: z.number(),
         actualHours: z.number().nullable(),
+        remainingHours: z.number().optional().default(0),
+        dependsOn: z.array(z.string()).optional().default([]),
+        startDate: z.string().nullable().optional().default(null),
+        deadlineDate: z.string().nullable().optional().default(null),
+        qcLastStatus: z.string().nullable().optional().default(null),
       }),
     ),
   }),
@@ -127,12 +137,54 @@ const planningSplRecommendationListResponseSchema = z.object({
   ),
 });
 
+const serviceTemplateSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  divisionId: z.string(),
+  estimatedHours: z.number(),
+  applicableConditions: z.array(z.string()),
+});
+
+const serviceTemplateListResponseSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+  data: z.array(serviceTemplateSchema),
+});
+
+const serviceIntakeResponseSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+  data: z.object({
+    intakeId: z.string(),
+    status: z.literal("DRAFT"),
+  }),
+});
+
+const criticalPathSnapshotResponseSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+  data: z.object({
+    unitId: z.string(),
+    savedAt: z.string(),
+  }),
+});
+
+const labourOverrideResponseSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+  data: z.object({
+    unitId: z.string(),
+    savedAt: z.string(),
+  }),
+});
+
 export type WorkControlUnit = z.infer<typeof workControlUnitSchema>;
 export type WorkControlUnitProgress = z.infer<typeof unitProgressResponseSchema>["data"];
 export type WorkControlDivisionCapacity = z.infer<typeof capacityResponseSchema>["data"][number];
 export type PlanningSplRecommendation = z.infer<
   typeof planningSplRecommendationListResponseSchema
 >["data"][number];
+export type WorkControlServiceTemplate = z.infer<typeof serviceTemplateSchema>;
 export type CreateWorkControlTargetInput = {
   planningTargetId?: string;
   weekStartDate: string;
@@ -314,4 +366,48 @@ export async function fetchPlanningSplRecommendations(
   }
 
   return { payload: parsed.data, status: response.status };
+}
+
+export async function fetchServiceTemplates() {
+  const response = await getWithCredentials("/api/planning/work-control/service-templates");
+  return serviceTemplateListResponseSchema.parse(await response.json());
+}
+
+export async function createServiceIntake(input: {
+  unitId: string;
+  diagnosis: string;
+  templateIds: string[];
+  totalEstimatedHours: number;
+  capacityStatus: "SPK_READY" | "SPK_WITH_SPL" | "TARGET_PERLU_DIREVISI";
+  targetFinishDate: string;
+}) {
+  const response = await postWithCredentials(
+    "/api/planning/work-control/service-intakes",
+    input,
+  );
+  return serviceIntakeResponseSchema.parse(await response.json());
+}
+
+export async function saveCriticalPathSnapshot(input: {
+  unitId: string;
+  summary: unknown;
+}) {
+  const response = await postWithCredentials(
+    "/api/planning/work-control/calculation-snapshots",
+    input,
+  );
+  return criticalPathSnapshotResponseSchema.parse(await response.json());
+}
+
+export async function saveLabourOverride(input: {
+  unitId: string;
+  billableHours: number;
+  nonBillableHours?: number;
+  warrantyHours?: number;
+}) {
+  const response = await postWithCredentials(
+    "/api/planning/work-control/labour-overrides",
+    input,
+  );
+  return labourOverrideResponseSchema.parse(await response.json());
 }

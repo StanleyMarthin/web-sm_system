@@ -1,8 +1,9 @@
 "use client";
 
 import type { MonitoringDivisionLoadRecord } from "@smsystem/contracts/monitoring";
-import { RefreshCcw } from "lucide-react";
+import { ChevronDown, ChevronUp, RefreshCcw } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import React, { useState } from "react";
 import { ActionButton, CompactDateInput, CompactDateRangeInput } from "@/shared/ui/compact";
 
 interface MonitoringDivisionShellProps {
@@ -61,6 +62,21 @@ export function MonitoringDivisionShell({
   const totalTasks = rows.reduce((sum, row) => sum + row.totalTasks, 0);
   const totalStarted = rows.reduce((sum, row) => sum + row.startedTasks, 0);
   const totalPendingSubmit = rows.reduce((sum, row) => sum + row.pendingSubmitTasks, 0);
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+
+  function rowKey(row: MonitoringDivisionLoadRecord): string {
+    return String(row.divisionId ?? row.divisionName ?? "unknown");
+  }
+
+  function toggleRow(key: string) {
+    const next = new Set(expandedRows);
+    if (next.has(key)) {
+      next.delete(key);
+    } else {
+      next.add(key);
+    }
+    setExpandedRows(next);
+  }
 
   function pushDailyDate(value: string) {
     const nextParams = new URLSearchParams(searchParams.toString());
@@ -246,7 +262,9 @@ export function MonitoringDivisionShell({
           <table className="min-w-full text-[12px] text-gray-800 dark:text-white/70">
             <thead className="sticky top-0 z-10 bg-white dark:bg-[#111114]">
               <tr className="border-b border-gray-300 dark:border-white/[0.06] text-left font-mono text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/30">
+                <th className="px-3 py-2 text-center">Unit</th>
                 <th className="px-3 py-2">Divisi</th>
+                <th className="px-3 py-2 text-right">Jml Unit</th>
                 <th className="px-3 py-2 text-right">Total</th>
                 <th className="px-3 py-2 text-right">Sudah Mulai</th>
                 <th className="px-3 py-2 text-right">Belum Ditutup</th>
@@ -257,41 +275,110 @@ export function MonitoringDivisionShell({
               </tr>
             </thead>
             <tbody>
-              {rows.length > 0 ? rows.map((row) => (
-                <tr
-                  key={`${row.divisionId ?? "unknown"}:${row.divisionName ?? "-"}`}
-                  className="border-b border-white/[0.04] hover:bg-gray-100 dark:hover:bg-white/[0.02]"
-                >
-                  <td className="px-3 py-2 text-gray-950 dark:text-white">
-                    {row.divisionId ? (
-                      <button
-                        type="button"
-                        onClick={() => openDivisionDetail(row.divisionId!)}
-                        className="font-mono text-left text-amber-400 transition-colors hover:text-amber-300"
-                      >
-                        {row.divisionName ?? "-"}
-                      </button>
-                    ) : (
-                      row.divisionName ?? "-"
+              {rows.length > 0 ? rows.map((row) => {
+                const key = rowKey(row);
+                const isExpanded = expandedRows.has(key);
+                return (
+                  <React.Fragment key={`${row.divisionId ?? "unknown"}:${row.divisionName ?? "-"}`}>
+                    <tr className="border-b border-white/[0.04] hover:bg-gray-100 dark:hover:bg-white/[0.02]">
+                      <td className="px-3 py-2 text-center">
+                        <button
+                          type="button"
+                          onClick={() => toggleRow(key)}
+                          className={[
+                            "inline-flex h-6 w-6 items-center justify-center border transition-colors",
+                            isExpanded
+                              ? "border-amber-500/30 bg-amber-500/10 text-amber-500"
+                              : "border-gray-300 text-gray-400 hover:border-amber-500/30 hover:text-amber-500 dark:border-white/[0.06] dark:text-white/30",
+                          ].join(" ")}
+                          aria-label={isExpanded ? "Tutup rincian unit" : "Buka rincian unit"}
+                        >
+                          {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                        </button>
+                      </td>
+                      <td className="px-3 py-2 text-gray-950 dark:text-white">
+                        {row.divisionId ? (
+                          <button
+                            type="button"
+                            onClick={() => openDivisionDetail(row.divisionId!)}
+                            className="font-mono text-left text-amber-400 transition-colors hover:text-amber-300"
+                          >
+                            {row.divisionName ?? "-"}
+                          </button>
+                        ) : (
+                          row.divisionName ?? "-"
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-right font-mono tabular-nums">{row.units.length}</td>
+                      <td className="px-3 py-2 text-right font-mono tabular-nums">{row.totalTasks}</td>
+                      <td className="px-3 py-2 text-right font-mono tabular-nums">{row.startedTasks}</td>
+                      <td className="px-3 py-2 text-right font-mono tabular-nums">{row.pendingSubmitTasks}</td>
+                      <td className="px-3 py-2 text-right font-mono tabular-nums">{row.doneTasks}</td>
+                      <td className="px-3 py-2 text-right font-mono tabular-nums">
+                        {row.totalActualHours.toFixed(2)}
+                      </td>
+                      <td className="px-3 py-2 text-right font-mono tabular-nums">
+                        {row.totalRemainingHours.toFixed(2)}
+                      </td>
+                      <td className="px-3 py-2 text-right font-mono tabular-nums">
+                        {row.averageProgressPercent.toFixed(0)}%
+                      </td>
+                    </tr>
+                    {isExpanded && row.units.length > 0 && (
+                      <tr className="bg-gray-50 dark:bg-[#050505]">
+                        <td colSpan={10} className="p-0">
+                          <div className="border-l-2 border-amber-500/40 px-4 py-3 md:ml-12">
+                            <div className="mb-2 flex items-center justify-between gap-2">
+                              <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/30">
+                                Unit yang dikerjakan
+                              </p>
+                              <span className="font-mono text-[10px] text-gray-500 dark:text-white/35">
+                                {row.units.length} unit
+                              </span>
+                            </div>
+                            <div className="overflow-x-auto border border-gray-200 bg-white dark:border-white/[0.04] dark:bg-[#0a0a0c]">
+                              <table className="min-w-full text-[11px]">
+                                <thead>
+                                  <tr className="border-b border-gray-200 text-left font-mono uppercase tracking-[0.1em] text-gray-500 dark:border-white/[0.04] dark:text-white/30">
+                                    <th className="px-3 py-2">Unit</th>
+                                    <th className="px-3 py-2 text-right">Pekerjaan</th>
+                                    <th className="px-3 py-2 text-right">Jam Aktual</th>
+                                    <th className="px-3 py-2 text-right">Sisa Jam</th>
+                                    <th className="px-3 py-2 text-right">Progress</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100 dark:divide-white/[0.03]">
+                                  {row.units.map((unit) => (
+                                    <tr key={unit.carId} className="hover:bg-gray-50 dark:hover:bg-white/[0.02]">
+                                      <td className="px-3 py-2">
+                                        <div className="font-medium text-gray-950 dark:text-white/80">{unit.unitName}</div>
+                                        <div className="text-[10px] text-gray-500 dark:text-white/30">{unit.customerName ?? "Customer belum diisi"}</div>
+                                      </td>
+                                      <td className="px-3 py-2 text-right font-mono tabular-nums">{unit.totalTasks}</td>
+                                      <td className="px-3 py-2 text-right font-mono tabular-nums">{unit.totalActualHours.toFixed(2)}</td>
+                                      <td className="px-3 py-2 text-right font-mono tabular-nums">{unit.totalRemainingHours.toFixed(2)}</td>
+                                      <td className="px-3 py-2 text-right font-mono tabular-nums text-amber-500">{unit.averageProgressPercent.toFixed(0)}%</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
                     )}
-                  </td>
-                  <td className="px-3 py-2 text-right font-mono tabular-nums">{row.totalTasks}</td>
-                  <td className="px-3 py-2 text-right font-mono tabular-nums">{row.startedTasks}</td>
-                  <td className="px-3 py-2 text-right font-mono tabular-nums">{row.pendingSubmitTasks}</td>
-                  <td className="px-3 py-2 text-right font-mono tabular-nums">{row.doneTasks}</td>
-                  <td className="px-3 py-2 text-right font-mono tabular-nums">
-                    {row.totalActualHours.toFixed(2)}
-                  </td>
-                  <td className="px-3 py-2 text-right font-mono tabular-nums">
-                    {row.totalRemainingHours.toFixed(2)}
-                  </td>
-                  <td className="px-3 py-2 text-right font-mono tabular-nums">
-                    {row.averageProgressPercent.toFixed(0)}%
-                  </td>
-                </tr>
-              )) : (
+                    {isExpanded && row.units.length === 0 && (
+                      <tr className="bg-gray-50 dark:bg-[#050505]">
+                        <td colSpan={10} className="px-4 py-4 text-[11px] text-gray-500 dark:text-white/30 md:pl-16">
+                          Belum ada rincian unit untuk divisi ini.
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                );
+              }) : (
                 <tr>
-                  <td colSpan={8} className="px-3 py-10 text-center text-sm text-gray-500 dark:text-white/35">
+                  <td colSpan={10} className="px-3 py-10 text-center text-sm text-gray-500 dark:text-white/35">
                     Belum ada data untuk filter yang dipilih.
                   </td>
                 </tr>
