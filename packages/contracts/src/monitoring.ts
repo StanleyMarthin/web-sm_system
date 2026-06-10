@@ -120,6 +120,8 @@ export const monitoringDivisionUnitRecordSchema = z.object({
   doneTasks: z.number().int().nonnegative(),
   totalPlannedHours: z.number().nonnegative(),
   totalActualHours: z.number().nonnegative(),
+  normalActualHours: z.number().nonnegative().default(0),
+  overtimeActualHours: z.number().nonnegative().default(0),
   totalRemainingHours: z.number().nonnegative(),
   averageProgressPercent: z.number().nonnegative(),
 });
@@ -132,6 +134,8 @@ export const monitoringDivisionLoadRecordSchema = z.object({
   pendingSubmitTasks: z.number().int().nonnegative(),
   doneTasks: z.number().int().nonnegative(),
   totalActualHours: z.number().nonnegative(),
+  normalActualHours: z.number().nonnegative().default(0),
+  overtimeActualHours: z.number().nonnegative().default(0),
   totalRemainingHours: z.number().nonnegative(),
   averageProgressPercent: z.number().nonnegative(),
   units: z.array(monitoringDivisionUnitRecordSchema).default([]),
@@ -146,6 +150,8 @@ export const monitoringDivisionMemberRecordSchema = z.object({
   doneTasks: z.number().int().nonnegative(),
   totalPlannedHours: z.number().nonnegative(),
   totalActualHours: z.number().nonnegative(),
+  normalActualHours: z.number().nonnegative().default(0),
+  overtimeActualHours: z.number().nonnegative().default(0),
   totalRemainingHours: z.number().nonnegative(),
   averageProgressPercent: z.number().nonnegative(),
 });
@@ -212,6 +218,31 @@ export const monitoringDivisionDetailEnvelopeSchema = z.object({
   members: z.array(monitoringDivisionMemberRecordSchema),
 });
 
+export const monitoringUnitTimesheetRecordSchema = z.object({
+  carId: z.string(),
+  unitName: z.string(),
+  customerName: z.string().nullable(),
+  employeeId: z.string().nullable(),
+  employeeName: z.string().nullable(),
+  divisionName: z.string().nullable().optional(),
+  isOvertime: z.boolean(),
+  taskDate: z.string(),
+  totalActualHours: z.number().nonnegative(),
+  totalPlannedHours: z.number().nonnegative(),
+  totalRemainingHours: z.number().nonnegative(),
+  averageProgressPercent: z.number().nonnegative(),
+  totalTasks: z.number().int().nonnegative(),
+});
+
+export const monitoringUnitEnvelopeSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+  data: z.array(monitoringUnitTimesheetRecordSchema),
+  date: z.string(),
+  dateTo: z.string().optional(),
+  span: z.enum(["daily", "weekly"]).optional(),
+});
+
 export const monitoringTaskListEnvelopeSchema = z.object({
   success: z.boolean(),
   message: z.string(),
@@ -231,6 +262,9 @@ export type MonitoringDivisionMemberRecord = z.infer<
 >;
 export type MonitoringDivisionDetailSummary = z.infer<
   typeof monitoringDivisionDetailSummarySchema
+>;
+export type MonitoringUnitTimesheetRecord = z.infer<
+  typeof monitoringUnitTimesheetRecordSchema
 >;
 export type MonitoringSummary = z.infer<typeof monitoringSummarySchema>;
 export type MonitoringQuery = z.infer<typeof monitoringQuerySchema>;

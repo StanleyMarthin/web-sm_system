@@ -1,392 +1,387 @@
 "use client";
 
-import type { MonitoringDivisionLoadRecord } from "@smsystem/contracts/monitoring";
-import { ChevronDown, ChevronUp, RefreshCcw } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import React, { useState } from "react";
+import React, { useMemo } from "react";
 import { ActionButton, CompactDateInput, CompactDateRangeInput } from "@/shared/ui/compact";
+import { RefreshCcw } from "lucide-react";
+import type { UnitTimesheetRecord } from "./Monitoring-unit-shell";
 
 interface MonitoringDivisionShellProps {
-  date: string;
-  dateTo?: string;
-  activeMode: "all" | "normal" | "overtime";
-  activeSpan: "daily" | "weekly";
-  rows: MonitoringDivisionLoadRecord[];
+    date: string;
+    dateTo: string;
+    activeSpan: "daily" | "weekly";
+    rows: UnitTimesheetRecord[];
 }
 
 function addDaysIso(baseDate: string, days: number): string {
-  const [year, month, day] = baseDate.split("-").map((value) => Number.parseInt(value, 10));
-  const nextDate = new Date(Date.UTC(year, (month || 1) - 1, day || 1));
-  nextDate.setUTCDate(nextDate.getUTCDate() + days);
-  const nextYear = nextDate.getUTCFullYear();
-  const nextMonth = String(nextDate.getUTCMonth() + 1).padStart(2, "0");
-  const nextDay = String(nextDate.getUTCDate()).padStart(2, "0");
-  return `${nextYear}-${nextMonth}-${nextDay}`;
+    const [year, month, day] = baseDate.split("-").map((v) => Number.parseInt(v, 10));
+    const d = new Date(Date.UTC(year, (month || 1) - 1, day || 1));
+    d.setUTCDate(d.getUTCDate() + days);
+    return [
+        d.getUTCFullYear(),
+        String(d.getUTCMonth() + 1).padStart(2, "0"),
+        String(d.getUTCDate()).padStart(2, "0"),
+    ].join("-");
 }
 
 function differenceInDaysInclusive(start: string, end: string): number {
-  const startDate = new Date(`${start}T00:00:00`).getTime();
-  const endDate = new Date(`${end}T00:00:00`).getTime();
-  return Math.floor((endDate - startDate) / 86_400_000) + 1;
+    const s = new Date(`${start}T00:00:00`).getTime();
+    const e = new Date(`${end}T00:00:00`).getTime();
+    return Math.floor((e - s) / 86_400_000) + 1;
 }
 
 function clampWeeklyRange(start: string, end: string): { start: string; end: string } {
-  const nextStart = start;
-  let nextEnd = end;
+    const nextEnd = end < start ? start : differenceInDaysInclusive(start, end) > 7 ? addDaysIso(start, 6) : end;
+    return { start, end: nextEnd };
+}
 
-  if (nextEnd < nextStart) {
-    nextEnd = nextStart;
-  }
+function fmt(hours: number): string {
+    return hours ? hours.toFixed(2) : "";
+}
 
-  const span = differenceInDaysInclusive(nextStart, nextEnd);
-  if (span > 7) {
-    nextEnd = addDaysIso(nextStart, 6);
-  }
+const daysOfWeek = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
+const months = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Ags", "Sep", "Okt", "Nov", "Des"];
 
-  return {
-    start: nextStart,
-    end: nextEnd,
-  };
+function formatMatrixDate(isoString: string) {
+    const d = new Date(`${isoString}T00:00:00`);
+    return `${daysOfWeek[d.getDay()]}, ${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
 }
 
 export function MonitoringDivisionShell({
-  date,
-  dateTo,
-  activeMode,
-  activeSpan,
-  rows,
+    date,
+    dateTo,
+    activeSpan,
+    rows,
 }: MonitoringDivisionShellProps) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const totalTasks = rows.reduce((sum, row) => sum + row.totalTasks, 0);
-  const totalStarted = rows.reduce((sum, row) => sum + row.startedTasks, 0);
-  const totalPendingSubmit = rows.reduce((sum, row) => sum + row.pendingSubmitTasks, 0);
-  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+    const router = useRouter();
+    const pathname = usePathname();
+    const searchParams = useSearchParams();
 
-  function rowKey(row: MonitoringDivisionLoadRecord): string {
-    return String(row.divisionId ?? row.divisionName ?? "unknown");
-  }
+    const resolvedDateTo = dateTo ?? (activeSpan === "weekly" ? addDaysIso(date, 6) : date);
 
-  function toggleRow(key: string) {
-    const next = new Set(expandedRows);
-    if (next.has(key)) {
-      next.delete(key);
-    } else {
-      next.add(key);
+    const divisions = useMemo(() => {
+        const set = new Set<string>();
+        for (const r of rows) {
+            if (r.divisionName) set.add(r.divisionName);
+        }
+        return Array.from(set).sort((a, b) => a.localeCompare(b));
+    }, [rows]);
+
+    const urlSelectedDivision = searchParams.get("division");
+    const selectedDivision = urlSelectedDivision && divisions.includes(urlSelectedDivision)
+        ? urlSelectedDivision
+        : "";
+
+    const matrixDates = useMemo(() => {
+        const diff = differenceInDaysInclusive(date, resolvedDateTo);
+        const result: string[] = [];
+        for (let i = 0; i < diff; i++) {
+            result.push(addDaysIso(date, i));
+        }
+        return result;
+    }, [date, resolvedDateTo]);
+
+    const matrixData = useMemo(() => {
+        if (!selectedDivision) return [];
+
+        const filtered = rows.filter((r) => r.divisionName === selectedDivision);
+        
+        type CellData = { normal: number; overtime: number };
+        type UnitData = { carId: string; unitName: string; days: Record<string, CellData> };
+        
+        const unitMap = new Map<string, UnitData>();
+
+        for (const r of filtered) {
+            let unit = unitMap.get(r.carId);
+            if (!unit) {
+                unit = { carId: r.carId, unitName: r.unitName, days: {} };
+                unitMap.set(r.carId, unit);
+            }
+
+            let dayCell = unit.days[r.taskDate];
+            if (!dayCell) {
+                dayCell = { normal: 0, overtime: 0 };
+                unit.days[r.taskDate] = dayCell;
+            }
+
+            if (r.isOvertime) dayCell.overtime += r.totalActualHours;
+            else dayCell.normal += r.totalActualHours;
+        }
+
+        return Array.from(unitMap.values()).sort((a, b) => a.unitName.localeCompare(b.unitName));
+    }, [rows, selectedDivision]);
+
+    const allMatrixData = useMemo(() => {
+        if (selectedDivision) return [];
+
+        type UnitRow = { carId: string; unitName: string; divHours: Record<string, number>; totalHours: number };
+        const unitMap = new Map<string, UnitRow>();
+
+        for (const r of rows) {
+            if (!r.divisionName) continue;
+
+            let unit = unitMap.get(r.carId);
+            if (!unit) {
+                unit = { carId: r.carId, unitName: r.unitName, divHours: {}, totalHours: 0 };
+                unitMap.set(r.carId, unit);
+            }
+
+            const hours = r.totalActualHours;
+            unit.divHours[r.divisionName] = (unit.divHours[r.divisionName] || 0) + hours;
+            unit.totalHours += hours;
+        }
+
+        return Array.from(unitMap.values()).sort((a, b) => b.totalHours - a.totalHours); // sort by highest hours
+    }, [rows, selectedDivision]);
+
+    function pushSpan(value: "daily" | "weekly") {
+        const p = new URLSearchParams(searchParams.toString());
+        p.set("span", value);
+        if (value === "weekly") p.set("dateTo", resolvedDateTo);
+        else p.delete("dateTo");
+        router.push(`${pathname}?${p.toString()}`);
     }
-    setExpandedRows(next);
-  }
 
-  function pushDailyDate(value: string) {
-    const nextParams = new URLSearchParams(searchParams.toString());
-    nextParams.set("date", value);
-    nextParams.delete("dateTo");
-    router.push(`${pathname}?${nextParams.toString()}`);
-  }
-
-  function pushMode(value: "all" | "normal" | "overtime") {
-    const nextParams = new URLSearchParams(searchParams.toString());
-    nextParams.set("mode", value);
-    router.push(`${pathname}?${nextParams.toString()}`);
-  }
-
-  function pushSpan(value: "daily" | "weekly") {
-    const nextParams = new URLSearchParams(searchParams.toString());
-    nextParams.set("span", value);
-    if (value === "weekly") {
-      nextParams.set("dateTo", resolvedDateTo);
-    } else {
-      nextParams.delete("dateTo");
-    }
-    router.push(`${pathname}?${nextParams.toString()}`);
-  }
-
-  const resolvedDateTo = dateTo ?? (activeSpan === "weekly" ? addDaysIso(date, 6) : date);
-  function applyRangeSelection(range: { from: string; to: string }) {
-    const nextParams = new URLSearchParams(searchParams.toString());
-
-    if (range.from === range.to) {
-      nextParams.set("date", range.from);
-      nextParams.delete("dateTo");
-      nextParams.set("span", "daily");
-      router.push(`${pathname}?${nextParams.toString()}`);
-      return;
+    function pushDailyDate(value: string) {
+        const p = new URLSearchParams(searchParams.toString());
+        p.set("date", value);
+        p.delete("dateTo");
+        router.push(`${pathname}?${p.toString()}`);
     }
 
-    const normalized = clampWeeklyRange(range.from, range.to);
-    nextParams.set("date", normalized.start);
-    nextParams.set("dateTo", normalized.end);
-    nextParams.set("span", "weekly");
-    router.push(`${pathname}?${nextParams.toString()}`);
-  }
+    function applyRangeSelection(range: { from: string; to: string }) {
+        const p = new URLSearchParams(searchParams.toString());
+        if (range.from === range.to) {
+            p.set("date", range.from);
+            p.delete("dateTo");
+            p.set("span", "daily");
+        } else {
+            const norm = clampWeeklyRange(range.from, range.to);
+            p.set("date", norm.start);
+            p.set("dateTo", norm.end);
+            p.set("span", "weekly");
+        }
+        router.push(`${pathname}?${p.toString()}`);
+    }
 
-  function openDivisionDetail(divisionId: number) {
-    const nextParams = new URLSearchParams(searchParams.toString());
-    router.push(`/monitoring/division/${divisionId}?${nextParams.toString()}`);
-  }
+    function changeDivision(div: string) {
+        const p = new URLSearchParams(searchParams.toString());
+        p.set("division", div);
+        router.push(`${pathname}?${p.toString()}`);
+    }
 
-  return (
-    <div className="space-y-2">
-      <div className="grid gap-2 xl:grid-cols-[minmax(0,1.2fr)_minmax(300px,0.8fr)]">
-        <div className="border border-gray-300 dark:border-white/[0.05] bg-white dark:bg-[#111114] px-3 py-3">
-          <div className="space-y-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-[12px] font-medium text-gray-950 dark:text-white">Monitoring per divisi</h1>
-
-              <div className="flex items-center gap-1.5 border border-gray-300 dark:border-white/[0.05] bg-slate-50 dark:bg-[#0a0a0c] p-1">
-                <button
-                  type="button"
-                  onClick={() => pushSpan("daily")}
-                  className={[
-                    "px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.12em] transition-colors",
-                    activeSpan === "daily"
-                      ? "bg-amber-500/10 text-amber-500"
-                      : "text-gray-400 dark:text-white/40 hover:text-gray-800 dark:text-white/70",
-                  ].join(" ")}
-                >
-                  Harian
-                </button>
-                <button
-                  type="button"
-                  onClick={() => pushSpan("weekly")}
-                  className={[
-                    "px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.12em] transition-colors",
-                    activeSpan === "weekly"
-                      ? "bg-amber-500/10 text-amber-500"
-                      : "text-gray-400 dark:text-white/40 hover:text-gray-800 dark:text-white/70",
-                  ].join(" ")}
-                >
-                  Mingguan
-                </button>
-              </div>
-
-              <div className="flex items-center gap-1.5 border border-gray-300 dark:border-white/[0.05] bg-slate-50 dark:bg-[#0a0a0c] p-1">
-                <button
-                  type="button"
-                  onClick={() => pushMode("all")}
-                  className={[
-                    "px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.12em] transition-colors",
-                    activeMode === "all"
-                      ? "bg-amber-500/10 text-amber-500"
-                      : "text-gray-400 dark:text-white/40 hover:text-gray-800 dark:text-white/70",
-                  ].join(" ")}
-                >
-                  Semua
-                </button>
-                <button
-                  type="button"
-                  onClick={() => pushMode("normal")}
-                  className={[
-                    "px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.12em] transition-colors",
-                    activeMode === "normal"
-                      ? "bg-amber-500/10 text-amber-500"
-                      : "text-gray-400 dark:text-white/40 hover:text-gray-800 dark:text-white/70",
-                  ].join(" ")}
-                >
-                  Normal
-                </button>
-                <button
-                  type="button"
-                  onClick={() => pushMode("overtime")}
-                  className={[
-                    "px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.12em] transition-colors",
-                    activeMode === "overtime"
-                      ? "bg-amber-500/10 text-amber-500"
-                      : "text-gray-400 dark:text-white/40 hover:text-gray-800 dark:text-white/70",
-                  ].join(" ")}
-                >
-                  Lembur
-                </button>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              {activeSpan === "daily" ? (
-                <div className="w-40">
-                  <CompactDateInput value={date} onChange={pushDailyDate} className="w-64" />
+    return (
+        <div className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-4 rounded-[14px] border border-white/[0.06] bg-[#0a0a0c] px-4 py-3">
+                <div className="flex items-center gap-3">
+                    <h1 className="text-[14px] font-medium text-white">Monitoring Divisi</h1>
+                    <div className="h-4 w-px bg-white/[0.06]" />
+                    <select
+                        value={selectedDivision}
+                        onChange={(e) => changeDivision(e.target.value)}
+                        className="w-48 appearance-none bg-transparent text-[13px] text-white outline-none ring-0 [&>option]:bg-[#111114] [&>option]:text-white"
+                        disabled={divisions.length === 0}
+                    >
+                        <option value="">Semua Divisi (Cross-Tab)</option>
+                        {divisions.map((d) => (
+                            <option key={d} value={d}>
+                                {d}
+                            </option>
+                        ))}
+                    </select>
                 </div>
-              ) : (
-                <CompactDateRangeInput
-                  from={date}
-                  to={resolvedDateTo}
-                  onChange={applyRangeSelection}
-                  selectionBehavior="single-or-range"
-                  className="w-64"
-                />
-              )}
-            </div>
-          </div>
-        </div>
 
-        <div className="border border-gray-300 dark:border-white/[0.05] bg-white dark:bg-[#111114] px-3 py-3">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex flex-wrap items-stretch border border-gray-300 dark:border-white/[0.05] bg-slate-50 dark:bg-[#0a0a0c]">
-              <div className="border-r border-gray-300 dark:border-white/[0.05] px-3 py-2 last:border-r-0">
-                <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/30">Total Pekerjaan</p>
-                <p className="mt-1 font-mono text-[13px] font-medium leading-none text-gray-950 dark:text-white tabular-nums">
-                  {totalTasks}
-                </p>
-              </div>
-              <div className="border-r border-gray-300 dark:border-white/[0.05] px-3 py-2 last:border-r-0">
-                <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-emerald-500/70">Sudah Mulai</p>
-                <p className="mt-1 font-mono text-[13px] font-medium leading-none text-emerald-500 tabular-nums">
-                  {totalStarted}
-                </p>
-              </div>
-              <div className="px-3 py-2">
-                <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-amber-500/70">Belum Ditutup</p>
-                <p className="mt-1 font-mono text-[13px] font-medium leading-none text-amber-500 tabular-nums">
-                  {totalPendingSubmit}
-                </p>
-              </div>
-            </div>
+                <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex items-center gap-1 rounded-lg border border-white/[0.06] bg-white/[0.03] p-1">
+                        {(["daily", "weekly"] as const).map((span) => (
+                            <button
+                                key={span}
+                                type="button"
+                                onClick={() => pushSpan(span)}
+                                className={[
+                                    "rounded-md px-3 py-1.5 text-[10px] uppercase tracking-wider transition-colors",
+                                    activeSpan === span
+                                        ? "bg-amber-500/10 text-amber-500"
+                                        : "text-white/40 hover:text-white/70",
+                                ].join(" ")}
+                            >
+                                {span === "daily" ? "Harian" : "Mingguan"}
+                            </button>
+                        ))}
+                    </div>
 
-            <ActionButton onClick={() => router.refresh()}>
-              <RefreshCcw className="h-3 w-3" />
-              Refresh
-            </ActionButton>
-          </div>
-        </div>
-      </div>
-
-      <section className="border border-gray-300 dark:border-white/[0.05] bg-white dark:bg-[#111114]">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-300 dark:border-white/[0.06] px-3 py-3">
-          <div className="flex items-center gap-2">
-            <h2 className="font-mono text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/30">Ringkasan divisi</h2>
-            <span className="font-mono text-[10px] text-gray-500 dark:text-white/35">{rows.length} divisi</span>
-          </div>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-[12px] text-gray-800 dark:text-white/70">
-            <thead className="sticky top-0 z-10 bg-white dark:bg-[#111114]">
-              <tr className="border-b border-gray-300 dark:border-white/[0.06] text-left font-mono text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/30">
-                <th className="px-3 py-2 text-center">Unit</th>
-                <th className="px-3 py-2">Divisi</th>
-                <th className="px-3 py-2 text-right">Jml Unit</th>
-                <th className="px-3 py-2 text-right">Total</th>
-                <th className="px-3 py-2 text-right">Sudah Mulai</th>
-                <th className="px-3 py-2 text-right">Belum Ditutup</th>
-                <th className="px-3 py-2 text-right">Selesai</th>
-                <th className="px-3 py-2 text-right">Jam Aktual</th>
-                <th className="px-3 py-2 text-right">Sisa Jam</th>
-                <th className="px-3 py-2 text-right">Rata-rata Progress</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.length > 0 ? rows.map((row) => {
-                const key = rowKey(row);
-                const isExpanded = expandedRows.has(key);
-                return (
-                  <React.Fragment key={`${row.divisionId ?? "unknown"}:${row.divisionName ?? "-"}`}>
-                    <tr className="border-b border-white/[0.04] hover:bg-gray-100 dark:hover:bg-white/[0.02]">
-                      <td className="px-3 py-2 text-center">
-                        <button
-                          type="button"
-                          onClick={() => toggleRow(key)}
-                          className={[
-                            "inline-flex h-6 w-6 items-center justify-center border transition-colors",
-                            isExpanded
-                              ? "border-amber-500/30 bg-amber-500/10 text-amber-500"
-                              : "border-gray-300 text-gray-400 hover:border-amber-500/30 hover:text-amber-500 dark:border-white/[0.06] dark:text-white/30",
-                          ].join(" ")}
-                          aria-label={isExpanded ? "Tutup rincian unit" : "Buka rincian unit"}
-                        >
-                          {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-                        </button>
-                      </td>
-                      <td className="px-3 py-2 text-gray-950 dark:text-white">
-                        {row.divisionId ? (
-                          <button
-                            type="button"
-                            onClick={() => openDivisionDetail(row.divisionId!)}
-                            className="font-mono text-left text-amber-400 transition-colors hover:text-amber-300"
-                          >
-                            {row.divisionName ?? "-"}
-                          </button>
+                    <div className="flex items-center gap-2 rounded-lg border border-white/[0.06] bg-white/[0.03] px-2 py-1">
+                        {activeSpan === "weekly" ? (
+                            <CompactDateRangeInput
+                                from={date}
+                                to={resolvedDateTo}
+                                onChange={applyRangeSelection}
+                                selectionBehavior="single-or-range"
+                                className="w-64"
+                            />
                         ) : (
-                          row.divisionName ?? "-"
+                            <CompactDateInput value={date} onChange={pushDailyDate} className="w-64" />
                         )}
-                      </td>
-                      <td className="px-3 py-2 text-right font-mono tabular-nums">{row.units.length}</td>
-                      <td className="px-3 py-2 text-right font-mono tabular-nums">{row.totalTasks}</td>
-                      <td className="px-3 py-2 text-right font-mono tabular-nums">{row.startedTasks}</td>
-                      <td className="px-3 py-2 text-right font-mono tabular-nums">{row.pendingSubmitTasks}</td>
-                      <td className="px-3 py-2 text-right font-mono tabular-nums">{row.doneTasks}</td>
-                      <td className="px-3 py-2 text-right font-mono tabular-nums">
-                        {row.totalActualHours.toFixed(2)}
-                      </td>
-                      <td className="px-3 py-2 text-right font-mono tabular-nums">
-                        {row.totalRemainingHours.toFixed(2)}
-                      </td>
-                      <td className="px-3 py-2 text-right font-mono tabular-nums">
-                        {row.averageProgressPercent.toFixed(0)}%
-                      </td>
-                    </tr>
-                    {isExpanded && row.units.length > 0 && (
-                      <tr className="bg-gray-50 dark:bg-[#050505]">
-                        <td colSpan={10} className="p-0">
-                          <div className="border-l-2 border-amber-500/40 px-4 py-3 md:ml-12">
-                            <div className="mb-2 flex items-center justify-between gap-2">
-                              <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/30">
-                                Unit yang dikerjakan
-                              </p>
-                              <span className="font-mono text-[10px] text-gray-500 dark:text-white/35">
-                                {row.units.length} unit
-                              </span>
-                            </div>
-                            <div className="overflow-x-auto border border-gray-200 bg-white dark:border-white/[0.04] dark:bg-[#0a0a0c]">
-                              <table className="min-w-full text-[11px]">
-                                <thead>
-                                  <tr className="border-b border-gray-200 text-left font-mono uppercase tracking-[0.1em] text-gray-500 dark:border-white/[0.04] dark:text-white/30">
-                                    <th className="px-3 py-2">Unit</th>
-                                    <th className="px-3 py-2 text-right">Pekerjaan</th>
-                                    <th className="px-3 py-2 text-right">Jam Aktual</th>
-                                    <th className="px-3 py-2 text-right">Sisa Jam</th>
-                                    <th className="px-3 py-2 text-right">Progress</th>
-                                  </tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-100 dark:divide-white/[0.03]">
-                                  {row.units.map((unit) => (
-                                    <tr key={unit.carId} className="hover:bg-gray-50 dark:hover:bg-white/[0.02]">
-                                      <td className="px-3 py-2">
-                                        <div className="font-medium text-gray-950 dark:text-white/80">{unit.unitName}</div>
-                                        <div className="text-[10px] text-gray-500 dark:text-white/30">{unit.customerName ?? "Customer belum diisi"}</div>
-                                      </td>
-                                      <td className="px-3 py-2 text-right font-mono tabular-nums">{unit.totalTasks}</td>
-                                      <td className="px-3 py-2 text-right font-mono tabular-nums">{unit.totalActualHours.toFixed(2)}</td>
-                                      <td className="px-3 py-2 text-right font-mono tabular-nums">{unit.totalRemainingHours.toFixed(2)}</td>
-                                      <td className="px-3 py-2 text-right font-mono tabular-nums text-amber-500">{unit.averageProgressPercent.toFixed(0)}%</td>
+                    </div>
+
+                    <ActionButton onClick={() => router.refresh()}>
+                        <RefreshCcw className="h-3.5 w-3.5" />
+                    </ActionButton>
+                </div>
+            </div>
+
+            {selectedDivision ? (
+                <section className="overflow-hidden rounded-[14px] border border-white/[0.06] bg-[#0a0a0c]">
+                    <div className="border-b border-white/[0.06] bg-[#111114] py-3 text-center">
+                        <h2 className="text-[13px] font-bold uppercase tracking-[0.05em] text-white">
+                            DIVISI {selectedDivision.toUpperCase()}
+                        </h2>
+                    </div>
+
+                    <div className="overflow-x-auto">
+                        <table className="min-w-full border-collapse text-sm">
+                            <thead>
+                                <tr>
+                                    <th
+                                        rowSpan={2}
+                                        className="border-b border-r border-white/[0.06] bg-white/[0.01] px-4 py-3 text-center text-[11px] font-medium uppercase tracking-[0.1em] text-white/40 align-middle"
+                                    >
+                                        Unit
+                                    </th>
+                                    {matrixDates.map((d) => (
+                                        <th
+                                            key={d}
+                                            colSpan={2}
+                                            className="border-b border-r border-white/[0.06] bg-amber-500/10 px-2 py-2.5 text-center text-[11px] font-semibold text-amber-500"
+                                        >
+                                            {formatMatrixDate(d)}
+                                        </th>
+                                    ))}
+                                </tr>
+                                <tr>
+                                    {matrixDates.map((d) => (
+                                        <React.Fragment key={`sub-${d}`}>
+                                            <th className="border-b border-r border-white/[0.06] bg-white/[0.01] px-2 py-2 text-center text-[10px] uppercase tracking-wider text-white/50">
+                                                Jam Normal
+                                            </th>
+                                            <th className="border-b border-r border-white/[0.06] bg-white/[0.01] px-2 py-2 text-center text-[10px] uppercase tracking-wider text-white/50">
+                                                Jam Lembur
+                                            </th>
+                                        </React.Fragment>
+                                    ))}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {matrixData.length === 0 ? (
+                                    <tr>
+                                        <td
+                                            colSpan={matrixDates.length * 2 + 1}
+                                            className="px-4 py-12 text-center text-[12px] italic text-white/30"
+                                        >
+                                            Tidak ada data untuk divisi ini pada periode yang dipilih.
+                                        </td>
                                     </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                    {isExpanded && row.units.length === 0 && (
-                      <tr className="bg-gray-50 dark:bg-[#050505]">
-                        <td colSpan={10} className="px-4 py-4 text-[11px] text-gray-500 dark:text-white/30 md:pl-16">
-                          Belum ada rincian unit untuk divisi ini.
-                        </td>
-                      </tr>
-                    )}
-                  </React.Fragment>
-                );
-              }) : (
-                <tr>
-                  <td colSpan={10} className="px-3 py-10 text-center text-sm text-gray-500 dark:text-white/35">
-                    Belum ada data untuk filter yang dipilih.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                                ) : (
+                                    matrixData.map((unit) => (
+                                        <tr key={unit.carId} className="border-b border-white/[0.04] transition-colors hover:bg-white/[0.02]">
+                                            <td className="border-r border-white/[0.06] px-4 py-2.5 text-[11px] font-bold text-white uppercase tracking-wider">
+                                                {unit.unitName}
+                                            </td>
+                                            {matrixDates.map((d) => {
+                                                const cell = unit.days[d];
+                                                return (
+                                                    <React.Fragment key={`cell-${unit.carId}-${d}`}>
+                                                        <td className="border-r border-white/[0.06] px-2 py-2.5 text-center tabular-nums text-white/70">
+                                                            {cell?.normal ? fmt(cell.normal) : ""}
+                                                        </td>
+                                                        <td className="border-r border-white/[0.06] px-2 py-2.5 text-center tabular-nums text-amber-500/80">
+                                                            {cell?.overtime ? fmt(cell.overtime) : ""}
+                                                        </td>
+                                                    </React.Fragment>
+                                                );
+                                            })}
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            ) : (
+                <section className="overflow-hidden rounded-[14px] border border-white/[0.06] bg-[#0a0a0c]">
+                    <div className="border-b border-white/[0.06] bg-[#111114] py-3 text-center flex flex-col items-center justify-center gap-1">
+                        <h2 className="text-[13px] font-bold uppercase tracking-[0.05em] text-white">
+                            REPORT PROJECT {activeSpan === "weekly" ? "MINGGUAN" : "HARIAN"}
+                        </h2>
+                    </div>
+
+                    <div className="overflow-x-auto">
+                        <table className="min-w-full border-collapse text-sm">
+                            <thead>
+                                <tr>
+                                    <th className="border-b border-r border-white/[0.06] bg-white/[0.01] px-4 py-3 text-center text-[11px] font-medium uppercase tracking-[0.1em] text-white/40">
+                                        No.
+                                    </th>
+                                    <th className="border-b border-r border-white/[0.06] bg-white/[0.01] px-4 py-3 text-center text-[11px] font-medium uppercase tracking-[0.1em] text-amber-500/80">
+                                        Jenis Kendaraan
+                                    </th>
+                                    {divisions.map((div) => (
+                                        <th
+                                            key={div}
+                                            className="border-b border-r border-white/[0.06] bg-white/[0.01] px-2 py-3 text-center text-[10px] font-semibold uppercase tracking-wider text-amber-500"
+                                        >
+                                            {div}
+                                        </th>
+                                    ))}
+                                    <th className="border-b border-white/[0.06] bg-white/[0.01] px-4 py-3 text-center text-[11px] font-bold uppercase tracking-[0.1em] text-amber-500">
+                                        Total
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {allMatrixData.length === 0 ? (
+                                    <tr>
+                                        <td
+                                            colSpan={divisions.length + 3}
+                                            className="px-4 py-12 text-center text-[12px] italic text-white/30"
+                                        >
+                                            Tidak ada data untuk periode yang dipilih.
+                                        </td>
+                                    </tr>
+                                ) : (
+                                    allMatrixData.map((unit, idx) => (
+                                        <tr key={unit.carId} className="border-b border-white/[0.04] transition-colors hover:bg-white/[0.02] even:bg-white/[0.01]">
+                                            <td className="border-r border-white/[0.06] px-4 py-2.5 text-[11px] text-center text-white/50">
+                                                {idx + 1}
+                                            </td>
+                                            <td className="border-r border-white/[0.06] px-4 py-2.5 text-[11px] font-medium text-white/80 uppercase tracking-wider">
+                                                {unit.unitName}
+                                            </td>
+                                            {divisions.map((div) => {
+                                                const hours = unit.divHours[div] || 0;
+                                                return (
+                                                    <td key={`cell-${unit.carId}-${div}`} className="border-r border-white/[0.06] px-2 py-2.5 text-center tabular-nums text-[11px] text-white/70">
+                                                        {hours > 0 ? (
+                                                            <span className={hours > 5 ? "font-bold text-white" : ""}>
+                                                                {fmt(hours)}
+                                                            </span>
+                                                        ) : (
+                                                            <span className="text-white/20">0.00</span>
+                                                        )}
+                                                    </td>
+                                                );
+                                            })}
+                                            <td className="px-4 py-2.5 text-center tabular-nums text-[11px] font-bold text-amber-500/90">
+                                                {fmt(unit.totalHours)}
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            )}
         </div>
-      </section>
-    </div>
-  );
+    );
 }

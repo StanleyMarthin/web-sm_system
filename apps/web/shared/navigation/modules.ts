@@ -111,6 +111,12 @@ const navigationModules: NavigationItem[] = [
         permission: permissionCodes.listCarProgress,
       },
       {
+        id: "monitoring-unit",
+        label: "Unit",
+        href: "/monitoring/unit",
+        permission: permissionCodes.listCarProgress,
+      },
+      {
         id: "monitoring-employee",
         label: "Karyawan",
         href: "/monitoring/employee",

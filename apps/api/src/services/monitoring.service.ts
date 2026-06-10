@@ -84,6 +84,7 @@ export interface MonitoringService {
   listNoSubmit(session: WebSession, date?: string, dateTo?: string): Promise<MonitoringTaskRecord[]>;
   listDivisionLoad(session: WebSession, date?: string, mode?: MonitoringFilterMode, span?: "daily" | "weekly", dateTo?: string): Promise<MonitoringDivisionLoadRecord[]>;
   getDivisionDetail(session: WebSession, divisionId: number, date?: string, mode?: MonitoringFilterMode, span?: "daily" | "weekly", dateTo?: string): Promise<MonitoringDivisionDetailResult>;
+  listUnitLoad(session: WebSession, date?: string, mode?: MonitoringFilterMode, span?: "daily" | "weekly", dateTo?: string): Promise<import("@smsystem/contracts/monitoring").MonitoringUnitTimesheetRecord[]>;
   listEmployeeTimesheet(session: WebSession, date: string, dateTo: string): Promise<Array<{
     employeeId: string | null;
     employeeName: string | null;
@@ -229,6 +230,23 @@ export class DefaultMonitoringService implements MonitoringService {
       units: result.units,
       members: result.members,
     };
+  }
+
+  async listUnitLoad(
+    session: WebSession,
+    date?: string,
+    mode: MonitoringFilterMode = "normal",
+    span: "daily" | "weekly" = "daily",
+    dateTo?: string,
+  ): Promise<import("@smsystem/contracts/monitoring").MonitoringUnitTimesheetRecord[]> {
+    return this.repository.listUnitLoad({
+      employeeId: session.user.employeeId,
+      scope: session.user.scope,
+      date: date?.trim() || todayIsoDate(),
+      mode,
+      span,
+      dateTo: dateTo?.trim() || date?.trim() || todayIsoDate(),
+    });
   }
 
   async listEmployeeTimesheet(session: WebSession, date: string, dateTo: string) {

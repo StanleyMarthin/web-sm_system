@@ -145,7 +145,8 @@ export async function handleMonitoringTodayRoute(
         dateTo: result.query.dateTo,
       }),
     );
-  } catch {
+  } catch (error) {
+    console.error("[monitoring] division load failed", error);
     return errorResponse(
       request,
       "Terjadi kesalahan internal pada monitoring module.",
@@ -201,6 +202,54 @@ export async function handleMonitoringDivisionRoute(
     );
   }
 }
+
+export async function handleMonitoringUnitRoute(
+  request: Request,
+  authService: AuthService,
+  monitoringService: MonitoringService,
+): Promise<Response> {
+  const sessionResult = await requireMonitoringSession(request, authService);
+  if ("response" in sessionResult) {
+    return sessionResult.response;
+  }
+
+  try {
+    const url = new URL(request.url);
+    const date = resolveDate(url.searchParams);
+    const dateTo = resolveDateTo(url.searchParams);
+    const mode = resolveDivisionMode(url.searchParams);
+    const span = resolveDivisionSpan(url.searchParams);
+    const range = resolveDivisionRange(date, dateTo, span);
+    const result = await monitoringService.listUnitLoad(
+      sessionResult.session,
+      range.date,
+      mode,
+      span,
+      range.dateTo,
+    );
+
+    return withCors(
+      request,
+      Response.json({
+        success: true,
+        message: "Unit monitoring ready",
+        data: result,
+        date: range.date,
+        dateTo: range.dateTo,
+        span,
+      }),
+    );
+  } catch (error) {
+    console.error("[monitoring] unit route error:", error);
+    return errorResponse(
+      request,
+      "Terjadi kesalahan internal pada monitoring module.",
+      500,
+      "MONITORING_FAILED",
+    );
+  }
+}
+
 
 export async function handleMonitoringDivisionDetailRoute(
   request: Request,

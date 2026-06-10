@@ -99,6 +99,7 @@ export function AppShell({ user, navigation, children }: AppShellProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [logoutError, setLogoutError] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement>(null);
@@ -495,18 +496,26 @@ export function AppShell({ user, navigation, children }: AppShellProps) {
                     disabled={isLoggingOut}
                     onClick={async () => {
                       setIsLoggingOut(true);
-                      try {
-                        await logoutFromWeb();
+                      setLogoutError(null);
+                      const didLogout = await logoutFromWeb();
+                      if (didLogout) {
                         window.location.href = "/login";
-                      } catch {
-                        setIsLoggingOut(false);
+                        return;
                       }
+
+                      setIsLoggingOut(false);
+                      setLogoutError("Logout gagal. Coba lagi.");
                     }}
                     className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-[13px] text-red-500/80 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-40 dark:text-red-400/80 dark:hover:bg-red-500/10 dark:hover:text-red-400"
                   >
                     <LogOut className="w-4 h-4" />
                     {isLoggingOut ? "Signing Out..." : "Sign Out"}
                   </button>
+                  {logoutError && (
+                    <p className="px-3 pb-2 pt-1 text-[11px] text-red-500/80 dark:text-red-300/80">
+                      {logoutError}
+                    </p>
+                  )}
                 </div>
               </div>
             )}

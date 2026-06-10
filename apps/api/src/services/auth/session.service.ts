@@ -182,6 +182,7 @@ export class RedisSessionStore implements SessionStore {
     return [
       buildExpiredCookie("sm_session", this.env),
       buildExpiredCookie("sm_refresh", this.env),
+      buildExpiredCookie("sm_device_id", this.env),
       buildExpiredCookie("sm_csrf", this.env),
     ];
   }

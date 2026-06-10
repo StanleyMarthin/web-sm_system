@@ -218,16 +218,16 @@ export function PlanningEvaluationShell({
       <section className="border border-white/5 bg-[#111114] px-4 py-3 flex flex-wrap items-center justify-between gap-4">
         <MetricBar
           items={[
-            { label: "Baseline", value: formatHours(summary.baselineHours) },
-            { label: "Revisi", value: formatHours(summary.revisionHours), tone: "warn" },
-            { label: "Aktual", value: formatHours(summary.actualHours), tone: "up" },
+            { label: "Rencana Awal", value: formatHours(summary.baselineHours) },
+            { label: "Rencana Update", value: formatHours(summary.revisionHours), tone: "warn" },
+            { label: "Realisasi", value: formatHours(summary.actualHours), tone: "up" },
             {
-              label: "Perubahan Plan",
+              label: "Selisih Rencana",
               value: formatHours(summary.revisionDeltaHours),
               tone: summary.revisionDeltaHours > 0 ? "warn" : summary.revisionDeltaHours < 0 ? "down" : "muted",
             },
             {
-              label: "Selisih Aktual",
+              label: "Selisih Realisasi",
               value: formatHours(summary.actualDeltaHours),
               tone: summary.actualDeltaHours > 0 ? "warn" : summary.actualDeltaHours < 0 ? "down" : "muted",
             },
@@ -254,14 +254,14 @@ export function PlanningEvaluationShell({
             <thead className="sticky top-0 z-10 bg-[#111114]">
               <tr className="border-b border-white/[0.06] text-left font-mono text-[10px] uppercase tracking-[0.12em] text-white/30">
                 <th className="px-3 py-2">Divisi</th>
-                <th className="px-3 py-2 text-right">Baseline</th>
-                <th className="px-3 py-2 text-right">Revisi</th>
-                <th className="px-3 py-2 text-right">Aktual</th>
-                <th className="px-3 py-2 text-right">Delta Plan</th>
-                <th className="px-3 py-2 text-right">Delta Aktual</th>
-                <th className="px-3 py-2 text-right">Unit Baseline</th>
-                <th className="px-3 py-2 text-right">Job Revisi</th>
-                <th className="px-3 py-2 text-right">Unit Aktual</th>
+                <th className="px-3 py-2 text-right">Rencana Awal</th>
+                <th className="px-3 py-2 text-right">Rencana Update</th>
+                <th className="px-3 py-2 text-right">Realisasi</th>
+                <th className="px-3 py-2 text-right">Selisih Rencana</th>
+                <th className="px-3 py-2 text-right">Selisih Realisasi</th>
+                <th className="px-3 py-2 text-right">Unit Awal</th>
+                <th className="px-3 py-2 text-right">Job Direncanakan</th>
+                <th className="px-3 py-2 text-right">Unit Dikerjakan</th>
               </tr>
             </thead>
             <tbody>

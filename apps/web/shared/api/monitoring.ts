@@ -3,6 +3,7 @@ import {
   monitoringDivisionEnvelopeSchema,
   monitoringGridEnvelopeSchema,
   monitoringTaskListEnvelopeSchema,
+  monitoringUnitEnvelopeSchema,
 } from "@smsystem/contracts/monitoring";
 import { getApiBaseUrl } from "@/shared/api/config";
 
@@ -35,6 +36,7 @@ function toUrlSearchParams(
 async function fetchWithCookie(path: string, cookieHeader: string) {
   try {
     const response = await fetch(`${getApiBaseUrl()}${path}`, {
+      credentials: "include",
       headers: cookieHeader
         ? {
             cookie: cookieHeader,
@@ -151,6 +153,30 @@ export async function fetchMonitoringDivision(
 
   return {
     payload: monitoringDivisionEnvelopeSchema.parse(await response.json()),
+    status: response.status,
+  };
+}
+
+export async function fetchMonitoringUnit(
+  cookieHeader: string,
+  searchParams: Record<string, string | string[] | undefined>,
+) {
+  const queryString = buildMonitoringGridQueryString(searchParams);
+  const suffix = queryString ? `?${queryString}` : "";
+  const response = await fetchWithCookie(
+    `/api/monitoring/unit${suffix}`,
+    cookieHeader,
+  );
+
+  if (!response || !response.ok) {
+    return {
+      payload: null,
+      status: response?.status ?? 503,
+    };
+  }
+
+  return {
+    payload: monitoringUnitEnvelopeSchema.parse(await response.json()),
     status: response.status,
   };
 }

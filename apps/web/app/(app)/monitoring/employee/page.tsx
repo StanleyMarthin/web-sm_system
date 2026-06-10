@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
 import dynamic from "next/dynamic";
 import { notFound, redirect } from "next/navigation";
-import { fetchMonitoringEmployee } from "@/shared/api/monitoring";
+import { fetchMonitoringUnit } from "@/shared/api/monitoring";
 import { ModuleUnavailableState } from "@/shared/ui/module-unavailable-state";
 import { PageDataSkeleton } from "@/shared/ui/page-data-skeleton";
 
@@ -24,7 +24,7 @@ async function MonitoringEmployeePageContent({ searchParams }: MonitoringEmploye
   const requestHeaders = await headers();
   const cookieHeader = requestHeaders.get("cookie") ?? "";
 
-  const { payload, status } = await fetchMonitoringEmployee(
+  const { payload, status } = await fetchMonitoringUnit(
     cookieHeader,
     resolvedSearchParams,
   );
@@ -50,8 +50,8 @@ async function MonitoringEmployeePageContent({ searchParams }: MonitoringEmploye
   return (
     <MonitoringEmployeeShell
       date={payload.date}
-      dateTo={payload.dateTo}
-      activeSpan={payload.span}
+      dateTo={payload.dateTo ?? ""}
+      activeSpan={payload.span ?? "daily"}
       rows={payload.data}
     />
   );

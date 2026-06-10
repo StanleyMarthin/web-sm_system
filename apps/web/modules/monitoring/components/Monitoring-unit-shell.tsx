@@ -1,17 +1,38 @@
 "use client";
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { ActionButton, CompactDateInput, CompactDateRangeInput } from "@/shared/ui/compact";
-import { RefreshCcw, ChevronDown, ChevronRight } from "lucide-react";
-import type { UnitTimesheetRecord } from "./Monitoring-unit-shell";
+import { RefreshCcw } from "lucide-react";
 
-interface MonitoringEmployeeShellProps {
+// ─── Contract ────────────────────────────────────────────────────────────────
+
+export interface UnitTimesheetRecord {
+    carId: string;
+    unitName: string;
+    customerName: string | null;
+    employeeId: string | null;
+    employeeName: string | null;
+    divisionName?: string | null;
+    isOvertime: boolean;
+    taskDate: string;
+    totalActualHours: number;
+    totalPlannedHours: number;
+    totalRemainingHours: number;
+    averageProgressPercent: number;
+    totalTasks: number;
+}
+
+// ─── Props ────────────────────────────────────────────────────────────────────
+
+interface MonitoringUnitShellProps {
     date: string;
     dateTo: string;
     activeSpan: "daily" | "weekly";
     rows: UnitTimesheetRecord[];
 }
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function addDaysIso(baseDate: string, days: number): string {
     const [year, month, day] = baseDate.split("-").map((v) => Number.parseInt(v, 10));
@@ -47,20 +68,37 @@ function formatMatrixDate(isoString: string) {
     return `${daysOfWeek[d.getDay()]}, ${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
 }
 
-export function MonitoringEmployeeShell({
+// ─── Component ────────────────────────────────────────────────────────────────
+
+export function MonitoringUnitShell({
     date,
     dateTo,
     activeSpan,
     rows,
-}: MonitoringEmployeeShellProps) {
+}: MonitoringUnitShellProps) {
     const router = useRouter();
     const pathname = usePathname();
     const searchParams = useSearchParams();
 
     const resolvedDateTo = dateTo ?? (activeSpan === "weekly" ? addDaysIso(date, 6) : date);
 
-    const [expandedEmps, setExpandedEmps] = useState<Set<string>>(new Set());
+    // Filter available units
+    const units = useMemo(() => {
+        const map = new Map<string, { carId: string; unitName: string; customerName: string | null }>();
+        for (const r of rows) {
+            if (!map.has(r.carId)) {
+                map.set(r.carId, { carId: r.carId, unitName: r.unitName, customerName: r.customerName });
+            }
+        }
+        return Array.from(map.values()).sort((a, b) => a.unitName.localeCompare(b.unitName));
+    }, [rows]);
 
+    const urlSelectedUnit = searchParams.get("carId");
+    const selectedUnitId = urlSelectedUnit && units.some((u) => u.carId === urlSelectedUnit)
+        ? urlSelectedUnit
+        : (units.length > 0 ? units[0].carId : "");
+
+    // Generated columns for the date range
     const matrixDates = useMemo(() => {
         const diff = differenceInDaysInclusive(date, resolvedDateTo);
         const result: string[] = [];
@@ -70,61 +108,41 @@ export function MonitoringEmployeeShell({
         return result;
     }, [date, resolvedDateTo]);
 
+    // Matrix data structure for the selected unit
     const matrixData = useMemo(() => {
+        if (!selectedUnitId) return [];
+
+        const filtered = rows.filter((r) => r.carId === selectedUnitId && r.employeeName);
+        
         type CellData = { normal: number; overtime: number };
-        type UnitData = { carId: string; unitName: string; days: Record<string, CellData> };
-        type EmpData = { employeeId: string | null; employeeName: string; days: Record<string, CellData>; units: Map<string, UnitData> };
+        type EmpData = { employeeId: string | null; employeeName: string; days: Record<string, CellData> };
         
         const empMap = new Map<string, EmpData>();
 
-        for (const r of rows) {
-            if (!r.employeeName) continue;
-
-            const empKey = r.employeeId ?? r.employeeName;
+        for (const r of filtered) {
+            const empKey = r.employeeId ?? r.employeeName!;
             let emp = empMap.get(empKey);
             if (!emp) {
-                emp = { employeeId: r.employeeId, employeeName: r.employeeName, days: {}, units: new Map() };
+                emp = { employeeId: r.employeeId, employeeName: r.employeeName!, days: {} };
                 empMap.set(empKey, emp);
             }
 
-            // Employee day totals
-            let empDayCell = emp.days[r.taskDate];
-            if (!empDayCell) {
-                empDayCell = { normal: 0, overtime: 0 };
-                emp.days[r.taskDate] = empDayCell;
+            let dayCell = emp.days[r.taskDate];
+            if (!dayCell) {
+                dayCell = { normal: 0, overtime: 0 };
+                emp.days[r.taskDate] = dayCell;
             }
 
-            if (r.isOvertime) empDayCell.overtime += r.totalActualHours;
-            else empDayCell.normal += r.totalActualHours;
-
-            // Unit details
-            let unit = emp.units.get(r.carId);
-            if (!unit) {
-                unit = { carId: r.carId, unitName: r.unitName, days: {} };
-                emp.units.set(r.carId, unit);
-            }
-
-            let unitDayCell = unit.days[r.taskDate];
-            if (!unitDayCell) {
-                unitDayCell = { normal: 0, overtime: 0 };
-                unit.days[r.taskDate] = unitDayCell;
-            }
-
-            if (r.isOvertime) unitDayCell.overtime += r.totalActualHours;
-            else unitDayCell.normal += r.totalActualHours;
+            if (r.isOvertime) dayCell.overtime += r.totalActualHours;
+            else dayCell.normal += r.totalActualHours;
         }
 
         return Array.from(empMap.values()).sort((a, b) => a.employeeName.localeCompare(b.employeeName));
-    }, [rows]);
+    }, [rows, selectedUnitId]);
 
-    function toggleEmp(empKey: string) {
-        setExpandedEmps(prev => {
-            const next = new Set(prev);
-            if (next.has(empKey)) next.delete(empKey);
-            else next.add(empKey);
-            return next;
-        });
-    }
+    const selectedUnitDetails = units.find((u) => u.carId === selectedUnitId);
+
+    // ── Navigation helpers ─────────────────────────────────────────────────────
 
     function pushSpan(value: "daily" | "weekly") {
         const p = new URLSearchParams(searchParams.toString());
@@ -156,16 +174,38 @@ export function MonitoringEmployeeShell({
         router.push(`${pathname}?${p.toString()}`);
     }
 
+    function changeUnit(carId: string) {
+        const p = new URLSearchParams(searchParams.toString());
+        p.set("carId", carId);
+        router.push(`${pathname}?${p.toString()}`);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
     return (
         <div className="space-y-4">
+
+            {/* ── Header bar ──────────────────────────────────────────────────────── */}
             <div className="flex flex-wrap items-center justify-between gap-4 rounded-[14px] border border-white/[0.06] bg-[#0a0a0c] px-4 py-3">
                 <div className="flex items-center gap-3">
-                    <h1 className="text-[14px] font-medium text-white">Monitoring Karyawan</h1>
+                    <h1 className="text-[14px] font-medium text-white">Monitoring Unit</h1>
                     <div className="h-4 w-px bg-white/[0.06]" />
-                    <span className="text-[11px] text-white/40">{matrixData.length} Karyawan</span>
+                    <select
+                        value={selectedUnitId}
+                        onChange={(e) => changeUnit(e.target.value)}
+                        className="w-48 appearance-none bg-transparent text-[13px] text-white outline-none ring-0 [&>option]:bg-[#111114] [&>option]:text-white"
+                        disabled={units.length === 0}
+                    >
+                        {units.length === 0 && <option value="">Belum ada unit</option>}
+                        {units.map((u) => (
+                            <option key={u.carId} value={u.carId}>
+                                {u.unitName}
+                            </option>
+                        ))}
+                    </select>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-3">
+                    {/* Span toggle */}
                     <div className="flex items-center gap-1 rounded-lg border border-white/[0.06] bg-white/[0.03] p-1">
                         {(["daily", "weekly"] as const).map((span) => (
                             <button
@@ -184,6 +224,7 @@ export function MonitoringEmployeeShell({
                         ))}
                     </div>
 
+                    {/* Date picker */}
                     <div className="flex items-center gap-2 rounded-lg border border-white/[0.06] bg-white/[0.03] px-2 py-1">
                         {activeSpan === "weekly" ? (
                             <CompactDateRangeInput
@@ -204,14 +245,28 @@ export function MonitoringEmployeeShell({
                 </div>
             </div>
 
-            <section className="overflow-hidden rounded-[14px] border border-white/[0.06] bg-[#0a0a0c]">
+            {/* ── Spreadsheet Matrix ──────────────────────────────────────────────────────── */}
+            {selectedUnitId ? (
+                <section className="overflow-hidden rounded-[14px] border border-white/[0.06] bg-[#0a0a0c]">
+                    {/* Matrix Header */}
+                    <div className="border-b border-white/[0.06] bg-[#111114] py-3 text-center">
+                        <h2 className="text-[13px] font-bold uppercase tracking-[0.05em] text-white">
+                            {selectedUnitDetails?.unitName}
+                            {selectedUnitDetails?.customerName && (
+                                <span className="ml-2 font-normal text-white/50">
+                                    {selectedUnitDetails.customerName}
+                                </span>
+                            )}
+                        </h2>
+                    </div>
+
                     <div className="overflow-x-auto">
                         <table className="min-w-full border-collapse text-sm">
                             <thead>
                                 <tr>
                                     <th
                                         rowSpan={2}
-                                        className="border-b border-r border-white/[0.06] bg-white/[0.01] px-4 py-3 text-left text-[11px] font-medium uppercase tracking-[0.1em] text-white/40 align-middle"
+                                        className="border-b border-r border-white/[0.06] bg-white/[0.01] px-4 py-3 text-center text-[11px] font-medium uppercase tracking-[0.1em] text-white/40 align-middle"
                                     >
                                         Nama
                                     </th>
@@ -229,10 +284,10 @@ export function MonitoringEmployeeShell({
                                     {matrixDates.map((d) => (
                                         <React.Fragment key={`sub-${d}`}>
                                             <th className="border-b border-r border-white/[0.06] bg-white/[0.01] px-2 py-2 text-center text-[10px] uppercase tracking-wider text-white/50">
-                                                Work Hour
+                                                Jam Normal
                                             </th>
-                                            <th className="border-b border-r border-white/[0.06] bg-white/[0.01] px-2 py-2 text-center text-[10px] uppercase tracking-wider text-amber-500/50">
-                                                Lembur
+                                            <th className="border-b border-r border-white/[0.06] bg-white/[0.01] px-2 py-2 text-center text-[10px] uppercase tracking-wider text-white/50">
+                                                Jam Lembur
                                             </th>
                                         </React.Fragment>
                                     ))}
@@ -245,71 +300,40 @@ export function MonitoringEmployeeShell({
                                             colSpan={matrixDates.length * 2 + 1}
                                             className="px-4 py-12 text-center text-[12px] italic text-white/30"
                                         >
-                                            Tidak ada data karyawan pada periode yang dipilih.
+                                            Tidak ada data karyawan untuk unit ini pada periode yang dipilih.
                                         </td>
                                     </tr>
                                 ) : (
-                                    matrixData.map((emp) => {
-                                        const empKey = emp.employeeId ?? emp.employeeName;
-                                        const isExpanded = expandedEmps.has(empKey);
-                                        
-                                        return (
-                                            <React.Fragment key={empKey}>
-                                                {/* Employee Master Row */}
-                                                <tr 
-                                                    className="border-b border-white/[0.04] transition-colors hover:bg-white/[0.02] cursor-pointer"
-                                                    onClick={() => toggleEmp(empKey)}
-                                                >
-                                                    <td className="border-r border-white/[0.06] px-4 py-2.5 text-[11px] font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                                                        <button type="button" className="text-white/40 hover:text-white">
-                                                            {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                                                        </button>
-                                                        {emp.employeeName}
-                                                    </td>
-                                                    {matrixDates.map((d) => {
-                                                        const cell = emp.days[d];
-                                                        return (
-                                                            <React.Fragment key={`cell-${empKey}-${d}`}>
-                                                                <td className="border-r border-white/[0.06] px-2 py-2.5 text-center tabular-nums text-white/70 bg-white/[0.01]">
-                                                                    {cell?.normal ? fmt(cell.normal) : ""}
-                                                                </td>
-                                                                <td className="border-r border-white/[0.06] px-2 py-2.5 text-center tabular-nums text-amber-500/80 bg-white/[0.01]">
-                                                                    {cell?.overtime ? fmt(cell.overtime) : ""}
-                                                                </td>
-                                                            </React.Fragment>
-                                                        );
-                                                    })}
-                                                </tr>
-                                                
-                                                {/* Expanded Units Rows */}
-                                                {isExpanded && Array.from(emp.units.values()).sort((a, b) => a.unitName.localeCompare(b.unitName)).map((unit) => (
-                                                    <tr key={`${empKey}-unit-${unit.carId}`} className="border-b border-white/[0.02] bg-[#050505] transition-colors hover:bg-white/[0.02]">
-                                                        <td className="border-r border-white/[0.06] pl-10 pr-4 py-2 text-[10px] text-white/50 uppercase tracking-wider">
-                                                            {unit.unitName}
+                                    matrixData.map((emp) => (
+                                        <tr key={emp.employeeName} className="border-b border-white/[0.04] transition-colors hover:bg-white/[0.02]">
+                                            <td className="border-r border-white/[0.06] px-4 py-2.5 text-[11px] font-bold text-white uppercase tracking-wider">
+                                                {emp.employeeName}
+                                            </td>
+                                            {matrixDates.map((d) => {
+                                                const cell = emp.days[d];
+                                                return (
+                                                    <React.Fragment key={`cell-${emp.employeeName}-${d}`}>
+                                                        <td className="border-r border-white/[0.06] px-2 py-2.5 text-center tabular-nums text-white/70">
+                                                            {cell?.normal ? fmt(cell.normal) : ""}
                                                         </td>
-                                                        {matrixDates.map((d) => {
-                                                            const cell = unit.days[d];
-                                                            return (
-                                                                <React.Fragment key={`cell-${empKey}-unit-${unit.carId}-${d}`}>
-                                                                    <td className="border-r border-white/[0.06] px-2 py-2 text-center tabular-nums text-[10px] text-white/40">
-                                                                        {cell?.normal ? fmt(cell.normal) : ""}
-                                                                    </td>
-                                                                    <td className="border-r border-white/[0.06] px-2 py-2 text-center tabular-nums text-[10px] text-amber-500/50">
-                                                                        {cell?.overtime ? fmt(cell.overtime) : ""}
-                                                                    </td>
-                                                                </React.Fragment>
-                                                            );
-                                                        })}
-                                                    </tr>
-                                                ))}
-                                            </React.Fragment>
-                                        );
-                                    })
+                                                        <td className="border-r border-white/[0.06] px-2 py-2.5 text-center tabular-nums text-amber-500/80">
+                                                            {cell?.overtime ? fmt(cell.overtime) : ""}
+                                                        </td>
+                                                    </React.Fragment>
+                                                );
+                                            })}
+                                        </tr>
+                                    ))
                                 )}
                             </tbody>
                         </table>
                     </div>
                 </section>
+            ) : (
+                <div className="rounded-[14px] border border-white/[0.06] bg-[#0a0a0c] px-4 py-12 text-center text-[12px] text-white/30">
+                    Silakan pilih filter unit dan waktu untuk melihat matriks pengerjaan.
+                </div>
+            )}
         </div>
     );
 }

@@ -141,6 +141,7 @@ export interface MonitoringRepository {
   listTasks(params: MonitoringListParams): Promise<MonitoringListPayload>;
   getSummary(params: ScopeParams & { date: string; dateTo?: string }): Promise<MonitoringSummary>;
   listDivisionLoad(params: ScopeParams & { date: string; mode: "all" | "normal" | "overtime"; span: "daily" | "weekly"; dateTo: string }): Promise<MonitoringDivisionLoadRecord[]>;
+  listUnitLoad(params: ScopeParams & { date: string; mode: "all" | "normal" | "overtime"; span: "daily" | "weekly"; dateTo?: string }): Promise<import("@smsystem/contracts/monitoring").MonitoringUnitTimesheetRecord[]>;
   getDivisionDetail(params: ScopeParams & { divisionId: number; date: string; mode: "all" | "normal" | "overtime"; span: "daily" | "weekly"; dateTo: string }): Promise<{
     divisionName: string | null;
     summary: MonitoringDivisionDetailSummary;
@@ -765,47 +766,52 @@ export class MySqlMonitoringRepository implements MonitoringRepository {
     const unitParams: unknown[] = [];
     const unitWhereClauses = buildDivisionMonitoringWhere(params, unitParams);
 
-    const [rows, unitRows] = await Promise.all([
-      pool.query(
-        `
+    const rows = (await pool.query(
+      `
+        SELECT
+          cd.division_id AS divisionId,
+          d.name AS divisionName,
+          COUNT(*) AS totalTasks,
+          SUM(CASE WHEN actual.latestActualId IS NOT NULL THEN 1 ELSE 0 END) AS startedTasks,
+          SUM(CASE WHEN actual.actualStatus = 'onprogress' THEN 1 ELSE 0 END) AS pendingSubmitTasks,
+          SUM(CASE WHEN actual.actualStatus = 'done' OR p.status = 'READY_QC' THEN 1 ELSE 0 END) AS doneTasks,
+          ROUND(SUM(COALESCE(actual.durationHours, 0)), 2) AS totalActualHours,
+          ROUND(SUM(CASE WHEN COALESCE(p.is_overtime, 0) = 0 THEN COALESCE(actual.durationHours, 0) ELSE 0 END), 2) AS normalActualHours,
+          ROUND(SUM(CASE WHEN COALESCE(p.is_overtime, 0) = 1 THEN COALESCE(actual.durationHours, 0) ELSE 0 END), 2) AS overtimeActualHours,
+          ROUND(SUM(COALESCE(cd.remaining_hours, 0)), 2) AS totalRemainingHours,
+          ROUND(AVG(COALESCE(actual.progres, cd.actual_progress_percent, 0)), 2) AS averageProgressPercent
+        FROM sm_jobdesc_plan p
+        JOIN sm_jobdesc_countdown cd ON cd.id = p.core_id
+        JOIN cars c ON c.id = cd.car_id
+        LEFT JOIN sm_divisi d ON d.id = cd.division_id
+        LEFT JOIN (
           SELECT
-            cd.division_id AS divisionId,
-            d.name AS divisionName,
-            COUNT(*) AS totalTasks,
-            SUM(CASE WHEN actual.latestActualId IS NOT NULL THEN 1 ELSE 0 END) AS startedTasks,
-            SUM(CASE WHEN actual.actualStatus = 'onprogress' THEN 1 ELSE 0 END) AS pendingSubmitTasks,
-            SUM(CASE WHEN actual.actualStatus = 'done' OR p.status = 'READY_QC' THEN 1 ELSE 0 END) AS doneTasks,
-            ROUND(SUM(COALESCE(cd.total_actual_hours, 0)), 2) AS totalActualHours,
-            ROUND(SUM(COALESCE(cd.remaining_hours, 0)), 2) AS totalRemainingHours,
-            ROUND(AVG(COALESCE(actual.progres, cd.actual_progress_percent, 0)), 2) AS averageProgressPercent
-          FROM sm_jobdesc_plan p
-          JOIN sm_jobdesc_countdown cd ON cd.id = p.core_id
-          JOIN cars c ON c.id = cd.car_id
-          LEFT JOIN sm_divisi d ON d.id = cd.division_id
-          LEFT JOIN (
+            a.plandaily_id,
+            a.id AS latestActualId,
+            CASE WHEN a.status = 'onprogress' AND a.finish_time IS NOT NULL THEN 'pending' ELSE a.status END AS actualStatus,
+            a.progres AS progres,
+            a.duration_hours AS durationHours
+          FROM sm_jobdesc_actual a
+          JOIN (
             SELECT
-              a.plandaily_id,
-              a.id AS latestActualId,
-              CASE WHEN a.status = 'onprogress' AND a.finish_time IS NOT NULL THEN 'pending' ELSE a.status END AS actualStatus,
-              a.progres AS progres
-            FROM sm_jobdesc_actual a
-            JOIN (
-              SELECT
-                plandaily_id,
-                MAX(created_at) AS latestCreatedAt
-              FROM sm_jobdesc_actual
-              GROUP BY plandaily_id
-            ) latest
-              ON latest.plandaily_id = a.plandaily_id
-             AND latest.latestCreatedAt = a.created_at
-          ) actual ON actual.plandaily_id = p.id
-          WHERE ${whereClauses.join(" AND ")}
-          GROUP BY cd.division_id, d.name
-          ORDER BY d.name ASC
-        `,
-        queryParams,
-      ) as Promise<[DivisionLoadRow[], unknown]>,
-      pool.query(
+              plandaily_id,
+              MAX(created_at) AS latestCreatedAt
+            FROM sm_jobdesc_actual
+            GROUP BY plandaily_id
+          ) latest
+            ON latest.plandaily_id = a.plandaily_id
+           AND latest.latestCreatedAt = a.created_at
+        ) actual ON actual.plandaily_id = p.id
+        WHERE ${whereClauses.join(" AND ")}
+        GROUP BY cd.division_id, d.name
+        ORDER BY d.name ASC
+      `,
+      queryParams,
+    )) as [DivisionLoadRow[], unknown];
+
+    let unitRows: [DivisionLoadUnitRow[], unknown] = [[], undefined];
+    try {
+      unitRows = (await pool.query(
         `
           SELECT
             cd.division_id AS divisionId,
@@ -816,8 +822,10 @@ export class MySqlMonitoringRepository implements MonitoringRepository {
             SUM(CASE WHEN actual.latestActualId IS NOT NULL THEN 1 ELSE 0 END) AS startedTasks,
             SUM(CASE WHEN actual.actualStatus = 'onprogress' THEN 1 ELSE 0 END) AS pendingSubmitTasks,
             SUM(CASE WHEN actual.actualStatus = 'done' OR p.status = 'READY_QC' THEN 1 ELSE 0 END) AS doneTasks,
-            ROUND(SUM(COALESCE(p.total_jam, 0)), 2) AS totalPlannedHours,
-            ROUND(SUM(COALESCE(cd.total_actual_hours, 0)), 2) AS totalActualHours,
+            ROUND(SUM(COALESCE(TIME_TO_SEC(p.dailyTargetHours) / 3600, 0)), 2) AS totalPlannedHours,
+            ROUND(SUM(COALESCE(actual.durationHours, 0)), 2) AS totalActualHours,
+            ROUND(SUM(CASE WHEN COALESCE(p.is_overtime, 0) = 0 THEN COALESCE(actual.durationHours, 0) ELSE 0 END), 2) AS normalActualHours,
+            ROUND(SUM(CASE WHEN COALESCE(p.is_overtime, 0) = 1 THEN COALESCE(actual.durationHours, 0) ELSE 0 END), 2) AS overtimeActualHours,
             ROUND(SUM(COALESCE(cd.remaining_hours, 0)), 2) AS totalRemainingHours,
             ROUND(AVG(COALESCE(actual.progres, cd.actual_progress_percent, 0)), 2) AS averageProgressPercent
           FROM sm_jobdesc_plan p
@@ -828,7 +836,8 @@ export class MySqlMonitoringRepository implements MonitoringRepository {
               a.plandaily_id,
               a.id AS latestActualId,
               CASE WHEN a.status = 'onprogress' AND a.finish_time IS NOT NULL THEN 'pending' ELSE a.status END AS actualStatus,
-              a.progres AS progres
+              a.progres AS progres,
+              a.duration_hours AS durationHours
             FROM sm_jobdesc_actual a
             JOIN (
               SELECT
@@ -845,8 +854,10 @@ export class MySqlMonitoringRepository implements MonitoringRepository {
           ORDER BY c.unit_name ASC
         `,
         unitParams,
-      ) as Promise<[DivisionLoadUnitRow[], unknown]>,
-    ]);
+      )) as [DivisionLoadUnitRow[], unknown];
+    } catch (error) {
+      console.error("[monitoring] division unit load failed", error);
+    }
 
     const unitsByDivision = new Map<string, MonitoringDivisionUnitRecord[]>();
     for (const row of unitRows[0]) {
@@ -862,6 +873,8 @@ export class MySqlMonitoringRepository implements MonitoringRepository {
         doneTasks: Number(row.doneTasks ?? 0),
         totalPlannedHours: Number(row.totalPlannedHours ?? 0),
         totalActualHours: Number(row.totalActualHours ?? 0),
+        normalActualHours: Number(row.normalActualHours ?? 0),
+        overtimeActualHours: Number(row.overtimeActualHours ?? 0),
         totalRemainingHours: Number(row.totalRemainingHours ?? 0),
         averageProgressPercent: Number(row.averageProgressPercent ?? 0),
       });
@@ -876,6 +889,8 @@ export class MySqlMonitoringRepository implements MonitoringRepository {
       pendingSubmitTasks: Number(row.pendingSubmitTasks ?? 0),
       doneTasks: Number(row.doneTasks ?? 0),
       totalActualHours: Number(row.totalActualHours ?? 0),
+      normalActualHours: Number(row.normalActualHours ?? 0),
+      overtimeActualHours: Number(row.overtimeActualHours ?? 0),
       totalRemainingHours: Number(row.totalRemainingHours ?? 0),
       averageProgressPercent: Number(row.averageProgressPercent ?? 0),
       units: unitsByDivision.get(String(row.divisionId ?? "unknown")) ?? [],
@@ -910,8 +925,10 @@ export class MySqlMonitoringRepository implements MonitoringRepository {
             SUM(CASE WHEN actual.latestActualId IS NOT NULL THEN 1 ELSE 0 END) AS startedTasks,
             SUM(CASE WHEN actual.actualStatus = 'onprogress' THEN 1 ELSE 0 END) AS pendingSubmitTasks,
             SUM(CASE WHEN actual.actualStatus = 'done' OR p.status = 'READY_QC' THEN 1 ELSE 0 END) AS doneTasks,
-            ROUND(SUM(COALESCE(p.total_jam, 0)), 2) AS totalPlannedHours,
-            ROUND(SUM(COALESCE(cd.total_actual_hours, 0)), 2) AS totalActualHours,
+            ROUND(SUM(COALESCE(TIME_TO_SEC(p.dailyTargetHours) / 3600, 0)), 2) AS totalPlannedHours,
+            ROUND(SUM(COALESCE(actual.durationHours, 0)), 2) AS totalActualHours,
+            ROUND(SUM(CASE WHEN COALESCE(p.is_overtime, 0) = 0 THEN COALESCE(actual.durationHours, 0) ELSE 0 END), 2) AS normalActualHours,
+            ROUND(SUM(CASE WHEN COALESCE(p.is_overtime, 0) = 1 THEN COALESCE(actual.durationHours, 0) ELSE 0 END), 2) AS overtimeActualHours,
             ROUND(SUM(COALESCE(cd.remaining_hours, 0)), 2) AS totalRemainingHours,
             ROUND(AVG(COALESCE(actual.progres, cd.actual_progress_percent, 0)), 2) AS averageProgressPercent
           FROM sm_jobdesc_plan p
@@ -922,7 +939,8 @@ export class MySqlMonitoringRepository implements MonitoringRepository {
               a.plandaily_id,
               a.id AS latestActualId,
               CASE WHEN a.status = 'onprogress' AND a.finish_time IS NOT NULL THEN 'pending' ELSE a.status END AS actualStatus,
-              a.progres AS progres
+              a.progres AS progres,
+              a.duration_hours AS durationHours
             FROM sm_jobdesc_actual a
             JOIN (
               SELECT
@@ -949,8 +967,10 @@ export class MySqlMonitoringRepository implements MonitoringRepository {
             SUM(CASE WHEN actual.latestActualId IS NOT NULL THEN 1 ELSE 0 END) AS startedTasks,
             SUM(CASE WHEN actual.actualStatus = 'onprogress' THEN 1 ELSE 0 END) AS pendingSubmitTasks,
             SUM(CASE WHEN actual.actualStatus = 'done' OR p.status = 'READY_QC' THEN 1 ELSE 0 END) AS doneTasks,
-            ROUND(SUM(COALESCE(p.total_jam, 0)), 2) AS totalPlannedHours,
-            ROUND(SUM(COALESCE(cd.total_actual_hours, 0)), 2) AS totalActualHours,
+            ROUND(SUM(COALESCE(TIME_TO_SEC(p.dailyTargetHours) / 3600, 0)), 2) AS totalPlannedHours,
+            ROUND(SUM(COALESCE(actual.durationHours, 0)), 2) AS totalActualHours,
+            ROUND(SUM(CASE WHEN COALESCE(p.is_overtime, 0) = 0 THEN COALESCE(actual.durationHours, 0) ELSE 0 END), 2) AS normalActualHours,
+            ROUND(SUM(CASE WHEN COALESCE(p.is_overtime, 0) = 1 THEN COALESCE(actual.durationHours, 0) ELSE 0 END), 2) AS overtimeActualHours,
             ROUND(SUM(COALESCE(cd.remaining_hours, 0)), 2) AS totalRemainingHours,
             ROUND(AVG(COALESCE(actual.progres, cd.actual_progress_percent, 0)), 2) AS averageProgressPercent
           FROM sm_jobdesc_plan p
@@ -962,7 +982,8 @@ export class MySqlMonitoringRepository implements MonitoringRepository {
               a.plandaily_id,
               a.id AS latestActualId,
               CASE WHEN a.status = 'onprogress' AND a.finish_time IS NOT NULL THEN 'pending' ELSE a.status END AS actualStatus,
-              a.progres AS progres
+              a.progres AS progres,
+              a.duration_hours AS durationHours
             FROM sm_jobdesc_actual a
             JOIN (
               SELECT
@@ -1005,6 +1026,8 @@ export class MySqlMonitoringRepository implements MonitoringRepository {
       doneTasks: Number(row.doneTasks ?? 0),
       totalPlannedHours: Number(row.totalPlannedHours ?? 0),
       totalActualHours: Number(row.totalActualHours ?? 0),
+      normalActualHours: Number(row.normalActualHours ?? 0),
+      overtimeActualHours: Number(row.overtimeActualHours ?? 0),
       totalRemainingHours: Number(row.totalRemainingHours ?? 0),
       averageProgressPercent: Number(row.averageProgressPercent ?? 0),
     }));
@@ -1018,6 +1041,8 @@ export class MySqlMonitoringRepository implements MonitoringRepository {
       doneTasks: Number(row.doneTasks ?? 0),
       totalPlannedHours: Number(row.totalPlannedHours ?? 0),
       totalActualHours: Number(row.totalActualHours ?? 0),
+      normalActualHours: Number(row.normalActualHours ?? 0),
+      overtimeActualHours: Number(row.overtimeActualHours ?? 0),
       totalRemainingHours: Number(row.totalRemainingHours ?? 0),
       averageProgressPercent: Number(row.averageProgressPercent ?? 0),
     }));
@@ -1163,5 +1188,130 @@ export class MySqlMonitoringRepository implements MonitoringRepository {
       isOvertime: Boolean(row.isOvertime),
       totalActualHours: Number(row.totalActualHours ?? 0),
     }));
+  }
+
+  async listUnitLoad(
+    params: ScopeParams & { date: string; mode: "all" | "normal" | "overtime"; span: "daily" | "weekly"; dateTo?: string }
+  ): Promise<import("@smsystem/contracts/monitoring").MonitoringUnitTimesheetRecord[]> {
+    const pool = this.poolFactory();
+    const queryParams: unknown[] = [];
+    const resolvedDateTo = params.dateTo ?? params.date;
+    const whereClauses = buildDivisionMonitoringWhere(
+      { ...params, dateTo: resolvedDateTo },
+      queryParams,
+    );
+
+    const unitParams = [...queryParams];
+    const [unitRows] = (await pool.query(
+      `
+        SELECT
+          c.id AS carId,
+          c.unit_name AS unitName,
+          c.customer_name AS customerName,
+          COUNT(*) AS totalTasks,
+          ROUND(SUM(COALESCE(TIME_TO_SEC(p.dailyTargetHours) / 3600, 0)), 2) AS totalPlannedHours,
+          ROUND(SUM(COALESCE(cd.remaining_hours, 0)), 2) AS totalRemainingHours,
+          ROUND(AVG(COALESCE(actual.progres, cd.actual_progress_percent, 0)), 2) AS averageProgressPercent
+        FROM sm_jobdesc_plan p
+        JOIN sm_jobdesc_countdown cd ON cd.id = p.core_id
+        JOIN cars c ON c.id = cd.car_id
+        LEFT JOIN (
+          SELECT
+            a.plandaily_id,
+            a.progres AS progres
+          FROM sm_jobdesc_actual a
+          JOIN (
+            SELECT plandaily_id, MAX(created_at) AS latestCreatedAt
+            FROM sm_jobdesc_actual GROUP BY plandaily_id
+          ) latest ON latest.plandaily_id = a.plandaily_id AND latest.latestCreatedAt = a.created_at
+        ) actual ON actual.plandaily_id = p.id
+        WHERE ${whereClauses.join(" AND ")}
+        GROUP BY c.id, c.unit_name, c.customer_name
+      `,
+      unitParams,
+    )) as [any[], unknown];
+
+    const empParams = [...queryParams];
+    const [empRows] = (await pool.query(
+      `
+        SELECT
+          c.id AS carId,
+          p.assigned_user_id AS employeeId,
+          e.full_name AS employeeName,
+          d.name AS divisionName,
+          DATE_FORMAT(p.task_date, '%Y-%m-%d') AS taskDate,
+          COALESCE(p.is_overtime, 0) AS isOvertime,
+          ROUND(SUM(COALESCE(actual.durationHours, 0)), 2) AS totalActualHours
+        FROM sm_jobdesc_plan p
+        JOIN sm_jobdesc_countdown cd ON cd.id = p.core_id
+        JOIN cars c ON c.id = cd.car_id
+        LEFT JOIN sm_employee e ON e.employee_id = p.assigned_user_id
+        LEFT JOIN sm_divisi d ON d.id = cd.division_id
+        LEFT JOIN (
+          SELECT
+            a.plandaily_id,
+            a.duration_hours AS durationHours
+          FROM sm_jobdesc_actual a
+          JOIN (
+            SELECT plandaily_id, MAX(created_at) AS latestCreatedAt
+            FROM sm_jobdesc_actual GROUP BY plandaily_id
+          ) latest ON latest.plandaily_id = a.plandaily_id AND latest.latestCreatedAt = a.created_at
+        ) actual ON actual.plandaily_id = p.id
+        WHERE ${whereClauses.join(" AND ")}
+        GROUP BY c.id, p.assigned_user_id, e.full_name, d.name, p.task_date, COALESCE(p.is_overtime, 0)
+      `,
+      empParams,
+    )) as [any[], unknown];
+
+    const unitMap = new Map<string, any>();
+    for (const u of unitRows) {
+      unitMap.set(u.carId, u);
+    }
+
+    const results: import("@smsystem/contracts/monitoring").MonitoringUnitTimesheetRecord[] = [];
+    const carsWithEmp = new Set<string>();
+
+    for (const emp of empRows) {
+      const u = unitMap.get(emp.carId);
+      if (!u) continue;
+      carsWithEmp.add(emp.carId);
+      results.push({
+        carId: emp.carId,
+        unitName: u.unitName,
+        customerName: u.customerName ?? null,
+        employeeId: emp.employeeId ?? null,
+        employeeName: emp.employeeName ?? null,
+        divisionName: emp.divisionName ?? null,
+        taskDate: typeof emp.taskDate === "string" ? emp.taskDate : (emp.taskDate instanceof Date ? emp.taskDate.toISOString().slice(0, 10) : params.date),
+        isOvertime: Boolean(emp.isOvertime),
+        totalActualHours: Number(emp.totalActualHours ?? 0),
+        totalPlannedHours: Number(u.totalPlannedHours ?? 0),
+        totalRemainingHours: Number(u.totalRemainingHours ?? 0),
+        averageProgressPercent: Number(u.averageProgressPercent ?? 0),
+        totalTasks: Number(u.totalTasks ?? 0),
+      });
+    }
+
+    for (const u of unitRows) {
+      if (!carsWithEmp.has(u.carId)) {
+        results.push({
+          carId: u.carId,
+          unitName: u.unitName,
+          customerName: u.customerName ?? null,
+          employeeId: null,
+          employeeName: null,
+          divisionName: null,
+          taskDate: params.date,
+          isOvertime: false,
+          totalActualHours: 0,
+          totalPlannedHours: Number(u.totalPlannedHours ?? 0),
+          totalRemainingHours: Number(u.totalRemainingHours ?? 0),
+          averageProgressPercent: Number(u.averageProgressPercent ?? 0),
+          totalTasks: Number(u.totalTasks ?? 0),
+        });
+      }
+    }
+
+    return results;
   }
 }

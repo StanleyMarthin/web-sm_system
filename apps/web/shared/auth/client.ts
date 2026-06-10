@@ -1,6 +1,6 @@
 "use client";
 
-import { authEnvelopeSchema } from "@smsystem/contracts/auth";
+import { CSRF_COOKIE_NAME, authEnvelopeSchema } from "@smsystem/contracts/auth";
 import { getApiBaseUrl } from "@/shared/api/config";
 
 interface ApiEnvelope {
@@ -21,6 +21,23 @@ async function parseApiEnvelope(response: Response): Promise<ApiEnvelope> {
       errorCode: "INVALID_RESPONSE",
     };
   }
+}
+
+function getCookieValue(name: string): string | null {
+  if (typeof document === "undefined") {
+    return null;
+  }
+
+  const cookie = document.cookie
+    .split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(`${name}=`));
+
+  if (!cookie) {
+    return null;
+  }
+
+  return decodeURIComponent(cookie.slice(name.length + 1));
 }
 
 export async function loginWithPassword(input: {
@@ -67,10 +84,20 @@ export async function loginWithPassword(input: {
 }
 
 export async function logoutFromWeb() {
-  const response = await fetch(`${getApiBaseUrl()}/api/auth/logout`, {
-    method: "POST",
-    credentials: "include",
-  });
+  try {
+    const csrfToken = getCookieValue(CSRF_COOKIE_NAME);
+    const response = await fetch(`${getApiBaseUrl()}/api/auth/logout`, {
+      method: "POST",
+      credentials: "include",
+      headers: csrfToken
+        ? {
+            "X-CSRF-Token": csrfToken,
+          }
+        : undefined,
+    });
 
-  return response.ok;
+    return response.ok;
+  } catch {
+    return false;
+  }
 }

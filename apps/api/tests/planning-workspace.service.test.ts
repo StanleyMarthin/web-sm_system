@@ -215,6 +215,9 @@ describe("DefaultPlanningWorkspaceService", () => {
       async getDivisionDetail() {
         throw new Error("Not implemented");
       },
+      async listUnitLoad() {
+        throw new Error("Not implemented");
+      },
       async listEmployeeTimesheet() {
         throw new Error("Not implemented");
       },

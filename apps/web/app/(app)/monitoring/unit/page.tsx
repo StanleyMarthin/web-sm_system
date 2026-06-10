@@ -5,26 +5,18 @@ import { fetchMonitoringUnit } from "@/shared/api/monitoring";
 import { ModuleUnavailableState } from "@/shared/ui/module-unavailable-state";
 import { PageDataSkeleton } from "@/shared/ui/page-data-skeleton";
 
-const MonitoringDivisionShell = dynamic(
+const MonitoringUnitShell = dynamic(
   () =>
-    import("@/modules/monitoring/components/monitoring-division-shell").then(
-      (mod) => mod.MonitoringDivisionShell,
+    import("@/modules/monitoring/components/Monitoring-unit-shell").then(
+      (mod) => mod.MonitoringUnitShell,
     ),
   {
-    loading: () => <PageDataSkeleton title="Memuat monitoring divisi" />,
+    loading: () => <PageDataSkeleton title="Memuat monitoring unit" />,
   },
 );
 
-interface MonitoringDivisionPageProps {
+interface MonitoringUnitPageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
-}
-
-function resolveMode(searchParams: Record<string, string | string[] | undefined>): "all" | "normal" | "overtime" {
-  if (searchParams.mode === "all") {
-    return "all";
-  }
-
-  return searchParams.mode === "overtime" ? "overtime" : "normal";
 }
 
 function resolveSpan(searchParams: Record<string, string | string[] | undefined>): "daily" | "weekly" {
@@ -43,11 +35,10 @@ function resolveDate(searchParams: Record<string, string | string[] | undefined>
   return `${today.getFullYear()}-${month}-${day}`;
 }
 
-export default async function MonitoringDivisionPage({
+export default async function MonitoringUnitPage({
   searchParams,
-}: MonitoringDivisionPageProps) {
+}: MonitoringUnitPageProps) {
   const resolvedSearchParams = await searchParams;
-  const activeMode = resolveMode(resolvedSearchParams);
   const activeSpan = resolveSpan(resolvedSearchParams);
   const requestHeaders = await headers();
   const cookieHeader = requestHeaders.get("cookie") ?? "";
@@ -68,14 +59,14 @@ export default async function MonitoringDivisionPage({
     return (
       <ModuleUnavailableState
         module="Job Monitoring"
-        title="Monitoring per divisi belum bisa dimuat"
-        message="Data ringkasan per divisi belum terbaca saat ini. Coba muat ulang beberapa saat lagi."
+        title="Monitoring per unit belum bisa dimuat"
+        message="Data ringkasan per unit belum terbaca saat ini. Coba muat ulang beberapa saat lagi."
       />
     );
   }
 
   return (
-    <MonitoringDivisionShell
+    <MonitoringUnitShell
       date={payload.date ?? resolveDate(resolvedSearchParams)}
       dateTo={payload.dateTo ?? ""}
       activeSpan={activeSpan}

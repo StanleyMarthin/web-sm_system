@@ -149,6 +149,8 @@ function createStubMonitoringService(): MonitoringService {
           pendingSubmitTasks: 1,
           doneTasks: 1,
           totalActualHours: 3.5,
+          normalActualHours: 2.5,
+          overtimeActualHours: 1.0,
           totalRemainingHours: 10.5,
           averageProgressPercent: 45,
           units: [],
@@ -165,6 +167,8 @@ function createStubMonitoringService(): MonitoringService {
           totalTasks: 3,
           totalPlannedHours: 8,
           totalActualHours: 3.5,
+          normalActualHours: 2.5,
+          overtimeActualHours: 1.0,
           totalRemainingHours: 4.5,
         },
         units: [
@@ -178,6 +182,8 @@ function createStubMonitoringService(): MonitoringService {
             doneTasks: 1,
             totalPlannedHours: 8,
             totalActualHours: 3.5,
+            normalActualHours: 2.5,
+            overtimeActualHours: 1.0,
             totalRemainingHours: 4.5,
             averageProgressPercent: 45,
           },
@@ -192,6 +198,8 @@ function createStubMonitoringService(): MonitoringService {
             doneTasks: 1,
             totalPlannedHours: 8,
             totalActualHours: 3.5,
+            normalActualHours: 2.5,
+            overtimeActualHours: 1.0,
             totalRemainingHours: 4.5,
             averageProgressPercent: 45,
           },
@@ -207,6 +215,9 @@ function createStubMonitoringService(): MonitoringService {
         units: [],
         employees: [],
       };
+    },
+    async listUnitLoad() {
+      return [];
     },
     async listOvertime() {
       return {
@@ -305,6 +316,8 @@ describe("monitoring routes", () => {
               pendingSubmitTasks: 0,
               doneTasks: 0,
               totalActualHours: 1,
+              normalActualHours: 1,
+              overtimeActualHours: 0,
               totalRemainingHours: 2,
               averageProgressPercent: 50,
               units: [],
@@ -352,6 +365,8 @@ describe("monitoring routes", () => {
               totalTasks: 5,
               totalPlannedHours: 12,
               totalActualHours: 4,
+              normalActualHours: 3,
+              overtimeActualHours: 1,
               totalRemainingHours: 8,
             },
             units: [],
