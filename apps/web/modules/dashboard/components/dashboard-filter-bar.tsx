@@ -2,7 +2,7 @@
 
 import { Filter, X } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { CompactDateRangeInput, SearchableSelect } from "@/shared/ui/compact";
 
 export interface FilterBarDivision {
@@ -76,7 +76,14 @@ export function DashboardFilterBar({
   }
 
   /* Auto-apply on every change (debounced 600ms) */
+  const isInitialMount = useRef(true);
+  
   useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+
     const t = setTimeout(() => {
       const p = buildParams();
       router.push(`/dashboard?${p.toString()}`);
