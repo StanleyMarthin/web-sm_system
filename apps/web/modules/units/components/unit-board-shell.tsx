@@ -142,15 +142,37 @@ function nullableDate(value: string) {
   return value.trim() ? value : null;
 }
 
+function canManageUnitMaster(user: AuthUser | null): boolean {
+  if (!user) {
+    return false;
+  }
+
+  return (
+    user.scope.canViewAllUnits ||
+    user.permissions.includes(permissionCodes.viewAllUnits) ||
+    user.permissions.includes(permissionCodes.manageUsers) ||
+    user.permissions.includes(permissionCodes.unitPanelManage)
+  );
+}
+
+function getMutationErrorDetail(result: {
+  message: string;
+  errorCode?: string;
+  data?: Record<string, unknown>;
+}): string {
+  const dependencySummary = result.data?.dependencySummary;
+  const dependencyText = Array.isArray(dependencySummary) && dependencySummary.length > 0
+    ? `\n\nDipakai di: ${dependencySummary.map(String).join(", ")}`
+    : "";
+  const errorCode = result.errorCode ? `\nKode: ${result.errorCode}` : "";
+
+  return `${result.message}${dependencyText}${errorCode}`;
+}
+
 export function UnitBoardShell({ rows, meta, state, user }: UnitBoardShellProps) {
   const router = useRouter();
   const sweetAlert = useSweetAlert();
-  const canManageUnits =
-    !!user &&
-    (
-      user.permissions.includes(permissionCodes.manageUsers) ||
-      user.permissions.includes(permissionCodes.unitPanelManage)
-    );
+  const canManageUnits = canManageUnitMaster(user);
   const [dialogMode, setDialogMode] = useState<"create" | "edit" | null>(null);
   const [form, setForm] = useState<UnitFormState>(emptyForm());
   const [pending, setPending] = useState(false);
@@ -187,7 +209,7 @@ export function UnitBoardShell({ rows, meta, state, user }: UnitBoardShellProps)
 
     setPending(false);
     if (!result.success) {
-      sweetAlert.notifyError("Unit belum tersimpan", result.message);
+      sweetAlert.notifyError("Unit belum tersimpan", getMutationErrorDetail(result));
       return;
     }
 
@@ -208,7 +230,7 @@ export function UnitBoardShell({ rows, meta, state, user }: UnitBoardShellProps)
 
     const result = await deleteUnit(unitId);
     if (!result.success) {
-      sweetAlert.notifyError("Unit belum terhapus", result.message);
+      sweetAlert.notifyError("Unit belum terhapus", getMutationErrorDetail(result));
       return;
     }
 

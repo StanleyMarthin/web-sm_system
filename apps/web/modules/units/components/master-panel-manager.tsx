@@ -155,7 +155,9 @@ function SearchableField({
               </button>
             ))
           ) : (
-            <div className="px-3 py-2 text-[10px] font-mono text-white/25">Tidak ada data cocok</div>
+            <div className="px-3 py-2 text-[10px] font-mono text-white/25">
+              Tidak ada data cocok. Tekan Simpan untuk memakai teks ini.
+            </div>
           )}
         </div>
       )}
@@ -489,7 +491,7 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
 
     const effectiveForm =
       mode.type === "create" && mode.sectionMode === "new"
-        ? { ...form, name: form.section.trim(), nodeType: "PANEL" as const, isActive: true }
+        ? { ...form, nodeType: "PANEL" as const }
         : form;
 
     const payload = {
@@ -514,33 +516,6 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
       setError("Pilih tipe yang valid: Panel atau Part.");
       setIsSubmitting(false);
       return;
-    }
-
-    if (mode.type === "create" && mode.sectionMode === "existing") {
-      const hasValidCategory = categoryOptions.some(option => option.value === form.category);
-      const hasValidSection = sectionOptions.some(option => option.value === form.section);
-
-      if (!hasValidCategory) {
-        setError("Pilih kategori dari daftar.");
-        setIsSubmitting(false);
-        return;
-      }
-
-      if (!hasValidSection) {
-        setError("Pilih section dari daftar.");
-        setIsSubmitting(false);
-        return;
-      }
-    }
-
-    if (mode.type === "create" && mode.sectionMode === "new") {
-      const hasValidCategory = categoryOptions.some(option => option.value === form.category);
-
-      if (!hasValidCategory) {
-        setError("Pilih kategori dari daftar.");
-        setIsSubmitting(false);
-        return;
-      }
     }
 
     if (mode.type !== "edit" && effectiveForm.nodeType === "PART" && !parentId) {
@@ -568,9 +543,7 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
         ? "Master panel berhasil diperbarui."
         : effectiveForm.nodeType === "PART"
           ? "Part berhasil ditambahkan."
-          : mode.sectionMode === "new"
-            ? "Section berhasil ditambahkan."
-            : "Panel berhasil ditambahkan.",
+          : "Panel berhasil ditambahkan.",
     );
     closeForm();
     await loadPanels();
@@ -629,7 +602,7 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
               </button>
               <button type="button" onClick={openCreateSection}
                 className="inline-flex items-center gap-1.5 border border-white/10 px-2 py-1 text-[10px] font-mono uppercase text-white/50 hover:border-white/30 hover:text-white transition-colors">
-                <Plus className="h-3 w-3" /> Tambah Section
+                <Plus className="h-3 w-3" /> Tambah Panel + Section
               </button>
             </>
           )}
@@ -960,7 +933,7 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
             <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">
               {mode === null ? "Form Master Panel"
                 : mode.type === "edit" ? `Edit ${mode.record.nodeType === "PANEL" ? "Panel" : "Part"}`
-                : mode.sectionMode === "new" ? "Tambah Section"
+                : mode.sectionMode === "new" ? "Tambah Panel + Section"
                 : form.nodeType === "PART" ? "Tambah Part"
                 : "Tambah Panel"}
             </span>
@@ -970,7 +943,7 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
             <p className="text-[11px] font-mono text-white/25">Akses baca saja.</p>
           ) : mode === null ? (
             <div className="border border-dashed border-white/10 px-4 py-6 text-center text-[10px] font-mono text-white/20">
-              Pilih panel/part untuk diedit, atau tambah panel/section baru dari toolbar.
+                  Pilih panel/part untuk diedit, atau tambah panel dengan kategori/section dari toolbar.
             </div>
           ) : (
             <form className="space-y-3" onSubmit={(event) => void handleSubmit(event)}>
@@ -1049,24 +1022,27 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
                 </label>
               )}
 
-              {mode.type !== "create" || mode.sectionMode !== "new" ? (
-                <>
-                  {mode.type === "edit" && mode.record.nodeType === "PART" && selectedParentPanel && (
-                    <div className="border border-amber-500/20 bg-amber-500/[0.04] px-3 py-2 text-[10px] font-mono text-amber-400">
-                      Parent: {selectedParentPanel.name}
-                    </div>
-                  )}
+              <>
+                {mode.type === "edit" && mode.record.nodeType === "PART" && selectedParentPanel && (
+                  <div className="border border-amber-500/20 bg-amber-500/[0.04] px-3 py-2 text-[10px] font-mono text-amber-400">
+                    Parent: {selectedParentPanel.name}
+                  </div>
+                )}
 
-                  <label className="block space-y-1">
-                    <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">
-                      {form.nodeType === "PART" ? "Nama Part" : "Nama Panel"}
-                    </span>
-                    <input value={form.name}
-                      onChange={(e) => setForm(c => ({ ...c, name: e.target.value }))}
-                      className="h-8 w-full border border-white/10 bg-[#111114] px-3 text-[11px] font-mono text-white/70 outline-none transition-colors focus:border-amber-500/40" />
-                  </label>
-                </>
-              ) : null}
+                <label className="block space-y-1">
+                  <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">
+                    {mode.type === "create" && mode.sectionMode === "new"
+                      ? "Nama Panel Pertama"
+                      : form.nodeType === "PART"
+                        ? "Nama Part"
+                        : "Nama Panel"}
+                  </span>
+                  <input value={form.name}
+                    onChange={(e) => setForm(c => ({ ...c, name: e.target.value }))}
+                    placeholder={mode.type === "create" && mode.sectionMode === "new" ? "Contoh: Body Depan" : undefined}
+                    className="h-8 w-full border border-white/10 bg-[#111114] px-3 text-[11px] font-mono text-white/70 outline-none transition-colors placeholder:text-white/20 focus:border-amber-500/40" />
+                </label>
+              </>
 
               {mode.type !== "create" || mode.sectionMode !== "existing" ? (
                 <label className="block space-y-1">
@@ -1080,17 +1056,14 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
                 </label>
               ) : null}
 
-              {mode.type !== "create" || mode.sectionMode !== "new" ? (
-                <label className="flex items-center gap-3 border border-white/5 bg-[#111114] px-3 py-2">
-                  <input type="checkbox" checked={form.isActive}
-                    onChange={(e) => setForm(c => ({ ...c, isActive: e.target.checked }))}
-                    className="h-4 w-4 border-white/20 bg-transparent" />
-                  <span className="text-[10px] font-mono text-white/50">Aktifkan {form.nodeType === "PART" ? "part" : "panel"} ini</span>
-                </label>
-              ) : null}
+              <label className="flex items-center gap-3 border border-white/5 bg-[#111114] px-3 py-2">
+                <input type="checkbox" checked={form.isActive}
+                  onChange={(e) => setForm(c => ({ ...c, isActive: e.target.checked }))}
+                  className="h-4 w-4 border-white/20 bg-transparent" />
+                <span className="text-[10px] font-mono text-white/50">Aktifkan {form.nodeType === "PART" ? "part" : "panel"} ini</span>
+              </label>
 
-              {mode.type !== "create" || mode.sectionMode !== "new" ? (
-                <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-2">
                   <label className="block space-y-1">
                     <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">Qty</span>
                     <input
@@ -1147,8 +1120,7 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
                       <option value="BARU">{CONDITION_LABEL.BARU}</option>
                     </select>
                   </label>
-                </div>
-              ) : null}
+              </div>
 
               <div className="flex gap-2 pt-1">
                 <button type="submit" disabled={isSubmitting}

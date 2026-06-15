@@ -4,6 +4,7 @@ import { describe, expect, test } from "bun:test";
 import { createApiFetchHandler } from "@/app";
 import type { AuthService } from "@/services/auth/auth.service";
 import type { WebSession } from "@/services/auth/session.service";
+import { SmLoginAdapterError } from "@/services/auth/sm-login.adapter";
 
 const sampleUser: AuthUser = {
   employeeId: "SM-03.004",
@@ -106,6 +107,43 @@ describe("API auth and dashboard routes", () => {
 
     const response = await fetchHandler(new Request("http://localhost/api/auth/me"));
     expect(response.status).toBe(401);
+  });
+
+  test("counts active-session warnings returned by upstream login", async () => {
+    const fetchHandler = createApiFetchHandler({
+      authService: createStubAuthService({
+        async login() {
+          throw new SmLoginAdapterError(
+            "Akun ini sedang login di perangkat Web lain.",
+            409,
+            "ACTIVE_SESSION_EXISTS",
+            {},
+          );
+        },
+      }),
+    });
+
+    let response: Response | null = null;
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      response = await fetchHandler(
+        new Request("http://localhost/api/auth/login", {
+          method: "POST",
+          body: JSON.stringify({
+            employeeId: "SM-77.777",
+            password: "secret",
+            force: false,
+          } satisfies LoginRequest),
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }),
+      );
+    }
+
+    const body = await response?.json();
+    expect(response?.status).toBe(429);
+    expect(body.errorCode).toBe("ACTIVE_SESSION_CANCEL_LIMITED");
+    expect(body.data.retryAfterSeconds).toBe(60);
   });
 
   test("protects dashboard bootstrap endpoint with permissions", async () => {

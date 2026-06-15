@@ -54,6 +54,7 @@ import { DefaultRolesService, type RolesService } from "@/services/roles.service
 import {
   handleUnitBomRoute,
   handleUnitDetailRoute,
+  handleUnitPanelCategoryRoute,
   handleUnitPanelDetailRoute,
   handleUnitPanelsRoute,
   handleUnitWorkspaceRoute,
@@ -760,7 +761,7 @@ export function createApiFetchHandler(dependencies: AppDependencies = {}) {
       );
     }
 
-    if (request.method === "GET" && url.pathname === "/api/units") {
+    if ((request.method === "GET" || request.method === "POST") && url.pathname === "/api/units") {
       return handleUnitsListRoute(request, getAuthService(), getUnitsService());
     }
 
@@ -2129,6 +2130,17 @@ export function createApiFetchHandler(dependencies: AppDependencies = {}) {
       );
     }
 
+    const unitPanelCategoryMatch = url.pathname.match(/^\/api\/units\/([^/]+)\/master-panels\/category$/);
+    if (unitPanelCategoryMatch && request.method === "PUT") {
+      const unitId = unitPanelCategoryMatch[1];
+      return handleUnitPanelCategoryRoute(
+        request,
+        unitId,
+        getAuthService(),
+        getUnitsService(),
+      );
+    }
+
     const unitPanelDetailMatch = url.pathname.match(/^\/api\/units\/([^/]+)\/master-panels\/(\d+)$/);
     if (unitPanelDetailMatch && (request.method === "PUT" || request.method === "DELETE")) {
       const unitId = unitPanelDetailMatch[1];
@@ -2143,7 +2155,7 @@ export function createApiFetchHandler(dependencies: AppDependencies = {}) {
     }
 
     const unitMatch = url.pathname.match(/^\/api\/units\/([^/]+)$/);
-    if (unitMatch && request.method === "GET") {
+    if (unitMatch && (request.method === "GET" || request.method === "PUT" || request.method === "DELETE")) {
       const unitId = unitMatch[1];
       return handleUnitDetailRoute(
         request,

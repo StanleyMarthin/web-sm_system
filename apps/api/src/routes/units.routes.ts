@@ -5,6 +5,7 @@ import {
 } from "@smsystem/contracts/unit";
 import {
   createUnitPanelRequestSchema,
+  renameUnitPanelCategoryRequestSchema,
   updateUnitPanelRequestSchema,
 } from "@smsystem/contracts/unit-panel";
 import { permissionCodes } from "@smsystem/permissions";
@@ -89,6 +90,8 @@ async function requireUnitManageSession(
 
   const permissions = sessionResult.session.user.permissions;
   if (
+    sessionResult.session.user.scope.canViewAllUnits ||
+    permissions.includes(permissionCodes.viewAllUnits) ||
     permissions.includes(permissionCodes.manageUsers)
     || permissions.includes(permissionCodes.unitPanelManage)
   ) {
@@ -98,7 +101,7 @@ async function requireUnitManageSession(
   return {
     response: errorResponse(
       request,
-      "Akses kelola unit tidak tersedia untuk user aktif.",
+      "Akses kelola unit membutuhkan scope semua unit atau permission kelola unit.",
       403,
       "UNIT_MANAGE_FORBIDDEN",
     ),
@@ -379,6 +382,44 @@ export async function handleUnitPanelDetailRoute(
 
     const result = await unitsService.deleteUnitPanel(sessionResult.session, unitId, panelId);
     return successResponse(request, "Master panel berhasil dihapus.", result);
+  } catch (error) {
+    return mapUnitsError(request, error);
+  }
+}
+
+export async function handleUnitPanelCategoryRoute(
+  request: Request,
+  unitId: string,
+  authService: AuthService,
+  unitsService: UnitsService,
+): Promise<Response> {
+  const sessionResult = await requireUnitPanelManageSession(request, authService);
+  if ("response" in sessionResult) {
+    return sessionResult.response;
+  }
+
+  try {
+    const body = await parseJsonBody(request, renameUnitPanelCategoryRequestSchema);
+    if (!body.success) {
+      return withCors(request, body.response);
+    }
+
+    const result = await unitsService.renameUnitPanelCategory(
+      sessionResult.session,
+      unitId,
+      body.data,
+    );
+
+    if (result.updatedCount === 0) {
+      return errorResponse(
+        request,
+        `Tidak ada panel atau part pada kategori "${body.data.fromCategory}" yang bisa diperbarui.`,
+        404,
+        "UNIT_PANEL_CATEGORY_NOT_FOUND",
+      );
+    }
+
+    return successResponse(request, "Kategori master panel berhasil diperbarui.", result);
   } catch (error) {
     return mapUnitsError(request, error);
   }

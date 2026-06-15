@@ -13,10 +13,12 @@ import {
   type WorkflowLayoutPayload,
 } from "@smsystem/contracts/workflow-layout";
 import {
+  unitPanelCategoryRenameEnvelopeSchema,
   unitPanelCollectionEnvelopeSchema,
   unitPanelDeleteEnvelopeSchema,
   unitPanelMutationEnvelopeSchema,
   type CreateUnitPanelRequest,
+  type RenameUnitPanelCategoryRequest,
   type UpdateUnitPanelRequest,
 } from "@smsystem/contracts/unit-panel";
 import { z } from "zod";
@@ -394,6 +396,33 @@ export async function updateUnitPanel(
   return {
     success: true as const,
     result: payload.data.record,
+  };
+}
+
+export async function renameUnitPanelCategory(
+  unitId: string,
+  input: RenameUnitPanelCategoryRequest,
+) {
+  const response = await fetch(`${getApiBaseUrl()}/api/units/${unitId}/master-panels/category`, {
+    method: "PUT",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(input),
+  });
+
+  if (!response.ok) {
+    return {
+      ...(await parseFailure(response)),
+      success: false as const,
+    };
+  }
+
+  const payload = unitPanelCategoryRenameEnvelopeSchema.parse(await response.json());
+  return {
+    success: true as const,
+    result: payload.data,
   };
 }
 

@@ -90,6 +90,11 @@ export const updateUnitPanelRequestSchema = z.object({
   isActive: z.boolean().optional().default(true),
 });
 
+export const renameUnitPanelCategoryRequestSchema = z.object({
+  fromCategory: z.string().trim().min(1).max(100),
+  toCategory: z.string().trim().min(1).max(100),
+});
+
 export const unitPanelCollectionEnvelopeSchema = z.object({
   success: z.boolean(),
   message: z.string(),
@@ -112,6 +117,14 @@ export const unitPanelDeleteEnvelopeSchema = z.object({
   }),
 });
 
+export const unitPanelCategoryRenameEnvelopeSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+  data: z.object({
+    updatedCount: z.number().int().nonnegative(),
+  }),
+});
+
 export type UnitPanelNodeType = z.infer<typeof unitPanelNodeTypeSchema>;
 export type UnitPanelLocationType = z.infer<typeof unitPanelLocationTypeSchema>;
 export type UnitPanelStockStatus = z.infer<typeof unitPanelStockStatusSchema>;
@@ -120,3 +133,4 @@ export type UnitPanelRecord = z.infer<typeof unitPanelRecordSchema>;
 export type UnitPanelCollection = z.infer<typeof unitPanelCollectionSchema>;
 export type CreateUnitPanelRequest = z.infer<typeof createUnitPanelRequestSchema>;
 export type UpdateUnitPanelRequest = z.infer<typeof updateUnitPanelRequestSchema>;
+export type RenameUnitPanelCategoryRequest = z.infer<typeof renameUnitPanelCategoryRequestSchema>;

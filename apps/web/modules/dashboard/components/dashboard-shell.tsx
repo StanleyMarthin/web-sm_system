@@ -1,27 +1,27 @@
+"use client";
+
 import type { AuthUser } from "@smsystem/contracts/auth";
 import type { DashboardSummaryPayload } from "@smsystem/contracts/dashboard";
+import type { IssueRecord } from "@smsystem/contracts/issue";
 import type { QcQueueRecord } from "@smsystem/contracts/qc";
 import {
   AlertTriangle,
   ArrowRight,
-  Boxes,
   BriefcaseBusiness,
-  CalendarClock,
-  CheckCircle2,
-  ClipboardCheck,
-  Clock3,
-  Gauge,
+  ChevronLeft,
+  ChevronRight,
   PackageSearch,
-  ShieldAlert,
+  ShieldX,
   Wrench,
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
-import type {
-  DashboardFilterParams,
-} from "@/shared/api/dashboard";
+import { useEffect, useState } from "react";
+import type { DashboardFilterParams } from "@/shared/api/dashboard";
 import type { PlanningWorkspacePayload } from "@/shared/api/planning";
-import { DashboardFilterBar } from "./dashboard-filter-bar";
+import { SearchableSelect } from "@/shared/ui/compact";
+import { getCalendarDayState } from "./dashboard-calendar";
 
 interface DashboardShellProps {
   summary: DashboardSummaryPayload;
@@ -30,56 +30,95 @@ interface DashboardShellProps {
   planning?: PlanningWorkspacePayload | null;
   qcQueue?: QcQueueRecord[];
   qcRework?: QcQueueRecord[];
+  issueLogRows?: IssueRecord[];
   isDeferredLoading?: boolean;
 }
 
-type SignalTone = "danger" | "warn" | "info";
+type SpkWorkType = "all" | "normal" | "lembur";
 
-type QaDivisionRow = {
+type QcDivisionRow = {
   divisionName: string;
   okCount: number;
   reworkCount: number;
   total: number;
 };
 
-type DangerSignal = {
-  key: string;
-  label: string;
-  detail: string;
-  href: string;
-  tone: SignalTone;
+type IssueDivisionRow = {
+  divisionId: string;
+  divisionName: string;
+  issueCount: number;
+  issues: IssueRecord[];
 };
 
-function fmt(v: number) {
-  return new Intl.NumberFormat("id-ID", { maximumFractionDigits: 0 }).format(v);
+type TaskMonitoringRow = {
+  divisionId: number;
+  divisionName: string;
+  belumMulai: number;
+  pending: number;
+  berjalan: number;
+  submit: number;
+  done: number;
+  totalTasks: number;
+  performancePct: number;
+};
+
+type SpkDivisionRow = {
+  divisionId: number;
+  divisionName: string;
+  units: Array<{
+    carId: string;
+    unitName: string;
+    allocatedHours: number;
+    actualHours: number;
+    workType: "normal" | "lembur";
+  }>;
+  totalAllocated: number;
+  totalActual: number;
+};
+
+type AktualDivisionRow = {
+  divisionId: number;
+  divisionName: string;
+  units: Array<{ carId: string; unitName: string; actualHours: number }>;
+  totalActual: number;
+};
+
+type CalRow = {
+  carId: string;
+  unitName: string;
+  targetDeliveryDate: string | null;
+};
+
+function fmt(value: number) {
+  return new Intl.NumberFormat("id-ID", { maximumFractionDigits: 0 }).format(value);
 }
 
-function fmtDec(v: number) {
+function fmtDec(value: number) {
   return new Intl.NumberFormat("id-ID", {
     minimumFractionDigits: 0,
     maximumFractionDigits: 1,
-  }).format(v);
+  }).format(value);
 }
 
-function fmtPct(v: number) {
-  return `${fmtDec(v)}%`;
+function fmtPct(value: number) {
+  return `${fmtDec(value)}%`;
 }
 
-function fmtDate(v: string | null) {
-  if (!v) return "Belum dijadwalkan";
+function fmtDate(value: string | null) {
+  if (!value) return "Belum dijadwalkan";
   try {
     return new Intl.DateTimeFormat("id-ID", {
       day: "2-digit",
       month: "short",
       year: "numeric",
       timeZone: "UTC",
-    }).format(new Date(`${v}T00:00:00.000Z`));
+    }).format(new Date(`${value}T00:00:00.000Z`));
   } catch {
-    return v;
+    return value;
   }
 }
 
-function fmtDateTime(v: string) {
+function fmtDateTime(value: string) {
   try {
     return new Intl.DateTimeFormat("id-ID", {
       day: "2-digit",
@@ -88,9 +127,9 @@ function fmtDateTime(v: string) {
       minute: "2-digit",
       hour12: false,
       timeZone: "Asia/Jakarta",
-    }).format(new Date(v));
+    }).format(new Date(value));
   } catch {
-    return v;
+    return value;
   }
 }
 
@@ -108,6 +147,7 @@ function getGreetingLabel(reference: string) {
       }).format(new Date(reference)),
       10,
     );
+
     if (hour < 11) return "Selamat Pagi";
     if (hour < 15) return "Selamat Siang";
     if (hour < 19) return "Selamat Sore";
@@ -123,11 +163,13 @@ function buildHref(
   overrides?: Record<string, string | number | null | undefined>,
 ) {
   const params = new URLSearchParams();
+
   if (filters?.date) params.set("date", filters.date);
   if (filters?.dateFrom) params.set("dateFrom", filters.dateFrom);
   if (filters?.dateTo) params.set("dateTo", filters.dateTo);
   if (filters?.divisionId) params.set("divisionId", filters.divisionId);
   if (filters?.unitId) params.set("unitId", filters.unitId);
+
   for (const [key, value] of Object.entries(overrides ?? {})) {
     if (value == null || value === "") {
       params.delete(key);
@@ -135,8 +177,20 @@ function buildHref(
     }
     params.set(key, String(value));
   }
+
   const qs = params.toString();
   return qs ? `${path}?${qs}` : path;
+}
+
+function buildIssueHref(filters?: DashboardFilterParams) {
+  const params = new URLSearchParams();
+  if (filters?.divisionId) params.append("filter", `divisionId:eq:${filters.divisionId}`);
+  if (filters?.unitId) params.append("filter", `carId:eq:${filters.unitId}`);
+  params.set("sortBy", "createdAt");
+  params.set("sortDirection", "desc");
+
+  const qs = params.toString();
+  return qs ? `/issues?${qs}` : "/issues";
 }
 
 function displayName(user: AuthUser | null) {
@@ -144,538 +198,10 @@ function displayName(user: AuthUser | null) {
   return user.fullName.split(" ")[0] ?? user.fullName;
 }
 
-function normalizeRoleName(roleName: string | null | undefined) {
-  return String(roleName ?? "")
-    .trim()
-    .toUpperCase()
-    .replaceAll("-", "_")
-    .replaceAll(" ", "_");
-}
-
-function isExecutiveRole(user: AuthUser | null) {
-  const role = normalizeRoleName(user?.roleName);
-  return [
-    "DIREKSI",
-    "DIRECTOR",
-    "PROJECT_MANAGER",
-    "MANAGER_PRODUKSI",
-    "MANAGER_PROJECT",
-    "MANAGER_OPERATIONAL",
-    "MIS",
-    "ADMIN",
-  ].includes(role) || Boolean(user?.scope.canViewAllUnits);
-}
-
-function isKdRole(user: AuthUser | null) {
-  return normalizeRoleName(user?.roleName) === "KETUA_DIVISI";
-}
-
-function Card({
-  children,
-  className = "",
-}: {
-  children: ReactNode;
-  className?: string;
-}) {
-  return (
-    <section
-      className={`overflow-hidden border border-gray-300 dark:border-white/[0.05] bg-white dark:bg-[#111114] ${className}`}
-    >
-      {children}
-    </section>
-  );
-}
-
-function SectionHeader({
-  eyebrow,
-  title,
-  detail,
-  href,
-  hrefLabel,
-}: {
-  eyebrow: string;
-  title: string;
-  detail?: string;
-  href?: string;
-  hrefLabel?: string;
-}) {
-  return (
-    <div className="flex items-start justify-between gap-3 border-b border-gray-300 dark:border-white/[0.05] px-3 py-2">
-      <div className="space-y-1">
-        <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/30">{eyebrow}</p>
-        <div className="space-y-0.5">
-          <h3 className="text-[12px] font-medium text-gray-950 dark:text-white">{title}</h3>
-          {detail ? null : null}
-        </div>
-      </div>
-      {href && hrefLabel ? (
-        <Link
-          href={href}
-          prefetch={false}
-          className="mt-0.5 inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/35 transition hover:text-gray-700 dark:text-white/68"
-        >
-          {hrefLabel}
-          <ArrowRight className="h-3 w-3" />
-        </Link>
-      ) : null}
-    </div>
-  );
-}
-
-function EmptyState({ message }: { message: string }) {
-  return (
-    <div className="border border-dashed border-gray-300 dark:border-white/[0.08] bg-slate-50 dark:bg-[#0a0a0c] px-3 py-4 text-[11px] text-gray-500 dark:text-white/35">
-      {message}
-    </div>
-  );
-}
-
-function DeferredRowsSkeleton({ rows = 3 }: { rows?: number }) {
-  return (
-    <div className="space-y-2">
-      {Array.from({ length: rows }).map((_, index) => (
-        <div
-          key={index}
-          className="border border-gray-300 dark:border-white/[0.05] bg-slate-50 dark:bg-[#0a0a0c] px-3 py-2"
-        >
-          <div className="h-3 w-2/5 animate-pulse bg-gray-200 dark:bg-white/[0.06]" />
-          <div className="mt-2 h-2 w-full animate-pulse bg-gray-200 dark:bg-white/[0.05]" />
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function InlineBadge({
-  children,
-  tone = "neutral",
-}: {
-  children: ReactNode;
-  tone?: "neutral" | "good" | "warn" | "danger";
-}) {
-  const className =
-    tone === "good"
-      ? "border-emerald-400/30 text-emerald-300"
-      : tone === "warn"
-        ? "border-amber-500/30 text-amber-500/70"
-        : tone === "danger"
-          ? "border-red-400/30 text-red-400/70"
-          : "border-gray-300 dark:border-white/10 text-gray-700 dark:text-white/60";
-  return (
-    <span className={`inline-flex items-center border px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] ${className}`}>
-      {children}
-    </span>
-  );
-}
-
-function MetricPill({
-  label,
-  value,
-  helper,
-}: {
-  label: string;
-  value: string;
-  helper: string;
-}) {
-  return (
-    <div className="border border-gray-300 dark:border-white/[0.05] bg-slate-50 dark:bg-[#0a0a0c] px-3 py-2">
-      <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/30">{label}</p>
-      <p className="mt-1 font-mono text-[13px] font-semibold text-gray-950 dark:text-white">{value}</p>
-      {helper ? null : null}
-    </div>
-  );
-}
-
-function BarTrack({
-  label,
-  value,
-  total,
-  colorClass,
-  helper,
-}: {
-  label: string;
-  value: number;
-  total: number;
-  colorClass: string;
-  helper: string;
-}) {
-  const pct = total > 0 ? clampPct((value / total) * 100) : 0;
-  return (
-    <div className="space-y-1">
-      <div className="flex items-center justify-between gap-3 text-[12px] text-gray-950 dark:text-white">
-        <span>{label}</span>
-        <span className="font-mono font-semibold">{fmtDec(value)} jam</span>
-      </div>
-      <div className="h-2 bg-white/[0.06]">
-        <div className={`h-2 ${colorClass}`} style={{ width: `${pct}%` }} />
-      </div>
-      {helper ? null : null}
-    </div>
-  );
-}
-
-function StackedBar({
-  plan,
-  actual,
-  remaining,
-}: {
-  plan: number;
-  actual: number;
-  remaining: number;
-}) {
-  const total = Math.max(1, plan + actual + remaining);
-  return (
-    <div className="flex h-2 overflow-hidden bg-white/[0.05]">
-      <div className="bg-sky-400" style={{ width: `${(plan / total) * 100}%` }} />
-      <div className="bg-emerald-400" style={{ width: `${(actual / total) * 100}%` }} />
-      <div className="bg-amber-400/75" style={{ width: `${(remaining / total) * 100}%` }} />
-    </div>
-  );
-}
-
-function MiniCalendar({
-  rows,
-  asOfDate,
-}: {
-  rows: { unitName: string; targetDeliveryDate: string | null }[];
-  asOfDate?: string;
-}) {
-  const activeDate = asOfDate ? new Date(asOfDate) : new Date();
-  const year = activeDate.getFullYear();
-  const month = activeDate.getMonth();
-  const monthLabel = new Intl.DateTimeFormat("id-ID", {
-    month: "long",
-    year: "numeric",
-  }).format(activeDate);
-
-  const firstDayOfMonth = new Date(year, month, 1);
-  const startDayIndex = (firstDayOfMonth.getDay() + 6) % 7;
-  const totalDaysInMonth = new Date(year, month + 1, 0).getDate();
-  const todayStr = new Date().toISOString().split("T")[0];
-
-  const days: { dayNumber: number | null; dateString: string | null }[] = [];
-  for (let i = 0; i < startDayIndex; i += 1) {
-    days.push({ dayNumber: null, dateString: null });
-  }
-  for (let day = 1; day <= totalDaysInMonth; day += 1) {
-    days.push({
-      dayNumber: day,
-      dateString: `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
-    });
-  }
-
-  const unitsByDate = new Map<string, number>();
-  for (const row of rows) {
-    if (!row.targetDeliveryDate) continue;
-    const dateKey = row.targetDeliveryDate.split("T")[0];
-    unitsByDate.set(dateKey, (unitsByDate.get(dateKey) ?? 0) + 1);
-  }
-
-  return (
-    <div className="border border-gray-300 dark:border-white/[0.05] bg-slate-50 dark:bg-[#0a0a0c] p-3">
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <div>
-          <p className="text-[12px] font-medium text-gray-950 dark:text-white">{monthLabel}</p>
-        </div>
-        <InlineBadge tone="neutral">{fmt(rows.length)} unit</InlineBadge>
-      </div>
-
-      <div className="mb-2 grid grid-cols-7 gap-1 text-center font-mono text-[10px] uppercase tracking-[0.12em] text-gray-300 dark:text-white/28">
-        <span>Sen</span>
-        <span>Sel</span>
-        <span>Rab</span>
-        <span>Kam</span>
-        <span>Jum</span>
-        <span>Sab</span>
-        <span>Min</span>
-      </div>
-
-      <div className="grid grid-cols-7 gap-1">
-        {days.map((item, index) => {
-          if (!item.dayNumber || !item.dateString) {
-            return <div key={`empty-${index}`} className="aspect-square bg-transparent" />;
-          }
-
-          const scheduledCount = unitsByDate.get(item.dateString) ?? 0;
-          const isToday = item.dateString === todayStr;
-
-          return (
-            <div
-              key={item.dateString}
-              className={`flex aspect-square flex-col items-center justify-center border text-[11px] transition ${
-                isToday
-                  ? "border-sky-400/40 bg-transparent text-gray-950 dark:text-white"
-                  : scheduledCount > 0
-                    ? "border-emerald-400/30 bg-transparent text-emerald-100"
-                    : "border-gray-300 dark:border-white/[0.05] bg-transparent text-gray-500 dark:text-white/42"
-              }`}
-            >
-              <span className={isToday ? "font-semibold" : ""}>{item.dayNumber}</span>
-              {scheduledCount > 0 ? (
-                <span className="mt-0.5 text-[9px] font-medium text-emerald-300">{scheduledCount}u</span>
-              ) : null}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function TimelineBoard({
-  rows,
-  asOfDate,
-}: {
-  rows: { unitName: string; remainingHours: number; effectiveDailyCapacity: number; targetDeliveryDate: string | null }[];
-  asOfDate?: string;
-}) {
-  const scheduled = rows
-    .filter((row) => row.targetDeliveryDate)
-    .sort((left, right) => (left.targetDeliveryDate ?? "").localeCompare(right.targetDeliveryDate ?? ""));
-  const unscheduled = rows.filter((row) => !row.targetDeliveryDate);
-
-  return (
-    <div className="grid gap-2 lg:grid-cols-[1.45fr_1fr]">
-      <MiniCalendar rows={rows} asOfDate={asOfDate} />
-
-      <div className="grid gap-3">
-        <div className="border border-gray-300 dark:border-white/[0.05] bg-slate-50 dark:bg-[#0a0a0c] p-3">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold text-gray-950 dark:text-white">Unit prioritas</p>
-            </div>
-            <InlineBadge tone="neutral">{fmt(scheduled.length)} terjadwal</InlineBadge>
-          </div>
-          <div className="space-y-2">
-            {scheduled.length > 0 ? (
-              scheduled.slice(0, 5).map((row) => (
-                <div
-                  key={`${row.unitName}-${row.targetDeliveryDate}`}
-                  className="border border-gray-300 dark:border-white/[0.05] bg-transparent px-3 py-2"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-medium text-gray-950 dark:text-white">{row.unitName}</p>
-                      <p className="text-[11px] text-gray-500 dark:text-white/42">
-                        {fmtDec(row.remainingHours)} jam sisa • kapasitas {fmtDec(row.effectiveDailyCapacity)} jam/hari
-                      </p>
-                    </div>
-                    <p className="shrink-0 text-[11px] font-medium text-emerald-200">
-                      {fmtDate(row.targetDeliveryDate)}
-                    </p>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <EmptyState message="Belum ada unit dengan target delivery terjadwal." />
-            )}
-          </div>
-        </div>
-
-        <div className="border border-gray-300 dark:border-white/[0.05] bg-slate-50 dark:bg-[#0a0a0c] p-3">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold text-gray-950 dark:text-white">Belum terjadwal</p>
-            </div>
-            <InlineBadge tone="neutral">
-              {fmt(unscheduled.length)} unit
-            </InlineBadge>
-          </div>
-          {unscheduled.length > 0 ? (
-            <div className="space-y-2">
-              {unscheduled.slice(0, 4).map((row) => (
-                <div
-                  key={`${row.unitName}-draft`}
-                  className="flex items-center justify-between gap-3 border border-gray-300 dark:border-white/[0.05] bg-transparent px-3 py-2"
-                >
-                  <div>
-                    <p className="text-sm font-medium text-gray-950 dark:text-white">{row.unitName}</p>
-                    <p className="text-[11px] text-gray-500 dark:text-white/42">{fmtDec(row.remainingHours)} jam belum diplot ke delivery</p>
-                  </div>
-                  <Clock3 className="h-4 w-4 shrink-0 text-gray-500 dark:text-white/30" />
-                </div>
-              ))}
-            </div>
-          ) : (
-            <EmptyState message="Semua unit pada scope aktif sudah memiliki target delivery." />
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function getUnitScopeSummary(
-  planning: PlanningWorkspacePayload | null | undefined,
-  summary: DashboardSummaryPayload,
-) {
-  const planningUnits = planning?.weeklyPlan.planningUnits ?? [];
-  const totalBacklogHours =
-    planningUnits.length > 0
-      ? planningUnits.reduce((sum, item) => sum + item.remainingHours, 0)
-      : (summary.deliveryRisk?.topUnits ?? []).reduce((sum, item) => sum + item.remainingHours, 0);
-
-  const totalWeeklyCapacity =
-    summary.manhour?.byDivision.reduce((sum, item) => sum + item.capacityHours, 0) ?? 0;
-
-  return {
-    totalBacklogHours,
-    totalWeeklyCapacity,
-    pressurePercent:
-      totalWeeklyCapacity > 0 ? (totalBacklogHours / totalWeeklyCapacity) * 100 : 0,
-  };
-}
-
-function getMarginInsights(
-  planning: PlanningWorkspacePayload | null | undefined,
-  summary: DashboardSummaryPayload,
-) {
-  const planningUnits = planning?.weeklyPlan.planningUnits ?? [];
-  const allocationUnits = planning?.weeklyPlan.units ?? [];
-  const actualByCar = new Map(
-    (summary.unitWorkHours ?? []).map((item) => [item.carId, item.actualHours]),
-  );
-
-  const flagByCar = new Map<string, boolean>();
-  for (const item of planningUnits) flagByCar.set(item.carId, item.isMargin);
-  for (const item of allocationUnits) flagByCar.set(item.carId, item.isMargin);
-
-  let marginActual = 0;
-  let nonMarginActual = 0;
-  let knownActualCount = 0;
-  for (const [carId, actualHours] of actualByCar.entries()) {
-    const isMargin = flagByCar.get(carId);
-    if (typeof isMargin !== "boolean") continue;
-    knownActualCount += 1;
-    if (isMargin) marginActual += actualHours;
-    else nonMarginActual += actualHours;
-  }
-
-  let dataSource: "actual" | "allocated" = "actual";
-  if (knownActualCount === 0) {
-    dataSource = "allocated";
-    marginActual = 0;
-    nonMarginActual = 0;
-    for (const item of allocationUnits) {
-      if (item.isMargin) marginActual += item.allocatedHours;
-      else nonMarginActual += item.allocatedHours;
-    }
-  }
-
-  const totalProjects = planningUnits.length || allocationUnits.length;
-  const marginProjects = (planningUnits.length > 0 ? planningUnits : allocationUnits).filter(
-    (item) => item.isMargin,
-  ).length;
-
-  return {
-    marginHours: marginActual,
-    nonMarginHours: nonMarginActual,
-    totalHours: marginActual + nonMarginActual,
-    dataSource,
-    marginProjectRatio: totalProjects > 0 ? (marginProjects / totalProjects) * 100 : 0,
-  };
-}
-
-function getBottleneckDivision(summary: DashboardSummaryPayload) {
-  const rows = summary.manhour?.byDivision ?? [];
-  if (rows.length === 0) return null;
-  const sorted = [...rows].sort((left, right) => {
-    const rightLoad =
-      right.utilizationPercent ?? (right.capacityHours > 0 ? (right.actualHours / right.capacityHours) * 100 : 0);
-    const leftLoad =
-      left.utilizationPercent ?? (left.capacityHours > 0 ? (left.actualHours / left.capacityHours) * 100 : 0);
-    return rightLoad - leftLoad;
-  });
-  const top = sorted[0];
-  const load =
-    top?.utilizationPercent ?? (top && top.capacityHours > 0 ? (top.actualHours / top.capacityHours) * 100 : 0);
-  if (!top) return null;
-  return {
-    divisionId: top.divisionId,
-    divisionName: top.divisionName,
-    loadPercent: load,
-  };
-}
-
-function getAllocationRows(
-  planning: PlanningWorkspacePayload | null | undefined,
-  summary: DashboardSummaryPayload,
-) {
-  const rows = planning?.weeklyPlan.units ?? [];
-  const actualByCar = new Map((summary.unitWorkHours ?? []).map((item) => [item.carId, item.actualHours]));
-  const merged = rows.map((row) => ({
-    carId: row.carId,
-    unitName: row.unitName,
-    divisionId: row.divisionId,
-    divisionName: row.divisionName,
-    targetHours: row.allocatedHours,
-    actualHours: actualByCar.get(row.carId) ?? 0,
-    isMargin: row.isMargin,
-    materialStatus: row.materialStatus,
-    targetDeliveryDate: row.targetDeliveryDate,
-  }));
-  return merged
-    .sort((left, right) => {
-      const leftDate = left.targetDeliveryDate ?? "9999-12-31";
-      const rightDate = right.targetDeliveryDate ?? "9999-12-31";
-      return leftDate.localeCompare(rightDate);
-    })
-    .slice(0, 8);
-}
-
-function getDangerSignals(
-  planning: PlanningWorkspacePayload | null | undefined,
-  summary: DashboardSummaryPayload,
-  filters?: DashboardFilterParams,
-): DangerSignal[] {
-  const signals: DangerSignal[] = [];
-  for (const row of summary.manhour?.byDivision ?? []) {
-    const load =
-      row.utilizationPercent ?? (row.capacityHours > 0 ? (row.actualHours / row.capacityHours) * 100 : 0);
-    if (load > 100) {
-      signals.push({
-        key: `load-${row.divisionId}`,
-        label: `${row.divisionName} overbudget jam kerja`,
-        detail: `${fmtPct(load)} load dari kapasitas normal mingguan.`,
-        href: buildHref("/monitoring/division", filters, { divisionId: row.divisionId }),
-        tone: "danger",
-      });
-    }
-  }
-
-  const huntingRows = (planning?.weeklyPlan.units ?? []).filter((row) => row.materialStatus === "HUNTING");
-  for (const row of huntingRows.slice(0, 3)) {
-    signals.push({
-      key: `hunt-${row.carId}-${row.divisionId}`,
-      label: `${row.unitName} macet material`,
-      detail: `${row.divisionName} masih menunggu part/material.`,
-      href: buildHref("/planning", filters, { unitId: row.carId, divisionId: row.divisionId }),
-      tone: "warn",
-    });
-  }
-
-  for (const row of (summary.countdownOverdue ?? []).slice(0, 3)) {
-    signals.push({
-      key: `overdue-${row.countdownId}`,
-      label: `${row.unitName} lewat timeline`,
-      detail: `${row.panelName} terlambat ${fmt(row.overdueDays)} hari.`,
-      href: buildHref("/countdown", filters, { unitId: row.carId }),
-      tone: row.overdueDays >= 7 ? "danger" : "warn",
-    });
-  }
-
-  const riskSummary = summary.deliveryRisk?.summary;
-  if (riskSummary && (riskSummary.red > 0 || riskSummary.orange > 0)) {
-    signals.unshift({
-      key: "delivery-risk",
-      label: `${fmt(riskSummary.red + riskSummary.orange)} unit butuh rescue delivery`,
-      detail: `${fmt(riskSummary.red)} merah, ${fmt(riskSummary.orange)} oranye pada radar delivery.`,
-      href: buildHref("/reports/delivery-accuracy", filters),
-      tone: "danger",
-    });
-  }
-
-  return signals.slice(0, 6);
+function getHeaderHelperText(filters?: DashboardFilterParams, currentUser?: AuthUser | null) {
+  if (filters?.unitId) return "Lagi fokus ke satu unit.";
+  if (filters?.divisionId || currentUser?.divisionName) return "Pilih unit kalau mau cek lebih detail.";
+  return "Pilih bagian atau unit kerja.";
 }
 
 function isTechnicalDivisionName(name: string | null | undefined) {
@@ -684,7 +210,9 @@ function isTechnicalDivisionName(name: string | null | undefined) {
     .toUpperCase()
     .replaceAll("&", "AND")
     .replace(/[^A-Z0-9]/g, "");
+
   if (!normalized) return false;
+
   const excluded = new Set([
     "ACCOUNTING",
     "ADVISOR",
@@ -704,38 +232,31 @@ function isTechnicalDivisionName(name: string | null | undefined) {
     "LEGAL",
     "TAX",
   ]);
+
   return !excluded.has(normalized);
 }
 
-function getPlanVsActualRows(summary: DashboardSummaryPayload) {
-  const progressMap = new Map(
-    (summary.divisionKpis ?? []).map((row) => [row.divisionId, row.avgProgressPercent]),
-  );
-  return (summary.manhour?.byDivision ?? [])
-    .filter((row) => isTechnicalDivisionName(row.divisionName))
-    .filter((row) => row.plannedHours > 0 || row.actualHours > 0 || row.remainingHours > 0)
-    .map((row) => ({
-      divisionId: row.divisionId,
-      divisionName: row.divisionName,
-      planHours: row.plannedHours,
-      actualHours: row.actualHours,
-      remainingHours: row.remainingHours,
-      progressPercent: progressMap.get(row.divisionId) ?? null,
-    }))
-    .sort((left, right) => {
-      const rightScore = right.actualHours + right.remainingHours + right.planHours;
-      const leftScore = left.actualHours + left.remainingHours + left.planHours;
-      return rightScore - leftScore;
-    });
+function daysRemaining(targetDate: string | null, asOfDate?: string) {
+  if (!targetDate) return null;
+
+  try {
+    const target = new Date(`${targetDate.split("T")[0]}T00:00:00.000Z`);
+    const refValue = asOfDate?.split("T")[0] ?? new Date().toISOString().split("T")[0];
+    const reference = new Date(`${refValue}T00:00:00.000Z`);
+    return Math.ceil((target.getTime() - reference.getTime()) / 86_400_000);
+  } catch {
+    return null;
+  }
 }
 
-function getQaRows(qcQueue: QcQueueRecord[], qcRework: QcQueueRecord[]) {
-  const map = new Map<string, QaDivisionRow>();
+function getQcFailRows(qcQueue: QcQueueRecord[], qcRework: QcQueueRecord[]) {
+  const map = new Map<string, QcDivisionRow>();
 
   const ensure = (divisionName: string) => {
     const existing = map.get(divisionName);
     if (existing) return existing;
-    const created: QaDivisionRow = {
+
+    const created: QcDivisionRow = {
       divisionName,
       okCount: 0,
       reworkCount: 0,
@@ -754,59 +275,581 @@ function getQaRows(qcQueue: QcQueueRecord[], qcRework: QcQueueRecord[]) {
 
   for (const row of qcRework) {
     const divisionName = row.divisionName ?? "Tanpa Divisi";
-    const target = ensure(divisionName);
-    target.reworkCount += 1;
+    ensure(divisionName).reworkCount += 1;
   }
 
-  const rows = [...map.values()].map((row) => ({
-    ...row,
-    total: row.okCount + row.reworkCount,
-  }));
-
-  return rows
-    .filter((row) => isTechnicalDivisionName(row.divisionName))
-    .sort((left, right) => right.total - left.total || left.divisionName.localeCompare(right.divisionName))
-    .slice(0, 6);
+  return [...map.values()]
+    .map((row) => ({ ...row, total: row.okCount + row.reworkCount }))
+    .filter((row) => isTechnicalDivisionName(row.divisionName) && row.reworkCount > 0)
+    .sort((left, right) => right.reworkCount - left.reworkCount || left.divisionName.localeCompare(right.divisionName));
 }
 
-function buildGreeting({
-  currentUser,
-  summary,
-  planning,
-  qcRework,
+function getIssueRows(issueLogRows: IssueRecord[]) {
+  const map = new Map<string, IssueDivisionRow>();
+
+  const ensure = (divisionId: string, divisionName: string) => {
+    const existing = map.get(divisionId);
+    if (existing) return existing;
+
+    const created: IssueDivisionRow = {
+      divisionId,
+      divisionName,
+      issueCount: 0,
+      issues: [],
+    };
+    map.set(divisionId, created);
+    return created;
+  };
+
+  for (const row of issueLogRows) {
+    if (row.status === "RESOLVED" || row.status === "WAIVED") continue;
+    const divisionId = row.divisionId ? String(row.divisionId) : "__tanpa_divisi__";
+    const divisionName = row.divisionName?.trim() || "Tanpa Divisi";
+    if (!isTechnicalDivisionName(divisionName)) continue;
+    const target = ensure(divisionId, divisionName);
+    target.issueCount += 1;
+    target.issues.push(row);
+  }
+
+  return [...map.values()].sort((left, right) => right.issueCount - left.issueCount);
+}
+
+function getTaskMonitoringRows(
+  planning: PlanningWorkspacePayload | null | undefined,
+  summary: DashboardSummaryPayload,
+) {
+  const allocationUnits = planning?.weeklyPlan.units ?? [];
+
+  const actualByCar = new Map(
+    (summary.unitWorkHours ?? []).map((item) => [item.carId, item.actualHours]),
+  );
+  const progressByDivision = new Map(
+    (summary.divisionKpis ?? []).map((row) => [row.divisionId, row.avgProgressPercent]),
+  );
+
+  type DivisionAccum = {
+    divisionId: number;
+    divisionName: string;
+    units: Array<{
+      carId: string;
+      allocatedHours: number;
+      actualHours: number;
+      materialStatus: string;
+    }>;
+  };
+
+  const divisionMap = new Map<number, DivisionAccum>();
+
+  for (const unit of allocationUnits) {
+    const divisionId = Number(unit.divisionId ?? 0);
+    if (!divisionId || !isTechnicalDivisionName(unit.divisionName)) continue;
+
+    if (!divisionMap.has(divisionId)) {
+      divisionMap.set(divisionId, {
+        divisionId,
+        divisionName: unit.divisionName,
+        units: [],
+      });
+    }
+
+    divisionMap.get(divisionId)?.units.push({
+      carId: unit.carId,
+      allocatedHours: unit.allocatedHours,
+      actualHours: actualByCar.get(unit.carId) ?? 0,
+      materialStatus: unit.materialStatus ?? "",
+    });
+  }
+
+  for (const division of summary.manhour?.byDivision ?? []) {
+    if (!isTechnicalDivisionName(division.divisionName)) continue;
+
+    if (!divisionMap.has(division.divisionId)) {
+      divisionMap.set(division.divisionId, {
+        divisionId: division.divisionId,
+        divisionName: division.divisionName,
+        units: [],
+      });
+    }
+  }
+
+  const rows: TaskMonitoringRow[] = [];
+
+  for (const [divisionId, division] of divisionMap.entries()) {
+    let belumMulai = 0;
+    let pending = 0;
+    let berjalan = 0;
+    let submit = 0;
+    let done = 0;
+
+    for (const unit of division.units) {
+      const progress = unit.allocatedHours > 0 ? (unit.actualHours / unit.allocatedHours) * 100 : 0;
+
+      if (unit.materialStatus === "HUNTING") pending += 1;
+      else if (unit.actualHours === 0) belumMulai += 1;
+      else if (progress >= 100) done += 1;
+      else if (progress >= 80) submit += 1;
+      else berjalan += 1;
+    }
+
+    const performancePct = clampPct(
+      progressByDivision.get(divisionId) ??
+        (division.units.length > 0
+          ? ((done + submit) / Math.max(1, division.units.length)) * 100
+          : 0),
+    );
+
+    rows.push({
+      divisionId,
+      divisionName: division.divisionName,
+      belumMulai,
+      pending,
+      berjalan,
+      submit,
+      done,
+      totalTasks: division.units.length,
+      performancePct,
+    });
+  }
+
+  return rows
+    .filter((row) => row.totalTasks > 0 || progressByDivision.has(row.divisionId))
+    .sort((left, right) => right.totalTasks - left.totalTasks || left.divisionName.localeCompare(right.divisionName));
+}
+
+function getSpkByDivision(
+  planning: PlanningWorkspacePayload | null | undefined,
+  summary: DashboardSummaryPayload,
+  workType: SpkWorkType,
+) {
+  const actualByCar = new Map(
+    (summary.unitWorkHours ?? []).map((item) => [item.carId, item.actualHours]),
+  );
+  const divisionMap = new Map<number, SpkDivisionRow>();
+
+  for (const unit of planning?.weeklyPlan.units ?? []) {
+    if (!unit.divisionId || !isTechnicalDivisionName(unit.divisionName)) continue;
+
+    // API sudah mengirimkan flag lembur di payload runtime, tetapi kontrak typing
+    // dashboard belum memuat field itu.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const unitWorkType: "normal" | "lembur" = (unit as any).isLembur ? "lembur" : "normal";
+    if (workType !== "all" && unitWorkType !== workType) continue;
+
+    const divisionId = Number(unit.divisionId);
+    if (!divisionMap.has(divisionId)) {
+      divisionMap.set(divisionId, {
+        divisionId,
+        divisionName: unit.divisionName,
+        units: [],
+        totalAllocated: 0,
+        totalActual: 0,
+      });
+    }
+
+    const actualHours = actualByCar.get(unit.carId) ?? 0;
+    const division = divisionMap.get(divisionId)!;
+    division.units.push({
+      carId: unit.carId,
+      unitName: unit.unitName,
+      allocatedHours: unit.allocatedHours,
+      actualHours,
+      workType: unitWorkType,
+    });
+    division.totalAllocated += unit.allocatedHours;
+    division.totalActual += actualHours;
+  }
+
+  return [...divisionMap.values()]
+    .filter((division) => division.units.length > 0)
+    .sort((left, right) => right.totalAllocated - left.totalAllocated);
+}
+
+function getAktualByDivision(
+  summary: DashboardSummaryPayload,
+  planning: PlanningWorkspacePayload | null | undefined,
+  workType: SpkWorkType,
+) {
+  const carInfo = new Map<
+    string,
+    {
+      unitName: string;
+      divisionId: number;
+      divisionName: string;
+      workType: "normal" | "lembur";
+    }
+  >();
+
+  for (const unit of planning?.weeklyPlan.units ?? []) {
+    if (!unit.divisionId) continue;
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const unitWorkType: "normal" | "lembur" = (unit as any).isLembur ? "lembur" : "normal";
+    carInfo.set(unit.carId, {
+      unitName: unit.unitName,
+      divisionId: Number(unit.divisionId),
+      divisionName: unit.divisionName,
+      workType: unitWorkType,
+    });
+  }
+
+  const divisionMap = new Map<number, AktualDivisionRow>();
+
+  for (const unitWork of summary.unitWorkHours ?? []) {
+    if (unitWork.actualHours <= 0) continue;
+
+    const info = carInfo.get(unitWork.carId);
+    if (!info || !isTechnicalDivisionName(info.divisionName)) continue;
+    if (workType !== "all" && info.workType !== workType) continue;
+
+    if (!divisionMap.has(info.divisionId)) {
+      divisionMap.set(info.divisionId, {
+        divisionId: info.divisionId,
+        divisionName: info.divisionName,
+        units: [],
+        totalActual: 0,
+      });
+    }
+
+    const division = divisionMap.get(info.divisionId)!;
+    division.units.push({
+      carId: unitWork.carId,
+      unitName: info.unitName,
+      actualHours: unitWork.actualHours,
+    });
+    division.totalActual += unitWork.actualHours;
+  }
+
+  for (const division of summary.manhour?.byDivision ?? []) {
+    if (!isTechnicalDivisionName(division.divisionName) || division.actualHours <= 0) continue;
+
+    if (!divisionMap.has(division.divisionId)) {
+      divisionMap.set(division.divisionId, {
+        divisionId: division.divisionId,
+        divisionName: division.divisionName,
+        units: [],
+        totalActual: division.actualHours,
+      });
+    }
+  }
+
+  return [...divisionMap.values()]
+    .filter((division) => division.totalActual > 0)
+    .sort((left, right) => right.totalActual - left.totalActual);
+}
+
+function Card({
+  children,
+  className = "",
 }: {
-  currentUser: AuthUser | null;
-  summary: DashboardSummaryPayload;
-  planning: PlanningWorkspacePayload | null | undefined;
-  qcRework: QcQueueRecord[];
+  children: ReactNode;
+  className?: string;
 }) {
-  const hello = getGreetingLabel(summary.generatedAt);
-  const name = displayName(currentUser);
-  const margin = getMarginInsights(planning, summary);
-  const riskUnits = (summary.deliveryRisk?.summary.red ?? 0) + (summary.deliveryRisk?.summary.orange ?? 0);
-  const pending = summary.pendingActions?.total ?? 0;
-  const bottleneck = getBottleneckDivision(summary);
+  return (
+    <section
+      className={`overflow-hidden border border-white/[0.05] bg-[#0d0d10] ${className}`}
+    >
+      {children}
+    </section>
+  );
+}
 
-  if (isKdRole(currentUser)) {
-    const divisionName = currentUser?.divisionName || "Divisi";
-    const members = (summary.manhour?.byEmployee ?? []).filter(
-      (row) => row.divisionName === divisionName,
-    ).length;
-    const targetHours = (planning?.weeklyPlan.units ?? [])
-      .filter((row) => row.divisionId === currentUser?.divisionId)
-      .reduce((sum, row) => sum + row.allocatedHours, 0);
-    const qcRevisionCount = qcRework.filter(
-      (row) => (row.divisionName ?? "") === divisionName,
-    ).length;
+function SectionHeader({
+  eyebrow,
+  title,
+  detail,
+  href,
+  hrefLabel,
+  right,
+}: {
+  eyebrow: string;
+  title?: string;
+  detail?: string;
+  href?: string;
+  hrefLabel?: string;
+  right?: ReactNode;
+}) {
+  return (
+    <div className="flex flex-wrap items-start justify-between gap-3 px-4 py-3">
+      <div className="space-y-1">
+        <p className="font-mono text-[10px] uppercase tracking-widest text-white/25">
+          {eyebrow}
+        </p>
+        {title ? (
+          <h3 className="text-[13px] font-medium text-white">{title}</h3>
+        ) : null}
+        {detail ? (
+          <p className="text-[11px] text-white/35">{detail}</p>
+        ) : null}
+      </div>
+      {right ??
+        (href && hrefLabel ? (
+          <Link
+            href={href}
+            prefetch={false}
+            className="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-widest text-white/30 transition hover:bg-white/[0.03] hover:text-white/60"
+          >
+            {hrefLabel}
+            <ArrowRight className="h-3 w-3" />
+          </Link>
+        ) : null)}
+    </div>
+  );
+}
 
-    return members >= 0 && targetHours >= 0 && qcRevisionCount >= 0 && hello && name ? null : null;
+function EmptyState({ message }: { message: string }) {
+  return (
+    <div className="border border-dashed border-white/[0.08] bg-white/[0.02] px-3 py-4 font-mono text-[11px] text-white/30">
+      {message}
+    </div>
+  );
+}
+
+function DeferredRowsSkeleton({ rows = 3 }: { rows?: number }) {
+  return (
+    <div className="space-y-2">
+      {Array.from({ length: rows }).map((_, index) => (
+        <div
+          key={index}
+          className="border border-white/[0.05] bg-[#0a0a0c] px-3 py-2"
+        >
+          <div className="h-3 w-2/5 animate-pulse bg-white/[0.06]" />
+          <div className="mt-2 h-2 w-full animate-pulse bg-white/[0.05]" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function InlineBadge({
+  children,
+  tone = "neutral",
+}: {
+  children: ReactNode;
+  tone?: "neutral" | "good" | "warn" | "danger";
+}) {
+  const className =
+    tone === "good"
+      ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-300"
+      : tone === "warn"
+        ? "border-amber-500/30 bg-amber-500/15 text-amber-300"
+        : tone === "danger"
+          ? "border-red-500/30 bg-red-500/15 text-red-300"
+          : "border-white/10 bg-white/[0.02] text-white/60";
+
+  return (
+    <span
+      className={`inline-flex items-center border px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest ${className}`}
+    >
+      {children}
+    </span>
+  );
+}
+
+function MiniBar({
+  value,
+  colorClass,
+}: {
+  value: number;
+  colorClass: string;
+}) {
+  return (
+    <div className="h-1.5 bg-white/[0.05]">
+      <div className={`h-1.5 ${colorClass}`} style={{ width: `${clampPct(value)}%` }} />
+    </div>
+  );
+}
+
+function InteractiveCalendar({
+  rows,
+  asOfDate,
+  selectedDate,
+  selectedUnitId,
+  filters,
+  onSelectDate,
+}: {
+  rows: CalRow[];
+  asOfDate?: string;
+  selectedDate: string;
+  selectedUnitId?: string;
+  filters?: DashboardFilterParams;
+  onSelectDate: (date: string) => void;
+}) {
+  const initialDate = selectedDate || (asOfDate ?? new Date().toISOString()).split("T")[0]!;
+  const [viewDate, setViewDate] = useState(() => {
+    const [year, month] = initialDate.split("-").map(Number);
+    return { year, month: (month ?? 1) - 1 };
+  });
+
+  const todayStr = new Date().toISOString().split("T")[0]!;
+  const { year, month } = viewDate;
+  const monthLabel = new Intl.DateTimeFormat("id-ID", {
+    month: "long",
+    year: "numeric",
+  }).format(new Date(year, month));
+
+  const startDayIndex = (new Date(year, month, 1).getDay() + 6) % 7;
+  const totalDays = new Date(year, month + 1, 0).getDate();
+  const cells: Array<{ day: number | null; dateStr: string | null }> = [];
+
+  for (let index = 0; index < startDayIndex; index += 1) {
+    cells.push({ day: null, dateStr: null });
   }
 
-  if (isExecutiveRole(currentUser)) {
-    return margin.marginProjectRatio >= 0 && riskUnits >= 0 && pending >= 0 && hello && name ? null : null;
+  for (let day = 1; day <= totalDays; day += 1) {
+    cells.push({
+      day,
+      dateStr: `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
+    });
   }
 
-  return riskUnits >= 0 && pending >= 0 && hello && name && (bottleneck ? bottleneck.loadPercent >= 0 : true) ? null : null;
+  const unitsByDate = new Map<string, CalRow[]>();
+  for (const row of rows) {
+    if (!row.targetDeliveryDate) continue;
+    const key = row.targetDeliveryDate.split("T")[0]!;
+    if (!unitsByDate.has(key)) unitsByDate.set(key, []);
+    unitsByDate.get(key)?.push(row);
+  }
+
+  const selectedUnits = selectedDate
+    ? unitsByDate.get(selectedDate) ?? []
+    : rows.filter((r) => {
+        if (!r.targetDeliveryDate) return false;
+        const [y, m] = r.targetDeliveryDate.split("-").map(Number);
+        return y === year && m === month + 1;
+      });
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="space-y-1.5">
+          <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-white/30">
+            Kalender deadline
+          </p>
+          <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+            <span className="border border-white/[0.06] px-2 py-1 text-white/38">
+              Dipilih: <b className="font-semibold text-white">{selectedDate ? fmtDate(selectedDate) : "Semua Bulan Ini"}</b>
+            </span>
+            <span className="border border-amber-400/35 bg-amber-400/[0.08] px-2 py-1 text-amber-300">
+              Hari ini: <b className="font-semibold">{fmtDate(todayStr)}</b>
+            </span>
+          </div>
+        </div>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() =>
+              setViewDate(({ year: currentYear, month: currentMonth }) =>
+                currentMonth === 0
+                  ? { year: currentYear - 1, month: 11 }
+                  : { year: currentYear, month: currentMonth - 1 },
+              )
+            }
+            className="border border-white/[0.06] p-1 text-white/40 transition hover:bg-white/[0.05]"
+          >
+            <ChevronLeft className="h-3.5 w-3.5" />
+          </button>
+          <p className="min-w-[112px] text-center font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-white">
+            {monthLabel}
+          </p>
+          <button
+            type="button"
+            onClick={() =>
+              setViewDate(({ year: currentYear, month: currentMonth }) =>
+                currentMonth === 11
+                  ? { year: currentYear + 1, month: 0 }
+                  : { year: currentYear, month: currentMonth + 1 },
+              )
+            }
+            className="border border-white/[0.06] p-1 text-white/40 transition hover:bg-white/[0.05]"
+          >
+            <ChevronRight className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-7 text-center font-mono text-[9px] uppercase tracking-[0.1em] text-white/28">
+        {["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"].map((day) => (
+          <span key={day} className="py-1">
+            {day}
+          </span>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-7 gap-px bg-white/[0.04]">
+        {cells.map((cell, index) => {
+          if (!cell.day || !cell.dateStr) {
+            return <div key={`empty-${index}`} className="aspect-square bg-[#111114]" />;
+          }
+
+          const scheduledUnits = unitsByDate.get(cell.dateStr) ?? [];
+          const dayState = getCalendarDayState({
+            dateStr: cell.dateStr,
+            selectedDate,
+            todayStr,
+            scheduledUnitCount: scheduledUnits.length,
+          });
+
+          return (
+            <button
+              key={cell.dateStr}
+              type="button"
+              onClick={() => onSelectDate(cell.dateStr === selectedDate ? "all" : cell.dateStr!)}
+              aria-current={dayState.isToday ? "date" : undefined}
+              aria-pressed={dayState.isSelected}
+              className={dayState.dayClassName}
+            >
+              <span>{cell.day}</span>
+              {scheduledUnits.length > 0 ? (
+                <span className="mt-0.5 text-[8px] leading-none text-emerald-400">
+                  {scheduledUnits.length}
+                </span>
+              ) : null}
+              {dayState.isToday ? (
+                <span className="mt-1 border border-amber-400/30 px-1 py-0.5 font-mono text-[7px] uppercase leading-none text-amber-300">
+                  Hari ini
+                </span>
+              ) : null}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="border-t border-white/[0.04] pt-3">
+        {selectedUnits.length > 0 ? (
+          <div className="space-y-2">
+            <p className="font-mono text-[9px] uppercase tracking-[0.12em] text-white/30">
+              {selectedDate ? `Unit deadline ${fmtDate(selectedDate)}` : `Semua unit bulan ini`} · {selectedUnits.length} unit
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {selectedUnits.map((unit) => (
+                <Link
+                  key={unit.carId}
+                  href={buildHref("/dashboard", filters, {
+                    date: selectedDate || "all",
+                    dateFrom: null,
+                    dateTo: null,
+                    unitId: unit.carId,
+                  })}
+                  prefetch={false}
+                  className={`inline-flex items-center border px-2 py-1 font-mono text-[10px] leading-none transition ${
+                    selectedUnitId === unit.carId
+                      ? "border-amber-500/35 bg-amber-500/[0.08] text-amber-300"
+                      : "border-emerald-400/25 bg-emerald-400/[0.05] text-emerald-300 hover:bg-emerald-500/[0.08]"
+                  }`}
+                >
+                  {unit.unitName}
+                </Link>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <p className="font-mono text-[10px] text-white/28">
+            Tidak ada unit deadline pada {selectedDate ? fmtDate(selectedDate) : "bulan ini"}.
+          </p>
+        )}
+      </div>
+    </div>
+  );
 }
 
 export function DashboardShell({
@@ -816,19 +859,27 @@ export function DashboardShell({
   planning,
   qcQueue = [],
   qcRework = [],
+  issueLogRows = [],
   isDeferredLoading = false,
 }: DashboardShellProps) {
-  const margin = getMarginInsights(planning, summary);
-  const scope = getUnitScopeSummary(planning, summary);
-  const allocationRows = getAllocationRows(planning, summary);
-  const dangerSignals = getDangerSignals(planning, summary, filters);
-  const planVsActualRows = getPlanVsActualRows(summary);
-  const qaRows = getQaRows(qcQueue, qcRework);
-  const bottleneck = getBottleneckDivision(summary);
+  const router = useRouter();
+  const [spkWorkType, setSpkWorkType] = useState<SpkWorkType>("all");
 
-  const lockedDivisionId = currentUser?.scope.managedDivisionIds.length
+  const isAllAccess = currentUser?.scope?.canViewAllUnits === true;
+  const lockedDivisionId = !isAllAccess && currentUser?.scope?.managedDivisionIds?.length
     ? currentUser.scope.managedDivisionIds[0]
     : null;
+
+  useEffect(() => {
+    if (lockedDivisionId != null && filters?.divisionId !== String(lockedDivisionId)) {
+      router.replace(buildHref("/dashboard", filters, { divisionId: String(lockedDivisionId) }));
+    }
+  }, [lockedDivisionId, filters?.divisionId, router]);
+
+  const todayStr = new Date().toISOString().split("T")[0]!;
+  const selectedDate = filters?.date === "all" ? "" : (filters?.date?.trim() || todayStr);
+  const activeDivisionId = lockedDivisionId != null ? String(lockedDivisionId) : (filters?.divisionId ?? "");
+  const activeUnitId = filters?.unitId ?? "";
 
   const divisions = [
     ...(planning?.divisionOptions ?? []).map((row) => ({
@@ -860,420 +911,471 @@ export function DashboardShell({
     })),
   ].filter((row, index, array) => array.findIndex((item) => item.id === row.id) === index);
 
-  const timelineRows =
-    summary.deliveryRisk?.topUnits && summary.deliveryRisk.topUnits.length > 0
-      ? summary.deliveryRisk.topUnits
-      : (planning?.deliveryRisk.rows ?? []).slice(0, 8).map((row) => ({
-          unitName: row.unitName,
-          remainingHours: row.remainingHours,
-          effectiveDailyCapacity: row.effectiveDailyCapacity,
-          targetDeliveryDate: row.targetDeliveryDate,
-        }));
+  const calendarRows: CalRow[] = [
+    ...(planning?.weeklyPlan.units ?? []).map((row) => ({
+      carId: row.carId,
+      unitName: row.unitName,
+      targetDeliveryDate: row.targetDeliveryDate,
+    })),
+    ...(summary.deliveryRisk?.topUnits ?? []).map((row) => ({
+      carId: row.carId,
+      unitName: row.unitName,
+      targetDeliveryDate: row.targetDeliveryDate,
+    })),
+    ...(planning?.deliveryRisk.rows ?? []).map((row) => ({
+      carId: row.carId,
+      unitName: row.unitName,
+      targetDeliveryDate: row.targetDeliveryDate,
+    })),
+  ].filter((row, index, array) => array.findIndex((item) => item.carId === row.carId) === index);
+
+  const top5Deadline = calendarRows
+    .filter((row) => row.targetDeliveryDate)
+    .map((row) => ({
+      ...row,
+      days: daysRemaining(row.targetDeliveryDate, summary.asOfDate),
+    }))
+    .filter((row) => row.days !== null)
+    .sort((left, right) => (left.days ?? Infinity) - (right.days ?? Infinity))
+    .slice(0, 5);
+
+  const spkRows = getSpkByDivision(planning, summary, spkWorkType);
+  const aktualRows = getAktualByDivision(summary, planning, spkWorkType);
+  const issueRows = getIssueRows(issueLogRows);
+  const qcFailRows = getQcFailRows(qcQueue, qcRework);
+  const taskRows = getTaskMonitoringRows(planning, summary);
+
+  const greeting = getGreetingLabel(summary.generatedAt);
+  const name = displayName(currentUser);
+  const headerHelperText = getHeaderHelperText(filters, currentUser);
+  const woIncoming = summary.pendingActions?.woApproval ?? 0;
+  const prIncoming = summary.pendingActions?.prApproval ?? 0;
+  const wovIncoming = summary.pendingActions?.vendorApproval ?? 0;
+
+  const pushDashboard = (overrides?: Record<string, string | number | null | undefined>) => {
+    router.push(buildHref("/dashboard", filters, overrides));
+  };
+
+  const hasScopeFilter = Boolean(filters?.divisionId || filters?.unitId || filters?.date !== todayStr);
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-start justify-between gap-3 border border-gray-300 dark:border-white/[0.05] bg-white dark:bg-[#111114] px-4 py-3">
-        <div className="space-y-1.5">
-          <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/30">Dashboard operasional</p>
-          <div className="space-y-1">
-            <h1 className="text-[14px] font-semibold text-gray-950 dark:text-white">{summary.headline.title}</h1>
-            {summary.headline.scopeNote ? null : null}
-          </div>
+    <div className="min-h-screen bg-[#111114]">
+      {/* Top Header Bar */}
+      <div className="flex items-center justify-between border-b border-white/[0.06] bg-[#111114] px-4 py-3">
+        <div>
+          <p className="font-mono text-[10px] uppercase tracking-widest text-white/30">
+            DASHBOARD OPERASIONAL
+          </p>
+          <h1 className="text-[22px] font-light text-white">
+            {greeting}, <span className="text-amber-400">{name}</span>
+          </h1>
         </div>
-        <div className="flex flex-wrap items-center gap-2 text-[11px] text-gray-500 dark:text-white/34">
-          {filters?.divisionId ? (
-            <InlineBadge>
-              {divisions.find((d) => String(d.id) === filters.divisionId)?.name ?? `Divisi ${filters.divisionId}`}
-            </InlineBadge>
-          ) : null}
-          {filters?.unitId ? (
-            <InlineBadge>
-              {units.find((u) => u.id === filters.unitId)?.name ?? `Unit ${filters.unitId}`}
-            </InlineBadge>
-          ) : null}
-          <span className="font-mono">Diperbarui {fmtDateTime(summary.generatedAt)}</span>
+        <div className="flex flex-col items-end gap-1.5">
+          <div className="flex items-center gap-2">
+            {/* Filter Divisi */}
+            <div className="min-w-[180px] border border-white/10 bg-[#1a1a1f] text-[12px] text-white">
+              <SearchableSelect
+                value={activeDivisionId}
+                onChange={(value) =>
+                  pushDashboard({
+                    date: selectedDate || null,
+                    dateFrom: null,
+                    dateTo: null,
+                    divisionId: value || null,
+                    unitId: null,
+                  })
+                }
+                options={lockedDivisionId != null 
+                  ? [{ value: String(lockedDivisionId), label: divisions.find((row) => row.id === lockedDivisionId)?.name ?? "Bagian saya" }]
+                  : divisions.map((row) => ({ value: String(row.id), label: row.name }))
+                }
+                placeholder="Semua divisi"
+                disabled={lockedDivisionId != null}
+              />
+            </div>
+            {/* Filter Unit */}
+            <div className="min-w-[180px] border border-white/10 bg-[#1a1a1f] text-[12px] text-white">
+              <SearchableSelect
+                value={activeUnitId}
+                onChange={(value) =>
+                  pushDashboard({
+                    date: selectedDate || null,
+                    dateFrom: null,
+                    dateTo: null,
+                    unitId: value || null,
+                  })
+                }
+                options={units.map((row) => ({ value: row.id, label: row.name }))}
+                placeholder="Semua unit"
+              />
+            </div>
+            {/* Reset filter */}
+            {(activeDivisionId || activeUnitId) ? (
+              <button
+                type="button"
+                onClick={() => pushDashboard({ divisionId: null, unitId: null, date: null })}
+                className="border border-white/[0.08] px-2 py-1.5 font-mono text-[10px] uppercase tracking-widest text-white/40 transition hover:bg-white/[0.04] hover:text-white/70"
+              >
+                Reset
+              </button>
+            ) : null}
+          </div>
+          <p className="mt-1 font-mono text-[11px] text-white/35">
+            <span className="mr-2 text-white/15">|</span>
+            {fmtDate(todayStr)}
+          </p>
         </div>
       </div>
 
-      <DashboardFilterBar divisions={divisions} units={units} lockedDivisionId={lockedDivisionId} />
-
-      <div className="grid grid-cols-2 divide-x divide-gray-200 dark:divide-white/5 border border-gray-300 dark:border-white/5 bg-white dark:bg-[#111114] md:grid-cols-4">
-        <div className="flex items-center gap-3 px-4 py-3">
-          <CalendarClock className="h-4 w-4 text-gray-400 dark:text-white/40 shrink-0" />
-          <div>
-            <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/30">Unit Aktif</p>
-            <p className="font-mono text-[18px] font-semibold text-gray-950 dark:text-white leading-none mt-1">{fmt(summary.kpis.activeUnits)}</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-3 px-4 py-3">
-          <Gauge className="h-4 w-4 text-gray-400 dark:text-white/40 shrink-0" />
-          <div>
-            <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/30">Delivery Minggu Ini</p>
-            <p className="font-mono text-[18px] font-semibold text-gray-950 dark:text-white leading-none mt-1">{fmt(summary.kpis.deliveryThisWeek)}</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-3 px-4 py-3">
-          <ShieldAlert className="h-4 w-4 text-red-400/60 shrink-0" />
-          <div>
-            <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/30">Overdue</p>
-            <p className="font-mono text-[18px] font-semibold text-gray-950 dark:text-white leading-none mt-1">{fmt(summary.kpis.overdueUnits)}</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-3 px-4 py-3">
-          <Clock3 className="h-4 w-4 text-gray-400 dark:text-white/40 shrink-0" />
-          <div>
-            <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/30">Pending Approval</p>
-            <p className="font-mono text-[18px] font-semibold text-gray-950 dark:text-white leading-none mt-1">{fmt(summary.pendingActions?.total ?? 0)}</p>
-          </div>
-        </div>
-      </div>
-
-      {buildGreeting({ currentUser, summary, planning, qcRework })}
-
-      <div className="grid gap-3 xl:grid-cols-5">
-        <Card className="xl:col-span-3">
-          <SectionHeader
-            eyebrow="Overview"
-            title="Reality Check"
-            detail="Bandingkan backlog jam kerja dengan kapasitas normal mingguan."
-            href={buildHref("/planning", filters)}
-            hrefLabel="Buka planning"
-          />
-          <div className="space-y-3 px-3 py-3">
-            <div className="grid gap-2 md:grid-cols-3">
-              <MetricPill
-                label="Backlog bengkel"
-                value={`${fmtDec(scope.totalBacklogHours)} jam`}
-                helper="Total sisa jam unit aktif dalam scope filter saat ini."
-              />
-              <MetricPill
-                label="Kapasitas mingguan"
-                value={`${fmtDec(scope.totalWeeklyCapacity)} jam`}
-                helper="Kapasitas normal agregat seluruh divisi pada dashboard."
-              />
-              <MetricPill
-                label="Tekanan kapasitas"
-                value={fmtPct(scope.pressurePercent)}
-                helper="Semakin tinggi, semakin rapat cadangan waktu bengkel."
-              />
-            </div>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-[12px] text-gray-800 dark:text-white/76">
-                <span>Backlog vs kapasitas normal</span>
-                <span className="font-mono font-semibold text-gray-950 dark:text-white">{fmtPct(scope.pressurePercent)}</span>
-              </div>
-              <div className="h-2 bg-white/[0.06]">
-                <div
-                  className={`h-2 ${
-                    scope.pressurePercent >= 100
-                      ? "bg-red-400"
-                      : scope.pressurePercent >= 75
-                        ? "bg-amber-400"
-                        : "bg-emerald-400"
-                  }`}
-                  style={{ width: `${clampPct(scope.pressurePercent)}%` }}
-                />
-              </div>
-            </div>
-          </div>
-        </Card>
-
+      <div className="grid gap-3 p-3 xl:grid-cols-3">
         <Card className="xl:col-span-2">
           <SectionHeader
-            eyebrow="Overview"
-            title="Margin vs Non-Margin"
-            detail="Perbandingan jam kerja unit margin dan non-margin."
-            href={buildHref("/planning", filters)}
-            hrefLabel="Lihat unit"
-          />
-          <div className="space-y-3 px-3 py-3">
-            <BarTrack
-              label="Margin"
-              value={margin.marginHours}
-              total={Math.max(1, margin.totalHours)}
-              colorClass="bg-emerald-400"
-              helper="Jam unit bernilai margin pada scope aktif."
-            />
-            <BarTrack
-              label="Non-Margin"
-              value={margin.nonMarginHours}
-              total={Math.max(1, margin.totalHours)}
-              colorClass="bg-amber-400"
-              helper="Jam unit non-margin yang ikut memakan kapasitas."
-            />
-            {margin.dataSource ? null : null}
-          </div>
-        </Card>
-      </div>
-
-      <div className="grid gap-3 xl:grid-cols-7">
-        <Card className="xl:col-span-4">
-          <SectionHeader
-            eyebrow="Eksekusi SPK"
-            title="Alokasi SPK Aktif"
-            detail="SPK dibaca sebagai Unit -> Divisi -> target jam kerja."
-            href={buildHref("/planning", filters)}
-            hrefLabel="Kelola SPK"
-          />
-          <div className="px-3 py-3">
-            {isDeferredLoading ? (
-              <DeferredRowsSkeleton rows={4} />
-            ) : allocationRows.length > 0 ? (
-              <div className="space-y-2">
-                {allocationRows.map((row) => {
-                  const progressPct = row.targetHours > 0 ? (row.actualHours / row.targetHours) * 100 : 0;
-                  return (
-                    <div
-                      key={`${row.carId}-${row.divisionId}`}
-                      className="border border-gray-300 dark:border-white/[0.05] bg-slate-50 dark:bg-[#0a0a0c] px-3 py-2"
-                    >
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div className="space-y-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                          <p className="text-[12px] font-semibold text-gray-950 dark:text-white">{row.unitName}</p>
-                            <InlineBadge tone={row.isMargin ? "good" : "warn"}>
-                              {row.isMargin ? "Margin" : "Non-Margin"}
-                            </InlineBadge>
-                            {row.materialStatus === "HUNTING" ? (
-                              <InlineBadge tone="danger">Hunting Part</InlineBadge>
-                            ) : null}
-                          </div>
-                          <p className="text-xs text-gray-500 dark:text-white/42">
-                            {row.divisionName} • deadline {fmtDate(row.targetDeliveryDate)}
-                          </p>
-                        </div>
-                        <div className="text-right">
-                          <p className="font-mono text-[12px] font-semibold text-gray-950 dark:text-white">
-                            {fmtDec(row.actualHours)} / {fmtDec(row.targetHours)} jam
-                          </p>
-                          <p className="font-mono text-[10px] text-gray-500 dark:text-white/38">{fmtPct(progressPct)}</p>
-                        </div>
-                      </div>
-                      <div className="mt-2 h-2 bg-white/[0.05]">
-                        <div
-                          className={`h-2 ${
-                            progressPct > 100 ? "bg-red-400" : progressPct >= 75 ? "bg-emerald-400" : "bg-amber-400"
-                          }`}
-                          style={{ width: `${clampPct(progressPct)}%` }}
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <EmptyState message="Belum ada alokasi SPK aktif pada filter yang dipilih." />
-            )}
-          </div>
-        </Card>
-
-        <Card className="xl:col-span-3">
-          <SectionHeader
-            eyebrow="Eksekusi SPK"
-            title="Sinyal Bahaya"
-            detail="Deteksi divisi macet, jam kerja overbudget, dan part hunting."
-            href={buildHref("/monitoring", filters)}
-            hrefLabel="Buka monitoring"
-          />
-          <div className="space-y-2 px-3 py-3">
-            {dangerSignals.length > 0 ? (
-              dangerSignals.map((signal) => (
-                <Link
-                  key={signal.key}
-                  href={signal.href}
-                  prefetch={false}
-                  className="flex items-start justify-between gap-3 border border-gray-300 dark:border-white/[0.05] bg-slate-50 dark:bg-[#0a0a0c] px-3 py-2 transition hover:bg-gray-100 dark:hover:bg-white/[0.05]"
-                >
-                  <div className="flex items-start gap-2">
-                    <div
-                      className={`mt-0.5 border p-1.5 ${
-                        signal.tone === "danger"
-                          ? "border-red-400/30 text-red-400/70"
-                          : signal.tone === "warn"
-                            ? "border-amber-500/30 text-amber-500/70"
-                            : "border-gray-300 dark:border-white/10 text-gray-400 dark:text-white/40"
-                      }`}
-                    >
-                      <AlertTriangle className="h-3.5 w-3.5" />
-                    </div>
-                    <div>
-                      <p className="text-[12px] font-medium text-gray-950 dark:text-white">{signal.label}</p>
-                      <p className="text-xs text-gray-500 dark:text-white/42">{signal.detail}</p>
-                    </div>
-                  </div>
-                  <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-gray-300 dark:text-white/28" />
-                </Link>
-              ))
-            ) : (
-              <EmptyState message="Tidak ada sinyal bahaya dominan dalam scope filter aktif." />
-            )}
-          </div>
-        </Card>
-      </div>
-
-      <div className="grid gap-3 xl:grid-cols-12">
-        <Card className="xl:col-span-6">
-          <SectionHeader
-            eyebrow="Progress"
-            title="Timeline Pengiriman Unit"
-            detail="Kalender unit aktif mengikuti filter unit dan divisi dari toolbar."
+            eyebrow="Timeline"
+            title="Calendar-first Deadline View"
+            detail="Tanggal aktif dashboard mengikuti pilihan kalender."
             href={buildHref("/reports/delivery-accuracy", filters)}
             hrefLabel="Delivery risk"
+            right={
+              selectedDate !== todayStr ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    pushDashboard({
+                      date: todayStr,
+                      dateFrom: null,
+                      dateTo: null,
+                    })
+                  }
+                  className="inline-flex items-center gap-1 border border-amber-500/25 bg-amber-500/[0.08] px-2 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-amber-300 transition hover:bg-amber-500/[0.14]"
+                >
+                  Hari ini
+                </button>
+              ) : null
+            }
           />
           <div className="px-3 py-3">
-            {timelineRows.length > 0 ? (
-              <TimelineBoard rows={timelineRows} asOfDate={summary.asOfDate} />
-            ) : (
-              <EmptyState message="Belum ada unit aktif yang memiliki timeline pengiriman." />
-            )}
+            <InteractiveCalendar
+              key={selectedDate}
+              rows={calendarRows}
+              asOfDate={summary.asOfDate}
+              selectedDate={selectedDate}
+              selectedUnitId={activeUnitId}
+              filters={filters}
+              onSelectDate={(date) =>
+                pushDashboard({
+                  date,
+                  dateFrom: null,
+                  dateTo: null,
+                  divisionId: activeDivisionId || null,
+                  unitId: activeUnitId || null,
+                })
+              }
+            />
           </div>
         </Card>
 
-        <Card className="xl:col-span-6">
-          <SectionHeader
-            eyebrow="Progress"
-            title="Plan vs Actual per Divisi"
-            detail={
-              filters?.unitId
-                ? "Hanya divisi teknis pada unit yang dipilih di URL."
-                : "PLAN, ACTUAL, dan SISA otomatis mengikuti filter dashboard untuk divisi teknis."
-            }
-            href={buildHref("/monitoring/division", filters)}
-            hrefLabel="Detail divisi"
-          />
-          <div className="space-y-3 px-3 py-3">
-            <div className="flex flex-wrap items-center gap-3 font-mono text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/42">
-              <span className="inline-flex items-center gap-1"><span className="h-2 w-2 border border-sky-400/70 bg-sky-400/20" />Plan</span>
-              <span className="inline-flex items-center gap-1"><span className="h-2 w-2 border border-emerald-400/70 bg-emerald-400/20" />Actual</span>
-              <span className="inline-flex items-center gap-1"><span className="h-2 w-2 border border-amber-400/70 bg-amber-400/20" />Sisa</span>
-            </div>
-            {planVsActualRows.length > 0 ? (
-              planVsActualRows.slice(0, 6).map((row) => (
-                <div key={row.divisionId} className="space-y-1.5 border border-gray-300 dark:border-white/[0.05] bg-slate-50 dark:bg-[#0a0a0c] px-3 py-2">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-[12px] font-medium text-gray-950 dark:text-white">{row.divisionName}</p>
-                      <p className="text-[11px] text-gray-400 dark:text-white/40">
-                        {row.progressPercent != null ? `Progress ${fmtPct(row.progressPercent)}` : "Progress belum tersedia"}
-                      </p>
-                    </div>
-                    <div className="text-right font-mono text-[10px] text-gray-600 dark:text-white/45">
-                      <p>{fmtDec(row.planHours)} plan</p>
-                      <p>{fmtDec(row.actualHours)} aktual</p>
-                      <p>{fmtDec(row.remainingHours)} sisa</p>
-                    </div>
-                  </div>
-                  <StackedBar
-                    plan={row.planHours}
-                    actual={row.actualHours}
-                    remaining={row.remainingHours}
-                  />
+        <div className="flex flex-col gap-3">
+          <Card className="flex-1">
+            <SectionHeader eyebrow="Prioritas" title="5 Unit Mendekati Deadline" />
+            <div className="divide-y divide-white/[0.04]">
+              {top5Deadline.length > 0 ? (
+                top5Deadline.map((unit) => {
+                  const tone =
+                    unit.days == null || unit.days > 7
+                      ? "neutral"
+                      : unit.days < 0 || unit.days <= 3
+                        ? "danger"
+                        : "warn";
+
+                  return (
+                    <Link
+                      key={unit.carId}
+                      href={buildHref("/dashboard", filters, {
+                        date: unit.targetDeliveryDate?.split("T")[0] ?? selectedDate,
+                        dateFrom: null,
+                        dateTo: null,
+                        unitId: unit.carId,
+                      })}
+                      prefetch={false}
+                      className="flex items-center justify-between gap-3 px-3 py-2 transition hover:bg-white/[0.03]"
+                    >
+                      <div className="min-w-0 space-y-0.5">
+                        <p className="truncate text-[12px] font-medium text-white">
+                          {unit.unitName}
+                        </p>
+                        <p className="font-mono text-[10px] text-white/35">
+                          {fmtDate(unit.targetDeliveryDate)}
+                        </p>
+                      </div>
+                      <InlineBadge tone={tone}>
+                        {unit.days == null
+                          ? "Belum pasti"
+                          : unit.days < 0
+                            ? `+${Math.abs(unit.days)}h lewat`
+                            : unit.days === 0
+                              ? "Hari ini"
+                              : `${unit.days}h lagi`}
+                      </InlineBadge>
+                    </Link>
+                  );
+                })
+              ) : (
+                <div className="px-3 py-3">
+                  <EmptyState message="Belum ada unit dengan target delivery aktif." />
                 </div>
-              ))
-            ) : (
-              <EmptyState message="Belum ada data plan vs actual per divisi." />
-            )}
+              )}
+            </div>
+          </Card>
+
+          <div className="border border-white/[0.05] bg-[#0d0d10] p-3">
+            <p className="mb-2 font-mono text-[10px] uppercase tracking-widest text-white/30">
+              PERMINTAAN MASUK HARI INI
+            </p>
+            <div className="grid grid-cols-3 gap-2">
+              <div className="border border-white/[0.05] bg-white/[0.01] p-3">
+                <p className="mb-1 font-mono text-[9px] uppercase text-white/25">WORK ORDER (WO)</p>
+                <p className="font-mono text-[32px] font-bold leading-none text-amber-400">{fmt(woIncoming)}</p>
+              </div>
+              <div className="border border-white/[0.05] bg-white/[0.01] p-3">
+                <p className="mb-1 font-mono text-[9px] uppercase text-white/25">PURCHASE REQUEST (PR)</p>
+                <p className="font-mono text-[32px] font-bold leading-none text-sky-400">{fmt(prIncoming)}</p>
+              </div>
+              <div className="border border-white/[0.05] bg-white/[0.01] p-3">
+                <p className="mb-1 font-mono text-[9px] uppercase text-white/25">WO VENDOR (WOV)</p>
+                <p className="font-mono text-[32px] font-bold leading-none text-white">{fmt(wovIncoming)}</p>
+              </div>
+            </div>
           </div>
-        </Card>
+        </div>
       </div>
 
-      <Card>
-        <SectionHeader
-          eyebrow="QA"
-          title="Dashboard QA"
-          detail="Snapshot kualitas aktif per divisi dari queue QC dan rework yang sedang berjalan."
-          href={buildHref("/qc", filters)}
-          hrefLabel="Buka QC"
-        />
-        <div className="grid gap-2 px-3 py-3 md:grid-cols-2 xl:grid-cols-4">
-          {isDeferredLoading ? (
-            <div className="md:col-span-2 xl:col-span-4">
-              <DeferredRowsSkeleton rows={3} />
+      {/* SPK table section */}
+      <div className="px-3 pb-3">
+        <div className="border border-white/[0.05] bg-[#0d0d10]">
+          <div className="flex items-center justify-between border-b border-white/[0.05] px-4 py-3">
+            <div className="flex gap-4">
+              {(["all", "normal", "lembur"] as SpkWorkType[]).map((type) => {
+                const label = type === "all" ? "SEMUA" : type === "normal" ? "NORMAL (SPK)" : "LEMBUR (SPL)";
+                const isActive = spkWorkType === type;
+                return (
+                  <button
+                    key={type}
+                    onClick={() => setSpkWorkType(type)}
+                    className={`font-mono text-[11px] uppercase tracking-widest ${
+                      isActive
+                        ? "border-b-2 border-amber-400 pb-1 text-amber-400"
+                        : "text-white/35 transition hover:text-white/60"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
             </div>
-          ) : qaRows.length > 0 ? (
-            qaRows.map((row) => {
-              const total = Math.max(1, row.total);
-              return (
-                <div key={row.divisionName} className="border border-gray-300 dark:border-white/[0.05] bg-slate-50 dark:bg-[#0a0a0c] p-3">
-                  <div className="flex items-start justify-between gap-3">
+            <p className="font-mono text-[11px] text-white/30">
+              {selectedDate === todayStr ? "Hari ini" : "Filter"} · {fmtDate(selectedDate || todayStr)}
+            </p>
+          </div>
+          
+          <div className="grid grid-cols-[140px_1fr_100px_100px_100px] border-b border-white/[0.05] px-4 py-2 font-mono text-[9px] uppercase tracking-widest text-white/25">
+            <div>DIVISI</div>
+            <div>UNIT</div>
+            <div>TARGET JAM</div>
+            <div>AKTUAL</div>
+            <div>STATUS</div>
+          </div>
+          
+          <div className="max-h-[400px] overflow-y-auto">
+            {spkRows.map((division) => (
+              division.units.map((unit, idx) => {
+                let statusBadge = "";
+                let statusClass = "";
+                if (unit.actualHours === 0) {
+                  statusBadge = "BELUM";
+                  statusClass = "border-red-500/25 bg-red-500/15 text-red-300";
+                } else if (unit.actualHours >= unit.allocatedHours) {
+                  statusBadge = "SELESAI";
+                  statusClass = "border-emerald-500/25 bg-emerald-500/15 text-emerald-300";
+                } else {
+                  statusBadge = "JALAN";
+                  statusClass = "border-sky-500/25 bg-sky-500/15 text-sky-300";
+                }
+
+                return (
+                  <div key={`${division.divisionId}-${unit.carId}`} className="grid grid-cols-[140px_1fr_100px_100px_100px] items-center border-b border-white/[0.04] px-4 py-2.5 hover:bg-white/[0.02]">
+                    <div className="truncate pr-4 text-[11px] text-white/35">
+                      {idx === 0 ? division.divisionName : ""}
+                    </div>
+                    <div className="truncate pr-4 text-[13px] font-medium text-white">
+                      {unit.unitName}
+                    </div>
+                    <div className="font-mono text-[12px] text-white/50">
+                      {fmtDec(unit.allocatedHours)}j
+                    </div>
+                    <div className="font-mono text-[13px] font-semibold text-amber-300">
+                      {unit.actualHours > 0 ? `${fmtDec(unit.actualHours)}j` : <span className="text-white/20">–</span>}
+                    </div>
                     <div>
-                      <p className="text-[12px] font-semibold text-gray-950 dark:text-white">{row.divisionName}</p>
+                      <span className={`inline-block border px-2 py-0.5 font-mono text-[9px] uppercase ${statusClass}`}>
+                        {statusBadge}
+                      </span>
                     </div>
-                    <ClipboardCheck className="h-4 w-4 text-gray-500 dark:text-white/30" />
                   </div>
-                  <div className="mt-4 space-y-3">
-                    <div className="flex items-end justify-between gap-3">
-                      <div>
-                        <p className="text-[11px] uppercase tracking-[0.14em] text-emerald-300/85">OK</p>
-                        <p className="mt-1 text-2xl font-semibold text-gray-950 dark:text-white">{fmt(row.okCount)}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-[11px] uppercase tracking-[0.14em] text-red-300/85">Revisi / Rework</p>
-                        <p className="mt-1 text-xl font-semibold text-gray-950 dark:text-white">{fmt(row.reworkCount)}</p>
-                      </div>
-                    </div>
-                    <div className="h-2 bg-white/[0.06]">
-                      <div className="flex h-2 overflow-hidden">
-                        <div className="bg-emerald-400" style={{ width: `${(row.okCount / total) * 100}%` }} />
-                        <div className="bg-red-400" style={{ width: `${(row.reworkCount / total) * 100}%` }} />
-                      </div>
+                );
+              })
+            ))}
+            {spkRows.length === 0 && (
+              <div className="px-4 py-8 text-center text-[12px] text-white/30">
+                Tidak ada data SPK
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-3 px-3 pb-3 xl:grid-cols-2">
+        {/* Issue Log Belum Selesai */}
+        <div className="border border-white/[0.05] bg-[#0d0d10]">
+          <SectionHeader
+            eyebrow="ISSUE LOG BELUM SELESAI"
+          />
+          <div className="grid grid-cols-[1fr_80px_80px] border-b border-white/[0.05] px-4 py-2 font-mono text-[9px] uppercase tracking-widest text-white/25">
+            <div>DIVISI</div>
+            <div className="text-center">OPEN</div>
+            <div className="text-center">HIGH</div>
+          </div>
+          <div>
+            {issueRows.map((row) => {
+              const highIssues = row.issues.filter(i => i.severity === "HIGH" || i.isUrgent).length;
+              return (
+                <div key={row.divisionId} className="grid grid-cols-[1fr_80px_80px] items-center border-b border-white/[0.04] px-4 py-2.5 hover:bg-white/[0.02]">
+                  <div className="truncate pr-4 text-[13px] text-white">
+                    {row.divisionName}
+                  </div>
+                  <div className="text-center">
+                    <span className="inline-block min-w-[28px] border border-amber-500/25 bg-amber-500/15 px-2 py-0.5 text-center font-mono text-[11px] font-bold text-amber-300">
+                      {row.issueCount}
+                    </span>
+                  </div>
+                  <div className="text-center">
+                    {highIssues > 0 ? (
+                      <span className="inline-block min-w-[28px] border border-red-500/25 bg-red-500/15 px-2 py-0.5 text-center font-mono text-[11px] font-bold text-red-300">
+                        {highIssues}
+                      </span>
+                    ) : (
+                      <span className="font-mono text-white/20">–</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+            {issueRows.length === 0 && (
+              <div className="px-4 py-6 text-center text-[12px] text-white/30">
+                Tidak ada issue open
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* QC Tidak Lolos */}
+        <div className="border border-white/[0.05] bg-[#0d0d10]">
+          <SectionHeader
+            eyebrow="QC TIDAK LOLOS"
+          />
+          <div className="grid grid-cols-[1fr_120px] border-b border-white/[0.05] px-4 py-2 font-mono text-[9px] uppercase tracking-widest text-white/25">
+            <div>DIVISI</div>
+            <div>HASIL</div>
+          </div>
+          <div>
+            {qcFailRows.map((row) => (
+              <div key={row.divisionName} className="grid grid-cols-[1fr_120px] items-center border-b border-white/[0.04] px-4 py-2.5 hover:bg-white/[0.02]">
+                <div className="truncate pr-4 text-[13px] text-white">
+                  {row.divisionName}
+                </div>
+                <div>
+                  {row.reworkCount > 0 ? (
+                    <span className="inline-block border border-red-500/25 bg-red-500/15 px-2 py-0.5 font-mono text-[10px] uppercase text-red-300">
+                      {row.reworkCount} GAGAL
+                    </span>
+                  ) : (
+                    <span className="inline-block border border-emerald-500/25 bg-emerald-500/15 px-2 py-0.5 font-mono text-[10px] uppercase text-emerald-300">
+                      LOLOS
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+            {qcFailRows.length === 0 && (
+              <div className="px-4 py-6 text-center text-[12px] text-white/30">
+                Tidak ada QC gagal
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="px-3 pb-3">
+        <div className="border border-white/[0.05] bg-[#0d0d10]">
+          <SectionHeader eyebrow="CONTROL MONITORING PER DIVISI" />
+          <div className="grid grid-cols-[minmax(150px,1fr)_80px_80px_80px_80px_80px_140px] border-b border-white/[0.05] px-4 py-2 font-mono text-[9px] uppercase tracking-widest text-white/25">
+            <div>DIVISI</div>
+            <div className="text-center">BLM MULAI</div>
+            <div className="text-center">PENDING</div>
+            <div className="text-center">BERJALAN</div>
+            <div className="text-center">SUBMIT</div>
+            <div className="text-center">DONE</div>
+            <div>PERFORMA</div>
+          </div>
+          <div>
+            {taskRows.map((row) => {
+              const renderBadge = (count: number, type: 'amber' | 'sky' | 'plain') => {
+                if (count === 0) return <span className="text-white/15">0</span>;
+                if (type === 'plain') return <span className="font-mono text-white/50">{count}</span>;
+                const classes = type === 'amber' 
+                  ? 'border-amber-500/25 bg-amber-500/15 text-amber-300'
+                  : 'border-sky-500/25 bg-sky-500/15 text-sky-300';
+                return <span className={`inline-block border px-2 py-0.5 font-mono text-[11px] font-bold ${classes}`}>{count}</span>;
+              };
+
+              let perfColor = "bg-emerald-400";
+              let perfText = "text-emerald-400";
+              if (row.performancePct < 50) {
+                perfColor = "bg-red-400";
+                perfText = "text-red-400";
+              } else if (row.performancePct < 80) {
+                perfColor = "bg-amber-400";
+                perfText = "text-amber-400";
+              }
+
+              return (
+                <div key={row.divisionId} className="grid grid-cols-[minmax(150px,1fr)_80px_80px_80px_80px_80px_140px] items-center border-b border-white/[0.04] px-4 py-2.5 hover:bg-white/[0.02]">
+                  <div className="truncate pr-4 text-[13px] text-white">
+                    {row.divisionName}
+                  </div>
+                  <div className="text-center">{renderBadge(row.belumMulai, 'amber')}</div>
+                  <div className="text-center">{renderBadge(row.pending, 'amber')}</div>
+                  <div className="text-center">{renderBadge(row.berjalan, 'sky')}</div>
+                  <div className="text-center">{renderBadge(row.submit, 'sky')}</div>
+                  <div className="text-center">{renderBadge(row.done, 'plain')}</div>
+                  <div className="flex items-center gap-3">
+                    <span className={`w-10 font-mono text-[11px] font-bold ${perfText}`}>
+                      {fmtPct(row.performancePct)}
+                    </span>
+                    <div className="h-1 w-16 bg-white/[0.06]">
+                      <div className={`h-1 ${perfColor}`} style={{ width: `${clampPct(row.performancePct)}%` }} />
                     </div>
                   </div>
                 </div>
               );
-            })
-          ) : (
-            <div className="md:col-span-2 xl:col-span-4">
-              <EmptyState message="Belum ada snapshot QC / rework per divisi yang bisa ditampilkan pada scope ini." />
-            </div>
-          )}
+            })}
+            {taskRows.length === 0 && (
+              <div className="px-4 py-6 text-center text-[12px] text-white/30">
+                Belum ada data monitoring
+              </div>
+            )}
+          </div>
         </div>
-      </Card>
-
-      <div className="flex flex-wrap gap-2">
-        <Link
-          href={buildHref("/wo", filters)}
-          prefetch={false}
-          className="inline-flex items-center gap-2 border border-gray-300 dark:border-white/[0.06] bg-white dark:bg-[#111114] px-3 py-2 font-mono text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/58 transition hover:bg-gray-100 dark:hover:bg-white/[0.05] hover:text-gray-900 dark:text-white/80"
-        >
-          <Wrench className="h-3.5 w-3.5 text-amber-300" />
-          WO aktif
-        </Link>
-        <Link
-          href={buildHref("/pr", filters)}
-          prefetch={false}
-          className="inline-flex items-center gap-2 border border-gray-300 dark:border-white/[0.06] bg-white dark:bg-[#111114] px-3 py-2 font-mono text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/58 transition hover:bg-gray-100 dark:hover:bg-white/[0.05] hover:text-gray-900 dark:text-white/80"
-        >
-          <PackageSearch className="h-3.5 w-3.5 text-amber-300" />
-          Antrean PR
-        </Link>
-        <Link
-          href={buildHref("/vendor", filters)}
-          prefetch={false}
-          className="inline-flex items-center gap-2 border border-gray-300 dark:border-white/[0.06] bg-white dark:bg-[#111114] px-3 py-2 font-mono text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/58 transition hover:bg-gray-100 dark:hover:bg-white/[0.05] hover:text-gray-900 dark:text-white/80"
-        >
-          <BriefcaseBusiness className="h-3.5 w-3.5 text-amber-300" />
-          Pekerjaan vendor
-        </Link>
-        <Link
-          href={buildHref("/warehouse", filters)}
-          prefetch={false}
-          className="inline-flex items-center gap-2 border border-gray-300 dark:border-white/[0.06] bg-white dark:bg-[#111114] px-3 py-2 font-mono text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/58 transition hover:bg-gray-100 dark:hover:bg-white/[0.05] hover:text-gray-900 dark:text-white/80"
-        >
-          <Boxes className="h-3.5 w-3.5 text-amber-300" />
-          Permintaan gudang
-        </Link>
-        <Link
-          href={buildHref("/qc", filters)}
-          prefetch={false}
-          className="inline-flex items-center gap-2 border border-gray-300 dark:border-white/[0.06] bg-white dark:bg-[#111114] px-3 py-2 font-mono text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/58 transition hover:bg-gray-100 dark:hover:bg-white/[0.05] hover:text-gray-900 dark:text-white/80"
-        >
-          <CheckCircle2 className="h-3.5 w-3.5 text-amber-300" />
-          Revisi QC
-        </Link>
       </div>
-
-      {bottleneck ? null : null}
     </div>
   );
 }

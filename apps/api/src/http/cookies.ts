@@ -21,7 +21,7 @@ function getBaseCookieOptions(env: ApiEnv) {
   return {
     path: "/",
     sameSite: "Lax",
-    secure: env.NODE_ENV === "production",
+    secure: env.COOKIE_SECURE,
   } as const;
 }
 

@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, LogIn, Lock, User, Eye, EyeOff } from "lucide-react";
 import { SERIF_STYLE } from "@/lib/constants";
@@ -37,42 +37,81 @@ export function LoginShell() {
   const [error, setError] = useState<string | null>(null);
   const [confirmMessage, setConfirmMessage] = useState("");
   const [showConfirm, setShowConfirm] = useState(false);
-  const [isPending, startTransition] = useTransition();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [retryAfterUntil, setRetryAfterUntil] = useState<number | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+  const submitLockRef = useRef(false);
+  const retryAfterSeconds =
+    retryAfterUntil === null
+      ? 0
+      : Math.max(0, Math.ceil((retryAfterUntil - now) / 1_000));
+
+  useEffect(() => {
+    if (retryAfterUntil === null) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      const nextNow = Date.now();
+      setNow(nextNow);
+      if (nextNow >= retryAfterUntil) {
+        setRetryAfterUntil(null);
+      }
+    }, 1_000);
+
+    return () => window.clearInterval(intervalId);
+  }, [retryAfterUntil]);
 
   async function doLogin(data: LoginFormValues, force: boolean) {
+    if (submitLockRef.current || retryAfterSeconds > 0) {
+      return;
+    }
+
+    submitLockRef.current = true;
+    setIsSubmitting(true);
     setError(null);
 
-    const result = await loginWithPassword({
-      employeeId: data.employeeId,
-      password: data.password,
-      force,
-    });
+    try {
+      const result = await loginWithPassword({
+        employeeId: data.employeeId,
+        password: data.password,
+        force,
+      });
 
-    if (result.success) {
-      router.push("/dashboard");
-      return;
+      if (result.success) {
+        setRetryAfterUntil(null);
+        setShowConfirm(false);
+        router.replace("/dashboard");
+        router.refresh();
+        return;
+      }
+
+      if (result.errorCode === "ACTIVE_SESSION_EXISTS") {
+        setConfirmMessage(result.message);
+        setShowConfirm(true);
+        return;
+      }
+
+      const retryAfter = result.data?.retryAfterSeconds;
+      if (typeof retryAfter === "number" && retryAfter > 0) {
+        setNow(Date.now());
+        setRetryAfterUntil(Date.now() + retryAfter * 1_000);
+      }
+
+      setShowConfirm(false);
+      setError(result.message);
+    } finally {
+      submitLockRef.current = false;
+      setIsSubmitting(false);
     }
-
-    if (result.errorCode === "ACTIVE_SESSION_EXISTS") {
-      setConfirmMessage(result.message);
-      setShowConfirm(true);
-      return;
-    }
-
-    setShowConfirm(false);
-    setError(result.message);
   }
 
   function submitLogin(data: LoginFormValues) {
-    startTransition(() => {
-      void doLogin(data, false);
-    });
+    void doLogin(data, false);
   }
 
   function submitForceLogin() {
-    startTransition(() => {
-      void doLogin(getValues(), true);
-    });
+    void doLogin(getValues(), true);
   }
 
   return (
@@ -167,11 +206,15 @@ export function LoginShell() {
 
           <button
             type="submit"
-            disabled={isPending}
+            disabled={isSubmitting || retryAfterSeconds > 0}
             className="w-full h-11 rounded-lg bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-black font-semibold text-sm tracking-wide flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <LogIn className="w-4 h-4" />}
-            {isPending ? "Masuk..." : "Masuk"}
+            {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <LogIn className="w-4 h-4" />}
+            {isSubmitting
+              ? "Masuk..."
+              : retryAfterSeconds > 0
+                ? `Tunggu ${retryAfterSeconds}s`
+                : "Masuk"}
           </button>
         </form>
 
@@ -195,6 +238,7 @@ export function LoginShell() {
               <button
                 type="button"
                 onClick={() => setShowConfirm(false)}
+                disabled={isSubmitting}
                 className="px-4 py-2 rounded-lg text-white/50 hover:text-white hover:bg-white/5 transition-colors text-sm font-medium"
               >
                 Batal
@@ -202,9 +246,10 @@ export function LoginShell() {
               <button
                 type="button"
                 onClick={submitForceLogin}
+                disabled={isSubmitting}
                 className="px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-black transition-colors text-sm font-semibold"
               >
-                Lanjutkan
+                Login di sini
               </button>
             </div>
           </div>

@@ -36,8 +36,10 @@ describe("RedisSessionStore", () => {
     const store = new RedisSessionStore(
       async () =>
         ({
-          async set(_key: string, value: string) {
-            savedSession = value;
+          async set(key: string, value: string) {
+            if (key.startsWith("session:")) {
+              savedSession = value;
+            }
           },
         }) as never,
       {
@@ -51,6 +53,8 @@ describe("RedisSessionStore", () => {
       refreshToken: "refresh-1",
       mobileSessionKey: "session:SM-03.003",
       deviceId: "web-device-1",
+      userAgent: null,
+      ipAddress: null,
     });
 
     const parsedSession = JSON.parse(savedSession ?? "{}") as WebSession;
@@ -60,6 +64,7 @@ describe("RedisSessionStore", () => {
   });
 
   test("normalizes MIS payload when reading an older session", async () => {
+    const sessions = new Map<string, string>();
     const rawSession: WebSession = {
       sessionId: "session-1",
       sessionKey: "session:SM-03.003:session-1",
@@ -74,8 +79,14 @@ describe("RedisSessionStore", () => {
     const store = new RedisSessionStore(
       async () =>
         ({
-          async get() {
-            return JSON.stringify(rawSession);
+          async get(key: string) {
+            return sessions.get(key) ?? null;
+          },
+          async set(key: string, value: string) {
+            sessions.set(key, value);
+          },
+          async del(key: string) {
+            sessions.delete(key);
           },
         }) as never,
       {
@@ -84,10 +95,13 @@ describe("RedisSessionStore", () => {
       } as never,
     );
 
+    sessions.set(rawSession.sessionKey, JSON.stringify(rawSession));
+    const cookies = store.buildLoginCookies(rawSession);
+
     const session = await store.getSessionFromRequest(
       new Request("http://localhost/api/auth/me", {
         headers: {
-          cookie: "sm_session=session:SM-03.003:session-1",
+          cookie: cookies.join("; "),
         },
       }),
     );

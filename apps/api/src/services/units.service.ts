@@ -8,6 +8,7 @@ import type {
 import type { UnitBomWorkspace } from "@smsystem/contracts/unit-bom";
 import type {
   CreateUnitPanelRequest,
+  RenameUnitPanelCategoryRequest,
   UnitPanelCollection,
   UnitPanelRecord,
   UpdateUnitPanelRequest,
@@ -36,6 +37,7 @@ export interface UnitsService {
   getUnitPanels(session: WebSession, unitId: string): Promise<UnitPanelCollection | null>;
   createUnitPanel(session: WebSession, unitId: string, input: CreateUnitPanelRequest): Promise<UnitPanelRecord>;
   updateUnitPanel(session: WebSession, unitId: string, panelId: number, input: UpdateUnitPanelRequest): Promise<UnitPanelRecord>;
+  renameUnitPanelCategory(session: WebSession, unitId: string, input: RenameUnitPanelCategoryRequest): Promise<{ updatedCount: number }>;
   deleteUnitPanel(session: WebSession, unitId: string, panelId: number): Promise<{ deletedId: number }>;
 }
 
@@ -209,6 +211,40 @@ export class DefaultUnitsService implements UnitsService {
     });
 
     return result.after;
+  }
+
+  async renameUnitPanelCategory(
+    session: WebSession,
+    unitId: string,
+    input: RenameUnitPanelCategoryRequest,
+  ): Promise<{ updatedCount: number }> {
+    const result = await this.repository.renameUnitPanelCategory({
+      employeeId: session.user.employeeId,
+      scope: session.user.scope,
+      unitId,
+      actorId: session.user.employeeId,
+      fromCategory: input.fromCategory,
+      toCategory: input.toCategory,
+    });
+
+    await this.auditService.log({
+      actorId: session.user.employeeId,
+      actorName: session.user.fullName,
+      action: "unit_panel.category.rename",
+      module: "unit_panel",
+      recordId: unitId,
+      oldValue: {
+        unitId,
+        category: input.fromCategory,
+      },
+      newValue: {
+        unitId,
+        category: input.toCategory,
+        updatedCount: result.updatedCount,
+      },
+    });
+
+    return result;
   }
 
   async deleteUnitPanel(

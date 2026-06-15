@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { DashboardShell } from "@/modules/dashboard/components/dashboard-shell";
 import { fetchDashboardSummary } from "@/shared/api/dashboard";
+import { fetchIssueGrid } from "@/shared/api/issues";
 import { fetchPlanningWorkspaceSummary } from "@/shared/api/planning";
 import { fetchQcQueue, fetchQcRework } from "@/shared/api/qc";
 import { fetchCurrentUser } from "@/shared/auth/server";
@@ -16,12 +17,40 @@ function getString(v: string | string[] | undefined): string | undefined {
   return Array.isArray(v) ? v[0] : v;
 }
 
+function buildIssueSearchParams(
+  searchParams: Record<string, string | string[] | undefined>,
+  filters: {
+    divisionId?: string;
+    unitId?: string;
+  },
+) {
+  const filterTokens = [
+    ...(Array.isArray(searchParams.filter)
+      ? searchParams.filter
+      : searchParams.filter
+        ? [searchParams.filter]
+        : []),
+  ];
+
+  if (filters.divisionId) filterTokens.push(`divisionId:eq:${filters.divisionId}`);
+  if (filters.unitId) filterTokens.push(`carId:eq:${filters.unitId}`);
+
+  return {
+    page: "1",
+    limit: "100",
+    sortBy: "createdAt",
+    sortDirection: "desc",
+    filter: filterTokens,
+  };
+}
+
 type DashboardSummaryData = NonNullable<
   Awaited<ReturnType<typeof fetchDashboardSummary>>["payload"]
 >["data"];
 type CurrentUserData = Awaited<ReturnType<typeof fetchCurrentUser>>["user"];
 type PlanningResult = Awaited<ReturnType<typeof fetchPlanningWorkspaceSummary>>;
 type QcGridResult = Awaited<ReturnType<typeof fetchQcQueue>>;
+type IssueGridResult = Awaited<ReturnType<typeof fetchIssueGrid>>;
 type DashboardFilters = Parameters<typeof DashboardShell>[0]["filters"];
 
 async function DashboardDeferredShell({
@@ -31,6 +60,7 @@ async function DashboardDeferredShell({
   planningPromise,
   qcQueuePromise,
   qcReworkPromise,
+  issueGridPromise,
 }: {
   summary: DashboardSummaryData;
   currentUser: CurrentUserData;
@@ -38,11 +68,13 @@ async function DashboardDeferredShell({
   planningPromise: Promise<PlanningResult>;
   qcQueuePromise: Promise<QcGridResult>;
   qcReworkPromise: Promise<QcGridResult>;
+  issueGridPromise: Promise<IssueGridResult>;
 }) {
-  const [planningResult, qcQueueResult, qcReworkResult] = await Promise.all([
+  const [planningResult, qcQueueResult, qcReworkResult, issueGridResult] = await Promise.all([
     planningPromise,
     qcQueuePromise,
     qcReworkPromise,
+    issueGridPromise,
   ]);
 
   return (
@@ -53,6 +85,7 @@ async function DashboardDeferredShell({
       planning={planningResult.payload?.data ?? null}
       qcQueue={qcQueueResult.payload?.data ?? []}
       qcRework={qcReworkResult.payload?.data ?? []}
+      issueLogRows={issueGridResult.payload?.data ?? []}
     />
   );
 }
@@ -75,6 +108,7 @@ async function DashboardPageContent({ searchParams }: DashboardPageProps) {
     page: "1",
     limit: "200",
   };
+  const issueSearchParams = buildIssueSearchParams(sp, filters);
 
   const [
     { payload, status },
@@ -97,9 +131,13 @@ async function DashboardPageContent({ searchParams }: DashboardPageProps) {
     );
   }
 
-  const planningPromise = fetchPlanningWorkspaceSummary(cookieHeader, sp);
+  const planningPromise = fetchPlanningWorkspaceSummary(cookieHeader, {
+    ...sp,
+    ...(filters.date ? { asOfDate: filters.date } : {}),
+  });
   const qcQueuePromise = fetchQcQueue(cookieHeader, qcSearchParams);
   const qcReworkPromise = fetchQcRework(cookieHeader, qcSearchParams);
+  const issueGridPromise = fetchIssueGrid(cookieHeader, issueSearchParams);
 
   return (
     <Suspense
@@ -111,6 +149,7 @@ async function DashboardPageContent({ searchParams }: DashboardPageProps) {
           planning={null}
           qcQueue={[]}
           qcRework={[]}
+          issueLogRows={[]}
           isDeferredLoading
         />
       }
@@ -122,6 +161,7 @@ async function DashboardPageContent({ searchParams }: DashboardPageProps) {
         planningPromise={planningPromise}
         qcQueuePromise={qcQueuePromise}
         qcReworkPromise={qcReworkPromise}
+        issueGridPromise={issueGridPromise}
       />
     </Suspense>
   );

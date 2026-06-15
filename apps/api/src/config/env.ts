@@ -41,6 +41,8 @@ export interface ApiEnv {
   REDIS_DB: number;
   REDIS_PASSWORD?: string;
   FCM_SERVER_KEY?: string;
+  ALLOW_INSECURE_SM_LOGIN: boolean;
+  COOKIE_SECURE: boolean;
 }
 
 let cachedEnv: ApiEnv | null = null;
@@ -121,9 +123,15 @@ export function loadApiEnv(
     merged.SM_LOGIN_BASE_URL?.trim() ||
     (nodeEnv === "production" ? "" : "http://108.136.189.225:8085");
 
-  if (nodeEnv === "production" && !loginBase.startsWith("https://")) {
+  const allowInsecureSmLogin =
+    ["1", "true", "yes", "on"].includes((merged.ALLOW_INSECURE_SM_LOGIN?.trim() || "").toLowerCase());
+  const cookieSecure =
+    ["1", "true", "yes", "on"].includes((merged.COOKIE_SECURE?.trim() || "").toLowerCase()) ||
+    (nodeEnv === "production" && !["0", "false", "no", "off"].includes((merged.COOKIE_SECURE?.trim() || "").toLowerCase()));
+
+  if (nodeEnv === "production" && !allowInsecureSmLogin && !loginBase.startsWith("https://")) {
     throw new Error(
-      "SM_LOGIN_BASE_URL must use HTTPS in production. " +
+      "SM_LOGIN_BASE_URL must use HTTPS in production unless ALLOW_INSECURE_SM_LOGIN=true is explicitly set. " +
         "Current value is insecure or missing.",
     );
   }
@@ -179,6 +187,8 @@ export function loadApiEnv(
     REDIS_DB: parseInteger(merged.REDIS_DB, 0, "REDIS_DB", 0),
     REDIS_PASSWORD: merged.REDIS_PASSWORD?.trim() || undefined,
     FCM_SERVER_KEY: merged.FCM_SERVER_KEY?.trim() || undefined,
+    ALLOW_INSECURE_SM_LOGIN: allowInsecureSmLogin,
+    COOKIE_SECURE: cookieSecure,
   };
 }
 

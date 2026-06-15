@@ -158,13 +158,6 @@ function buildTimeline(node: UnitBomNode): TimelineItem[] {
       icon: Truck,
       tone: "border-sky-400/30 bg-sky-400/10 text-sky-300",
     });
-    items.push({
-      title: node.label ?? "Pekerjaan countdown",
-      detail: `${hierarchyLabel(node)} - ${workStatusLabel(node)}`,
-      date: "-",
-      icon: Wrench,
-      tone: "border-amber-400/30 bg-amber-400/10 text-amber-300",
-    });
     if (node.physicalStatus === "INSTALLED") {
       items.push({
         title: "Pemeriksaan akhir",
@@ -478,7 +471,19 @@ function buildWorkflowSources(node: UnitBomNode): WorkflowNode[] {
   const progressPercent = Math.round(node.progressPercent ?? 0);
   const progressLabel = `${progressPercent}%`;
   const divisionLabel = node.divisionName ?? null;
-  const timeline = buildTimeline(node);
+  const timeline = node.detail?.timeline.length
+    ? node.detail.timeline.map((item) => {
+        const rawItem: TimelineItem = {
+          eventType: item.eventType,
+          title: item.title,
+          detail: item.description,
+          date: formatShortDate(item.occurredAt),
+          icon: timelineIcon(item.eventType),
+          tone: timelineTone(item.eventType),
+        };
+        return normalizeTimelineItem(rawItem, node);
+      })
+    : [];
   const hasActualSignal = progressPercent > 0
     || node.physicalStatus === "INSTALLED"
     || timeline.some((item) => item.eventType === "QC" || item.title.toLowerCase().includes("aktual"));

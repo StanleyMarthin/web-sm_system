@@ -5,7 +5,7 @@ import { DefaultAuthService } from "@/services/auth/auth.service";
 import type { AuditService } from "@/services/audit/audit.service";
 import type { AuthContextRepository } from "@/repositories/auth-context.repo";
 import type { SessionStore, WebSession } from "@/services/auth/session.service";
-import type { SmLoginAdapter } from "@/services/auth/sm-login.adapter";
+import { SmLoginAdapterError, type SmLoginAdapter } from "@/services/auth/sm-login.adapter";
 
 const sampleUser: AuthUser = {
   employeeId: "SM-03.004",
@@ -34,6 +34,8 @@ class InMemorySessionStore implements SessionStore {
     refreshToken: string;
     mobileSessionKey: string;
     deviceId: string;
+    userAgent: string | null;
+    ipAddress: string | null;
   }): Promise<WebSession> {
     const session: WebSession = {
       sessionId: "session-1",
@@ -65,8 +67,23 @@ class InMemorySessionStore implements SessionStore {
     return this.sessions.get(sessionKey) ?? null;
   }
 
+  async getActiveSessionByEmployeeId(employeeId: string): Promise<WebSession | null> {
+    return (
+      [...this.sessions.values()].find((session) => session.employeeId === employeeId) ??
+      null
+    );
+  }
+
   async deleteSessionByKey(sessionKey: string): Promise<void> {
     this.sessions.delete(sessionKey);
+  }
+
+  async deleteActiveSessionByEmployeeId(employeeId: string): Promise<void> {
+    for (const session of this.sessions.values()) {
+      if (session.employeeId === employeeId) {
+        this.sessions.delete(session.sessionKey);
+      }
+    }
   }
 
   buildLoginCookies(session: WebSession): string[] {
@@ -141,6 +158,8 @@ describe("DefaultAuthService", () => {
       refreshToken: "refresh-1",
       mobileSessionKey: "session:SM-03.004",
       deviceId: "web-device-1",
+      userAgent: null,
+      ipAddress: null,
     });
 
     const authService = new DefaultAuthService(
@@ -176,6 +195,149 @@ describe("DefaultAuthService", () => {
     expect(sessionStore.sessions.size).toBe(0);
     expect(cookies.join(";")).toContain("Max-Age=0");
     expect(auditEntries).toEqual(["auth.logout"]);
+  });
+
+  test("requires confirmation before taking over another active web session", async () => {
+    const sessionStore = new InMemorySessionStore();
+    await sessionStore.createSession({
+      user: sampleUser,
+      refreshToken: "refresh-1",
+      mobileSessionKey: "session:SM-03.004",
+      deviceId: "web-device-1",
+      userAgent: null,
+      ipAddress: null,
+    });
+
+    const authService = new DefaultAuthService(
+      {
+        async loginWeb() {
+          return {
+            employeeId: sampleUser.employeeId,
+            mobileSessionKey: "session:new",
+            refreshToken: "new-refresh",
+          };
+        },
+        async refresh() {
+          throw new Error("Not used");
+        },
+      } satisfies SmLoginAdapter,
+      {
+        async findByEmployeeId() {
+          return sampleUser;
+        },
+      } satisfies AuthContextRepository,
+      sessionStore,
+      {
+        async log() {
+          return;
+        },
+      } satisfies AuditService,
+    );
+
+    try {
+      await authService.login(new Request("http://localhost/api/auth/login"), {
+        employeeId: sampleUser.employeeId,
+        password: "secret",
+        force: false,
+      });
+      throw new Error("Expected active session warning");
+    } catch (error) {
+      expect((error as { errorCode?: string }).errorCode).toBe("ACTIVE_SESSION_EXISTS");
+    }
+  });
+
+  test("checks credentials before reporting another active web session", async () => {
+    const sessionStore = new InMemorySessionStore();
+    const existingSession = await sessionStore.createSession({
+      user: sampleUser,
+      refreshToken: "refresh-1",
+      mobileSessionKey: "session:SM-03.004",
+      deviceId: "web-device-1",
+      userAgent: null,
+      ipAddress: null,
+    });
+
+    const authService = new DefaultAuthService(
+      {
+        async loginWeb() {
+          throw new SmLoginAdapterError("Password salah.", 401, "INVALID_CREDENTIALS", {});
+        },
+        async refresh() {
+          throw new Error("Not used");
+        },
+      } satisfies SmLoginAdapter,
+      {
+        async findByEmployeeId() {
+          throw new Error("Should not load user context when credentials fail");
+        },
+      } satisfies AuthContextRepository,
+      sessionStore,
+      {
+        async log() {
+          return;
+        },
+      } satisfies AuditService,
+    );
+
+    try {
+      await authService.login(new Request("http://localhost/api/auth/login"), {
+        employeeId: sampleUser.employeeId,
+        password: "wrong",
+        force: false,
+      });
+      throw new Error("Expected credential failure");
+    } catch (error) {
+      expect((error as { errorCode?: string }).errorCode).toBe("INVALID_CREDENTIALS");
+    }
+
+    expect(sessionStore.sessions.get(existingSession.sessionKey)).toBe(existingSession);
+  });
+
+  test("force login deletes the older active web session", async () => {
+    const sessionStore = new InMemorySessionStore();
+    await sessionStore.createSession({
+      user: sampleUser,
+      refreshToken: "old-refresh",
+      mobileSessionKey: "session:old",
+      deviceId: "web-device-old",
+      userAgent: null,
+      ipAddress: null,
+    });
+
+    const authService = new DefaultAuthService(
+      {
+        async loginWeb() {
+          return {
+            employeeId: sampleUser.employeeId,
+            mobileSessionKey: "session:new",
+            refreshToken: "new-refresh",
+          };
+        },
+        async refresh() {
+          throw new Error("Not used");
+        },
+      } satisfies SmLoginAdapter,
+      {
+        async findByEmployeeId() {
+          return sampleUser;
+        },
+      } satisfies AuthContextRepository,
+      sessionStore,
+      {
+        async log() {
+          return;
+        },
+      } satisfies AuditService,
+    );
+
+    const result = await authService.login(new Request("http://localhost/api/auth/login"), {
+      employeeId: sampleUser.employeeId,
+      password: "secret",
+      force: true,
+    });
+
+    expect(result.user.employeeId).toBe(sampleUser.employeeId);
+    expect([...sessionStore.sessions.values()][0]?.refreshToken).toBe("new-refresh");
   });
 
   test("throws when refresh is requested without a refresh cookie", async () => {

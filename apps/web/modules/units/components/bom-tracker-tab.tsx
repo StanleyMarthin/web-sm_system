@@ -43,8 +43,10 @@ import {
   deleteUnitPanel,
   fetchUnitBom,
   fetchUnitPanels,
+  renameUnitPanelCategory,
   updateUnitPanel,
 } from "@/shared/api/units";
+import { useSweetAlert } from "@/shared/ui/sweet-alert";
 
 interface BomTrackerTabProps {
   carId: string;
@@ -221,7 +223,7 @@ function hasOperationalTrace(node: UnitBomNode): boolean {
 
 function panelDetailKey(node: UnitBomNode): string | null {
   if (node.actualId) return node.actualId;
-  if (node.panelId && hasOperationalTrace(node)) return `panel-${node.panelId}`;
+  if (node.panelId) return `panel-${node.panelId}`;
   return null;
 }
 
@@ -334,6 +336,14 @@ function flattenPanelRecords(rows: UnitPanelRecord[]): UnitPanelRecord[] {
     records.push(...flattenPanelRecords(row.children));
   }
   return records;
+}
+
+function displayCategory(value: string | null | undefined): string {
+  return value?.trim() || "Lainnya";
+}
+
+function recordMatchesCategory(record: UnitPanelRecord, category: string): boolean {
+  return displayCategory(record.category) === category;
 }
 
 function buildCanvasLayout(nodes: UnitBomNode[], expandedNodeIds: Set<string>, isRootExpanded: boolean): CanvasLayout {
@@ -456,7 +466,9 @@ function SearchableField({
               </button>
             ))
           ) : (
-            <div className="px-3 py-2 text-[10px] font-mono text-white/25">Tidak ada data cocok</div>
+            <div className="px-3 py-2 text-[10px] font-mono text-white/25">
+              Tidak ada data cocok. Tekan Simpan untuk memakai teks ini.
+            </div>
           )}
         </div>
       ) : null}
@@ -695,6 +707,7 @@ export function BomTrackerTab({
   canManagePanels = false,
 }: BomTrackerTabProps) {
   const router = useRouter();
+  const sweetAlert = useSweetAlert();
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const hasLoadedCanvasStateRef = useRef(false);
   const skipNextCanvasSaveRef = useRef(true);
@@ -840,18 +853,18 @@ export function BomTrackerTab({
   const categories = useMemo(() => {
     const cats = new Set<string>();
     for (const row of rows) {
-      if (row.category) cats.add(row.category);
+      cats.add(displayCategory(row.category));
     }
     if (workspace) {
       for (const node of positionedNodes) {
-        if (node.node.category) cats.add(node.node.category);
+        cats.add(displayCategory(node.node.category));
       }
     }
     return Array.from(cats).sort();
   }, [positionedNodes, rows, workspace]);
 
   const rowsInSelectedCategory = useMemo(() => {
-    return rows.filter((row) => (row.category ?? "") === form.category);
+    return rows.filter((row) => displayCategory(row.category) === form.category);
   }, [rows, form.category]);
 
   const formSections = useMemo(() => {
@@ -861,7 +874,7 @@ export function BomTrackerTab({
   }, [rowsInSelectedCategory, form.section]);
 
   const panelsBySelectedSection = useMemo(() => {
-    return rows.filter((row) => (row.category ?? "") === form.category && row.section === form.section);
+    return rows.filter((row) => displayCategory(row.category) === form.category && row.section === form.section);
   }, [rows, form.category, form.section]);
 
   const selectedParentPanel = useMemo(() => {
@@ -885,6 +898,18 @@ export function BomTrackerTab({
   const totalPanelRecords = rows.length;
   const totalPartRecords = useMemo(() => rows.reduce((total, row) => total + row.children.length, 0), [rows]);
 
+  useEffect(() => {
+    if (error) {
+      sweetAlert.notifyError("Aksi belum berhasil", error);
+    }
+  }, [error]);
+
+  useEffect(() => {
+    if (message) {
+      sweetAlert.notifySuccess("Berhasil", message);
+    }
+  }, [message]);
+
   function getNextSortOrder(parentId: number | null, section: string) {
     if (parentId !== null) {
       const parent = rows.find((row) => row.id === parentId);
@@ -895,6 +920,21 @@ export function BomTrackerTab({
     return rows
       .filter((row) => row.section === section)
       .reduce((max, row) => Math.max(max, row.sortOrder), -1) + 1;
+  }
+
+  async function getPanelRecordsForMutation(): Promise<UnitPanelRecord[] | null> {
+    if (flatPanelRecords.length > 0) {
+      return flatPanelRecords;
+    }
+
+    const result = await fetchUnitPanels("", carId);
+    if (!result.payload) {
+      setError("Master panel unit belum bisa dimuat untuk disimpan.");
+      return null;
+    }
+
+    setRows(result.payload.data.tree);
+    return flattenPanelRecords(result.payload.data.tree);
   }
 
   const openCreateRoot = useCallback(() => {
@@ -937,6 +977,52 @@ export function BomTrackerTab({
     setForm({ ...emptyForm(), category });
     setMessage(null);
     setError(null);
+  }
+
+  async function handleDeleteCategory(category: string) {
+    if (!canManagePanels) return;
+
+    const panelRecords = await getPanelRecordsForMutation();
+    if (!panelRecords) {
+      return;
+    }
+
+    const targets = panelRecords
+      .filter((record) => recordMatchesCategory(record, category))
+      .sort((left, right) => {
+        if (left.parentId === null && right.parentId !== null) return 1;
+        if (left.parentId !== null && right.parentId === null) return -1;
+        return 0;
+      });
+
+    if (targets.length === 0) {
+      setError("Kategori tidak memiliki panel atau part yang bisa dihapus.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Hapus kategori "${category}" beserta ${targets.length} panel/part di dalamnya?`,
+    );
+    if (!confirmed) return;
+
+    setIsSubmitting(true);
+    setError(null);
+    setMessage(null);
+
+    for (const record of targets) {
+      const result = await deleteUnitPanel(carId, record.id);
+      if (!result.success) {
+        setError(result.message);
+        setIsSubmitting(false);
+        return;
+      }
+    }
+
+    setMessage(`Kategori "${category}" berhasil dihapus.`);
+    closeForm();
+    setSelection({ type: "unit" });
+    await refreshWorkspace();
+    setIsSubmitting(false);
   }
 
   function openEditSection(category: string, section: string) {
@@ -1039,23 +1125,17 @@ export function BomTrackerTab({
         return;
       }
 
-      const targets = flatPanelRecords.filter((record) => (record.category ?? "") === mode.category);
-      const results = await Promise.all(
-        targets.map((record) =>
-          updateUnitPanel(carId, record.id, {
-            ...buildPayload(formFromRecord(record)),
-            category: nextCategory,
-          }),
-        ),
-      );
-      const failed = results.find((result) => !result.success);
-      if (failed) {
-        setError(failed.message);
+      const result = await renameUnitPanelCategory(carId, {
+        fromCategory: mode.category,
+        toCategory: nextCategory,
+      });
+      if (!result.success) {
+        setError(result.message);
         setIsSubmitting(false);
         return;
       }
 
-      setMessage("Nama kategori berhasil diperbarui.");
+      setMessage(`Nama kategori berhasil diperbarui untuk ${result.result.updatedCount} panel/part.`);
       closeForm();
       await refreshWorkspace();
       setIsSubmitting(false);
@@ -1070,9 +1150,21 @@ export function BomTrackerTab({
         return;
       }
 
-      const targets = flatPanelRecords.filter(
-        (record) => (record.category ?? "") === mode.category && record.section === mode.section,
+      const panelRecords = await getPanelRecordsForMutation();
+      if (!panelRecords) {
+        setIsSubmitting(false);
+        return;
+      }
+
+      const targets = panelRecords.filter(
+        (record) => recordMatchesCategory(record, mode.category) && record.section === mode.section,
       );
+      if (targets.length === 0) {
+        setError(`Tidak ada panel atau part pada section "${mode.section}" yang bisa diperbarui.`);
+        setIsSubmitting(false);
+        return;
+      }
+
       const results = await Promise.all(
         targets.map((record) =>
           updateUnitPanel(carId, record.id, {
@@ -1107,7 +1199,7 @@ export function BomTrackerTab({
 
     const effectiveForm =
       mode.type === "create" && mode.sectionMode === "new"
-        ? { ...form, name: form.name.trim() || form.section.trim(), nodeType: "PANEL" as const, isActive: true }
+        ? { ...form, nodeType: "PANEL" as const }
         : form;
 
     const payload = {
@@ -1159,9 +1251,7 @@ export function BomTrackerTab({
         ? "Master panel berhasil diperbarui."
         : effectiveForm.nodeType === "PART"
           ? "Part berhasil ditambahkan."
-          : mode.sectionMode === "new"
-            ? "Section berhasil ditambahkan."
-            : "Panel berhasil ditambahkan.",
+          : "Panel berhasil ditambahkan.",
     );
     closeForm();
     await refreshWorkspace();
@@ -1326,7 +1416,7 @@ export function BomTrackerTab({
           : mode.type === "edit"
         ? `Edit ${mode.record.nodeType === "PANEL" ? "Panel" : "Part"}`
         : mode.sectionMode === "new"
-          ? "Tambah Kategori / Section"
+          ? "Tambah Panel + Kategori / Section"
           : form.nodeType === "PART"
             ? "Tambah Part"
             : "Tambah Panel";
@@ -1471,7 +1561,7 @@ export function BomTrackerTab({
                         onClick={openCreateCategory}
                         className="border border-amber-500/30 bg-amber-500/[0.06] px-3 py-2 text-left text-[11px] font-mono text-amber-500 transition-colors hover:bg-amber-500/10"
                       >
-                        Tambah kategori baru
+                        Tambah panel kategori baru
                       </button>
                     ) : null}
                   </>
@@ -1497,10 +1587,17 @@ export function BomTrackerTab({
                         </button>
                         <button
                           type="button"
+                          onClick={() => void handleDeleteCategory(displayCategory(selectedNode.category))}
+                          className="border border-red-500/25 px-3 py-2 text-left text-[11px] font-mono text-red-400/70 transition-colors hover:border-red-500/50 hover:text-red-300"
+                        >
+                          Hapus kategori
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => openCreateSectionFromCategory(selectedNode.category ?? "")}
                           className="border border-amber-500/30 bg-amber-500/[0.06] px-3 py-2 text-left text-[11px] font-mono text-amber-500 transition-colors hover:bg-amber-500/10"
                         >
-                          Tambah section
+                          Tambah panel section baru
                         </button>
                       </>
                     ) : null}
@@ -1530,7 +1627,7 @@ export function BomTrackerTab({
                           onClick={() => openCreatePanelFromSection(selectedNode)}
                           className="border border-amber-500/30 bg-amber-500/[0.06] px-3 py-2 text-left text-[11px] font-mono text-amber-500 transition-colors hover:bg-amber-500/10"
                         >
-                          Tambah panel
+                          Tambah panel di section ini
                         </button>
                       </>
                     ) : null}
@@ -1767,7 +1864,7 @@ export function BomTrackerTab({
                       {canManagePanels ? (
                         <button type="button" onClick={openCreateCategory}
                           className="w-full border border-amber-500/30 bg-amber-500/[0.06] px-3 py-2 text-left text-[11px] font-mono text-amber-500 transition-colors hover:bg-amber-500/10">
-                          Tambah kategori baru
+                          Tambah panel kategori baru
                         </button>
                       ) : null}
                     </>
@@ -1785,9 +1882,13 @@ export function BomTrackerTab({
                             className="w-full border border-white/10 px-3 py-2 text-left text-[11px] font-mono text-white/60 transition-colors hover:border-white/30 hover:text-white">
                             Edit nama kategori
                           </button>
+                          <button type="button" onClick={() => void handleDeleteCategory(displayCategory(selectedNode.category))}
+                            className="w-full border border-red-500/25 px-3 py-2 text-left text-[11px] font-mono text-red-400/70 transition-colors hover:border-red-500/50 hover:text-red-300">
+                            Hapus kategori
+                          </button>
                           <button type="button" onClick={() => openCreateSectionFromCategory(selectedNode.category ?? "")}
                             className="w-full border border-amber-500/30 bg-amber-500/[0.06] px-3 py-2 text-left text-[11px] font-mono text-amber-500 transition-colors hover:bg-amber-500/10">
-                            Tambah section
+                            Tambah panel section baru
                           </button>
                         </>
                       ) : null}
@@ -1808,7 +1909,7 @@ export function BomTrackerTab({
                           </button>
                           <button type="button" onClick={() => openCreatePanelFromSection(selectedNode)}
                             className="w-full border border-amber-500/30 bg-amber-500/[0.06] px-3 py-2 text-left text-[11px] font-mono text-amber-500 transition-colors hover:bg-amber-500/10">
-                            Tambah panel
+                            Tambah panel di section ini
                           </button>
                         </>
                       ) : null}
@@ -2019,20 +2120,17 @@ export function BomTrackerTab({
                     </label>
                   ) : null}
 
-                  {mode.type !== "create" || mode.sectionMode !== "new" ? (
-                    <label className="flex items-center gap-3 border border-white/5 bg-[#111114] px-3 py-2">
-                      <input
-                        type="checkbox"
-                        checked={form.isActive}
-                        onChange={(event) => setForm((current) => ({ ...current, isActive: event.target.checked }))}
-                        className="h-4 w-4 border-white/20 bg-transparent"
-                      />
-                      <span className="text-[10px] font-mono text-white/50">Aktifkan {form.nodeType === "PART" ? "part" : "panel"} ini</span>
-                    </label>
-                  ) : null}
+                  <label className="flex items-center gap-3 border border-white/5 bg-[#111114] px-3 py-2">
+                    <input
+                      type="checkbox"
+                      checked={form.isActive}
+                      onChange={(event) => setForm((current) => ({ ...current, isActive: event.target.checked }))}
+                      className="h-4 w-4 border-white/20 bg-transparent"
+                    />
+                    <span className="text-[10px] font-mono text-white/50">Aktifkan {form.nodeType === "PART" ? "part" : "panel"} ini</span>
+                  </label>
 
-                  {mode.type !== "create" || mode.sectionMode !== "new" ? (
-                    <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-2 gap-2">
                       <label className="block space-y-1">
                         <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">Qty</span>
                         <input
@@ -2089,8 +2187,7 @@ export function BomTrackerTab({
                           <option value="BARU">{CONDITION_LABEL.BARU}</option>
                         </select>
                       </label>
-                    </div>
-                  ) : null}
+                  </div>
 
                   <div className="flex gap-2 pt-1">
                     <button
@@ -2118,6 +2215,7 @@ export function BomTrackerTab({
           </aside>
           ) : null}
         </div>
+        {sweetAlert.alertElement}
       </section>
   );
 }

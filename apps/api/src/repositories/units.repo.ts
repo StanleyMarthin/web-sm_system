@@ -1965,6 +1965,40 @@ export class UnitsRepository {
     };
   }
 
+  async renameUnitPanelCategory(
+    params: ScopeParams & {
+      unitId: string;
+      actorId: string;
+      fromCategory: string;
+      toCategory: string;
+    },
+  ): Promise<{ updatedCount: number }> {
+    const unitSummary = await this.findUnitSummary(params);
+    if (!unitSummary) {
+      throw new Error("UNIT_NOT_FOUND");
+    }
+
+    const pool = this.poolFactory();
+    const [result] = await pool.execute<ResultSetHeader>(
+      `
+        UPDATE master_panels
+        SET
+          category = ?,
+          updated_by = ?
+        WHERE car_id = ?
+          AND COALESCE(NULLIF(TRIM(category), ''), 'Lainnya') = ?
+      `,
+      [
+        toNullableText(params.toCategory),
+        params.actorId,
+        params.unitId,
+        params.fromCategory.trim(),
+      ],
+    );
+
+    return { updatedCount: Number(result.affectedRows ?? 0) };
+  }
+
   async deleteUnitPanel(
     params: ScopeParams & {
       unitId: string;

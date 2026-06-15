@@ -4,12 +4,15 @@ import type { AuthContextRepository } from "@/repositories/auth-context.repo";
 import type { AuditService } from "@/services/audit/audit.service";
 import type { SessionStore, WebSession } from "@/services/auth/session.service";
 import type {
-  HttpSmLoginAdapter,
   RefreshWebParams,
   SmLoginAdapter,
-  SmLoginAdapterError,
 } from "@/services/auth/sm-login.adapter";
 import { getCookie } from "@/http/cookies";
+import { SmLoginAdapterError } from "@/services/auth/sm-login.adapter";
+import {
+  getLoginAttemptBlock,
+  recordActiveSessionWarning,
+} from "@/services/auth/login-attempts";
 
 interface LoginResult {
   user: AuthUser;
@@ -46,9 +49,16 @@ export class DefaultAuthService implements AuthService {
   ) {}
 
   async login(request: Request, body: LoginRequest): Promise<LoginResult> {
-    const existingSession = await this.sessionStore.getSessionFromRequest(request);
-    if (existingSession) {
-      await this.sessionStore.deleteSessionByKey(existingSession.sessionKey);
+    const loginBlock = await getLoginAttemptBlock(body.employeeId);
+    if (loginBlock) {
+      throw new SmLoginAdapterError(
+        loginBlock.message,
+        loginBlock.errorCode === "ACCOUNT_DISABLED" ? 403 : 429,
+        loginBlock.errorCode,
+        {
+          retryAfterSeconds: loginBlock.retryAfterSeconds,
+        },
+      );
     }
 
     const deviceId = getDeviceId(request);
@@ -58,6 +68,41 @@ export class DefaultAuthService implements AuthService {
       deviceId,
       force: body.force ?? false,
     });
+
+    const employeeId = mobileSession.employeeId.toUpperCase();
+    const existingSession = await this.sessionStore.getSessionFromRequest(request);
+    const activeSession = await this.sessionStore.getActiveSessionByEmployeeId(employeeId);
+    const isAnotherActiveSession =
+      activeSession !== null && activeSession.sessionKey !== existingSession?.sessionKey;
+
+    if (isAnotherActiveSession) {
+      if (!body.force) {
+        const warningBlock = await recordActiveSessionWarning(employeeId);
+        if (warningBlock) {
+          throw new SmLoginAdapterError(
+            warningBlock.message,
+            warningBlock.errorCode === "ACCOUNT_DISABLED" ? 403 : 429,
+            warningBlock.errorCode,
+            {
+              retryAfterSeconds: warningBlock.retryAfterSeconds,
+            },
+          );
+        }
+
+        throw new SmLoginAdapterError(
+          "Akun ini sedang login di perangkat Web lain. Apakah Anda ingin melanjutkan dan logout dari perangkat tersebut?",
+          409,
+          "ACTIVE_SESSION_EXISTS",
+          {},
+        );
+      }
+
+      await this.sessionStore.deleteActiveSessionByEmployeeId(employeeId);
+    }
+
+    if (existingSession) {
+      await this.sessionStore.deleteSessionByKey(existingSession.sessionKey);
+    }
 
     const user = await this.authContextRepository.findByEmployeeId(
       mobileSession.employeeId,
@@ -71,6 +116,8 @@ export class DefaultAuthService implements AuthService {
       refreshToken: mobileSession.refreshToken,
       mobileSessionKey: mobileSession.mobileSessionKey,
       deviceId,
+      userAgent: request.headers.get("user-agent"),
+      ipAddress: getIpAddress(request),
     });
 
     await this.auditService.log({
@@ -142,6 +189,8 @@ export class DefaultAuthService implements AuthService {
       refreshToken: mobileSession.refreshToken,
       mobileSessionKey: mobileSession.mobileSessionKey,
       deviceId,
+      userAgent: request.headers.get("user-agent"),
+      ipAddress: getIpAddress(request),
     });
 
     await this.auditService.log({

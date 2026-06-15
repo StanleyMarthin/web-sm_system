@@ -391,6 +391,9 @@ function createStubUnitsService(overrides: Partial<UnitsService> = {}): UnitsSer
       };
       return record;
     },
+    async renameUnitPanelCategory() {
+      return { updatedCount: 2 };
+    },
     async deleteUnitPanel(_session, _unitId, panelId) {
       return { deletedId: panelId };
     },
@@ -503,6 +506,55 @@ describe("units routes", () => {
     expect(response.status).toBe(200);
   });
 
+  test("allows super-unit scope to create unit without legacy manage permissions", async () => {
+    const fetchHandler = createApiFetchHandler({
+      authService: createStubAuthService({
+        async getCurrentSession() {
+          return {
+            ...sampleSession,
+            user: {
+              ...sampleUser,
+              permissions: [
+                permissionCodes.viewUnits,
+                permissionCodes.viewAllUnits,
+              ],
+              scope: {
+                ...sampleUser.scope,
+                canViewAllUnits: true,
+              },
+            },
+          };
+        },
+      }),
+      unitsService: createStubUnitsService(),
+    });
+
+    const response = await fetchHandler(
+      new Request("http://localhost/api/units", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          unitId: "TEST_SUPER_UNIT",
+          unitName: "Test Super Unit",
+          plateNumber: null,
+          customerName: "Mr. Test",
+          restorationType: "FULL_RESTORASI",
+          isMargin: true,
+          contractDeliveryDate: "2026-06-30",
+          incomingDate: "2026-06-12",
+          revisionContract: null,
+          status: "In_Progress",
+        }),
+      }),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(201);
+    expect(body.data.unit.unitId).toBe("TEST_SUPER_UNIT");
+  });
+
   test("blocks unit detail when detail permission is missing", async () => {
     const fetchHandler = createApiFetchHandler({
       authService: createStubAuthService({
@@ -594,6 +646,23 @@ describe("units routes", () => {
 
     expect(updateResponse.status).toBe(200);
     expect(updateBody.data.record.sortOrder).toBe(3);
+
+    const categoryResponse = await fetchHandler(
+      new Request("http://localhost/api/units/MB500SEL_MRSILMY/master-panels/category", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          fromCategory: "Lainnya",
+          toCategory: "Body",
+        }),
+      }),
+    );
+    const categoryBody = await categoryResponse.json();
+
+    expect(categoryResponse.status).toBe(200);
+    expect(categoryBody.data.updatedCount).toBe(2);
 
     const deleteResponse = await fetchHandler(
       new Request("http://localhost/api/units/MB500SEL_MRSILMY/master-panels/10", {

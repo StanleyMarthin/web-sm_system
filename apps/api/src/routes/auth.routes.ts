@@ -2,6 +2,12 @@ import { loginRequestSchema } from "@smsystem/contracts/auth";
 import type { AuthService } from "@/services/auth/auth.service";
 import { parseJsonBody } from "@/http/request";
 import { errorResponse, noContentResponse, successResponse } from "@/http/response";
+import {
+  isCredentialFailure,
+  recordActiveSessionWarning,
+  recordLoginFailure,
+  resetLoginFailures,
+} from "@/services/auth/login-attempts";
 
 function appendCookies(response: Response, cookies: string[]): Response {
   for (const cookie of cookies) {
@@ -22,13 +28,27 @@ export async function handleLoginRoute(
 
   try {
     const result = await authService.login(request, parsedBody.data);
+    await resetLoginFailures(parsedBody.data.employeeId);
     const response = successResponse(request, "Login berhasil", {
       user: result.user,
     });
 
     return appendCookies(response, result.cookies);
   } catch (error) {
-    console.error("[auth] login failed", error);
+    if (isCredentialFailure(error)) {
+      const loginBlock = await recordLoginFailure(parsedBody.data.employeeId);
+      if (loginBlock) {
+        return errorResponse(
+          request,
+          loginBlock.message,
+          loginBlock.errorCode === "ACCOUNT_DISABLED" ? 403 : 429,
+          loginBlock.errorCode,
+          {
+            retryAfterSeconds: loginBlock.retryAfterSeconds,
+          },
+        );
+      }
+    }
 
     if (
       typeof error === "object" &&
@@ -44,6 +64,21 @@ export async function handleLoginRoute(
         data?: Record<string, unknown>;
       };
 
+      if (adapterError.errorCode === "ACTIVE_SESSION_EXISTS") {
+        const warningBlock = await recordActiveSessionWarning(parsedBody.data.employeeId);
+        if (warningBlock) {
+          return errorResponse(
+            request,
+            warningBlock.message,
+            warningBlock.errorCode === "ACCOUNT_DISABLED" ? 403 : 429,
+            warningBlock.errorCode,
+            {
+              retryAfterSeconds: warningBlock.retryAfterSeconds,
+            },
+          );
+        }
+      }
+
       return errorResponse(
         request,
         adapterError.message,
@@ -52,6 +87,8 @@ export async function handleLoginRoute(
         adapterError.data ?? {},
       );
     }
+
+    console.error("[auth] login failed", error);
 
     return errorResponse(
       request,

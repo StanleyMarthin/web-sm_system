@@ -16,6 +16,7 @@
 .claude/
 .cursor/
 .continue/
+.hallmark/
 start-dev.sh
 # markdown notes / docs kept local in this workspace
 *.md
@@ -31,12 +32,17 @@ progress/
 *.sh
 /apps/api/scratch*
 /apps/api/check-db.ts
-/apps/api/db/migrations/*.sql
+scripts/
+
+# SQL dumps are local; application migrations are source code.
+*.sql
+!/apps/api/db/migrations/*.sql
 
 # testing
 /coverage
 **/coverage/
 
+pakages/
 # next.js
 /.next/
 **/.next/
@@ -54,10 +60,19 @@ progress/
 *.bak
 *.orig
 *.swp
+*.key
+*.crt
+*.csr
+*.p12
+*.pfx
 *~
 .dev/
 .cache/
 tmp/
+mysql_data/
+redis_data/
+certbot/
+nginx/
 
 # debug
 npm-debug.log*
@@ -74,3 +89,5 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+# Added by code-review-graph
+.code-review-graph/

@@ -27,6 +27,20 @@ function getAuditTableName(auditDbName: string): string {
   return `\`${auditDbName}\`.log_audit_trails`;
 }
 
+function toLegacyAuditAction(action: string): "INSERT" | "UPDATE" | "DELETE" {
+  const normalized = action.toLowerCase();
+
+  if (/\b(create|import|generate|submit|publish|release|store)\b/u.test(normalized)) {
+    return "INSERT";
+  }
+
+  if (/\b(delete|deactivate|cancel)\b/u.test(normalized)) {
+    return "DELETE";
+  }
+
+  return "UPDATE";
+}
+
 export class MySqlAuditRepository implements AuditRepository {
   constructor(
     private readonly poolFactory: (env?: ApiEnv) => Pick<Pool, "execute"> = getMySqlPool,
@@ -58,7 +72,7 @@ export class MySqlAuditRepository implements AuditRepository {
         this.env.DB_NAME,
         entry.module,
         entry.recordId ?? randomUUID(),
-        entry.action.toUpperCase(),
+        toLegacyAuditAction(entry.action),
         entry.actorId,
         entry.actorName,
         null,

@@ -2,6 +2,8 @@ import {
   createCipheriv,
   createDecipheriv,
   createHash,
+  createHmac,
+  timingSafeEqual,
   randomBytes,
   randomUUID,
 } from "node:crypto";
@@ -27,6 +29,8 @@ export interface WebSession {
   csrfToken?: string;
   mobileSessionKey: string;
   deviceId: string;
+  userAgentHash?: string;
+  ipAddressHash?: string;
   user: AuthUser;
   createdAt: string;
 }
@@ -36,18 +40,54 @@ interface CreateSessionInput {
   refreshToken: string;
   mobileSessionKey: string;
   deviceId: string;
+  userAgent: string | null;
+  ipAddress: string | null;
 }
 
 export interface SessionStore {
   createSession(input: CreateSessionInput): Promise<WebSession>;
   getSessionFromRequest(request: Request): Promise<WebSession | null>;
+  getActiveSessionByEmployeeId(employeeId: string): Promise<WebSession | null>;
   deleteSessionByKey(sessionKey: string): Promise<void>;
+  deleteActiveSessionByEmployeeId(employeeId: string): Promise<void>;
   buildLoginCookies(session: WebSession): string[];
   buildLogoutCookies(): string[];
 }
 
-function getSessionCookieValue(request: Request): string | null {
-  return getCookie(request, "sm_session");
+function getSessionSigningKey(env: ApiEnv): Buffer {
+  const keyMaterial = env.REFRESH_TOKEN_ENCRYPTION_KEY ?? env.DB_PASS;
+  return createHash("sha256").update(`session-cookie:${keyMaterial}`).digest();
+}
+
+function signSessionKey(sessionKey: string, env: ApiEnv): string {
+  return createHmac("sha256", getSessionSigningKey(env))
+    .update(sessionKey)
+    .digest("base64url");
+}
+
+function secureEqual(left: string, right: string): boolean {
+  const leftBuffer = Buffer.from(left);
+  const rightBuffer = Buffer.from(right);
+  return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer);
+}
+
+function encodeSessionCookieValue(sessionKey: string, env: ApiEnv): string {
+  return `v1.${Buffer.from(sessionKey, "utf8").toString("base64url")}.${signSessionKey(sessionKey, env)}`;
+}
+
+function decodeSignedSessionCookieValue(value: string, env: ApiEnv): string | null {
+  const [version, encodedSessionKey, signature] = value.split(".");
+  if (version !== "v1" || !encodedSessionKey || !signature) {
+    return null;
+  }
+
+  const sessionKey = Buffer.from(encodedSessionKey, "base64url").toString("utf8");
+  return secureEqual(signature, signSessionKey(sessionKey, env)) ? sessionKey : null;
+}
+
+function getSessionCookieValue(request: Request, env: ApiEnv): string | null {
+  const cookieValue = getCookie(request, "sm_session");
+  return cookieValue ? decodeSignedSessionCookieValue(cookieValue, env) : null;
 }
 
 function createCsrfToken(): string {
@@ -124,22 +164,32 @@ export class RedisSessionStore implements SessionStore {
     };
 
     const client = await this.clientFactory();
-    await client.set(sessionKey, JSON.stringify(storedSession), {
-      expiration: {
-        type: "EX",
-        value: this.env.SESSION_TTL_SECONDS,
-      },
-    });
+    const activeSessionKey = `session-active:${input.user.employeeId}`;
+    await Promise.all([
+      client.set(sessionKey, JSON.stringify(storedSession), {
+        expiration: {
+          type: "EX",
+          value: this.env.SESSION_TTL_SECONDS,
+        },
+      }),
+      client.set(activeSessionKey, sessionKey, {
+        expiration: {
+          type: "EX",
+          value: this.env.SESSION_TTL_SECONDS,
+        },
+      }),
+    ]);
 
     return session;
   }
 
   async getSessionFromRequest(request: Request): Promise<WebSession | null> {
-    const sessionKey = getSessionCookieValue(request);
+    const sessionKey = getSessionCookieValue(request, this.env);
     if (!sessionKey) {
       return null;
     }
 
+    const deviceId = getCookie(request, "sm_device_id");
     const client = await this.clientFactory();
     const rawSession = await client.get(sessionKey);
     if (!rawSession) {
@@ -148,6 +198,37 @@ export class RedisSessionStore implements SessionStore {
 
     const session = JSON.parse(rawSession) as WebSession;
     if (!session?.sessionKey || !session.user?.employeeId) {
+      return null;
+    }
+
+    if (!deviceId || session.deviceId !== deviceId) {
+      return null;
+    }
+
+    return {
+      ...session,
+      refreshToken: decryptRefreshToken(session.refreshToken, this.env),
+      user: normalizeReservedAuthUser(session.user),
+    };
+  }
+
+  async getActiveSessionByEmployeeId(employeeId: string): Promise<WebSession | null> {
+    const client = await this.clientFactory();
+    const activeSessionKey = `session-active:${employeeId}`;
+    const sessionKey = await client.get(activeSessionKey);
+    if (!sessionKey) {
+      return null;
+    }
+
+    const rawSession = await client.get(sessionKey);
+    if (!rawSession) {
+      await client.del(activeSessionKey);
+      return null;
+    }
+
+    const session = JSON.parse(rawSession) as WebSession;
+    if (!session?.sessionKey || session.employeeId !== employeeId) {
+      await client.del(activeSessionKey);
       return null;
     }
 
@@ -164,14 +245,38 @@ export class RedisSessionStore implements SessionStore {
     }
 
     const client = await this.clientFactory();
+    const rawSession = await client.get(sessionKey);
     await client.del(sessionKey);
+
+    if (!rawSession) {
+      return;
+    }
+
+    const session = JSON.parse(rawSession) as Partial<WebSession>;
+    if (session.employeeId) {
+      const activeSessionKey = `session-active:${session.employeeId}`;
+      const activeSession = await client.get(activeSessionKey);
+      if (activeSession === sessionKey) {
+        await client.del(activeSessionKey);
+      }
+    }
+  }
+
+  async deleteActiveSessionByEmployeeId(employeeId: string): Promise<void> {
+    const client = await this.clientFactory();
+    const activeSessionKey = `session-active:${employeeId}`;
+    const sessionKey = await client.get(activeSessionKey);
+    if (sessionKey) {
+      await client.del(sessionKey);
+    }
+    await client.del(activeSessionKey);
   }
 
   buildLoginCookies(session: WebSession): string[] {
     const csrfToken = session.csrfToken ?? createCsrfToken();
 
     return [
-      buildSessionCookie(session.sessionKey, this.env),
+      buildSessionCookie(encodeSessionCookieValue(session.sessionKey, this.env), this.env),
       buildRefreshCookie(session.refreshToken, this.env),
       buildDeviceCookie(session.deviceId, this.env),
       buildCsrfCookie(csrfToken, this.env),

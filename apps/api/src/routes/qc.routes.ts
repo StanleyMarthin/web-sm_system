@@ -5,6 +5,7 @@ import {
   qcRejectRequestSchema,
 } from "@smsystem/contracts/qc";
 import { permissionCodes } from "@smsystem/permissions";
+import { ZodError } from "zod";
 import { parseJsonBody } from "@/http/request";
 import { errorResponse, withCors } from "@/http/response";
 import { requireSession } from "@/middleware/auth.middleware";
@@ -73,6 +74,10 @@ async function requireQcValidateSession(request: Request, authService: AuthServi
 }
 
 function mapQcError(request: Request, error: unknown): Response {
+  if (error instanceof ZodError) {
+    return errorResponse(request, "Query QC tidak valid.", 400, "INVALID_QC_QUERY");
+  }
+
   if (error instanceof Error) {
     if (error.message === "QC_NOT_FOUND" || error.message === "FINAL_CHECKLIST_NOT_FOUND") {
       return errorResponse(request, "Data QC tidak ditemukan.", 404, error.message);

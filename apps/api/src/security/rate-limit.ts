@@ -4,6 +4,7 @@ import { errorResponse } from "@/http/response";
 import { getCookie } from "@/http/cookies";
 import { getRedisClient } from "@/redis/client";
 import type { AuthService } from "@/services/auth/auth.service";
+import { getLoginAttemptBlock } from "@/services/auth/login-attempts";
 
 interface RateLimitRule {
   key: string;
@@ -24,6 +25,16 @@ function hashKey(value: string): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
+function getPositiveIntegerEnv(name: string, fallback: number): number {
+  const rawValue = process.env[name]?.trim();
+  if (!rawValue) {
+    return fallback;
+  }
+
+  const parsedValue = Number.parseInt(rawValue, 10);
+  return Number.isInteger(parsedValue) && parsedValue > 0 ? parsedValue : fallback;
+}
+
 function getClientIp(request: Request): string {
   return (
     request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
@@ -38,12 +49,17 @@ async function enforceRateLimit(
 ): Promise<Response | null> {
   const redisKey = `rate-limit:${hashKey(rule.key)}`;
   let count: number;
+  let retryAfterSeconds = rule.windowSeconds;
 
   try {
     const client = await getRedisClient();
     count = await client.incr(redisKey);
     if (count === 1) {
       await client.expire(redisKey, rule.windowSeconds);
+    }
+    const ttl = await client.ttl(redisKey);
+    if (ttl > 0) {
+      retryAfterSeconds = ttl;
     }
   } catch (error) {
     if (process.env.NODE_ENV === "production") {
@@ -62,6 +78,7 @@ async function enforceRateLimit(
     } else {
       count = current.count + 1;
       current.count = count;
+      retryAfterSeconds = Math.max(1, Math.ceil((current.expiresAt - now) / 1_000));
     }
   }
 
@@ -71,9 +88,12 @@ async function enforceRateLimit(
 
   return errorResponse(
     request,
-    "Terlalu banyak request. Coba lagi beberapa saat.",
+    `Terlalu banyak request. Coba lagi dalam ${retryAfterSeconds} detik.`,
     429,
     "RATE_LIMITED",
+    {
+      retryAfterSeconds,
+    },
   );
 }
 
@@ -112,11 +132,20 @@ export async function enforceSecurityRateLimit(
 
   if (request.method === "POST" && url.pathname === "/api/auth/login") {
     const employeeId = await getLoginEmployeeId(request);
-    return enforceRateLimit(request, {
-      key: `login:${employeeId}:${ip}`,
-      limit: 5,
-      windowSeconds: 5 * 60,
-    });
+    const loginBlock = await getLoginAttemptBlock(employeeId);
+    if (loginBlock) {
+      return errorResponse(
+        request,
+        loginBlock.message,
+        loginBlock.errorCode === "ACCOUNT_DISABLED" ? 403 : 429,
+        loginBlock.errorCode,
+        {
+          retryAfterSeconds: loginBlock.retryAfterSeconds,
+        },
+      );
+    }
+
+    return null;
   }
 
   if (request.method === "POST" && url.pathname === "/api/auth/refresh") {
