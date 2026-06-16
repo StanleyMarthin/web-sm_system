@@ -26,6 +26,7 @@ export interface AuthService {
   getCurrentSession(request: Request): Promise<WebSession | null>;
   getCurrentUser(request: Request): Promise<AuthUser | null>;
   getCurrentPermissions(request: Request): Promise<string[] | null>;
+  updateCurrentUserPhotoUrl?(request: Request, photoUrl: string): Promise<void>;
 }
 
 function getIpAddress(request: Request): string | null {
@@ -218,6 +219,18 @@ export class DefaultAuthService implements AuthService {
 
   async getCurrentUser(request: Request): Promise<AuthUser | null> {
     return (await this.getCurrentSession(request))?.user ?? null;
+  }
+
+  async updateCurrentUserPhotoUrl(request: Request, photoUrl: string): Promise<void> {
+    const session = await this.getCurrentSession(request);
+    if (!session) {
+      return;
+    }
+
+    await this.sessionStore.updateSessionUser?.(session.sessionKey, {
+      ...session.user,
+      photoUrl,
+    });
   }
 
   async getCurrentPermissions(request: Request): Promise<string[] | null> {

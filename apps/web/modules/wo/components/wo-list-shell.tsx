@@ -209,6 +209,11 @@ export function WoListShell({
         options: references.statuses,
       },
       {
+        field: "carId",
+        label: "Unit",
+        options: references.units,
+      },
+      {
         field: "fromDivisionId",
         label: "Divisi Asal",
         options: references.divisions,
@@ -227,7 +232,7 @@ export function WoListShell({
         ],
       },
     ],
-    [references.divisions, references.statuses],
+    [references.divisions, references.statuses, references.units],
   );
 
   function pushViewMode(value: string) {

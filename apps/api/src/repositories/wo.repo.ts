@@ -317,6 +317,12 @@ function buildFilterClauses(query: WoGridQuery, params: unknown[]): string[] {
       continue;
     }
 
+    if (filter.field === "carId") {
+      clauses.push("w.car_id = ?");
+      params.push(filter.value);
+      continue;
+    }
+
     if (filter.field === "isPriority") {
       clauses.push("COALESCE(w.is_priority, 0) = ?");
       params.push(filter.value === "1" ? 1 : 0);

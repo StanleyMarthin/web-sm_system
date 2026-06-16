@@ -9,7 +9,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { approveWo, markWoDone, rejectWo } from "@/shared/api/wo";
-import { humanizeCodeLabel } from "@/shared/format/humanize";
+import { humanizeCodeLabel, fmtDateTime } from "@/shared/format/humanize";
 
 interface WoDetailShellProps {
   ticket: WoRecord;
@@ -249,7 +249,7 @@ export function WoDetailShell({
                 </Link>
                 <span>{row.divisionName}</span>
                 <span>{row.status}</span>
-                <span className="text-white/35">{row.createdAt}</span>
+                <span className="text-white/35">{fmtDateTime(row.createdAt)}</span>
               </div>
             ))
           )}

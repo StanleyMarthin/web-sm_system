@@ -16,6 +16,7 @@ export interface ApiEnv {
   API_HOST: string;
   API_PORT: number;
   SM_LOGIN_BASE_URL: string;
+  SM_TASKS_BASE_URL?: string;
   WEB_ALLOWED_ORIGINS: string[];
   SESSION_TTL_SECONDS: number;
   REFRESH_TTL_SECONDS: number;
@@ -150,6 +151,7 @@ export function loadApiEnv(
     API_HOST: merged.API_HOST?.trim() || "0.0.0.0",
     API_PORT: parseInteger(merged.API_PORT, 3001, "API_PORT"),
     SM_LOGIN_BASE_URL: loginBase,
+    SM_TASKS_BASE_URL: merged.SM_TASKS_BASE_URL?.trim() || undefined,
     WEB_ALLOWED_ORIGINS: (merged.WEB_ALLOWED_ORIGINS?.trim() || "")
       .split(",")
       .map((value) => value.trim())

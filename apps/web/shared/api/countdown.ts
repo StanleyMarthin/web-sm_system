@@ -193,11 +193,12 @@ export async function deleteCountdownRecord(countdownId: string) {
   };
 }
 
-export async function uploadCountdownWorkbook(file: File) {
+export async function uploadCountdownWorkbook(file: File, params: { unitId: string }) {
   const formData = new FormData();
   formData.set("file", file);
 
-  const response = await fetch(`${getApiBaseUrl()}/api/countdown/import`, {
+  const qs = toUrlSearchParams({ unitId: params.unitId }).toString();
+  const response = await fetch(`${getApiBaseUrl()}/api/countdown/import?${qs}`, {
     method: "POST",
     credentials: "include",
     body: formData,
@@ -218,8 +219,9 @@ export async function uploadCountdownWorkbook(file: File) {
   };
 }
 
-export async function downloadCountdownTemplate() {
-  const response = await fetch(`${getApiBaseUrl()}/api/countdown/template`, {
+export async function downloadCountdownTemplate(params: { unitId: string }) {
+  const qs = toUrlSearchParams({ unitId: params.unitId }).toString();
+  const response = await fetch(`${getApiBaseUrl()}/api/countdown/template?${qs}`, {
     method: "GET",
     credentials: "include",
   });
@@ -236,7 +238,40 @@ export async function downloadCountdownTemplate() {
   const url = window.URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = "countdown-template.xlsx";
+  link.download = `countdown-template-${params.unitId}.xlsx`;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+
+  return {
+    success: true as const,
+  };
+}
+
+export async function downloadCountdownWorkbook(params: { unitId: string; divisionId?: string }) {
+  const query: Record<string, string> = { unitId: params.unitId };
+  if (params.divisionId) query.divisionId = params.divisionId;
+  const qs = toUrlSearchParams(query).toString();
+  
+  const response = await fetch(`${getApiBaseUrl()}/api/countdown/download?${qs}`, {
+    method: "GET",
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    const failure = await parseFailure(response);
+    return {
+      ...failure,
+      success: false as const,
+    };
+  }
+
+  const blob = await response.blob();
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `countdown-export-${params.unitId}${params.divisionId ? `-${params.divisionId}` : ""}.xlsx`;
   document.body.append(link);
   link.click();
   link.remove();

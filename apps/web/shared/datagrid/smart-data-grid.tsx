@@ -34,6 +34,7 @@ interface SmartDataGridProps {
   };
   state: GridQueryState;
   searchPlaceholder?: string;
+  searchMinLength?: number;
   filters?: SmartDataGridFilterDefinition[];
   sortOptions?: SmartDataGridSortOption[];
   savedViews?: SmartDataGridSavedView[];
@@ -159,6 +160,7 @@ function TableFilterInput({ value, onChange, placeholder, listId }: TableFilterI
 export function SmartDataGrid({
   title, description, columns, rows, meta, state,
   searchPlaceholder = "Cari data...",
+  searchMinLength = 0,
   filters = [], sortOptions = [], savedViews = [],
   exportHref, bulkInsert, onBulkSubmit,
   isBulkSubmitting = false, bulkSubmitLabel = "Simpan Bulk",
@@ -241,7 +243,11 @@ export function SmartDataGrid({
               e.preventDefault();
               const fd = new FormData(e.currentTarget);
               const kw = fd.get("search");
-              gridState.setSearch(typeof kw === "string" ? kw.trim() : "");
+              const nextSearch = typeof kw === "string" ? kw.trim() : "";
+              if (nextSearch && nextSearch.length < searchMinLength) {
+                return;
+              }
+              gridState.setSearch(nextSearch);
             }}
           >
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400 dark:text-white/35" />

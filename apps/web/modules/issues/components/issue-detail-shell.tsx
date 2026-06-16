@@ -15,7 +15,7 @@ import {
   startIssue,
   waiveIssue,
 } from "@/shared/api/issues";
-import { humanizeCodeLabel } from "@/shared/format/humanize";
+import { humanizeCodeLabel, fmtDateTime } from "@/shared/format/humanize";
 
 interface IssueDetailShellProps {
   issue: IssueRecord;
@@ -162,8 +162,8 @@ export function IssueDetailShell({
             <div className="mt-4 space-y-2 text-sm text-white/60">
               <p>Dilaporkan oleh: {issue.reportedByName ?? "-"}</p>
               <p>Ditangani oleh: {issue.assignedToName ?? "-"}</p>
-              <p>Dibuat: {issue.createdAt}</p>
-              <p>Diperbarui: {issue.updatedAt}</p>
+              <p>Dibuat: {fmtDateTime(issue.createdAt)}</p>
+              <p>Diperbarui: {fmtDateTime(issue.updatedAt)}</p>
               <p>Penyelesaian: {issue.resolutionNotes ?? "-"}</p>
             </div>
           </div>

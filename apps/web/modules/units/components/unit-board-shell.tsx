@@ -346,10 +346,13 @@ export function UnitBoardShell({ rows, meta, state, user }: UnitBoardShellProps)
         meta={meta}
         state={state}
         searchPlaceholder="Cari unit / customer / KP..."
+        searchMinLength={2}
         filters={filters}
         sortOptions={sortOptions}
         savedViews={savedViews}
         emptyMessage="Belum ada unit sesuai query saat ini."
+        onRowClick={(row) => router.push(`/units/${String(row.unitId)}`)}
+        getRowAriaLabel={(row) => `Buka workspace ${String(row.unitName ?? row.unitId)}`}
         headerActions={canManageUnits ? (
           <button
             type="button"

@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import { DashboardShell } from "@/modules/dashboard/components/dashboard-shell";
 import { fetchDashboardSummary } from "@/shared/api/dashboard";
 import { fetchIssueGrid } from "@/shared/api/issues";
+import { fetchJobPlanGrid } from "@/shared/api/job-plan";
 import { fetchPlanningWorkspaceSummary } from "@/shared/api/planning";
 import { fetchQcQueue, fetchQcRework } from "@/shared/api/qc";
 import { fetchCurrentUser } from "@/shared/auth/server";
@@ -44,6 +45,36 @@ function buildIssueSearchParams(
   };
 }
 
+function buildJobPlanSearchParams(
+  searchParams: Record<string, string | string[] | undefined>,
+  filters: {
+    date?: string;
+    divisionId?: string;
+  },
+) {
+  const filterTokens = [
+    ...(Array.isArray(searchParams.filter)
+      ? searchParams.filter
+      : searchParams.filter
+        ? [searchParams.filter]
+        : []),
+  ];
+
+  if (filters.divisionId) filterTokens.push(`divisionId:eq:${filters.divisionId}`);
+
+  const date = filters.date && filters.date !== "all" ? filters.date : undefined;
+
+  return {
+    page: "1",
+    limit: "100",
+    sortBy: "taskDate",
+    sortDirection: "asc",
+    window: "daily",
+    ...(date ? { date } : {}),
+    filter: filterTokens,
+  };
+}
+
 type DashboardSummaryData = NonNullable<
   Awaited<ReturnType<typeof fetchDashboardSummary>>["payload"]
 >["data"];
@@ -51,6 +82,7 @@ type CurrentUserData = Awaited<ReturnType<typeof fetchCurrentUser>>["user"];
 type PlanningResult = Awaited<ReturnType<typeof fetchPlanningWorkspaceSummary>>;
 type QcGridResult = Awaited<ReturnType<typeof fetchQcQueue>>;
 type IssueGridResult = Awaited<ReturnType<typeof fetchIssueGrid>>;
+type JobPlanGridResult = Awaited<ReturnType<typeof fetchJobPlanGrid>>;
 type DashboardFilters = Parameters<typeof DashboardShell>[0]["filters"];
 
 async function DashboardDeferredShell({
@@ -61,6 +93,8 @@ async function DashboardDeferredShell({
   qcQueuePromise,
   qcReworkPromise,
   issueGridPromise,
+  normalJobPlanPromise,
+  overtimeJobPlanPromise,
 }: {
   summary: DashboardSummaryData;
   currentUser: CurrentUserData;
@@ -69,12 +103,23 @@ async function DashboardDeferredShell({
   qcQueuePromise: Promise<QcGridResult>;
   qcReworkPromise: Promise<QcGridResult>;
   issueGridPromise: Promise<IssueGridResult>;
+  normalJobPlanPromise: Promise<JobPlanGridResult>;
+  overtimeJobPlanPromise: Promise<JobPlanGridResult>;
 }) {
-  const [planningResult, qcQueueResult, qcReworkResult, issueGridResult] = await Promise.all([
+  const [
+    planningResult,
+    qcQueueResult,
+    qcReworkResult,
+    issueGridResult,
+    normalJobPlanResult,
+    overtimeJobPlanResult,
+  ] = await Promise.all([
     planningPromise,
     qcQueuePromise,
     qcReworkPromise,
     issueGridPromise,
+    normalJobPlanPromise,
+    overtimeJobPlanPromise,
   ]);
 
   return (
@@ -86,6 +131,10 @@ async function DashboardDeferredShell({
       qcQueue={qcQueueResult.payload?.data ?? []}
       qcRework={qcReworkResult.payload?.data ?? []}
       issueLogRows={issueGridResult.payload?.data ?? []}
+      jobPlanRows={[
+        ...(normalJobPlanResult.payload?.data ?? []),
+        ...(overtimeJobPlanResult.payload?.data ?? []),
+      ]}
     />
   );
 }
@@ -109,6 +158,7 @@ async function DashboardPageContent({ searchParams }: DashboardPageProps) {
     limit: "200",
   };
   const issueSearchParams = buildIssueSearchParams(sp, filters);
+  const jobPlanSearchParams = buildJobPlanSearchParams(sp, filters);
 
   const [
     { payload, status },
@@ -138,6 +188,8 @@ async function DashboardPageContent({ searchParams }: DashboardPageProps) {
   const qcQueuePromise = fetchQcQueue(cookieHeader, qcSearchParams);
   const qcReworkPromise = fetchQcRework(cookieHeader, qcSearchParams);
   const issueGridPromise = fetchIssueGrid(cookieHeader, issueSearchParams);
+  const normalJobPlanPromise = fetchJobPlanGrid(cookieHeader, jobPlanSearchParams, "normal");
+  const overtimeJobPlanPromise = fetchJobPlanGrid(cookieHeader, jobPlanSearchParams, "overtime");
 
   return (
     <Suspense
@@ -150,7 +202,7 @@ async function DashboardPageContent({ searchParams }: DashboardPageProps) {
           qcQueue={[]}
           qcRework={[]}
           issueLogRows={[]}
-          isDeferredLoading
+          jobPlanRows={[]}
         />
       }
     >
@@ -162,6 +214,8 @@ async function DashboardPageContent({ searchParams }: DashboardPageProps) {
         qcQueuePromise={qcQueuePromise}
         qcReworkPromise={qcReworkPromise}
         issueGridPromise={issueGridPromise}
+        normalJobPlanPromise={normalJobPlanPromise}
+        overtimeJobPlanPromise={overtimeJobPlanPromise}
       />
     </Suspense>
   );

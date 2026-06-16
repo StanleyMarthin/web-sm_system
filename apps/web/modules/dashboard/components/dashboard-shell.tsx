@@ -3,16 +3,12 @@
 import type { AuthUser } from "@smsystem/contracts/auth";
 import type { DashboardSummaryPayload } from "@smsystem/contracts/dashboard";
 import type { IssueRecord } from "@smsystem/contracts/issue";
+import type { JobPlanRecord } from "@smsystem/contracts/job-plan";
 import type { QcQueueRecord } from "@smsystem/contracts/qc";
 import {
-  AlertTriangle,
   ArrowRight,
-  BriefcaseBusiness,
   ChevronLeft,
   ChevronRight,
-  PackageSearch,
-  ShieldX,
-  Wrench,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -31,7 +27,7 @@ interface DashboardShellProps {
   qcQueue?: QcQueueRecord[];
   qcRework?: QcQueueRecord[];
   issueLogRows?: IssueRecord[];
-  isDeferredLoading?: boolean;
+  jobPlanRows?: JobPlanRecord[];
 }
 
 type SpkWorkType = "all" | "normal" | "lembur";
@@ -66,20 +62,13 @@ type SpkDivisionRow = {
   divisionId: number;
   divisionName: string;
   units: Array<{
-    carId: string;
+    planId: string;
     unitName: string;
-    allocatedHours: number;
+    targetHours: number;
     actualHours: number;
     workType: "normal" | "lembur";
   }>;
-  totalAllocated: number;
-  totalActual: number;
-};
-
-type AktualDivisionRow = {
-  divisionId: number;
-  divisionName: string;
-  units: Array<{ carId: string; unitName: string; actualHours: number }>;
+  totalTarget: number;
   totalActual: number;
 };
 
@@ -100,6 +89,14 @@ function fmtDec(value: number) {
   }).format(value);
 }
 
+function fmtWorkHours(value: number) {
+  const totalMinutes = Math.max(0, Math.round(value * 60));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+
+  return `${hours}:${String(minutes).padStart(2, "0")}`;
+}
+
 function fmtPct(value: number) {
   return `${fmtDec(value)}%`;
 }
@@ -113,21 +110,6 @@ function fmtDate(value: string | null) {
       year: "numeric",
       timeZone: "UTC",
     }).format(new Date(`${value}T00:00:00.000Z`));
-  } catch {
-    return value;
-  }
-}
-
-function fmtDateTime(value: string) {
-  try {
-    return new Intl.DateTimeFormat("id-ID", {
-      day: "2-digit",
-      month: "short",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-      timeZone: "Asia/Jakarta",
-    }).format(new Date(value));
   } catch {
     return value;
   }
@@ -182,26 +164,9 @@ function buildHref(
   return qs ? `${path}?${qs}` : path;
 }
 
-function buildIssueHref(filters?: DashboardFilterParams) {
-  const params = new URLSearchParams();
-  if (filters?.divisionId) params.append("filter", `divisionId:eq:${filters.divisionId}`);
-  if (filters?.unitId) params.append("filter", `carId:eq:${filters.unitId}`);
-  params.set("sortBy", "createdAt");
-  params.set("sortDirection", "desc");
-
-  const qs = params.toString();
-  return qs ? `/issues?${qs}` : "/issues";
-}
-
 function displayName(user: AuthUser | null) {
   if (!user?.fullName) return "Tim";
   return user.fullName.split(" ")[0] ?? user.fullName;
-}
-
-function getHeaderHelperText(filters?: DashboardFilterParams, currentUser?: AuthUser | null) {
-  if (filters?.unitId) return "Lagi fokus ke satu unit.";
-  if (filters?.divisionId || currentUser?.divisionName) return "Pilih unit kalau mau cek lebih detail.";
-  return "Pilih bagian atau unit kerja.";
 }
 
 function isTechnicalDivisionName(name: string | null | undefined) {
@@ -416,125 +381,59 @@ function getTaskMonitoringRows(
     .sort((left, right) => right.totalTasks - left.totalTasks || left.divisionName.localeCompare(right.divisionName));
 }
 
+function getJobPlanActualHours(row: JobPlanRecord) {
+  if (row.actualProgressPercent != null && row.actualProgressPercent > 0) {
+    return (row.targetHours * clampPct(row.actualProgressPercent)) / 100;
+  }
+
+  if (row.actualStatus === "DONE" || row.status === "DONE" || row.status === "READY_QC") {
+    return row.targetHours;
+  }
+
+  return 0;
+}
+
 function getSpkByDivision(
-  planning: PlanningWorkspacePayload | null | undefined,
-  summary: DashboardSummaryPayload,
+  rows: JobPlanRecord[],
   workType: SpkWorkType,
+  activeUnitName?: string | null,
 ) {
-  const actualByCar = new Map(
-    (summary.unitWorkHours ?? []).map((item) => [item.carId, item.actualHours]),
-  );
   const divisionMap = new Map<number, SpkDivisionRow>();
 
-  for (const unit of planning?.weeklyPlan.units ?? []) {
-    if (!unit.divisionId || !isTechnicalDivisionName(unit.divisionName)) continue;
+  for (const row of rows) {
+    if (!row.divisionId || !isTechnicalDivisionName(row.divisionName)) continue;
+    if (activeUnitName && row.unitName !== activeUnitName) continue;
 
-    // API sudah mengirimkan flag lembur di payload runtime, tetapi kontrak typing
-    // dashboard belum memuat field itu.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const unitWorkType: "normal" | "lembur" = (unit as any).isLembur ? "lembur" : "normal";
+    const unitWorkType: "normal" | "lembur" = row.isOvertime ? "lembur" : "normal";
     if (workType !== "all" && unitWorkType !== workType) continue;
 
-    const divisionId = Number(unit.divisionId);
+    const divisionId = Number(row.divisionId);
     if (!divisionMap.has(divisionId)) {
       divisionMap.set(divisionId, {
         divisionId,
-        divisionName: unit.divisionName,
+        divisionName: row.divisionName,
         units: [],
-        totalAllocated: 0,
+        totalTarget: 0,
         totalActual: 0,
       });
     }
 
-    const actualHours = actualByCar.get(unit.carId) ?? 0;
+    const actualHours = getJobPlanActualHours(row);
     const division = divisionMap.get(divisionId)!;
     division.units.push({
-      carId: unit.carId,
-      unitName: unit.unitName,
-      allocatedHours: unit.allocatedHours,
+      planId: row.planId,
+      unitName: row.unitName,
+      targetHours: row.targetHours,
       actualHours,
       workType: unitWorkType,
     });
-    division.totalAllocated += unit.allocatedHours;
+    division.totalTarget += row.targetHours;
     division.totalActual += actualHours;
   }
 
   return [...divisionMap.values()]
     .filter((division) => division.units.length > 0)
-    .sort((left, right) => right.totalAllocated - left.totalAllocated);
-}
-
-function getAktualByDivision(
-  summary: DashboardSummaryPayload,
-  planning: PlanningWorkspacePayload | null | undefined,
-  workType: SpkWorkType,
-) {
-  const carInfo = new Map<
-    string,
-    {
-      unitName: string;
-      divisionId: number;
-      divisionName: string;
-      workType: "normal" | "lembur";
-    }
-  >();
-
-  for (const unit of planning?.weeklyPlan.units ?? []) {
-    if (!unit.divisionId) continue;
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const unitWorkType: "normal" | "lembur" = (unit as any).isLembur ? "lembur" : "normal";
-    carInfo.set(unit.carId, {
-      unitName: unit.unitName,
-      divisionId: Number(unit.divisionId),
-      divisionName: unit.divisionName,
-      workType: unitWorkType,
-    });
-  }
-
-  const divisionMap = new Map<number, AktualDivisionRow>();
-
-  for (const unitWork of summary.unitWorkHours ?? []) {
-    if (unitWork.actualHours <= 0) continue;
-
-    const info = carInfo.get(unitWork.carId);
-    if (!info || !isTechnicalDivisionName(info.divisionName)) continue;
-    if (workType !== "all" && info.workType !== workType) continue;
-
-    if (!divisionMap.has(info.divisionId)) {
-      divisionMap.set(info.divisionId, {
-        divisionId: info.divisionId,
-        divisionName: info.divisionName,
-        units: [],
-        totalActual: 0,
-      });
-    }
-
-    const division = divisionMap.get(info.divisionId)!;
-    division.units.push({
-      carId: unitWork.carId,
-      unitName: info.unitName,
-      actualHours: unitWork.actualHours,
-    });
-    division.totalActual += unitWork.actualHours;
-  }
-
-  for (const division of summary.manhour?.byDivision ?? []) {
-    if (!isTechnicalDivisionName(division.divisionName) || division.actualHours <= 0) continue;
-
-    if (!divisionMap.has(division.divisionId)) {
-      divisionMap.set(division.divisionId, {
-        divisionId: division.divisionId,
-        divisionName: division.divisionName,
-        units: [],
-        totalActual: division.actualHours,
-      });
-    }
-  }
-
-  return [...divisionMap.values()]
-    .filter((division) => division.totalActual > 0)
-    .sort((left, right) => right.totalActual - left.totalActual);
+    .sort((left, right) => right.totalTarget - left.totalTarget);
 }
 
 function Card({
@@ -604,22 +503,6 @@ function EmptyState({ message }: { message: string }) {
   );
 }
 
-function DeferredRowsSkeleton({ rows = 3 }: { rows?: number }) {
-  return (
-    <div className="space-y-2">
-      {Array.from({ length: rows }).map((_, index) => (
-        <div
-          key={index}
-          className="border border-white/[0.05] bg-[#0a0a0c] px-3 py-2"
-        >
-          <div className="h-3 w-2/5 animate-pulse bg-white/[0.06]" />
-          <div className="mt-2 h-2 w-full animate-pulse bg-white/[0.05]" />
-        </div>
-      ))}
-    </div>
-  );
-}
-
 function InlineBadge({
   children,
   tone = "neutral",
@@ -642,20 +525,6 @@ function InlineBadge({
     >
       {children}
     </span>
-  );
-}
-
-function MiniBar({
-  value,
-  colorClass,
-}: {
-  value: number;
-  colorClass: string;
-}) {
-  return (
-    <div className="h-1.5 bg-white/[0.05]">
-      <div className={`h-1.5 ${colorClass}`} style={{ width: `${clampPct(value)}%` }} />
-    </div>
   );
 }
 
@@ -860,7 +729,7 @@ export function DashboardShell({
   qcQueue = [],
   qcRework = [],
   issueLogRows = [],
-  isDeferredLoading = false,
+  jobPlanRows = [],
 }: DashboardShellProps) {
   const router = useRouter();
   const [spkWorkType, setSpkWorkType] = useState<SpkWorkType>("all");
@@ -874,7 +743,7 @@ export function DashboardShell({
     if (lockedDivisionId != null && filters?.divisionId !== String(lockedDivisionId)) {
       router.replace(buildHref("/dashboard", filters, { divisionId: String(lockedDivisionId) }));
     }
-  }, [lockedDivisionId, filters?.divisionId, router]);
+  }, [lockedDivisionId, filters, filters?.divisionId, router]);
 
   const todayStr = new Date().toISOString().split("T")[0]!;
   const selectedDate = filters?.date === "all" ? "" : (filters?.date?.trim() || todayStr);
@@ -910,6 +779,9 @@ export function DashboardShell({
       name: row.unitName,
     })),
   ].filter((row, index, array) => array.findIndex((item) => item.id === row.id) === index);
+  const activeUnitName = activeUnitId
+    ? units.find((row) => row.id === activeUnitId)?.name ?? null
+    : null;
 
   const calendarRows: CalRow[] = [
     ...(planning?.weeklyPlan.units ?? []).map((row) => ({
@@ -939,15 +811,13 @@ export function DashboardShell({
     .sort((left, right) => (left.days ?? Infinity) - (right.days ?? Infinity))
     .slice(0, 5);
 
-  const spkRows = getSpkByDivision(planning, summary, spkWorkType);
-  const aktualRows = getAktualByDivision(summary, planning, spkWorkType);
+  const spkRows = getSpkByDivision(jobPlanRows, spkWorkType, activeUnitName);
   const issueRows = getIssueRows(issueLogRows);
   const qcFailRows = getQcFailRows(qcQueue, qcRework);
   const taskRows = getTaskMonitoringRows(planning, summary);
 
   const greeting = getGreetingLabel(summary.generatedAt);
   const name = displayName(currentUser);
-  const headerHelperText = getHeaderHelperText(filters, currentUser);
   const woIncoming = summary.pendingActions?.woApproval ?? 0;
   const prIncoming = summary.pendingActions?.prApproval ?? 0;
   const wovIncoming = summary.pendingActions?.vendorApproval ?? 0;
@@ -955,8 +825,6 @@ export function DashboardShell({
   const pushDashboard = (overrides?: Record<string, string | number | null | undefined>) => {
     router.push(buildHref("/dashboard", filters, overrides));
   };
-
-  const hasScopeFilter = Boolean(filters?.divisionId || filters?.unitId || filters?.date !== todayStr);
 
   return (
     <div className="min-h-screen bg-[#111114]">
@@ -1031,8 +899,7 @@ export function DashboardShell({
         <Card className="xl:col-span-2">
           <SectionHeader
             eyebrow="Timeline"
-            title="Calendar-first Deadline View"
-            detail="Tanggal aktif dashboard mengikuti pilihan kalender."
+            title="Kalendar Deadline"
             href={buildHref("/reports/delivery-accuracy", filters)}
             hrefLabel="Delivery risk"
             right={
@@ -1177,52 +1044,31 @@ export function DashboardShell({
             </p>
           </div>
           
-          <div className="grid grid-cols-[140px_1fr_100px_100px_100px] border-b border-white/[0.05] px-4 py-2 font-mono text-[9px] uppercase tracking-widest text-white/25">
+          <div className="grid grid-cols-[140px_1fr_120px_120px] border-b border-white/[0.05] px-4 py-2 font-mono text-[9px] uppercase tracking-widest text-white/25">
             <div>DIVISI</div>
             <div>UNIT</div>
             <div>TARGET JAM</div>
             <div>AKTUAL</div>
-            <div>STATUS</div>
           </div>
           
           <div className="max-h-[400px] overflow-y-auto">
             {spkRows.map((division) => (
-              division.units.map((unit, idx) => {
-                let statusBadge = "";
-                let statusClass = "";
-                if (unit.actualHours === 0) {
-                  statusBadge = "BELUM";
-                  statusClass = "border-red-500/25 bg-red-500/15 text-red-300";
-                } else if (unit.actualHours >= unit.allocatedHours) {
-                  statusBadge = "SELESAI";
-                  statusClass = "border-emerald-500/25 bg-emerald-500/15 text-emerald-300";
-                } else {
-                  statusBadge = "JALAN";
-                  statusClass = "border-sky-500/25 bg-sky-500/15 text-sky-300";
-                }
-
-                return (
-                  <div key={`${division.divisionId}-${unit.carId}`} className="grid grid-cols-[140px_1fr_100px_100px_100px] items-center border-b border-white/[0.04] px-4 py-2.5 hover:bg-white/[0.02]">
-                    <div className="truncate pr-4 text-[11px] text-white/35">
-                      {idx === 0 ? division.divisionName : ""}
-                    </div>
-                    <div className="truncate pr-4 text-[13px] font-medium text-white">
-                      {unit.unitName}
-                    </div>
-                    <div className="font-mono text-[12px] text-white/50">
-                      {fmtDec(unit.allocatedHours)}j
-                    </div>
-                    <div className="font-mono text-[13px] font-semibold text-amber-300">
-                      {unit.actualHours > 0 ? `${fmtDec(unit.actualHours)}j` : <span className="text-white/20">–</span>}
-                    </div>
-                    <div>
-                      <span className={`inline-block border px-2 py-0.5 font-mono text-[9px] uppercase ${statusClass}`}>
-                        {statusBadge}
-                      </span>
-                    </div>
+              division.units.map((unit, idx) => (
+                <div key={`${division.divisionId}-${unit.planId}`} className="grid grid-cols-[140px_1fr_120px_120px] items-center border-b border-white/[0.04] px-4 py-2.5 hover:bg-white/[0.02]">
+                  <div className="truncate pr-4 text-[11px] text-white/35">
+                    {idx === 0 ? division.divisionName : ""}
                   </div>
-                );
-              })
+                  <div className="truncate pr-4 text-[13px] font-medium text-white">
+                    {unit.unitName}
+                  </div>
+                  <div className="font-mono text-[12px] text-white/50">
+                    {fmtWorkHours(unit.targetHours)}
+                  </div>
+                  <div className="font-mono text-[13px] font-semibold text-amber-300">
+                    {fmtWorkHours(unit.actualHours)}
+                  </div>
+                </div>
+              ))
             ))}
             {spkRows.length === 0 && (
               <div className="px-4 py-8 text-center text-[12px] text-white/30">

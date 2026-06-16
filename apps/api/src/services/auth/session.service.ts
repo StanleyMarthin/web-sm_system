@@ -48,6 +48,7 @@ export interface SessionStore {
   createSession(input: CreateSessionInput): Promise<WebSession>;
   getSessionFromRequest(request: Request): Promise<WebSession | null>;
   getActiveSessionByEmployeeId(employeeId: string): Promise<WebSession | null>;
+  updateSessionUser?(sessionKey: string, user: AuthUser): Promise<void>;
   deleteSessionByKey(sessionKey: string): Promise<void>;
   deleteActiveSessionByEmployeeId(employeeId: string): Promise<void>;
   buildLoginCookies(session: WebSession): string[];
@@ -237,6 +238,41 @@ export class RedisSessionStore implements SessionStore {
       refreshToken: decryptRefreshToken(session.refreshToken, this.env),
       user: normalizeReservedAuthUser(session.user),
     };
+  }
+
+  async updateSessionUser(sessionKey: string, user: AuthUser): Promise<void> {
+    if (!sessionKey) {
+      return;
+    }
+
+    const client = await this.clientFactory();
+    const rawSession = await client.get(sessionKey);
+    if (!rawSession) {
+      return;
+    }
+
+    const session = JSON.parse(rawSession) as WebSession;
+    if (!session?.sessionKey || session.sessionKey !== sessionKey) {
+      return;
+    }
+
+    const ttlSeconds = await client.ttl(sessionKey);
+    const updatedSession: WebSession = {
+      ...session,
+      user: normalizeReservedAuthUser(user),
+    };
+
+    if (ttlSeconds > 0) {
+      await client.set(sessionKey, JSON.stringify(updatedSession), {
+        expiration: {
+          type: "EX",
+          value: ttlSeconds,
+        },
+      });
+      return;
+    }
+
+    await client.set(sessionKey, JSON.stringify(updatedSession));
   }
 
   async deleteSessionByKey(sessionKey: string): Promise<void> {

@@ -19,6 +19,7 @@ import type {
   SmartDataGridSortOption,
 } from "@/shared/datagrid/types";
 import { ActionButton, CompactDateInput, CompactDateRangeInput, EmptyRow, MetricBar, PageHeader, SectionCard } from "@/shared/ui/compact";
+import { fmtTime } from "@/shared/format/humanize";
 
 interface MonitoringShellProps {
   activeMode: "all" | "normal" | "overtime";
@@ -180,10 +181,10 @@ export function MonitoringShell({
           const actualStart = row.actualStartTime ?? row.latestStartTime;
           const actualFinish = row.actualFinishTime ?? row.latestFinishTime;
           const start = actualStart
-            ? String(actualStart).split(" ")[1]?.substring(0, 5) ?? "-"
+            ? fmtTime(actualStart)
             : "-";
           const finish = actualFinish
-            ? String(actualFinish).split(" ")[1]?.substring(0, 5) ?? "-"
+            ? fmtTime(actualFinish)
             : "-";
           const breakMins = Number(row.actualBreakMinutes ?? row.latestBreakDurationMinutes ?? 0);
           const actualDuration = row.actualDurationHours as number | null | undefined;

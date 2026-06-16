@@ -4,7 +4,7 @@ import type { CountdownDetail } from "@smsystem/contracts/countdown";
 import { encodeGridFilterToken } from "@smsystem/contracts/grid";
 import { ArrowLeft, Clock3, Layers3, Moon, Plus, Wrench } from "lucide-react";
 import Link from "next/link";
-import { humanizeCodeLabel } from "@/shared/format/humanize";
+import { humanizeCodeLabel, fmtTime, fmtDateTime } from "@/shared/format/humanize";
 
 interface CountdownDetailShellProps {
   countdown: CountdownDetail;
@@ -115,7 +115,7 @@ export function CountdownDetailShell({ countdown }: CountdownDetailShellProps) {
             <p>Divisi: {countdown.divisionName ?? "-"}</p>
             <p>Panel: {countdown.panelName ?? "-"}</p>
             <p>Mulai: {countdown.startDate ?? "-"}</p>
-            <p>Diperbarui: {countdown.updatedAt ?? "-"}</p>
+            <p>Diperbarui: {countdown.updatedAt ? fmtDateTime(countdown.updatedAt) : "-"}</p>
           </div>
         </section>
 
@@ -165,7 +165,7 @@ export function CountdownDetailShell({ countdown }: CountdownDetailShellProps) {
                   <td className="px-4 py-3">{detail.employeeRole ?? "-"}</td>
                   <td className="px-4 py-3">{detail.workDate}</td>
                   <td className="px-4 py-3">
-                    {detail.startTime} - {detail.finishTime}
+                    {fmtTime(detail.startTime)} - {fmtTime(detail.finishTime)}
                   </td>
                   <td className="px-4 py-3">{detail.billedHours.toFixed(2)}</td>
                   <td className="px-4 py-3">{detail.progressPercent.toFixed(0)}%</td>

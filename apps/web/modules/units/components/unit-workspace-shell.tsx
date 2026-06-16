@@ -38,6 +38,64 @@ function SummaryCard({
   );
 }
 
+type UnitStatusKey = "TOP_URGENT" | "URGENT" | "NORMAL" | "SLOW" | "HOLD";
+
+const UNIT_STATUS_CONFIG: Record<UnitStatusKey, { label: string; cls: string }> = {
+  TOP_URGENT: {
+    label: "Top Urgent",
+    cls: "border-red-400/35 text-red-300",
+  },
+  URGENT: {
+    label: "Urgent",
+    cls: "border-amber-500/35 text-amber-300",
+  },
+  NORMAL: {
+    label: "Normal",
+    cls: "border-emerald-400/30 text-emerald-300",
+  },
+  SLOW: {
+    label: "Lambat",
+    cls: "border-sky-400/30 text-sky-300",
+  },
+  HOLD: {
+    label: "Hold",
+    cls: "border-white/10 text-white/45",
+  },
+};
+
+type UnitBoardRowExtended = UnitBoardRow & {
+  unitStatus?: UnitStatusKey | string | null;
+  totalWorkHours?: number | null;
+  usedWorkHours?: number | null;
+};
+
+type UnitWorkspaceExtended = UnitWorkspace & {
+  qcIssueSummary?: {
+    pembahasan?: number | null;
+    onProgress?: number | null;
+    done?: number | null;
+    pending?: number | null;
+  } | null;
+  woSummary: UnitWorkspace["woSummary"] & {
+    done?: number | null;
+  };
+};
+
+const summaryLinkClass =
+  "text-white/60 transition-colors hover:text-amber-400 group-hover:text-white/70";
+
+function gridHref(path: string, filters: Record<string, string | number | null | undefined>, extras?: Record<string, string>) {
+  const params = new URLSearchParams(extras);
+
+  for (const [field, value] of Object.entries(filters)) {
+    if (value == null || value === "") continue;
+    params.append("filter", `${field}:eq:${String(value)}`);
+  }
+
+  const query = params.toString();
+  return query ? `${path}?${query}` : path;
+}
+
 type UnitWorkspaceTab = "summary" | "parts-panels" | "master-panel";
 
 function resolveTab(value: string | null): UnitWorkspaceTab {
@@ -58,6 +116,17 @@ export function UnitWorkspaceShell({
   const searchParams = useSearchParams();
   const activeTab = resolveTab(searchParams.get("tab"));
   const countdownItems = workspace.countdownItems ?? [];
+  const unitDetails = unit as UnitBoardRowExtended;
+  const workspaceDetails = workspace as UnitWorkspaceExtended;
+  const woDoneCount = workspaceDetails.woSummary.done ?? 0;
+  const woOpenCount = workspaceDetails.woSummary.open;
+  const woTotal =
+    workspaceDetails.woSummary.submitted +
+    workspaceDetails.woSummary.approved +
+    workspaceDetails.woSummary.rejected +
+    workspaceDetails.woSummary.open;
+  const unitStatus = unitDetails.unitStatus ?? unit.riskLevel;
+  const statusConfig = UNIT_STATUS_CONFIG[unitStatus as UnitStatusKey];
 
   // Aggregate countdownItems per divisi teknis
   const divisionStats = Object.values(
@@ -161,8 +230,8 @@ export function UnitWorkspaceShell({
             <SummaryCard label="QC Issue Open" value={String(unit.qcIssueOpenCount)} />
           </div>
 
-          <div className="grid gap-4 xl:grid-cols-3">
-            <section className="border border-white/5 bg-[#111114] px-4 py-3">
+          <div className="grid gap-4 xl:grid-cols-4">
+            <section className="group border border-white/5 bg-[#111114] px-4 py-3">
               <div className="flex items-center gap-3">
                 <FileText className="h-3.5 w-3.5 text-amber-500" />
                 <h2 className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">
@@ -179,33 +248,103 @@ export function UnitWorkspaceShell({
               </div>
             </section>
 
-            <section className="border border-white/5 bg-[#111114] px-4 py-3">
+            <section className="group border border-white/5 bg-[#111114] px-4 py-3">
               <div className="flex items-center gap-3">
                 <FileText className="h-3.5 w-3.5 text-amber-500" />
                 <h2 className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">
                   Ringkasan WO
                 </h2>
               </div>
-              <div className="mt-2 grid grid-cols-2 gap-y-1 gap-x-3 text-[11px] font-mono text-white/60">
-                <p>Diajukan: {workspace.woSummary.submitted}</p>
-                <p>Disetujui: {workspace.woSummary.approved}</p>
-                <p>Ditolak: {workspace.woSummary.rejected}</p>
-                <p>Open: {workspace.woSummary.open}</p>
+              <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] font-mono">
+                <Link
+                  href={gridHref("/wo", { carId: unit.unitId, status: "DONE" }, { viewMode: "done" })}
+                  className={summaryLinkClass}
+                >
+                  Sudah Dikerjakan: {woDoneCount}
+                </Link>
+                <Link
+                  href={gridHref("/wo", { carId: unit.unitId, status: "OPEN" })}
+                  className={summaryLinkClass}
+                >
+                  Belum Dikerjakan: {woOpenCount}
+                </Link>
+                <div className="col-span-2 my-1 border-t border-white/5" />
+                <Link
+                  href={gridHref("/wo", { carId: unit.unitId, status: "REJECTED" }, { viewMode: "done" })}
+                  className={summaryLinkClass}
+                >
+                  Ditolak: {workspace.woSummary.rejected}
+                </Link>
+                <Link
+                  href={gridHref("/wo", { carId: unit.unitId }, { viewMode: "all" })}
+                  className={summaryLinkClass}
+                >
+                  Total: {woTotal}
+                </Link>
               </div>
             </section>
 
-            <section className="border border-white/5 bg-[#111114] px-4 py-3">
+            <section className="group border border-white/5 bg-[#111114] px-4 py-3">
               <div className="flex items-center gap-3">
                 <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
                 <h2 className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">
-                  Ringkasan Issue
+                  Pembahasan
                 </h2>
               </div>
-              <div className="mt-2 grid grid-cols-2 gap-y-1 gap-x-3 text-[11px] font-mono text-white/60">
-                <p>Open: {workspace.issueSummary.open}</p>
-                <p>Selesai: {workspace.issueSummary.resolved}</p>
-                <p>High: {workspace.issueSummary.highSeverityOpen}</p>
-                <p>Risk: {humanizeCodeLabel(workspace.deliveryRisk.level)}</p>
+              <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] font-mono">
+                <Link
+                  href={gridHref("/issues", { carId: unit.unitId, status: "OPEN" })}
+                  className={summaryLinkClass}
+                >
+                  Open: {workspace.issueSummary.open}
+                </Link>
+                <Link
+                  href={gridHref("/issues", { carId: unit.unitId, status: "RESOLVED" })}
+                  className={summaryLinkClass}
+                >
+                  Selesai: {workspace.issueSummary.resolved}
+                </Link>
+                <Link
+                  href={gridHref("/issues", { carId: unit.unitId, severity: "HIGH", status: "OPEN" })}
+                  className={summaryLinkClass}
+                >
+                  High: {workspace.issueSummary.highSeverityOpen}
+                </Link>
+              </div>
+            </section>
+
+            <section className="group border border-white/5 bg-[#111114] px-4 py-3">
+              <div className="flex items-center gap-3">
+                <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+                <h2 className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">
+                  Temuan QC
+                </h2>
+              </div>
+              <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] font-mono">
+                <Link
+                  href={gridHref("/qc/dashboard", { carId: unit.unitId, status: "OPEN" })}
+                  className={summaryLinkClass}
+                >
+                  Pembahasan: {workspaceDetails.qcIssueSummary?.pembahasan ?? unit.qcIssueOpenCount}
+                </Link>
+                <Link
+                  href={gridHref("/qc/dashboard", { carId: unit.unitId, status: "IN_PROGRESS" })}
+                  className={summaryLinkClass}
+                >
+                  On Progress: {workspaceDetails.qcIssueSummary?.onProgress ?? 0}
+                </Link>
+                <Link
+                  href={gridHref("/qc/dashboard", { carId: unit.unitId, status: "DONE" })}
+                  className={summaryLinkClass}
+                >
+                  Done: {workspaceDetails.qcIssueSummary?.done ?? 0}
+                </Link>
+                <Link
+                  href={gridHref("/qc/dashboard", { carId: unit.unitId, status: "PENDING" })}
+                  className={summaryLinkClass}
+                >
+                  Pending: {workspaceDetails.qcIssueSummary?.pending ?? 0}
+                </Link>
               </div>
             </section>
           </div>
@@ -214,10 +353,17 @@ export function UnitWorkspaceShell({
             <div className="flex items-center gap-3">
               <Wrench className="h-3.5 w-3.5 text-amber-500" />
               <h2 className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">
-                Ringkasan Risiko Pengiriman
+                Catatan Status
               </h2>
             </div>
             <p className="mt-2 text-[11px] text-white/50">{workspace.deliveryRisk.reason}</p>
+            <span
+              className={`mt-2 inline-flex border px-2 py-0.5 text-[10px] font-mono uppercase tracking-[0.1em] ${
+                statusConfig?.cls ?? "border-white/10 text-white/30"
+              }`}
+            >
+              {statusConfig?.label ?? humanizeCodeLabel(unit.riskLevel)}
+            </span>
           </div>
 
           {/* Progress per Divisi Teknis */}

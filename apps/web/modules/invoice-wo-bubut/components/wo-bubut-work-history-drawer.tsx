@@ -18,6 +18,7 @@ import {
   updateBubutInvoice,
   fetchBubutInvoiceWorkOrdersClient,
 } from "@/shared/api/bubut-invoice";
+import { fmtTime } from "@/shared/format/humanize";
 
 function rupiah(value: number) {
   return new Intl.NumberFormat("id-ID", {
@@ -366,7 +367,7 @@ export function WoBubutWorkHistoryDrawer({
                             <tr key={row.id} className={idx % 2 === 0 ? "bg-white/[0.01] hover:bg-white/[0.03] transition-colors" : "hover:bg-white/[0.03] transition-colors"}>
                               <td className="px-4 py-3 font-mono text-white/70">{text(row.workDate)}</td>
                               <td className="px-4 py-3 font-mono text-white/50">
-                                {text(row.startTime)} – {text(row.finishTime)}
+                                {fmtTime(row.startTime)} – {fmtTime(row.finishTime)}
                               </td>
                               <td className={`px-4 py-3 font-mono font-semibold ${row.workingHourDecimal > 4 ? "text-amber-500" : "text-white/80"}`}>{row.workingHourText}</td>
                               <td className="px-4 py-3 text-white/80">{text(row.operatorName)}</td>

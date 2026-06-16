@@ -52,7 +52,7 @@ import {
   PageHeader,
 } from "@/shared/ui/compact";
 import { useSweetAlert } from "@/shared/ui/sweet-alert";
-import { humanizeCodeLabel } from "@/shared/format/humanize";
+import { humanizeCodeLabel, fmtTime } from "@/shared/format/humanize";
 
 interface JobPlanShellProps {
   title: string;
@@ -1636,7 +1636,7 @@ export function JobPlanShell({
         const planFinish = row.finishTime as string | null | undefined;
         return (
           <span className="font-mono text-[11px] text-white/70">
-            {planStart || "-"} — {planFinish || "-"}
+            {fmtTime(planStart)} — {fmtTime(planFinish)}
           </span>
         );
       },
@@ -1657,7 +1657,7 @@ export function JobPlanShell({
         return (
           <div className="flex flex-col gap-1 text-[11px]">
             <span className="font-mono text-white/80">
-              {actualStart || "-"} — {actualFinish || "-"}
+              {fmtTime(actualStart)} — {fmtTime(actualFinish)}
             </span>
             {breakMins > 0 ? (
               <span className="text-white/45">
@@ -1985,7 +1985,7 @@ export function JobPlanShell({
                 </div>
                 {preview.length > 1 ? (
                   <p className="mt-1 text-[10px] text-white/35">
-                    Split {preview[0]?.finishTime} lalu lanjut lembur
+                    Split {fmtTime(preview[0]?.finishTime)} lalu lanjut lembur
                   </p>
                 ) : null}
               </td>
@@ -2537,13 +2537,13 @@ export function JobPlanShell({
                 <div>
                   <FieldLabel>Jam Mulai</FieldLabel>
                   <div className="flex h-[38px] items-center rounded-md border border-white/5 bg-[#111114] px-3 text-[12px] text-amber-300">
-                    {additionalPreview[0]?.startTime ?? "-"}
+                    {fmtTime(additionalPreview[0]?.startTime)}
                   </div>
                 </div>
                 <div>
                   <FieldLabel>Jam Selesai</FieldLabel>
                   <div className="flex h-[38px] items-center rounded-md border border-white/5 bg-[#111114] px-3 text-[12px] text-amber-300">
-                    {additionalPreview[additionalPreview.length - 1]?.finishTime ?? "-"}
+                    {fmtTime(additionalPreview[additionalPreview.length - 1]?.finishTime)}
                   </div>
                 </div>
               </div>

@@ -4,7 +4,7 @@ import type {
   GalleryPhotoRecord,
   GalleryPhotoType,
 } from "@smsystem/contracts/gallery";
-import { Download, Eye, LoaderCircle, Pencil, Trash2, Upload } from "lucide-react";
+import { Download, Eye, LoaderCircle, Trash2, Upload } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -15,11 +15,12 @@ import {
   updateGalleryPhoto,
 } from "@/shared/api/gallery";
 import { getProxiedImageUrl } from "@/shared/api/config";
+import { fmtDateTime } from "@/shared/format/humanize";
 import { GalleryUploadForm, type UploadFormValues } from "./forms/gallery-upload-form";
 import { GalleryPhotoEditForm, type EditFormValues } from "./forms/gallery-photo-edit-form";
 
 const inputCls =
-  "h-9 rounded-lg border border-white/[0.08] bg-white/[0.03] px-2.5 text-[12px] text-white outline-none transition-colors focus:border-amber-500/30 [color-scheme:dark]";
+  "h-9 border border-white/[0.08] bg-white/[0.03] px-2.5 text-[12px] font-mono text-white outline-none transition-colors focus:border-amber-500/30 [color-scheme:dark]";
 
 const photoTypes: GalleryPhotoType[] = ["BEFORE", "PROCESS", "AFTER", "DEFECT"];
 
@@ -363,10 +364,10 @@ export function GalleryPhotoDrawer({
       <div className="h-full w-full max-w-[980px] overflow-y-auto border-l border-white/[0.08] bg-[#070707] p-6 shadow-2xl">
         <div className="flex flex-col gap-4 border-b border-white/[0.08] pb-6 md:flex-row md:items-start md:justify-between">
           <div>
-            <p className="text-[11px] uppercase tracking-[0.2em] text-amber-500/70">
+            <p className="text-[10px] font-mono uppercase tracking-[0.14em] text-amber-500">
               Foto Pengerjaan
             </p>
-            <h2 className="mt-2 text-xl font-light text-white">
+            <h2 className="mt-2 text-[15px] font-mono text-white">
               {detail?.data.actual.unitName ?? "Memuat foto..."}
             </h2>
             <p className="mt-2 text-sm text-white/45">
@@ -377,19 +378,19 @@ export function GalleryPhotoDrawer({
             {detail?.data.actual ? (
               <div className="mt-3 flex flex-wrap items-center gap-4 text-[12px] text-white/50">
                 <span className="flex items-center gap-1.5">
-                  <span className="h-1.5 w-1.5 rounded-full bg-white/20"></span>
+                  <span className="h-1.5 w-1.5 bg-white/20"></span>
                   {detail.data.actual.workDate}
                 </span>
                 <span className="flex items-center gap-1.5">
-                  <span className="h-1.5 w-1.5 rounded-full bg-white/20"></span>
+                  <span className="h-1.5 w-1.5 bg-white/20"></span>
                   {detail.data.actual.divisionName}
                 </span>
                 <span className="flex items-center gap-1.5">
-                  <span className="h-1.5 w-1.5 rounded-full bg-white/20"></span>
+                  <span className="h-1.5 w-1.5 bg-white/20"></span>
                   {detail.data.actual.employeeName}
                 </span>
                 <span className="flex items-center gap-1.5">
-                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500/50"></span>
+                  <span className="h-1.5 w-1.5 bg-amber-500"></span>
                   {detail.data.actual.actualStatus}
                 </span>
               </div>
@@ -399,21 +400,21 @@ export function GalleryPhotoDrawer({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full border border-white/[0.08] px-4 py-2 text-xs text-white/65 transition-colors hover:bg-white/[0.04] hover:text-white"
+            className="border border-white/[0.08] px-4 py-2 text-[11px] font-mono uppercase tracking-[0.12em] text-white/50 transition-colors hover:border-white/20 hover:text-white"
           >
             Tutup
           </button>
         </div>
 
         {isLoading ? (
-          <div className="mt-8 flex items-center gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.03] px-4 py-5 text-sm text-white/60">
+          <div className="mt-8 flex items-center gap-3 border border-white/[0.06] bg-white/[0.03] px-4 py-5 text-[12px] font-mono text-white/50">
             <LoaderCircle className="h-4 w-4 animate-spin text-amber-500" />
             Memuat foto pengerjaan...
           </div>
         ) : null}
 
         {error ? (
-          <div className="mt-6 rounded-2xl border border-red-500/20 bg-red-500/8 px-4 py-3 text-sm text-red-100/85">
+          <div className="mt-6 border border-red-500/20 bg-red-500/[0.06] px-4 py-3 text-[12px] font-mono text-red-400">
             {error}
           </div>
         ) : null}
@@ -422,10 +423,10 @@ export function GalleryPhotoDrawer({
           <div className="mt-6 space-y-6">
 
             {canManagePhotos ? (
-              <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-4">
+              <div className="border border-white/[0.06] bg-white/[0.03] p-4">
                 <div className="flex items-center gap-2">
                   <Upload className="h-4 w-4 text-amber-500" />
-                  <h3 className="text-sm font-medium text-white">Tambah satu foto baru</h3>
+                  <h3 className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/50">Tambah Foto</h3>
                 </div>
 
                 <GalleryUploadForm
@@ -441,16 +442,16 @@ export function GalleryPhotoDrawer({
               </div>
             ) : null}
 
-            <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-4">
+            <div className="border border-white/[0.06] bg-white/[0.03] p-4">
               {detail.data.actual.jobDescription ? (
-                <div className="mb-4 rounded-xl border border-white/[0.06] bg-black/20 px-3 py-2.5">
+                <div className="mb-4 border border-white/[0.06] bg-black/20 px-3 py-2.5">
                   <p className="text-[10px] uppercase tracking-[0.16em] text-white/30">Keterangan / PR / WO</p>
                   <p className="mt-1 text-[12px] text-white/80 leading-relaxed">{detail.data.actual.jobDescription}</p>
                 </div>
               ) : null}
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <h3 className="text-sm font-medium text-white">Daftar foto</h3>
+                  <h3 className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/50">Daftar Foto</h3>
                 </div>
                 {canDownloadPhotos ? (
                   <button
@@ -459,7 +460,7 @@ export function GalleryPhotoDrawer({
                       void handleDownloadSelected();
                     }}
                     disabled={selectedPhotos.length === 0}
-                    className="rounded-lg border border-white/[0.08] px-3 py-2 text-[12px] text-white/70 hover:text-white disabled:cursor-not-allowed disabled:opacity-35"
+                    className="border border-white/[0.08] px-3 py-2 text-[11px] font-mono uppercase tracking-[0.1em] text-white/60 hover:text-white hover:border-white/20 disabled:cursor-not-allowed disabled:opacity-35 transition-colors"
                   >
                     Unduh Terpilih ({selectedPhotos.length})
                   </button>
@@ -467,7 +468,7 @@ export function GalleryPhotoDrawer({
               </div>
 
               {detail.data.photos.length === 0 ? (
-                <div className="mt-4 rounded-xl border border-white/[0.06] bg-black/20 px-4 py-8 text-center text-sm text-white/35">
+                <div className="mt-4 border border-white/[0.06] bg-black/20 px-4 py-8 text-center text-[12px] font-mono text-white/35">
                   Belum ada foto di jobdesc ini.
                 </div>
               ) : (
@@ -480,12 +481,12 @@ export function GalleryPhotoDrawer({
                     return (
                       <div
                         key={photo.photoId}
-                        className={`relative flex flex-col overflow-hidden rounded-2xl border transition-colors ${
-                          isSelected ? "border-amber-500/40 bg-amber-500/5" : "border-white/[0.07] bg-black/20"
+                        className={`relative flex flex-col overflow-hidden border transition-colors ${
+                          isSelected ? "border-amber-500/40 bg-amber-500/[0.04]" : "border-white/[0.07] bg-black/20"
                         }`}
                       >
                         {/* Checkbox pojok kiri atas */}
-                        <label className="absolute left-2.5 top-2.5 z-10 flex h-5 w-5 cursor-pointer items-center justify-center rounded-full border border-white/20 bg-black/50 backdrop-blur-sm">
+                        <label className="absolute left-2.5 top-2.5 z-10 flex h-5 w-5 cursor-pointer items-center justify-center border border-white/20 bg-black/50 backdrop-blur-sm">
                           <input
                             type="checkbox"
                             checked={isSelected}
@@ -496,12 +497,12 @@ export function GalleryPhotoDrawer({
                                   : current.filter((id) => id !== photo.photoId),
                               );
                             }}
-                            className="h-3 w-3 rounded accent-amber-500"
+                            className="h-3 w-3 accent-amber-500"
                           />
                         </label>
 
                         {/* Badge jenis pojok kanan atas */}
-                        <span className="absolute right-2.5 top-2.5 z-10 rounded-full bg-black/60 px-2 py-0.5 text-[10px] uppercase tracking-[0.16em] text-white/70 backdrop-blur-sm">
+                        <span className="absolute right-2.5 top-2.5 z-10 border border-white/[0.12] bg-black/70 px-2 py-0.5 text-[10px] font-mono uppercase tracking-[0.12em] text-white/60 backdrop-blur-sm">
                           {humanizePhotoType(photo.photoType)}
                         </span>
 
@@ -542,7 +543,7 @@ export function GalleryPhotoDrawer({
                           <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-white/35">
                             <span>{photo.uploadedByName || photo.uploadedBy || "-"}</span>
                             <span>·</span>
-                            <span>{photo.uploadedAt}</span>
+                            <span>{fmtDateTime(photo.uploadedAt)}</span>
                             <span>·</span>
                             <span>{photo.source}</span>
                           </div>
@@ -552,7 +553,7 @@ export function GalleryPhotoDrawer({
                             <button
                               type="button"
                               onClick={() => window.open(getProxiedImageUrl(photo.photoUrl), "_blank", "noopener,noreferrer")}
-                              className="inline-flex items-center gap-1 rounded-full border border-white/[0.08] px-2.5 py-1 text-[11px] text-white/60 hover:text-white"
+                              className="inline-flex items-center gap-1 border border-white/[0.08] px-2.5 py-1 text-[11px] font-mono text-white/60 hover:text-white transition-colors"
                             >
                               <Eye className="h-3 w-3" />
                               Lihat
@@ -571,7 +572,7 @@ export function GalleryPhotoDrawer({
                                     ),
                                   );
                                 }}
-                                className="inline-flex items-center gap-1 rounded-full border border-white/[0.08] px-2.5 py-1 text-[11px] text-white/60 hover:text-white"
+                                className="inline-flex items-center gap-1 border border-white/[0.08] px-2.5 py-1 text-[11px] font-mono text-white/60 hover:text-white transition-colors"
                               >
                                 <Download className="h-3 w-3" />
                                 Unduh
@@ -587,7 +588,7 @@ export function GalleryPhotoDrawer({
                                     setReplaceTarget(photo);
                                     replaceInputRef.current?.click();
                                   }}
-                                  className="inline-flex items-center gap-1 rounded-full border border-white/[0.08] px-2.5 py-1 text-[11px] text-white/60 hover:text-white disabled:opacity-35"
+                                  className="inline-flex items-center gap-1 border border-white/[0.08] px-2.5 py-1 text-[11px] font-mono text-white/60 hover:text-white transition-colors disabled:opacity-35"
                                 >
                                   Ganti
                                 </button>
@@ -595,14 +596,14 @@ export function GalleryPhotoDrawer({
                                   type="button"
                                   disabled={isBusy}
                                   onClick={() => { void handleDeletePhoto(photo.photoId); }}
-                                  className="inline-flex items-center gap-1 rounded-full bg-red-500/10 px-2.5 py-1 text-[11px] text-red-300 ring-1 ring-red-500/20 disabled:opacity-35"
+                                  className="inline-flex items-center gap-1 border border-red-500/20 bg-red-500/[0.06] px-2.5 py-1 text-[11px] font-mono text-red-400 transition-colors hover:border-red-500/40 disabled:opacity-35"
                                 >
                                   <Trash2 className="h-3 w-3" />
                                   Hapus
                                 </button>
                               </>
                             ) : (
-                              <span className="rounded-full border border-white/[0.06] px-2.5 py-1 text-[11px] text-white/25">
+                              <span className="border border-white/[0.06] px-2.5 py-1 text-[11px] font-mono uppercase tracking-[0.1em] text-white/25">
                                 Foto final
                               </span>
                             )}

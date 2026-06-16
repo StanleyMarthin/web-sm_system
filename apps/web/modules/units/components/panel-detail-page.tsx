@@ -51,6 +51,7 @@ import {
 import { createWo } from "@/shared/api/wo";
 import { createPr } from "@/shared/api/pr";
 import { createVendor } from "@/shared/api/vendor";
+import { fmtDateTime } from "@/shared/format/humanize";
 
 type DrawerTab = "timeline" | "photos" | "documents";
 type TriageTone = "good" | "repair" | "replace" | "unknown";
@@ -1185,7 +1186,7 @@ export function PanelDetailPage({
                             <div className="flex flex-wrap gap-x-2 gap-y-1 text-[10px] text-white/35">
                               <span>{photo.uploadedByName || photo.uploadedBy || "-"}</span>
                               <span>-</span>
-                              <span>{photo.uploadedAt}</span>
+                              <span>{fmtDateTime(photo.uploadedAt)}</span>
                               <span>-</span>
                               <span>{photo.source}</span>
                             </div>

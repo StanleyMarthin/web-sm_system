@@ -9,7 +9,6 @@ import { z } from "zod";
 import { parseJsonBody } from "@/http/request";
 import { getApiEnv } from "@/config/env";
 import { getMySqlPool } from "@/db/mysql";
-import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import {
   errorResponse,
   successResponse,
@@ -19,6 +18,59 @@ import { requireSession } from "@/middleware/auth.middleware";
 import { requirePermission } from "@/middleware/permission.middleware";
 import type { AuthService } from "@/services/auth/auth.service";
 import type { UsersService } from "@/services/users.service";
+
+interface UploadTicketEnvelope {
+  success?: boolean;
+  data?: {
+    upload_url?: string;
+    public_url?: string;
+    uploadUrl?: string;
+    publicUrl?: string;
+  };
+  message?: string;
+}
+
+function stripTrailingSlash(value: string): string {
+  return value.replace(/\/$/u, "");
+}
+
+function resolveTasksBaseUrl(): string {
+  const env = getApiEnv();
+  if (env.SM_TASKS_BASE_URL) {
+    return stripTrailingSlash(env.SM_TASKS_BASE_URL);
+  }
+
+  try {
+    const loginUrl = new URL(env.SM_LOGIN_BASE_URL);
+    loginUrl.port = "8086";
+    loginUrl.pathname = "";
+    loginUrl.search = "";
+    loginUrl.hash = "";
+    return stripTrailingSlash(loginUrl.toString());
+  } catch {
+    return "http://172.31.11.74:8086";
+  }
+}
+
+async function requestTaskUploadTicket(objectKey: string): Promise<{
+  uploadUrl: string;
+  publicUrl: string;
+}> {
+  const ticketUrl = new URL(`${resolveTasksBaseUrl()}/sm/tasks/upload-ticket`);
+  ticketUrl.searchParams.set("filename", objectKey);
+
+  const response = await fetch(ticketUrl);
+  const payload = (await response.json().catch(() => null)) as UploadTicketEnvelope | null;
+  const data = payload?.data ?? {};
+  const uploadUrl = data.upload_url ?? data.uploadUrl;
+  const publicUrl = data.public_url ?? data.publicUrl;
+
+  if (!response.ok || payload?.success === false || !uploadUrl || !publicUrl) {
+    throw new Error(payload?.message || "UPLOAD_TICKET_FAILED");
+  }
+
+  return { uploadUrl, publicUrl };
+}
 
 async function requireManageUsersSession(
   request: Request,
@@ -308,43 +360,37 @@ export async function handleProfileAvatarUploadRoute(
   };
   const extension = allowedMimes[mimeType] ?? "jpg";
   const objectKey = `avatars/${sessionResult.session.employeeId}_${Date.now()}.${extension}`;
-  
-  const env = getApiEnv();
-  if (!env.R2_ENDPOINT_URL || !env.R2_BUCKET_NAME || !env.R2_PUBLIC_URL) {
-    return errorResponse(request, "Penyimpanan foto belum dikonfigurasi", 503, "STORAGE_UNAVAILABLE");
-  }
-
-  const s3 = new S3Client({
-    endpoint: env.R2_ENDPOINT_URL,
-    region: "auto",
-    credentials: {
-      accessKeyId: env.R2_ACCESS_KEY_ID!,
-      secretAccessKey: env.R2_SECRET_ACCESS_KEY!,
-    },
-    forcePathStyle: true,
-  });
 
   try {
     const arrayBuffer = await file.arrayBuffer();
-    
-    // 1. Upload ke R2 dari Backend (bebas CORS)
-    await s3.send(new PutObjectCommand({
-      Bucket: env.R2_BUCKET_NAME,
-      Key: objectKey,
-      ContentType: mimeType,
-      Body: new Uint8Array(arrayBuffer),
-    }));
+    const ticket = await requestTaskUploadTicket(objectKey);
 
-    const publicUrl = `${env.R2_PUBLIC_URL.replace(/\/$/u, "")}/${objectKey}`;
+    const uploadResponse = await fetch(ticket.uploadUrl, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "image/jpeg",
+      },
+      body: new Uint8Array(arrayBuffer),
+    });
+
+    if (!uploadResponse.ok) {
+      const body = await uploadResponse.text().catch(() => "");
+      console.error("[profile-avatar] r2 ticket upload failed", {
+        status: uploadResponse.status,
+        body: body.slice(0, 500),
+      });
+      return errorResponse(request, "Gagal mengupload foto profil", 502, "R2_UPLOAD_FAILED");
+    }
 
     // 2. Update Database
     const pool = getMySqlPool();
     await pool.query(
       `UPDATE sm_employee SET photo_url = ? WHERE employee_id = ?`,
-      [publicUrl, sessionResult.session.employeeId]
+      [ticket.publicUrl, sessionResult.session.employeeId]
     );
+    await authService.updateCurrentUserPhotoUrl?.(request, ticket.publicUrl);
 
-    return successResponse(request, "Foto profil berhasil diupload", { photoUrl: publicUrl });
+    return successResponse(request, "Foto profil berhasil diupload", { photoUrl: ticket.publicUrl });
   } catch (error) {
     console.error("[profile-avatar] proxy upload error:", error);
     return errorResponse(request, "Gagal menyimpan foto profil", 500, "UPLOAD_FAILED");

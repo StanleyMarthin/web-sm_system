@@ -39,6 +39,7 @@ import {
   requestGalleryUploadTicket,
   updateGalleryPhoto,
 } from "@/shared/api/gallery";
+import { fmtDateTime } from "@/shared/format/humanize";
 
 type DrawerTab = "timeline" | "photos" | "documents";
 type TriageTone = "good" | "repair" | "replace" | "unknown";
@@ -117,6 +118,12 @@ function hierarchyLabel(node: UnitBomNode): string {
   const parts = [node.category, node.section].filter(Boolean);
   if (parts.length === 0) return "Kategori belum tercatat";
   return `Kategori: ${parts.join(" > ")}`;
+}
+
+function nodeNameLabel(node: UnitBomNode): string {
+  if (node.nodeType === "CATEGORY") return "Nama Category";
+  if (node.nodeType === "SECTION") return "Nama Section";
+  return "Nama Panel / Part";
 }
 
 function buildTimeline(node: UnitBomNode): TimelineItem[] {
@@ -640,8 +647,21 @@ export function PanelDetailDrawer({ node, isOpen, canManagePhotos, canDownloadPh
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">Panel Detail</p>
-              <h2 className="mt-2 truncate text-[16px] font-mono text-white/90">{node.label}</h2>
-              <p className="mt-1 text-[11px] font-mono text-white/35">{hierarchyLabel(node)}</p>
+              <div className="mt-3 grid gap-2 text-[11px] font-mono sm:grid-cols-3">
+                <div className="min-w-0">
+                  <p className="text-[9px] uppercase tracking-[0.12em] text-white/25">Category</p>
+                  <p className="mt-0.5 break-words text-white/70">{node.category ?? "Belum tercatat"}</p>
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[9px] uppercase tracking-[0.12em] text-white/25">Section</p>
+                  <p className="mt-0.5 break-words text-white/70">{node.section ?? "Belum tercatat"}</p>
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[9px] uppercase tracking-[0.12em] text-white/25">{nodeNameLabel(node)}</p>
+                  <h2 className="mt-0.5 break-words text-[15px] text-white/90">{node.label}</h2>
+                </div>
+              </div>
+              <p className="mt-2 text-[10px] font-mono text-white/28">{hierarchyLabel(node)}</p>
             </div>
             <button
               type="button"
@@ -883,7 +903,7 @@ export function PanelDetailDrawer({ node, isOpen, canManagePhotos, canDownloadPh
                             <div className="flex flex-wrap gap-x-2 gap-y-1 text-[10px] text-white/35">
                               <span>{photo.uploadedByName || photo.uploadedBy || "-"}</span>
                               <span>-</span>
-                              <span>{photo.uploadedAt}</span>
+                              <span>{fmtDateTime(photo.uploadedAt)}</span>
                               <span>-</span>
                               <span>{photo.source}</span>
                             </div>

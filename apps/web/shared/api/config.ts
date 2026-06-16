@@ -89,10 +89,5 @@ export function getApiBaseUrl(): string {
 export function getProxiedImageUrl(url: string | null | undefined): string | undefined {
   if (!url) return undefined;
 
-  if (url.includes(".r2.dev")) {
-    const apiBase = getApiBaseUrl();
-    return `${apiBase}/api/proxy/image?url=${encodeURIComponent(url)}`;
-  }
-
   return url;
 }

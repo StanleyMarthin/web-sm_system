@@ -115,3 +115,58 @@ export function humanizeCodeLabel(value: unknown): string {
     })
     .join(" ");
 }
+
+/**
+ * Format jam ke H:mm (tanpa leading zero pada jam).
+ * Input: ISO datetime ("2026-06-15 09:05:00"), time ("09:05"), atau Date.
+ * Contoh: "2026-06-15 09:05:00" → "9:05" | "14:30:00" → "14:30"
+ */
+export function fmtTime(value: unknown): string {
+  if (!value) return "-";
+
+  try {
+    const str = value instanceof Date ? value.toISOString() : String(value).trim();
+
+    // Pure time string: HH:MM or HH:MM:SS
+    const pureTime = /^(\d{1,2}):(\d{2})(?::\d{2})?$/.exec(str);
+    if (pureTime) {
+      const h = parseInt(pureTime[1]!, 10);
+      const m = pureTime[2]!;
+      return `${h}:${m}`;
+    }
+
+    // Datetime string "YYYY-MM-DD HH:MM:SS" or ISO
+    const normalized = str.includes(" ") ? str.replace(" ", "T") : str;
+    const date = new Date(normalized.includes("T") ? normalized : `${normalized}T00:00:00`);
+    if (isNaN(date.getTime())) return str;
+
+    const h = date.getHours();
+    const m = String(date.getMinutes()).padStart(2, "0");
+    return `${h}:${m}`;
+  } catch {
+    return String(value);
+  }
+}
+
+/**
+ * Format datetime ke "D MMM · H:mm".
+ * Contoh: "2026-06-15 14:30:00" → "15 Jun · 14:30"
+ */
+export function fmtDateTime(value: unknown): string {
+  if (!value) return "-";
+
+  try {
+    const str = value instanceof Date ? value.toISOString() : String(value).trim();
+    const normalized = str.includes(" ") ? str.replace(" ", "T") : str;
+    const date = new Date(normalized.includes("T") ? normalized : `${normalized}T00:00:00`);
+    if (isNaN(date.getTime())) return str;
+
+    const day = date.getDate();
+    const month = date.toLocaleString("id-ID", { month: "short" });
+    const h = date.getHours();
+    const m = String(date.getMinutes()).padStart(2, "0");
+    return `${day} ${month} · ${h}:${m}`;
+  } catch {
+    return String(value);
+  }
+}

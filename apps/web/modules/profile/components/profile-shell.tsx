@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import NextImage from "next/image";
 import {
   Camera,
   CheckCircle2,
@@ -16,7 +17,7 @@ import {
   X,
 } from "lucide-react";
 import type { AuthUser } from "@smsystem/contracts/auth";
-import { getApiBaseUrl, getProxiedImageUrl } from "@/shared/api/config";
+import { getApiBaseUrl } from "@/shared/api/config";
 import { ProfileEmailForm } from "./forms/profile-email-form";
 import { ProfilePasswordForm } from "./forms/profile-password-form";
 
@@ -155,11 +156,13 @@ export function ProfileShell({ user }: { user: AuthUser }) {
               >
                 <div className="w-28 h-28 rounded-full overflow-hidden bg-white/5 border-2 border-white/10 flex items-center justify-center transition-all group-hover:border-amber-500/50 relative">
                   {photoUrl ? (
-                    <img
-                      src={getProxiedImageUrl(photoUrl)}
+                    <NextImage
+                      key={photoUrl}
+                      src={photoUrl}
                       alt={user.fullName}
-                      className="w-full h-full object-cover"
-                      loading="lazy"
+                      fill
+                      sizes="112px"
+                      className="object-cover"
                     />
                   ) : (
                     <User className="w-10 h-10 text-white/20" />

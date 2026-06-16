@@ -342,6 +342,14 @@ function displayCategory(value: string | null | undefined): string {
   return value?.trim() || "Lainnya";
 }
 
+function estimateNodeHeight(node: UnitBomNode): number {
+  const hierarchy = hierarchyText(node);
+  const labelLines = Math.max(1, Math.ceil(node.label.length / 22));
+  const hierarchyLines = Math.max(1, Math.ceil(hierarchy.length / 30));
+  const locationLines = node.nodeType === "PART" ? Math.max(1, Math.ceil((node.divisionName ?? "Belum ditentukan").length / 28)) : 1;
+  return NODE_HEIGHT + (labelLines - 1) * 16 + (hierarchyLines - 1) * 14 + (locationLines - 1) * 14;
+}
+
 function recordMatchesCategory(record: UnitPanelRecord, category: string): boolean {
   return displayCategory(record.category) === category;
 }
@@ -354,7 +362,11 @@ function buildCanvasLayout(nodes: UnitBomNode[], expandedNodeIds: Set<string>, i
   function walk(items: UnitBomNode[], depth: number, parentId: string | null) {
     maxDepth = Math.max(maxDepth, depth);
     for (const item of items) {
-      const y = 32 + row * (NODE_HEIGHT + ROW_GAP);
+      const nodeHeight = estimateNodeHeight(item);
+      const previousBottom = positioned.length > 0
+        ? Math.max(...positioned.map((node) => node.y + node.height))
+        : 32;
+      const y = positioned.length > 0 ? previousBottom + ROW_GAP : 32;
       const x = 32 + depth * (NODE_WIDTH + COLUMN_GAP);
       row += 1;
       positioned.push({
@@ -363,7 +375,7 @@ function buildCanvasLayout(nodes: UnitBomNode[], expandedNodeIds: Set<string>, i
         x,
         y,
         width: NODE_WIDTH,
-        height: NODE_HEIGHT,
+        height: nodeHeight,
         parentId,
       });
       if (item.children.length > 0 && expandedNodeIds.has(item.nodeId)) {
@@ -379,7 +391,7 @@ function buildCanvasLayout(nodes: UnitBomNode[], expandedNodeIds: Set<string>, i
   return {
     nodes: positioned,
     width: Math.max(860, 64 + (maxDepth + 1) * NODE_WIDTH + maxDepth * COLUMN_GAP),
-    height: Math.max(520, 64 + Math.max(1, row) * (NODE_HEIGHT + ROW_GAP)),
+    height: Math.max(520, 64 + Math.max(1, row) * (NODE_HEIGHT + ROW_GAP), 64 + Math.max(0, ...positioned.map((node) => node.y + node.height))),
   };
 }
 
@@ -588,7 +600,7 @@ function NodeCard({
     <div
       data-canvas-node="true"
       className="group absolute"
-      style={{ left: x, top: y, width, height }}
+      style={{ left: x, top: y, width, minHeight: height }}
       onContextMenu={(event) => onOpenMenu(node, event)}
       onPointerDown={handleNodePointerDown}
       onPointerMove={handleNodePointerMove}
@@ -600,22 +612,22 @@ function NodeCard({
         onClick={() => {
           if (suppressClickRef.current) return;
         }}
-        className={`h-full w-full border bg-[#111114] p-3 text-left shadow-lg shadow-black/20 transition-[border-color,background-color,transform] hover:-translate-y-0.5 hover:border-amber-500/35 hover:bg-[#151518] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-500/70 ${
+        className={`min-h-full w-full border bg-[#111114] p-3 text-left shadow-lg shadow-black/20 transition-[border-color,background-color,transform] hover:-translate-y-0.5 hover:border-amber-500/35 hover:bg-[#151518] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-500/70 ${
           isSelected ? "border-amber-500/60" : isGroup ? "border-white/10" : detailKey ? "border-white/10" : "border-white/5"
         }`}
       >
         <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start gap-2">
               {canExpand ? (
                 <span className="flex h-5 w-5 shrink-0 items-center justify-center border border-white/10 text-white/35">
                   {isExpanded ? <ChevronDown className="h-3 w-3" /> : <Plus className="h-3 w-3" />}
                 </span>
               ) : null}
-              <span className={`h-2 w-2 shrink-0 ${triage.dotClassName}`} />
-              <p className="truncate text-[12px] font-mono text-white/85">{node.label}</p>
+              <span className={`mt-1.5 h-2 w-2 shrink-0 ${triage.dotClassName}`} />
+              <p className="min-w-0 whitespace-normal break-words text-[12px] font-mono leading-4 text-white/85">{node.label}</p>
             </div>
-            <p className="mt-1 truncate text-[10px] text-white/35">{hierarchyText(node)}</p>
+            <p className="mt-1 whitespace-normal break-words text-[10px] leading-3 text-white/35">{hierarchyText(node)}</p>
           </div>
           <span className="shrink-0 border border-white/10 px-1.5 py-0.5 text-[9px] font-mono uppercase text-white/35">
             {isGroup ? node.nodeType : panelRecord?.nodeType ?? "PART"}
@@ -638,7 +650,7 @@ function NodeCard({
           <>
             <div className="mt-3 flex items-center gap-1.5 text-[10px] text-white/45">
               {triage.tone === "good" ? <PackageCheck className="h-3 w-3 text-emerald-300" /> : <MapPin className="h-3 w-3 text-white/30" />}
-              <span className="truncate">{location}</span>
+              <span className="min-w-0 whitespace-normal break-words leading-3">{location}</span>
             </div>
             <ProgressBar value={node.progressPercent} tone={triage.tone} />
           </>
@@ -2039,17 +2051,17 @@ export function BomTrackerTab({
                     </div>
                   ) : null}
 
-                  {mode.type === "create" && mode.sectionMode === "existing" ? (
-                    <label className="block space-y-1">
-                      <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">Kategori</span>
-                      <SearchableField
-                        value={form.category}
-                        options={categoryOptions}
-                        onChange={selectCategory}
-                        placeholder="Pilih kategori"
-                      />
-                    </label>
-                  ) : null}
+                  <label className="block space-y-1">
+                    <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">Kategori</span>
+                    <SearchableField
+                      value={form.category}
+                      options={categoryOptions}
+                      onChange={mode.type === "create" && mode.sectionMode === "existing"
+                        ? selectCategory
+                        : (category) => setForm((current) => ({ ...current, category }))}
+                      placeholder="Pilih kategori"
+                    />
+                  </label>
 
                   <label className="block space-y-1">
                     <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">Section</span>
@@ -2107,18 +2119,6 @@ export function BomTrackerTab({
                       />
                     </label>
                   </>
-
-                  {mode.type !== "create" || mode.sectionMode !== "existing" ? (
-                    <label className="block space-y-1">
-                      <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">Kategori</span>
-                      <SearchableField
-                        value={form.category}
-                        options={categoryOptions}
-                        onChange={(category) => setForm((current) => ({ ...current, category }))}
-                        placeholder="Pilih kategori"
-                      />
-                    </label>
-                  ) : null}
 
                   <label className="flex items-center gap-3 border border-white/5 bg-[#111114] px-3 py-2">
                     <input

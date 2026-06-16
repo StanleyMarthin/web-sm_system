@@ -106,6 +106,7 @@ export function ActionButton({
   type = "button",
   disabled,
   className = "",
+  title,
 }: {
   children: ReactNode;
   onClick?: () => void;
@@ -113,6 +114,7 @@ export function ActionButton({
   type?: "button" | "submit";
   disabled?: boolean;
   className?: string;
+  title?: string;
 }) {
   const styles: Record<string, string> = {
     default:  "border border-gray-300 text-gray-600 hover:border-gray-400 hover:bg-gray-50 hover:text-gray-950 dark:border-white/[0.08] dark:text-white/60 dark:hover:text-white",
@@ -126,6 +128,7 @@ export function ActionButton({
       type={type}
       onClick={onClick}
       disabled={disabled}
+      title={title}
       className={`inline-flex h-9 items-center gap-1.5 border px-3 font-mono text-[12px] font-medium uppercase tracking-[0.08em] transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${styles[variant]} ${className}`}
     >
       {children}

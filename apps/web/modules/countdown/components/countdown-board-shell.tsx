@@ -6,6 +6,7 @@ import {
   createCountdownRecord,
   deleteCountdownRecord,
   downloadCountdownTemplate,
+  downloadCountdownWorkbook,
   updateCountdownRecord,
   uploadCountdownWorkbook,
 } from "@/shared/api/countdown";
@@ -21,7 +22,7 @@ import {
   ActionButton, MetricBar, PageHeader,
 } from "@/shared/ui/compact";
 import { CountdownBoardForm, type CountdownFormValues } from "./forms/countdown-board-form";
-import { Download, FileUp, Pencil, Plus, RefreshCcw, Trash2, Upload, X } from "lucide-react";
+import { Download, FileText, FileUp, Pencil, Plus, RefreshCcw, Trash2, Upload, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -230,10 +231,10 @@ function buildCountdownColumns(
       key: "isOverdue", label: "Risk", kind: "text", align: "center",
       renderCell: (_v, row) => (
         <span className={[
-          "inline-flex rounded-full px-2 py-0.5 text-[10px] uppercase tracking-wider",
+          "inline-flex border px-2 py-0.5 text-[10px] font-mono uppercase tracking-[0.1em]",
           row.isOverdue
-            ? "border border-red-500/30 bg-red-500/10 text-red-300"
-            : "border border-emerald-500/20 bg-emerald-500/10 text-emerald-300",
+            ? "border-red-500/30 bg-red-500/[0.06] text-red-400"
+            : "border-emerald-500/20 bg-emerald-500/[0.06] text-emerald-400",
         ].join(" ")}>
           {row.isOverdue ? "Overdue" : "On Track"}
         </span>
@@ -244,17 +245,17 @@ function buildCountdownColumns(
       renderCell: (_v, row) => (
         <div className="flex flex-wrap items-center justify-center gap-1">
           <Link href={`/countdown/${String(row.countdownId ?? "")}`}
-            className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] uppercase tracking-wider text-amber-300 hover:bg-amber-500/20">
+            className="border border-amber-500/30 bg-amber-500/[0.06] px-2 py-0.5 text-[10px] font-mono uppercase tracking-[0.1em] text-amber-400 hover:bg-amber-500/[0.12] transition-colors">
             Detail
           </Link>
           {canManage && (
             <>
               <button type="button" onClick={() => onEdit(toBoardRow(row))}
-                className="inline-flex items-center gap-1 rounded-lg border border-white/[0.07] px-2 py-0.5 text-[10px] uppercase tracking-wider text-white/55 hover:border-amber-500/30 hover:text-amber-300">
+                className="inline-flex items-center gap-1 border border-white/[0.07] px-2 py-0.5 text-[10px] font-mono uppercase tracking-[0.1em] text-white/55 hover:border-amber-500/30 hover:text-amber-400 transition-colors">
                 <Pencil className="h-3 w-3" />Edit
               </button>
               <button type="button" onClick={() => onDelete(toBoardRow(row))}
-                className="inline-flex items-center gap-1 rounded-lg border border-red-500/20 px-2 py-0.5 text-[10px] uppercase tracking-wider text-red-300/80 hover:bg-red-500/10">
+                className="inline-flex items-center gap-1 border border-red-500/20 px-2 py-0.5 text-[10px] font-mono uppercase tracking-[0.1em] text-red-400/80 hover:bg-red-500/[0.06] transition-colors">
                 <Trash2 className="h-3 w-3" />Del
               </button>
             </>
@@ -301,6 +302,16 @@ export function CountdownBoardShell({ rows, references, canManage, meta, state }
   const [initialFormValues, setInitialFormValues] = useState<CountdownFormValues | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const saveInFlightRef = useRef(false);
+
+  const activeUnitFilter = state.filters?.find((f) => f.field === "unitId");
+  const activeDivisionFilter = state.filters?.find((f) => f.field === "divisionId");
+
+  const activeUnitId = activeUnitFilter?.value as string | undefined;
+  const activeDivisionId = activeDivisionFilter?.value as string | undefined;
+
+  // Resolve label untuk display di UI
+  const activeUnitLabel = references.units.find((u) => u.value === activeUnitId)?.label ?? null;
+  const activeDivisionLabel = references.divisions.find((d) => d.value === activeDivisionId)?.label ?? null;
 
   const summary = useMemo(() => ({
     total: rows.length,
@@ -359,10 +370,11 @@ export function CountdownBoardShell({ rows, references, canManage, meta, state }
 
   async function submitImport() {
     if (!selectedFile) { setError("Pilih file Excel terlebih dahulu."); return; }
+    if (!activeUnitId) { setError("Filter unit wajib dipilih sebelum upload."); return; }
     setError(null); setMessage(null); setImportResult(null);
     setIsUploading(true);
     try {
-      const result = await uploadCountdownWorkbook(selectedFile);
+      const result = await uploadCountdownWorkbook(selectedFile, { unitId: activeUnitId });
       if (!result.success) { setError(result.message); return; }
       setImportResult(result.result);
       setMessage(`Import selesai. Inserted ${result.result.inserted}, rejected ${result.result.rejected}.`);
@@ -373,10 +385,38 @@ export function CountdownBoardShell({ rows, references, canManage, meta, state }
   }
 
   async function handleTemplateDownload() {
+    if (!activeUnitId) {
+      setError("Pilih filter unit terlebih dahulu sebelum download template.");
+      return;
+    }
     setError(null); setMessage(null);
-    const result = await downloadCountdownTemplate();
+    const result = await downloadCountdownTemplate({ unitId: activeUnitId });
     if (!result.success) { setError(result.message); return; }
-    setMessage("Template countdown berhasil didownload.");
+    setMessage(`Template countdown untuk unit "${activeUnitLabel}" berhasil didownload.`);
+  }
+
+  async function handleCountdownDownload() {
+    if (!activeUnitId) {
+      setError("Pilih filter unit terlebih dahulu sebelum download countdown.");
+      return;
+    }
+    setError(null); setMessage(null);
+
+    const result = await downloadCountdownWorkbook({
+      unitId: activeUnitId,
+      divisionId: activeDivisionId ?? undefined,
+      // Backend behavior:
+      // - Jika divisionId ada → 1 sheet, sheet name = nama divisi itu
+      // - Jika divisionId tidak ada → multi-sheet, tiap sheet = satu divisi
+      //   (sheet name = divisionName, isi = countdown rows divisi tersebut)
+    });
+
+    if (!result.success) { setError(result.message); return; }
+
+    const sheetDesc = activeDivisionId
+      ? `sheet "${activeDivisionLabel}"`
+      : "semua divisi (multi-sheet)";
+    setMessage(`Download countdown unit "${activeUnitLabel}" — ${sheetDesc} berhasil.`);
   }
 
   async function handleSaveCountdown(data: CountdownFormValues) {
@@ -465,20 +505,75 @@ export function CountdownBoardShell({ rows, references, canManage, meta, state }
                 <ActionButton variant="success" onClick={openCreateCountdown}>
                   <Plus className="h-3 w-3" />Tambah Jobdesc
                 </ActionButton>
-                <ActionButton variant="primary" onClick={() => setUploadOpen(true)}>
+                <ActionButton
+                  variant="primary"
+                  onClick={() => {
+                    if (!activeUnitId) {
+                      setError("Pilih filter unit terlebih dahulu sebelum upload.");
+                      return;
+                    }
+                    setUploadOpen(true);
+                  }}
+                >
                   <FileUp className="h-3 w-3" />Upload Excel
                 </ActionButton>
               </>
             ) : null}
-            <ActionButton onClick={() => void handleTemplateDownload()}>
-              <Download className="h-3 w-3" />Template
+
+            {/* Download Countdown — tombol baru */}
+            <ActionButton
+              onClick={() => void handleCountdownDownload()}
+              disabled={!activeUnitId}
+              title={!activeUnitId ? "Pilih filter unit terlebih dahulu" : `Download countdown ${activeUnitLabel}`}
+            >
+              <Download className="h-3 w-3" />Download
             </ActionButton>
+
+            {/* Download Template */}
+            <ActionButton
+              onClick={() => void handleTemplateDownload()}
+              disabled={!activeUnitId}
+              title={!activeUnitId ? "Pilih filter unit terlebih dahulu" : `Download template untuk ${activeUnitLabel}`}
+            >
+              <FileText className="h-3 w-3" />Template
+            </ActionButton>
+
             <ActionButton onClick={() => router.refresh()}>
               <RefreshCcw className="h-3 w-3" />Refresh
             </ActionButton>
           </>
         }
       />
+
+      {/* ── Active Filter Indicator ── */}
+      {(activeUnitId || activeDivisionId) ? (
+        <div className="flex flex-wrap items-center gap-2 border border-amber-500/15 bg-amber-500/[0.04] px-3 py-2">
+          <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-amber-500/60">
+            Filter aktif:
+          </span>
+          {activeUnitLabel ? (
+            <span className="border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[10px] font-mono text-white/70">
+              Unit: {activeUnitLabel}
+            </span>
+          ) : null}
+          {activeDivisionLabel ? (
+            <span className="border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[10px] font-mono text-white/70">
+              Divisi: {activeDivisionLabel}
+            </span>
+          ) : null}
+          {!activeUnitId ? (
+            <span className="border border-amber-500/20 bg-amber-500/[0.06] px-2 py-0.5 text-[10px] font-mono text-amber-400">
+              ⚠ Pilih unit untuk aktifkan download & upload
+            </span>
+          ) : null}
+        </div>
+      ) : (
+        <div className="flex items-center gap-2 border border-white/[0.04] bg-white/[0.02] px-3 py-2">
+          <span className="text-[10px] font-mono text-white/25">
+            Pilih filter Unit untuk mengaktifkan Download & Upload Excel
+          </span>
+        </div>
+      )}
 
       {/* ── Metrics ── */}
       <MetricBar items={[
@@ -520,23 +615,48 @@ export function CountdownBoardShell({ rows, references, canManage, meta, state }
 
       {canManage && uploadOpen ? (
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 px-4 backdrop-blur-[1px]">
-          <div className="w-full max-w-xl rounded-[14px] border border-white/[0.08] bg-[#080a0d] p-4 shadow-2xl">
+          <div className="w-full max-w-xl border border-white/[0.08] bg-[#080a0d] p-4 shadow-2xl">
+            {/* Header */}
             <div className="mb-4 flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <FileUp className="h-3.5 w-3.5 text-amber-400" />
-                <p className="text-[12px] font-medium text-white">Upload Excel Countdown</p>
+                <p className="text-[12px] font-mono text-white">Upload Excel Countdown</p>
               </div>
               <ActionButton onClick={() => setUploadOpen(false)}><X className="h-3 w-3" />Tutup</ActionButton>
             </div>
-            <input type="file" accept=".xlsx,.xls"
+
+            {/* Unit context — wajib ada */}
+            {activeUnitId ? (
+              <div className="mb-3 border border-amber-500/15 bg-amber-500/[0.04] px-3 py-2">
+                <p className="text-[10px] font-mono text-amber-500/70 uppercase tracking-[0.12em]">Upload untuk unit</p>
+                <p className="mt-0.5 text-[12px] font-mono text-white">{activeUnitLabel}</p>
+                {activeDivisionLabel ? (
+                  <p className="mt-0.5 text-[10px] font-mono text-white/40">Divisi: {activeDivisionLabel}</p>
+                ) : null}
+              </div>
+            ) : (
+              <div className="mb-3 border border-red-500/20 bg-red-500/[0.05] px-3 py-2">
+                <p className="text-[11px] font-mono text-red-400">
+                  ⚠ Filter unit belum dipilih. Tutup modal ini dan pilih filter unit dari grid terlebih dahulu.
+                </p>
+              </div>
+            )}
+
+            {/* File input */}
+            <input
+              type="file"
+              accept=".xlsx,.xls"
+              disabled={!activeUnitId}
               onChange={(e) => setSelectedFile(e.target.files?.[0] ?? null)}
-              className="block w-full rounded-lg border border-white/[0.06] bg-white/[0.03] p-2 text-[11px] text-white/50 file:mr-2 file:rounded-lg file:border-0 file:bg-amber-500/10 file:px-2 file:py-1 file:text-[10px] file:font-semibold file:uppercase file:tracking-wider file:text-amber-300"
+              className="block w-full border border-white/[0.06] bg-white/[0.03] p-2 text-[11px] font-mono text-white/50 disabled:cursor-not-allowed disabled:opacity-40 file:mr-2 file:border-0 file:bg-amber-500/10 file:px-2 file:py-1 file:text-[10px] file:font-mono file:uppercase file:tracking-wider file:text-amber-300"
             />
+
+            {/* Import result */}
             {importResult ? (
-              <div className="mt-3 rounded-lg border border-white/[0.05] bg-white/[0.02] px-2.5 py-2 text-[11px] text-white/60">
+              <div className="mt-3 border border-white/[0.05] bg-white/[0.02] px-2.5 py-2 text-[11px] font-mono text-white/60">
                 <p>Inserted: {importResult.inserted} · Updated: {importResult.updated} · Rejected: {importResult.rejected}</p>
                 {importResult.issues.length > 0 ? (
-                  <div className="mt-1.5 space-y-0.5 text-red-200/80">
+                  <div className="mt-1.5 space-y-0.5 text-red-400/80">
                     {importResult.issues.map((issue) => (
                       <p key={`${issue.rowNumber}-${issue.field}`}>
                         Row {issue.rowNumber} · {issue.field} · {issue.message}
@@ -546,8 +666,13 @@ export function CountdownBoardShell({ rows, references, canManage, meta, state }
                 ) : null}
               </div>
             ) : null}
+
             <div className="mt-4 flex justify-end">
-              <ActionButton variant="primary" disabled={isUploading} onClick={() => void submitImport()}>
+              <ActionButton
+                variant="primary"
+                disabled={isUploading || !activeUnitId || !selectedFile}
+                onClick={() => void submitImport()}
+              >
                 <Upload className="h-3 w-3" />
                 {isUploading ? "Uploading..." : "Upload"}
               </ActionButton>
