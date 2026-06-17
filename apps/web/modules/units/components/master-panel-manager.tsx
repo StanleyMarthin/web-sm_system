@@ -222,6 +222,7 @@ function formForChild(parent: UnitPanelRecord): PanelFormState {
 function buildPayload(form: PanelFormState): Omit<CreateUnitPanelRequest, "parentId"> & UpdateUnitPanelRequest {
   const normalizedForm = normalizeInventoryForm(form);
   return {
+    parentId: form.nodeType === "PART" ? (Number.parseInt(form.parentId, 10) || null) : null,
     section: normalizedForm.section.trim(),
     name: normalizedForm.name.trim(),
     category: normalizedForm.category.trim() || null,
@@ -483,11 +484,7 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
 
     const parsedParentId = Number.parseInt(form.parentId, 10);
     const parentId =
-      mode.type === "edit"
-        ? mode.record.parentId
-        : form.nodeType === "PART"
-          ? (Number.isFinite(parsedParentId) ? parsedParentId : null)
-          : null;
+      form.nodeType === "PART" && Number.isFinite(parsedParentId) ? parsedParentId : null;
 
     const effectiveForm =
       mode.type === "create" && mode.sectionMode === "new"
@@ -524,13 +521,17 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
       return;
     }
 
+    console.log("Submitting updateUnitPanel:", { unitId, panelId: mode.type === "edit" ? mode.record.id : null, payload });
+
     const result =
       mode.type === "edit"
-        ? await updateUnitPanel(unitId, mode.record.id, payload)
+        ? await updateUnitPanel(unitId, mode.record.id, { ...payload, parentId })
         : await createUnitPanel(unitId, {
-            parentId,
             ...payload,
+            parentId,
           });
+
+    console.log("Update result:", result);
 
     if (!result.success) {
       setError(result.message);

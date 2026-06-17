@@ -1,5 +1,6 @@
 import type { AuthScope } from "@smsystem/contracts/auth";
 import type {
+  CreateMonitoringActualRequest,
   MonitoringDivisionDetailSummary,
   MonitoringDivisionLoadRecord,
   MonitoringDivisionMemberRecord,
@@ -8,6 +9,8 @@ import type {
   MonitoringSummary,
   MonitoringTaskRecord,
 } from "@smsystem/contracts/monitoring";
+import { randomUUID } from "node:crypto";
+import { isNonTechnicalDivisionReference } from "@smsystem/contracts/division";
 import type { Pool, RowDataPacket } from "mysql2/promise";
 import { getMySqlPool } from "@/db/mysql";
 
@@ -135,6 +138,16 @@ interface DivisionNameRow extends RowDataPacket {
 interface OptionRow extends RowDataPacket {
   value: string | number;
   label: string;
+  code?: string | null;
+  isTeknis?: number | boolean | null;
+  divisionId?: number | null;
+}
+
+interface DivisionTechnicalRow extends RowDataPacket {
+  value: string;
+  label: string | null;
+  code: string | null;
+  isTeknis: number | boolean | null;
 }
 
 export interface MonitoringRepository {
@@ -149,9 +162,9 @@ export interface MonitoringRepository {
     members: MonitoringDivisionMemberRecord[];
   }>;
   listReferences(params: ScopeParams): Promise<{
-    divisions: Array<{ label: string; value: string }>;
+    divisions: Array<{ label: string; value: string; code?: string | null; isTeknis?: boolean | null; isTechnical?: boolean | null }>;
     units: Array<{ label: string; value: string }>;
-    employees: Array<{ label: string; value: string }>;
+    employees: Array<{ label: string; value: string; divisionId?: number | null }>;
   }>;
   listEmployeeTimesheet(params: ScopeParams & { date: string; dateTo: string }): Promise<Array<{
     employeeId: string | null;
@@ -161,6 +174,10 @@ export interface MonitoringRepository {
     isOvertime: boolean;
     totalActualHours: number;
   }>>;
+  createActual(params: ScopeParams & { actorId: string }, input: CreateMonitoringActualRequest): Promise<{
+    planId: string;
+    actualId: string;
+  }>;
 }
 
 function buildScopeWhereClause(
@@ -177,6 +194,8 @@ function buildScopeWhereClause(
   }
 
   const clauses: string[] = [];
+  clauses.push("p.assigned_user_id = ?");
+  params.push(employeeId);
 
   if (scope.canViewAssignedUnits) {
     clauses.push(
@@ -229,8 +248,8 @@ function buildMonitoringBaseSql(): string {
     SELECT
       p.id AS planId,
       p.core_id AS coreId,
-      c.id AS carId,
-      c.unit_name AS unitName,
+      COALESCE(c.id, cd.id) AS carId,
+      COALESCE(c.unit_name, NULLIF(cd.section_name, ''), p.jobdescription, cd.id) AS unitName,
       c.customer_name AS customerName,
       cd.division_id AS divisionId,
       d.name AS divisionName,
@@ -264,7 +283,13 @@ function buildMonitoringBaseSql(): string {
       ${executionStatusSql()} AS executionStatus,
       cd.status AS countdownStatus,
       ROUND(COALESCE(actual.progres, cd.actual_progress_percent, 0), 2) AS progressPercent,
-      ROUND(COALESCE(cd.total_actual_hours, 0), 2) AS totalActualHours,
+      ROUND(
+        CASE
+          WHEN cd.car_id IS NULL THEN COALESCE(actual.durationHours, 0)
+          ELSE COALESCE(cd.total_actual_hours, 0)
+        END,
+        2
+      ) AS totalActualHours,
       ROUND(COALESCE(cd.remaining_hours, 0), 2) AS remainingHours,
       DATE_FORMAT(actual.startTime, '%Y-%m-%d %H:%i:%s') AS latestStartTime,
       DATE_FORMAT(actual.finishTime, '%Y-%m-%d %H:%i:%s') AS latestFinishTime,
@@ -288,7 +313,7 @@ function buildMonitoringBaseSql(): string {
       END AS hasDelayRisk
     FROM sm_jobdesc_plan p
     JOIN sm_jobdesc_countdown cd ON cd.id = p.core_id
-    JOIN cars c ON c.id = cd.car_id
+    LEFT JOIN cars c ON c.id = cd.car_id
     LEFT JOIN sm_divisi d ON d.id = cd.division_id
     LEFT JOIN master_panels mp ON mp.id = cd.panel_id
     LEFT JOIN master_job_types mjt ON mjt.id = cd.job_type_id
@@ -410,7 +435,7 @@ function buildFilterClauses(
     const value = `%${query.search}%`;
     clauses.push(
       `(
-        c.unit_name LIKE ?
+        COALESCE(c.unit_name, cd.section_name, p.jobdescription, '') LIKE ?
         OR COALESCE(c.customer_name, '') LIKE ?
         OR COALESCE(d.name, '') LIKE ?
         OR COALESCE(e.full_name, '') LIKE ?
@@ -429,7 +454,7 @@ function buildFilterClauses(
     }
 
     if (filter.field === "carId") {
-      clauses.push("c.id = ?");
+      clauses.push("COALESCE(c.id, cd.id) = ?");
       params.push(filter.value);
       continue;
     }
@@ -459,7 +484,7 @@ function buildFilterClauses(
 function buildOrderBy(sortBy: string, direction: "asc" | "desc"): string {
   const columnMap: Record<string, string> = {
     taskDate: "p.task_date",
-    unitName: "c.unit_name",
+    unitName: "COALESCE(c.unit_name, cd.section_name, p.jobdescription)",
     divisionName: "d.name",
     employeeName: "e.full_name",
     progressPercent: "progressPercent",
@@ -469,7 +494,7 @@ function buildOrderBy(sortBy: string, direction: "asc" | "desc"): string {
   };
 
   const column = columnMap[sortBy] ?? "p.task_date";
-  return `${column} ${direction.toUpperCase()}, c.unit_name ASC, p.id ASC`;
+  return `${column} ${direction.toUpperCase()}, COALESCE(c.unit_name, cd.section_name, p.jobdescription) ASC, p.id ASC`;
 }
 
 function mapTaskRow(row: MonitoringTaskRow): MonitoringTaskRecord {
@@ -535,6 +560,126 @@ function toOptionRows(rows: OptionRow[]): Array<{ label: string; value: string }
   }));
 }
 
+function toBoolean(value: unknown): boolean {
+  return value === true || value === 1 || value === "1";
+}
+
+function combineDateTime(date: string, time: string): Date {
+  return new Date(`${date}T${time}:00+07:00`);
+}
+
+function calculateActualHours(date: string, startTime: string, finishTime: string, breakMinutes: number): number {
+  const start = combineDateTime(date, startTime).getTime();
+  let finish = combineDateTime(date, finishTime).getTime();
+  if (finish < start) {
+    finish += 86_400_000;
+  }
+
+  const minutes = Math.max(0, (finish - start) / 60_000 - breakMinutes);
+  return Number((minutes / 60).toFixed(2));
+}
+
+function mapActualStatus(status: CreateMonitoringActualRequest["taskStatus"]): "pending" | "onprogress" | "done" | "cancel" {
+  if (status === "DONE" || status === "READY_QC") {
+    return "done";
+  }
+
+  if (status === "CANCEL") {
+    return "cancel";
+  }
+
+  if (status === "PENDING") {
+    return "pending";
+  }
+
+  return "onprogress";
+}
+
+async function getDivisionTechnicalReference(
+  connection: Pick<Pool, "query">,
+  divisionId: number,
+): Promise<DivisionTechnicalRow | null> {
+  const [rows] = (await connection.query(
+    `
+      SELECT
+        CAST(id AS CHAR) AS value,
+        name AS label,
+        code,
+        isteknis AS isTeknis
+      FROM sm_divisi
+      WHERE id = ?
+      LIMIT 1
+    `,
+    [divisionId],
+  )) as [DivisionTechnicalRow[], unknown];
+
+  return rows[0] ?? null;
+}
+
+async function createManualCountdown(
+  connection: Pick<Pool, "execute" | "query">,
+  params: { actorId: string },
+  input: CreateMonitoringActualRequest,
+): Promise<string> {
+  const division = await getDivisionTechnicalReference(connection, input.divisionId);
+  if (!isNonTechnicalDivisionReference(division)) {
+    throw new Error("MANUAL_TECHNICAL_ACTUAL_REQUIRES_PLAN");
+  }
+
+  const coreId = randomUUID();
+  const now = new Date();
+  await connection.execute(
+    `
+      INSERT INTO sm_jobdesc_countdown (
+        id,
+        car_id,
+        division_id,
+        task_category,
+        ref_taks_id,
+        prerequisite_core_id,
+        panel_id,
+        section_name,
+        job_type_id,
+        target_hours_initial,
+        time_extension_hours,
+        target_hours_revised,
+        total_actual_hours,
+        remaining_hours,
+        actual_progress_percent,
+        status,
+        qc_last_status,
+        created_at,
+        start_date,
+        deadline_date,
+        latest_qc_id,
+        ref_rework_qc_id,
+        count_revisi,
+        updated_at,
+        user_update,
+        extension_request_status,
+        requested_extension_hours,
+        requested_deadline,
+        revision_reason,
+        last_qc_level
+      ) VALUES (?, ?, ?, 'ADDITIONAL', NULL, NULL, NULL, ?, NULL, 0, 0, 0, 0, 0, 0, 'PLAN', NULL, ?, ?, ?, NULL, NULL, 0, ?, ?, NULL, 0, NULL, ?, NULL)
+    `,
+    [
+      coreId,
+      input.carId || null,
+      input.divisionId,
+      input.jobDescription,
+      now,
+      input.date,
+      input.date,
+      now,
+      params.actorId,
+      input.resultNote ?? null,
+    ],
+  );
+
+  return coreId;
+}
+
 function buildDivisionMonitoringWhere(
   params: ScopeParams & {
     divisionId?: number;
@@ -585,6 +730,149 @@ export class MySqlMonitoringRepository implements MonitoringRepository {
   constructor(
     private readonly poolFactory: () => Pool = getMySqlPool,
   ) {}
+
+  async createActual(
+    params: ScopeParams & { actorId: string },
+    input: CreateMonitoringActualRequest,
+  ): Promise<{ planId: string; actualId: string }> {
+    const pool = this.poolFactory();
+    const connection = await pool.getConnection();
+    const actualHours = calculateActualHours(
+      input.date,
+      input.startTime,
+      input.finishTime,
+      input.breakMinutes,
+    );
+    const planStatus = input.taskStatus === "DONE"
+      ? "DONE"
+      : input.taskStatus === "READY_QC"
+        ? "READY_QC"
+        : input.taskStatus === "CANCEL"
+          ? "CANCEL"
+          : input.taskStatus === "PENDING"
+            ? "ONPROGRESS"
+            : "ONPROGRESS";
+
+    try {
+      await connection.beginTransaction();
+
+      let planId = input.planId?.trim() || "";
+      if (!planId) {
+        const coreId = await createManualCountdown(connection, params, input);
+        planId = `PLAN-${randomUUID().replace(/-/gu, "").slice(0, 20).toUpperCase()}`;
+        await connection.execute(
+          `
+            INSERT INTO sm_jobdesc_plan (
+              id,
+              core_id,
+              task_date,
+              jobdescription,
+              assigned_user_id,
+              target_start_hours,
+              target_finish_hours,
+              dailyTargetHours,
+              is_overtime,
+              is_rework,
+              isPriority,
+              status,
+              acc_tracking,
+              note
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, SEC_TO_TIME(? * 3600), ?, 0, 0, 'PLAN', 0, ?)
+          `,
+          [
+            planId,
+            coreId,
+            input.date,
+            input.jobDescription,
+            input.employeeId,
+            input.startTime,
+            input.finishTime,
+            Math.max(actualHours, 0.01),
+            input.isOvertime ? 1 : 0,
+            input.resultNote ?? null,
+          ],
+        );
+      } else {
+        await connection.execute(
+          `
+            UPDATE sm_jobdesc_plan
+            SET status = ?,
+                jobdescription = COALESCE(NULLIF(?, ''), jobdescription),
+                target_start_hours = COALESCE(?, target_start_hours),
+                target_finish_hours = COALESCE(?, target_finish_hours),
+                is_overtime = ?,
+                note = COALESCE(?, note)
+            WHERE id = ?
+          `,
+          [
+            planStatus,
+            input.jobDescription,
+            input.startTime,
+            input.finishTime,
+            input.isOvertime ? 1 : 0,
+            input.resultNote ?? null,
+            planId,
+          ],
+        );
+      }
+
+      const actualId = randomUUID();
+      await connection.execute(
+        `
+          INSERT INTO sm_jobdesc_actual (
+            id,
+            plandaily_id,
+            start_time,
+            finish_time,
+            break_duration_minutes,
+            billed_duration_hours,
+            duration_hours,
+            is_overtime,
+            is_verify,
+            verified_by,
+            daily_notes,
+            status,
+            progres,
+            submitted_to_ledger,
+            submitted_at,
+            submitted_by
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, ?, ?, ?, 0, ?, ?)
+        `,
+        [
+          actualId,
+          planId,
+          `${input.date} ${input.startTime}:00`,
+          `${input.date} ${input.finishTime}:00`,
+          input.breakMinutes,
+          actualHours,
+          actualHours,
+          input.isOvertime ? 1 : 0,
+          input.resultNote || input.jobDescription,
+          mapActualStatus(input.taskStatus),
+          Math.round(input.progressPercent),
+          input.taskStatus === "PENDING" ? new Date() : null,
+          params.actorId,
+        ],
+      );
+
+      await connection.execute(
+        `
+          UPDATE sm_jobdesc_plan
+          SET status = ?
+          WHERE id = ?
+        `,
+        [planStatus, planId],
+      );
+
+      await connection.commit();
+      return { planId, actualId };
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
 
   async listTasks(params: MonitoringListParams): Promise<MonitoringListPayload> {
     const pool = this.poolFactory();
@@ -644,7 +932,7 @@ export class MySqlMonitoringRepository implements MonitoringRepository {
         ) monitoring_base
         JOIN sm_jobdesc_plan p ON p.id = monitoring_base.planId
         JOIN sm_jobdesc_countdown cd ON cd.id = monitoring_base.coreId
-        JOIN cars c ON c.id = monitoring_base.carId
+        LEFT JOIN cars c ON c.id = cd.car_id
         LEFT JOIN (
           SELECT
             a.plandaily_id,
@@ -1068,28 +1356,51 @@ export class MySqlMonitoringRepository implements MonitoringRepository {
     const pool = this.poolFactory();
     const divisionParams: unknown[] = [];
     const divisionWhereClauses: string[] = [];
-    const divisionScopeWhere = buildScopeWhereClause(
-      params.scope,
-      params.employeeId,
-      divisionParams,
-      {
-        carId: "c.id",
-        divisionId: "cd.division_id",
-      },
-    );
-    if (divisionScopeWhere) {
-      divisionWhereClauses.push(divisionScopeWhere);
+    if (!params.scope.canViewAllUnits) {
+      if (params.scope.divisionIds.length > 0) {
+        divisionWhereClauses.push(`d.id IN (${params.scope.divisionIds.map(() => "?").join(", ")})`);
+        divisionParams.push(...params.scope.divisionIds);
+      } else {
+        divisionWhereClauses.push("d.id = (SELECT e_scope.division_id FROM sm_employee e_scope WHERE e_scope.employee_id = ? LIMIT 1)");
+        divisionParams.push(params.employeeId);
+      }
+    }
+
+    const unitParams: unknown[] = [];
+    const unitWhereClauses: string[] = [];
+    if (!params.scope.canViewAllUnits) {
+      if (params.scope.unitIds.length > 0) {
+        unitWhereClauses.push(`c.id IN (${params.scope.unitIds.map(() => "?").join(", ")})`);
+        unitParams.push(...params.scope.unitIds);
+      }
+
+      if (params.scope.canViewAssignedUnits) {
+        unitWhereClauses.push(
+          `EXISTS (
+            SELECT 1
+            FROM car_project_assignment cpa_unit
+            WHERE cpa_unit.car_id = c.id
+              AND cpa_unit.ended_at IS NULL
+              AND (
+                cpa_unit.kp_id = ?
+                OR cpa_unit.advisor_id = ?
+                OR cpa_unit.kd_id = ?
+              )
+          )`,
+        );
+        unitParams.push(params.employeeId, params.employeeId, params.employeeId);
+      }
     }
 
     const [divisionRows, unitRows, employeeRows] = await Promise.all([
       pool.query(
         `
           SELECT DISTINCT
-            cd.division_id AS value,
-            d.name AS label
-          FROM sm_jobdesc_countdown cd
-          JOIN cars c ON c.id = cd.car_id
-          LEFT JOIN sm_divisi d ON d.id = cd.division_id
+            d.id AS value,
+            d.name AS label,
+            d.code AS code,
+            d.isteknis AS isTeknis
+          FROM sm_divisi d
           ${divisionWhereClauses.length > 0 ? `WHERE ${divisionWhereClauses.join(" AND ")}` : ""}
           ORDER BY d.name ASC
         `,
@@ -1101,28 +1412,50 @@ export class MySqlMonitoringRepository implements MonitoringRepository {
             c.id AS value,
             c.unit_name AS label
           FROM cars c
-          JOIN sm_jobdesc_countdown cd ON cd.car_id = c.id
-          ${divisionWhereClauses.length > 0 ? `WHERE ${divisionWhereClauses.join(" AND ")}` : ""}
+          ${
+            params.scope.canViewAllUnits
+              ? ""
+              : unitWhereClauses.length > 0
+                ? `WHERE ${unitWhereClauses.join(" OR ")}`
+                : "WHERE 1 = 0"
+          }
           ORDER BY c.unit_name ASC
         `,
-        divisionParams,
+        unitParams,
       ) as Promise<[OptionRow[], unknown]>,
       pool.query(
         `
           SELECT DISTINCT
             e.employee_id AS value,
-            e.full_name AS label
+            e.full_name AS label,
+            e.division_id AS divisionId
           FROM sm_employee e
-          JOIN sm_jobdesc_plan p ON p.assigned_user_id = e.employee_id
+          WHERE e.is_active = 1
           ORDER BY e.full_name ASC
         `,
       ) as Promise<[OptionRow[], unknown]>,
     ]);
 
     return {
-      divisions: toOptionRows(divisionRows[0]),
+      divisions: divisionRows[0].map((row) => ({
+        label: row.label,
+        value: String(row.value),
+        code: row.code ?? null,
+        isTeknis:
+          row.isTeknis === null || row.isTeknis === undefined
+            ? null
+            : toBoolean(row.isTeknis),
+        isTechnical:
+          row.isTeknis === null || row.isTeknis === undefined
+            ? null
+            : toBoolean(row.isTeknis),
+      })),
       units: toOptionRows(unitRows[0]),
-      employees: toOptionRows(employeeRows[0]),
+      employees: employeeRows[0].map((row) => ({
+        label: row.label,
+        value: String(row.value),
+        divisionId: row.divisionId ?? null,
+      })),
     };
   }
 
@@ -1150,13 +1483,13 @@ export class MySqlMonitoringRepository implements MonitoringRepository {
         SELECT
           p.assigned_user_id AS employeeId,
           e.full_name AS employeeName,
-          c.id AS carId,
-          c.unit_name AS unitName,
+          COALESCE(c.id, cd.id) AS carId,
+          COALESCE(c.unit_name, NULLIF(cd.section_name, ''), p.jobdescription, cd.id) AS unitName,
           COALESCE(p.is_overtime, 0) AS isOvertime,
           ROUND(SUM(COALESCE(actual.durationHours, 0)), 2) AS totalActualHours
         FROM sm_jobdesc_plan p
         JOIN sm_jobdesc_countdown cd ON cd.id = p.core_id
-        JOIN cars c ON c.id = cd.car_id
+        LEFT JOIN cars c ON c.id = cd.car_id
         LEFT JOIN sm_employee e ON e.employee_id = p.assigned_user_id
         LEFT JOIN (
           SELECT
@@ -1174,7 +1507,7 @@ export class MySqlMonitoringRepository implements MonitoringRepository {
            AND latest.latestCreatedAt = a.created_at
         ) actual ON actual.plandaily_id = p.id
         WHERE ${whereClauses.join(" AND ")}
-        GROUP BY p.assigned_user_id, e.full_name, c.id, c.unit_name, COALESCE(p.is_overtime, 0)
+        GROUP BY p.assigned_user_id, e.full_name, COALESCE(c.id, cd.id), COALESCE(c.unit_name, cd.section_name, p.jobdescription, cd.id), COALESCE(p.is_overtime, 0)
         ORDER BY e.full_name ASC
       `,
       queryParams,
@@ -1205,8 +1538,8 @@ export class MySqlMonitoringRepository implements MonitoringRepository {
     const [unitRows] = (await pool.query(
       `
         SELECT
-          c.id AS carId,
-          c.unit_name AS unitName,
+          COALESCE(c.id, cd.id) AS carId,
+          COALESCE(c.unit_name, NULLIF(cd.section_name, ''), p.jobdescription, cd.id) AS unitName,
           c.customer_name AS customerName,
           COUNT(*) AS totalTasks,
           ROUND(SUM(COALESCE(TIME_TO_SEC(p.dailyTargetHours) / 3600, 0)), 2) AS totalPlannedHours,
@@ -1214,7 +1547,7 @@ export class MySqlMonitoringRepository implements MonitoringRepository {
           ROUND(AVG(COALESCE(actual.progres, cd.actual_progress_percent, 0)), 2) AS averageProgressPercent
         FROM sm_jobdesc_plan p
         JOIN sm_jobdesc_countdown cd ON cd.id = p.core_id
-        JOIN cars c ON c.id = cd.car_id
+        LEFT JOIN cars c ON c.id = cd.car_id
         LEFT JOIN (
           SELECT
             a.plandaily_id,
@@ -1226,7 +1559,7 @@ export class MySqlMonitoringRepository implements MonitoringRepository {
           ) latest ON latest.plandaily_id = a.plandaily_id AND latest.latestCreatedAt = a.created_at
         ) actual ON actual.plandaily_id = p.id
         WHERE ${whereClauses.join(" AND ")}
-        GROUP BY c.id, c.unit_name, c.customer_name
+        GROUP BY COALESCE(c.id, cd.id), COALESCE(c.unit_name, cd.section_name, p.jobdescription, cd.id), c.customer_name
       `,
       unitParams,
     )) as [any[], unknown];
@@ -1235,7 +1568,7 @@ export class MySqlMonitoringRepository implements MonitoringRepository {
     const [empRows] = (await pool.query(
       `
         SELECT
-          c.id AS carId,
+          COALESCE(c.id, cd.id) AS carId,
           p.assigned_user_id AS employeeId,
           e.full_name AS employeeName,
           d.name AS divisionName,
@@ -1244,7 +1577,7 @@ export class MySqlMonitoringRepository implements MonitoringRepository {
           ROUND(SUM(COALESCE(actual.durationHours, 0)), 2) AS totalActualHours
         FROM sm_jobdesc_plan p
         JOIN sm_jobdesc_countdown cd ON cd.id = p.core_id
-        JOIN cars c ON c.id = cd.car_id
+        LEFT JOIN cars c ON c.id = cd.car_id
         LEFT JOIN sm_employee e ON e.employee_id = p.assigned_user_id
         LEFT JOIN sm_divisi d ON d.id = cd.division_id
         LEFT JOIN (
@@ -1258,7 +1591,7 @@ export class MySqlMonitoringRepository implements MonitoringRepository {
           ) latest ON latest.plandaily_id = a.plandaily_id AND latest.latestCreatedAt = a.created_at
         ) actual ON actual.plandaily_id = p.id
         WHERE ${whereClauses.join(" AND ")}
-        GROUP BY c.id, p.assigned_user_id, e.full_name, d.name, p.task_date, COALESCE(p.is_overtime, 0)
+        GROUP BY COALESCE(c.id, cd.id), p.assigned_user_id, e.full_name, d.name, p.task_date, COALESCE(p.is_overtime, 0)
       `,
       empParams,
     )) as [any[], unknown];

@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
 import dynamic from "next/dynamic";
 import { notFound, redirect } from "next/navigation";
-import { fetchMonitoringUnit } from "@/shared/api/monitoring";
+import { fetchMonitoringToday, fetchMonitoringUnit } from "@/shared/api/monitoring";
 import { ModuleUnavailableState } from "@/shared/ui/module-unavailable-state";
 import { PageDataSkeleton } from "@/shared/ui/page-data-skeleton";
 
@@ -24,10 +24,13 @@ async function MonitoringEmployeePageContent({ searchParams }: MonitoringEmploye
   const requestHeaders = await headers();
   const cookieHeader = requestHeaders.get("cookie") ?? "";
 
-  const { payload, status } = await fetchMonitoringUnit(
-    cookieHeader,
-    resolvedSearchParams,
-  );
+  const [{ payload, status }, todayResult] = await Promise.all([
+    fetchMonitoringUnit(cookieHeader, resolvedSearchParams),
+    fetchMonitoringToday(cookieHeader, {
+      ...resolvedSearchParams,
+      limit: "200",
+    }),
+  ]);
 
   if (status === 401) {
     redirect("/login");
@@ -53,6 +56,8 @@ async function MonitoringEmployeePageContent({ searchParams }: MonitoringEmploye
       dateTo={payload.dateTo ?? ""}
       activeSpan={payload.span ?? "daily"}
       rows={payload.data}
+      references={todayResult.payload?.references ?? { divisions: [], units: [], employees: [] }}
+      plans={todayResult.payload?.data ?? []}
     />
   );
 }

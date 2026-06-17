@@ -1,5 +1,6 @@
 import type { GridQueryState } from "@smsystem/contracts/grid";
 import type {
+  CreateMonitoringActualRequest,
   MonitoringDivisionDetailSummary,
   MonitoringDivisionLoadRecord,
   MonitoringDivisionMemberRecord,
@@ -94,6 +95,10 @@ export interface MonitoringService {
     totalActualHours: number;
   }>>;
   listReferences(session: WebSession): Promise<MonitoringReferences>;
+  createActual(session: WebSession, input: CreateMonitoringActualRequest): Promise<{
+    planId: string;
+    actualId: string;
+  }>;
 }
 
 const MONITORING_REFERENCE_CACHE_TTL_MS = 60_000;
@@ -265,6 +270,19 @@ export class DefaultMonitoringService implements MonitoringService {
         scope: session.user.scope,
       }),
     );
+  }
+
+  async createActual(session: WebSession, input: CreateMonitoringActualRequest) {
+    const result = await this.repository.createActual(
+      {
+        employeeId: session.user.employeeId,
+        scope: session.user.scope,
+        actorId: session.user.employeeId,
+      },
+      input,
+    );
+    monitoringReferenceCache.delete(monitoringScopeCacheKey(session));
+    return result;
   }
 
   private async listByMode(

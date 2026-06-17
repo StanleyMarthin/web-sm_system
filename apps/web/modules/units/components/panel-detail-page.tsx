@@ -13,6 +13,7 @@ import {
   ArrowLeft,
   Camera,
   CheckCircle2,
+  ChevronDown,
   ClipboardList,
   Download,
   Eye,
@@ -409,6 +410,86 @@ function mergeGalleryPhotos(slots: PhotoSlot[], photos: GalleryPhotoRecord[]): P
       photos: slotPhotos,
     };
   });
+}
+
+function JobTypeCombobox({
+  options,
+  selectedValue,
+  searchValue,
+  onSearchChange,
+  onSelect,
+}: {
+  options: WorkflowDivisionOption[];
+  selectedValue: string;
+  searchValue: string;
+  onSearchChange: (value: string) => void;
+  onSelect: (value: string) => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const selectedOption = options.find((option) => option.value === selectedValue) ?? null;
+  const inputValue = searchValue || selectedOption?.label || "";
+  const normalizedSearch = normalizeTextToken(searchValue);
+  const filteredOptions = normalizedSearch
+    ? options.filter((option) => normalizeTextToken(option.label).includes(normalizedSearch))
+    : options;
+
+  return (
+    <div className="relative">
+      <div className="flex h-10 items-center border border-white/10 bg-black transition-colors focus-within:border-amber-500/45">
+        <input
+          value={inputValue}
+          onFocus={() => setIsOpen(true)}
+          onBlur={() => window.setTimeout(() => setIsOpen(false), 120)}
+          onChange={(event) => {
+            const nextValue = event.target.value;
+            onSearchChange(nextValue);
+            if (selectedValue && nextValue !== selectedOption?.label) {
+              onSelect("");
+            }
+            setIsOpen(true);
+          }}
+          placeholder="Cari atau pilih jobdesc"
+          className="h-full min-w-0 flex-1 bg-transparent px-3 text-[13px] text-white outline-none placeholder:text-white/25"
+        />
+        <button
+          type="button"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => setIsOpen((current) => !current)}
+          className="flex h-full w-9 shrink-0 items-center justify-center text-white/30 transition-colors hover:text-white/65"
+          aria-label="Buka pilihan jobdesc"
+        >
+          <ChevronDown className="h-3.5 w-3.5" />
+        </button>
+      </div>
+
+      {isOpen ? (
+        <div className="absolute left-0 right-0 top-[calc(100%+4px)] z-[90] max-h-56 overflow-auto border border-white/10 bg-[#0d0d10] py-1 shadow-2xl shadow-black/50">
+          {filteredOptions.length > 0 ? (
+            filteredOptions.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  onSelect(option.value);
+                  onSearchChange("");
+                  setIsOpen(false);
+                }}
+                className={[
+                  "w-full px-3 py-2 text-left text-[12px] transition-colors hover:bg-amber-500/[0.08] hover:text-amber-300",
+                  selectedValue === option.value ? "text-amber-300" : "text-white/70",
+                ].join(" ")}
+              >
+                {option.label}
+              </button>
+            ))
+          ) : (
+            <div className="px-3 py-2 text-[11px] text-white/30">Tidak ada hasil</div>
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 type WorkflowNodeType = "handover" | "job" | "doc" | "wov";
@@ -1416,6 +1497,8 @@ function WorkflowBuilder({
     jobTypes: [],
   });
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isCreateMinimized, setIsCreateMinimized] = useState(false);
+  const [jobTypeSearch, setJobTypeSearch] = useState("");
   const defaultCreateType = allowedCreateTypes[0] ?? "COUNTDOWN";
   const [createForm, setCreateForm] = useState<WorkflowCreateFormState>(() => createWorkflowForm(node, defaultCreateType));
   const [createError, setCreateError] = useState<string | null>(null);
@@ -2136,6 +2219,8 @@ function WorkflowBuilder({
         idSuffix,
       });
       setIsCreateOpen(false);
+      setIsCreateMinimized(false);
+      setJobTypeSearch("");
       setCreateForm(createWorkflowForm(node));
     } catch (error) {
       setCreateError(error instanceof Error ? error.message : "Sumber job belum bisa dibuat.");
@@ -2287,6 +2372,8 @@ function WorkflowBuilder({
     PR: "PR",
     WOV: "WOV",
   };
+  const countdownJobTypeOptions = visibleCountdownJobTypes();
+  const showJobTypeSearch = countdownJobTypeOptions.length > 3;
 
   return (
     <>
@@ -2307,6 +2394,8 @@ function WorkflowBuilder({
               onClick={() => {
                 setCreateForm(createWorkflowForm(node, defaultCreateType));
                 setCreateError(null);
+                setJobTypeSearch("");
+                setIsCreateMinimized(false);
                 setIsCreateOpen(true);
               }}
               className="flex h-7 w-7 items-center justify-center border border-amber-500/30 bg-amber-500/[0.06] text-amber-400 transition-colors hover:border-amber-500/60 hover:bg-amber-500/[0.12]"
@@ -2730,7 +2819,33 @@ function WorkflowBuilder({
         </div>
       </div>
     </div>
-    {isCreateOpen ? (
+    {isCreateOpen && isCreateMinimized ? (
+      <div className="fixed bottom-4 right-4 z-[80] w-[min(360px,calc(100vw-32px))] border border-white/10 bg-[#0d0d10] shadow-2xl">
+        <div className="flex items-center gap-3 px-3 py-2">
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[10px] font-mono uppercase tracking-[0.12em] text-amber-500">Tambah Sumber Job</p>
+            <p className="truncate text-[12px] text-white/55">{createForm.title || node.label}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsCreateMinimized(false)}
+            className="border border-white/10 px-3 py-1.5 text-[10px] font-mono uppercase tracking-[0.1em] text-white/55 hover:text-white"
+          >
+            Buka
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setIsCreateOpen(false);
+              setIsCreateMinimized(false);
+            }}
+            className="flex h-7 w-7 items-center justify-center border border-white/10 text-white/35 hover:text-white"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+    ) : isCreateOpen ? (
       <div className="fixed inset-0 z-[80] flex items-start justify-center overflow-y-auto bg-black/75 px-3 py-6 backdrop-blur-[2px]">
         <div className="flex max-h-[calc(100vh-48px)] w-full max-w-3xl flex-col overflow-hidden border border-white/10 bg-[#0d0d10] shadow-2xl">
           <div className="flex shrink-0 items-center justify-between border-b border-white/10 bg-[#111114] px-4 py-3">
@@ -2738,13 +2853,26 @@ function WorkflowBuilder({
               <p className="text-[11px] font-mono uppercase tracking-[0.12em] text-amber-500">Tambah Sumber Job</p>
               <p className="mt-1 text-[13px] text-white/70">{node.label}</p>
             </div>
-            <button
-              type="button"
-              onClick={() => setIsCreateOpen(false)}
-              className="flex h-8 w-8 items-center justify-center border border-white/10 text-white/45 hover:text-white"
-            >
-              <X className="h-4 w-4" />
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setIsCreateMinimized(true)}
+                className="flex h-8 w-8 items-center justify-center border border-white/10 text-white/45 hover:text-white"
+                title="Minimize"
+              >
+                <span className="mb-1 text-lg leading-none">-</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsCreateOpen(false);
+                  setIsCreateMinimized(false);
+                }}
+                className="flex h-8 w-8 items-center justify-center border border-white/10 text-white/45 hover:text-white"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
           </div>
 
           <div className="grid flex-1 gap-3 overflow-y-auto px-4 py-4 sm:grid-cols-2">
@@ -2755,7 +2883,10 @@ function WorkflowBuilder({
                   <button
                     key={type}
                     type="button"
-                    onClick={() => setCreateForm((current) => ({ ...current, type }))}
+                    onClick={() => {
+                      setCreateForm((current) => ({ ...current, type }));
+                      setJobTypeSearch("");
+                    }}
                     className={[
                       "h-9 text-[10px] font-mono uppercase tracking-[0.1em] transition-colors",
                       createForm.type === type
@@ -2772,7 +2903,10 @@ function WorkflowBuilder({
               <span className="block text-[11px] font-mono uppercase tracking-[0.12em] text-white/35">Divisi</span>
               <select
                 value={createForm.divisionId}
-                onChange={(event) => setCreateForm((current) => ({ ...current, divisionId: event.target.value }))}
+                onChange={(event) => {
+                  setCreateForm((current) => ({ ...current, divisionId: event.target.value, jobTypeId: "" }));
+                  setJobTypeSearch("");
+                }}
                 disabled={createForm.type === "WOV"}
                 className="h-10 w-full border border-white/10 bg-black px-3 text-[13px] text-white outline-none focus:border-amber-500/45 disabled:cursor-not-allowed disabled:opacity-45"
               >
@@ -2837,16 +2971,26 @@ function WorkflowBuilder({
                 </label>
                 <label className="space-y-1.5 sm:col-span-2">
                   <span className="block text-[11px] font-mono uppercase tracking-[0.12em] text-white/35">Jobdesc</span>
-                  <select
-                    value={createForm.jobTypeId}
-                    onChange={(event) => setCreateForm((current) => ({ ...current, jobTypeId: event.target.value }))}
-                    className="h-10 w-full border border-white/10 bg-black px-3 text-[13px] text-white outline-none focus:border-amber-500/45"
-                  >
-                    <option value="">Pilih jobdesc</option>
-                    {visibleCountdownJobTypes().map((jobType) => (
-                      <option key={jobType.value} value={jobType.value}>{jobType.label}</option>
-                    ))}
-                  </select>
+                  {showJobTypeSearch ? (
+                    <JobTypeCombobox
+                      options={countdownJobTypeOptions}
+                      selectedValue={createForm.jobTypeId}
+                      searchValue={jobTypeSearch}
+                      onSearchChange={setJobTypeSearch}
+                      onSelect={(jobTypeId) => setCreateForm((current) => ({ ...current, jobTypeId }))}
+                    />
+                  ) : (
+                    <select
+                      value={createForm.jobTypeId}
+                      onChange={(event) => setCreateForm((current) => ({ ...current, jobTypeId: event.target.value }))}
+                      className="h-10 w-full border border-white/10 bg-black px-3 text-[13px] text-white outline-none focus:border-amber-500/45"
+                    >
+                      <option value="">Pilih jobdesc</option>
+                      {countdownJobTypeOptions.map((jobType) => (
+                        <option key={jobType.value} value={jobType.value}>{jobType.label}</option>
+                      ))}
+                    </select>
+                  )}
                 </label>
                 <label className="space-y-1.5">
                   <span className="block text-[11px] font-mono uppercase tracking-[0.12em] text-white/35">Target Awal</span>
@@ -2973,7 +3117,10 @@ function WorkflowBuilder({
           <div className="flex shrink-0 justify-end gap-2 border-t border-white/10 bg-[#111114] px-4 py-3">
             <button
               type="button"
-              onClick={() => setIsCreateOpen(false)}
+              onClick={() => {
+                setIsCreateOpen(false);
+                setIsCreateMinimized(false);
+              }}
               className="border border-white/10 px-4 py-2 text-[11px] font-mono uppercase tracking-[0.12em] text-white/55 hover:text-white"
             >
               Batal

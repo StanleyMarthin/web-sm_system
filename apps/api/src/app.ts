@@ -225,6 +225,7 @@ import {
 import {
   handleMonitoringDivisionDetailRoute,
   handleMonitoringDivisionRoute,
+  handleMonitoringActualCreateRoute,
   handleMonitoringEmployeeRoute,
   handleMonitoringUnitRoute,
   handleMonitoringNoStartRoute,
@@ -811,6 +812,14 @@ export function createApiFetchHandler(dependencies: AppDependencies = {}) {
 
     if (request.method === "GET" && url.pathname === "/api/monitoring/employee") {
       return handleMonitoringEmployeeRoute(
+        request,
+        getAuthService(),
+        getMonitoringService(),
+      );
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/monitoring/actual") {
+      return handleMonitoringActualCreateRoute(
         request,
         getAuthService(),
         getMonitoringService(),

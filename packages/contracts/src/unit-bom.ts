@@ -13,6 +13,31 @@ export const unitBomLogisticStatusSchema = z.enum([
   "CANNIBALIZED",
 ]);
 
+export const unitBomStockStatusSchema = z.enum([
+  "IN_STORAGE",
+  "RETRIEVED",
+  "INSTALLED",
+  "LOST",
+]);
+
+export const unitBomConditionTypeSchema = z.enum([
+  "BARU",
+  "RESTORE",
+  "BEKAS",
+]);
+
+export const unitBomJobStatusSchema = z.enum([
+  "PLAN",
+  "PROSES",
+  "QC_READY",
+  "DONE",
+]);
+
+export const unitBomQcLastStatusSchema = z.enum([
+  "LOLOS",
+  "TIDAK_LOLOS",
+]);
+
 export const unitBomNodeTypeSchema = z.enum([
   "CATEGORY",
   "SECTION",
@@ -87,6 +112,18 @@ export interface UnitBomNodeShape {
   logisticStatus: "READY_GUDANG" | "ORDER_PR" | "AT_VENDOR" | "CANNIBALIZED" | null;
   logisticReference: string | null;
   logisticPath: string | null;
+  stockStatus?: "IN_STORAGE" | "RETRIEVED" | "INSTALLED" | "LOST" | null;
+  conditionType?: "BARU" | "RESTORE" | "BEKAS" | null;
+  locationName?: string | null;
+  locationDetail?: string | null;
+  takenByName?: string | null;
+  dateOut?: string | null;
+  jobStatus?: "PLAN" | "PROSES" | "QC_READY" | "DONE" | null;
+  qcLastStatus?: "LOLOS" | "TIDAK_LOLOS" | null;
+  deadlineDate?: string | null;
+  countRevisi?: number | null;
+  isLocked?: boolean | null;
+  currentDivisionName?: string | null;
   detail?: UnitBomPartDetail | null;
   children: UnitBomNodeShape[];
 }
@@ -115,6 +152,18 @@ export const unitBomNodeSchema: z.ZodType<UnitBomNodeShape> = z.lazy(() =>
     logisticStatus: unitBomLogisticStatusSchema.nullable(),
     logisticReference: z.string().nullable(),
     logisticPath: z.string().nullable(),
+    stockStatus: unitBomStockStatusSchema.nullable().optional(),
+    conditionType: unitBomConditionTypeSchema.nullable().optional(),
+    locationName: z.string().nullable().optional(),
+    locationDetail: z.string().nullable().optional(),
+    takenByName: z.string().nullable().optional(),
+    dateOut: z.string().nullable().optional(),
+    jobStatus: unitBomJobStatusSchema.nullable().optional(),
+    qcLastStatus: unitBomQcLastStatusSchema.nullable().optional(),
+    deadlineDate: z.string().nullable().optional(),
+    countRevisi: z.number().int().nullable().optional(),
+    isLocked: z.boolean().nullable().optional(),
+    currentDivisionName: z.string().nullable().optional(),
     detail: unitBomPartDetailSchema.nullable().optional(),
     children: z.array(unitBomNodeSchema),
   }),
@@ -134,6 +183,10 @@ export const unitBomWorkspaceEnvelopeSchema = z.object({
 
 export type UnitBomPhysicalStatus = z.infer<typeof unitBomPhysicalStatusSchema>;
 export type UnitBomLogisticStatus = z.infer<typeof unitBomLogisticStatusSchema>;
+export type UnitBomStockStatus = z.infer<typeof unitBomStockStatusSchema>;
+export type UnitBomConditionType = z.infer<typeof unitBomConditionTypeSchema>;
+export type UnitBomJobStatus = z.infer<typeof unitBomJobStatusSchema>;
+export type UnitBomQcLastStatus = z.infer<typeof unitBomQcLastStatusSchema>;
 export type UnitBomNodeType = z.infer<typeof unitBomNodeTypeSchema>;
 export type UnitBomTimelineEventType = z.infer<typeof unitBomTimelineEventTypeSchema>;
 export type UnitBomPhotoSlot = z.infer<typeof unitBomPhotoSlotSchema>;

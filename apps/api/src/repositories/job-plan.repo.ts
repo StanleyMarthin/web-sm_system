@@ -14,6 +14,7 @@ import type {
   UpdateJobPlanRequest,
   UpdateJobPlanStatusRequest,
 } from "@smsystem/contracts/job-plan";
+import { isNonTechnicalDivisionReference } from "@smsystem/contracts/division";
 import { buildJobPlanScheduleSegments } from "@smsystem/contracts/job-plan-schedule";
 import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
 import { getMySqlPool } from "@/db/mysql";
@@ -33,8 +34,8 @@ interface JobPlanMutationParams extends ScopeParams {
 
 interface CountdownContextRow extends RowDataPacket {
   coreId: string;
-  carId: string;
-  unitName: string;
+  carId: string | null;
+  unitName: string | null;
   divisionId: number | null;
   divisionName: string | null;
   panelId: number | null;
@@ -95,6 +96,7 @@ interface ReferenceRow extends RowDataPacket {
   parentId?: number | null;
   parentName?: string | null;
   parentCode?: string | null;
+  isTeknis?: number | boolean | null;
 }
 
 interface CountdownReferenceRow extends RowDataPacket {
@@ -165,6 +167,13 @@ interface AdditionalContextRow extends RowDataPacket {
   divisionName: string | null;
   jobTypeId: string;
   jobName: string | null;
+}
+
+interface DivisionTechnicalRow extends RowDataPacket {
+  value: string;
+  label: string | null;
+  code: string | null;
+  isTeknis: number | boolean | null;
 }
 
 function toBoolean(value: unknown): boolean {
@@ -312,7 +321,7 @@ async function hasScopeAccess(
   scope: AuthScope,
   employeeId: string,
   params: {
-    carId: string;
+    carId: string | null;
     divisionId: number | null;
     assignedUserId?: string | null;
   },
@@ -325,7 +334,7 @@ async function hasScopeAccess(
     return true;
   }
 
-  if (scope.unitIds.includes(params.carId)) {
+  if (params.carId && scope.unitIds.includes(params.carId)) {
     return true;
   }
 
@@ -340,7 +349,7 @@ async function hasScopeAccess(
     return false;
   }
 
-  return hasAssignmentScopeAccess(connection, employeeId, params.carId);
+  return params.carId ? hasAssignmentScopeAccess(connection, employeeId, params.carId) : false;
 }
 
 async function hasActiveAdvisor(
@@ -371,6 +380,38 @@ async function resolveInitialSubmittedStatus(
   carId: string | null,
 ): Promise<JobPlanStatus> {
   return (await hasActiveAdvisor(connection, carId)) ? "PENDING_ADV" : "PENDING_KP";
+}
+
+async function getDivisionTechnicalReference(
+  connection: Pick<PoolConnection, "query">,
+  divisionId: number,
+): Promise<DivisionTechnicalRow | null> {
+  const [rows] = (await connection.query(
+    `
+      SELECT
+        CAST(id AS CHAR) AS value,
+        name AS label,
+        code,
+        isteknis AS isTeknis
+      FROM sm_divisi
+      WHERE id = ?
+      LIMIT 1
+    `,
+    [divisionId],
+  )) as [DivisionTechnicalRow[], unknown];
+
+  return rows[0] ?? null;
+}
+
+async function isNonTechnicalDivisionId(
+  connection: Pick<PoolConnection, "query">,
+  divisionId: number | null | undefined,
+): Promise<boolean> {
+  if (!divisionId) {
+    return false;
+  }
+
+  return isNonTechnicalDivisionReference(await getDivisionTechnicalReference(connection, divisionId));
 }
 
 async function isPlanLocked(
@@ -474,7 +515,7 @@ function buildListSelectSql(): string {
       p.id AS planId,
       p.core_id AS coreId,
       DATE_FORMAT(p.task_date, '%Y-%m-%d') AS taskDate,
-      COALESCE(c.unit_name, jc.car_id) AS unitName,
+      COALESCE(c.unit_name, jc.car_id, NULLIF(jc.section_name, ''), p.jobdescription, '-') AS unitName,
       jc.division_id AS divisionId,
       d.name AS divisionName,
       COALESCE(mp.name, jc.section_name) AS panelName,
@@ -932,6 +973,80 @@ async function createCountdownInTransaction(
   return created;
 }
 
+async function createNonTechnicalCountdownInTransaction(
+  connection: PoolConnection,
+  params: { actorId: string },
+  input: {
+    carId: string | null;
+    divisionId: number;
+    sectionName: string;
+    jobTypeId: string | null;
+    taskDate: string;
+    deadlineDate: string;
+    note: string | null;
+  },
+): Promise<CountdownContextRow> {
+  const countdownId = randomUUID();
+  const now = new Date();
+
+  await connection.execute(
+    `
+      INSERT INTO sm_jobdesc_countdown (
+        id,
+        car_id,
+        division_id,
+        task_category,
+        ref_taks_id,
+        prerequisite_core_id,
+        panel_id,
+        section_name,
+        job_type_id,
+        target_hours_initial,
+        time_extension_hours,
+        target_hours_revised,
+        total_actual_hours,
+        remaining_hours,
+        actual_progress_percent,
+        status,
+        qc_last_status,
+        created_at,
+        start_date,
+        deadline_date,
+        latest_qc_id,
+        ref_rework_qc_id,
+        count_revisi,
+        updated_at,
+        user_update,
+        extension_request_status,
+        requested_extension_hours,
+        requested_deadline,
+        revision_reason,
+        last_qc_level
+      ) VALUES (?, ?, ?, 'ADDITIONAL', NULL, NULL, NULL, ?, ?, 0, 0, 0, 0, 0, 0, 'PLAN', NULL, ?, ?, ?, NULL, NULL, 0, ?, ?, NULL, 0, NULL, ?, NULL)
+    `,
+    [
+      countdownId,
+      input.carId,
+      input.divisionId,
+      input.sectionName,
+      input.jobTypeId,
+      now,
+      input.taskDate,
+      input.deadlineDate,
+      now,
+      params.actorId,
+      input.note,
+    ],
+  );
+
+  const created = await getCountdownContext(connection, countdownId);
+  if (!created) {
+    throw new Error("COUNTDOWN_NOT_FOUND");
+  }
+
+  return created;
+}
+
 async function resolveWorkspaceCountdown(
   connection: PoolConnection,
   params: ScopeParams,
@@ -964,6 +1079,18 @@ async function resolveWorkspaceCountdown(
   }
 
   if (!row.carId || !row.divisionId || !row.panelId || !row.jobTypeId) {
+    if (await isNonTechnicalDivisionId(connection, row.divisionId ?? null)) {
+      return createNonTechnicalCountdownInTransaction(connection, { actorId: params.employeeId }, {
+        carId: row.carId || null,
+        divisionId: row.divisionId,
+        sectionName: row.jobDescription.trim(),
+        jobTypeId: row.jobTypeId || null,
+        taskDate: workspaceMeta.taskDate,
+        deadlineDate: workspaceMeta.deadlineDate,
+        note: row.note ?? null,
+      });
+    }
+
     throw new Error("ADDITIONAL_REFERENCE_INCOMPLETE");
   }
 
@@ -1305,13 +1432,14 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
       ),
       pool.query(
         `
-          SELECT
-            CAST(d.id AS CHAR) AS value,
-            d.name AS label,
-            d.code AS code,
-            d.parent_id AS parentId,
-            parent.name AS parentName,
-            parent.code AS parentCode
+      SELECT
+        CAST(d.id AS CHAR) AS value,
+        d.name AS label,
+        d.code AS code,
+        d.isteknis AS isTeknis,
+        d.parent_id AS parentId,
+        parent.name AS parentName,
+        parent.code AS parentCode
           FROM sm_divisi d
           LEFT JOIN sm_divisi parent ON parent.id = d.parent_id
           WHERE 1 = 1
@@ -1514,6 +1642,14 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
         value: row.value,
         label: row.label,
         code: row.code ?? null,
+        isTeknis:
+          row.isTeknis === null || row.isTeknis === undefined
+            ? null
+            : toBoolean(row.isTeknis),
+        isTechnical:
+          row.isTeknis === null || row.isTeknis === undefined
+            ? null
+            : toBoolean(row.isTeknis),
         parentId: row.parentId ?? null,
         parentName: row.parentName ?? null,
         parentCode: row.parentCode ?? null,
@@ -1709,23 +1845,30 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
       }
 
       for (const row of input.rows) {
+        const isManualNonTechnical =
+          row.source === "additional" &&
+          (await isNonTechnicalDivisionId(connection, row.divisionId ?? null));
         const countdown = await resolveWorkspaceCountdown(connection, params, row, {
           projectTargetHours,
           taskDate: input.taskDate,
           deadlineDate: input.deadlineDate,
         });
-        const initialStatus = await resolveInitialSubmittedStatus(
-          connection,
-          countdown.carId,
-        );
+        const initialStatus = isManualNonTechnical
+          ? "PLAN"
+          : await resolveInitialSubmittedStatus(
+              connection,
+              countdown.carId,
+            );
         const scheduleSegments = buildJobPlanScheduleSegments({
           taskDate: input.taskDate,
           requestedMode: input.mode,
           targetHours: row.targetHours,
         });
 
-        await checkPanelLock(connection, countdown);
-        await assertCountdownCapacity(connection, countdown, row.targetHours);
+        if (!isManualNonTechnical) {
+          await checkPanelLock(connection, countdown);
+          await assertCountdownCapacity(connection, countdown, row.targetHours);
+        }
 
         for (const segment of scheduleSegments) {
           const planId = `PLAN-${randomUUID().replace(/-/gu, "").slice(0, 20).toUpperCase()}`;
@@ -1768,7 +1911,9 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
           createdIds.push(planId);
         }
 
-        await lockPanel(connection, countdown);
+        if (!isManualNonTechnical) {
+          await lockPanel(connection, countdown);
+        }
       }
 
       await connection.commit();
@@ -1794,6 +1939,10 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
 
       for (const draft of drafts) {
         if (draft.sourceType === "ADDITIONAL") {
+          const isManualNonTechnical = await isNonTechnicalDivisionId(
+            connection,
+            draft.divisionId ?? null,
+          );
           const row: JobPlanWorkspaceDraftRow = {
             source: "additional",
             referenceId: null,
@@ -1814,18 +1963,22 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
             taskDate: draft.taskDate,
             deadlineDate: draft.deadlineDate ?? draft.taskDate,
           });
-          const initialStatus = await resolveInitialSubmittedStatus(
-            connection,
-            countdown.carId,
-          );
+          const initialStatus = isManualNonTechnical
+            ? "PLAN"
+            : await resolveInitialSubmittedStatus(
+                connection,
+                countdown.carId,
+              );
           const scheduleSegments = buildJobPlanScheduleSegments({
             taskDate: draft.taskDate,
             requestedMode: draft.isOvertime ? "overtime" : "normal",
             targetHours: draft.targetHours,
           });
 
-          await checkPanelLock(connection, countdown);
-          await assertCountdownCapacity(connection, countdown, draft.targetHours);
+          if (!isManualNonTechnical) {
+            await checkPanelLock(connection, countdown);
+            await assertCountdownCapacity(connection, countdown, draft.targetHours);
+          }
 
           for (const segment of scheduleSegments) {
             const planId = `PLAN-${randomUUID().replace(/-/gu, "").slice(0, 20).toUpperCase()}`;
@@ -1867,7 +2020,9 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
             createdIds.push(planId);
           }
 
-          await lockPanel(connection, countdown);
+          if (!isManualNonTechnical) {
+            await lockPanel(connection, countdown);
+          }
           continue;
         }
 

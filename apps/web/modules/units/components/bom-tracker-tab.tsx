@@ -9,25 +9,33 @@ import type {
 import {
   ArrowUpRight,
   Boxes,
-  CheckCircle2,
   ChevronDown,
-  Edit3,
+  Eye,
+  EyeOff,
+  FolderOpen,
   GitBranch,
   Grip,
-  MapPin,
+  Lock,
   PackageCheck,
-  PackagePlus,
   PackageSearch,
+  Pencil,
   Plus,
   RefreshCw,
   Trash2,
+  Undo2,
   Wrench,
   X,
   XCircle,
   ZoomIn,
   ZoomOut,
+  Maximize2,
+  Minimize2,
+  ChevronsDownUp,
+  ChevronsUpDown,
+  Users,
 } from "lucide-react";
 import {
+  memo,
   useCallback,
   useEffect,
   useMemo,
@@ -57,16 +65,6 @@ interface BomTrackerTabProps {
   canManagePanels?: boolean;
 }
 
-type TriageTone = "good" | "repair" | "replace" | "unknown";
-
-interface TriageMeta {
-  label: string;
-  tone: TriageTone;
-  className: string;
-  dotClassName: string;
-  icon: typeof CheckCircle2;
-}
-
 type FormMode =
   | { type: "create"; sectionMode: "existing" | "new"; sourceNode?: UnitBomNode | null }
   | { type: "edit"; record: UnitPanelRecord }
@@ -79,10 +77,6 @@ interface PanelFormState {
   name: string;
   category: string;
   sortOrder: string;
-  qty: string;
-  defaultLocationType: "GUDANG" | "WORKSHOP" | "UNIT";
-  defaultStockStatus: "IN_STORAGE" | "RETRIEVED" | "INSTALLED" | "LOST";
-  defaultConditionType: "BARU" | "RESTORE" | "BEKAS";
   isActive: boolean;
   nodeType: "PANEL" | "PART";
   nodeTypeName: string;
@@ -135,6 +129,30 @@ interface PersistedCanvasState {
   isRootExpanded?: boolean;
   expandedNodeIds?: string[];
   nodePositions?: Record<string, NodePosition>;
+  canvasMinSize?: { width: number; height: number };
+  hiddenNodeIds?: string[];
+  nodeDimensions?: Record<string, NodeDimension>;
+}
+
+interface NodeDimension {
+  width: number;
+  height: number;
+}
+
+interface ContextMenuState {
+  node: UnitBomNode;
+  x: number;
+  y: number;
+}
+
+interface BomCanvasDraft {
+  zoom: number;
+  isRootExpanded: boolean;
+  expandedNodeIds: string[];
+  nodePositions: Record<string, NodePosition>;
+  canvasMinSize: { width: number; height: number };
+  hiddenNodeIds: string[];
+  nodeDimensions: Record<string, NodeDimension>;
 }
 
 const NODE_WIDTH = 220;
@@ -143,64 +161,62 @@ const COLUMN_GAP = 96;
 const ROW_GAP = 24;
 const ROOT_NODE_ID = "__unit_root";
 const CANVAS_STATE_VERSION = "v1";
+const MIN_NODE_WIDTH = 180;
+const MIN_NODE_HEIGHT = 118;
+const EDGE_SCROLL_ZONE = 80;
+const EDGE_SCROLL_SPEED = 10;
+const EDGE_EXPAND_STEP = 300;
 
-const LOCATION_LABEL: Record<PanelFormState["defaultLocationType"], string> = {
-  UNIT: "UNIT",
-  WORKSHOP: "WORKSHOP",
-  GUDANG: "GUDANG",
-};
+function safeStorage(): Storage | null {
+  if (typeof window === 'undefined') return null;
+  return window.localStorage;
+}
 
-const STOCK_STATUS_LABEL: Record<PanelFormState["defaultStockStatus"], string> = {
-  INSTALLED: "Terpasang",
-  IN_STORAGE: "Disimpan",
-  RETRIEVED: "Dilepas",
-  LOST: "Hilang",
-};
+function getAllNodeIds(nodes: UnitBomNode[]): string[] {
+  return nodes.flatMap((node) => [node.nodeId, ...getAllNodeIds(node.children)]);
+}
 
-const CONDITION_LABEL: Record<PanelFormState["defaultConditionType"], string> = {
-  BEKAS: "Bekas",
-  RESTORE: "Restore",
-  BARU: "Baru",
-};
-
-function triageMeta(node: UnitBomNode): TriageMeta {
-  if (node.physicalStatus === "INSTALLED" || node.logisticStatus === "READY_GUDANG") {
-    return {
-      label: "BAGUS",
-      tone: "good",
-      className: "border-emerald-500/20 bg-emerald-500/[0.06] text-emerald-300",
-      dotClassName: "bg-emerald-400 shadow-[0_0_16px_rgba(52,211,153,0.45)]",
-      icon: CheckCircle2,
-    };
+function jobStatusMeta(status: string | null | undefined) {
+  switch (status) {
+    case "DONE":
+      return { label: "DONE", className: "border-emerald-500/30 bg-emerald-500/[0.07] text-emerald-300", dot: "bg-emerald-400" };
+    case "QC_READY":
+      return { label: "QC", className: "border-sky-500/30 bg-sky-500/[0.07] text-sky-300", dot: "bg-sky-400" };
+    case "PROSES":
+      return { label: "PROSES", className: "border-amber-500/25 bg-amber-500/[0.07] text-amber-400", dot: "bg-amber-400" };
+    case "PLAN":
+      return { label: "PLAN", className: "border-white/10 bg-white/[0.03] text-white/40", dot: "bg-white/30" };
+    default:
+      return { label: "BELUM ADA", className: "border-white/10 bg-white/[0.03] text-white/25", dot: "bg-white/20" };
   }
+}
 
-  if (node.physicalStatus === "IN_DIVISION" || node.logisticStatus === "AT_VENDOR") {
-    return {
-      label: "REPAIR",
-      tone: "repair",
-      className: "border-amber-500/25 bg-amber-500/[0.07] text-amber-400",
-      dotClassName: "bg-amber-400 shadow-[0_0_16px_rgba(245,158,11,0.45)]",
-      icon: Wrench,
-    };
+function stockStatusMeta(status: string | null | undefined) {
+  switch (status) {
+    case "INSTALLED":
+      return { label: "Terpasang", icon: PackageCheck, className: "text-emerald-400" };
+    case "RETRIEVED":
+      return { label: "Diambil", icon: Wrench, className: "text-amber-400" };
+    case "IN_STORAGE":
+      return { label: "Di Gudang", icon: Boxes, className: "text-sky-400" };
+    case "LOST":
+      return { label: "Hilang", icon: XCircle, className: "text-red-400" };
+    default:
+      return { label: "Tidak ada", icon: PackageSearch, className: "text-white/30" };
   }
+}
 
-  if (node.physicalStatus === "DISASSEMBLED" || node.logisticStatus === "ORDER_PR") {
-    return {
-      label: "REPLACE",
-      tone: "replace",
-      className: "border-red-500/20 bg-red-500/[0.06] text-red-300",
-      dotClassName: "bg-red-400 shadow-[0_0_16px_rgba(248,113,113,0.45)]",
-      icon: XCircle,
-    };
+function conditionBadge(type: string | null | undefined) {
+  switch (type) {
+    case "BARU":
+      return "border-emerald-500/25 text-emerald-400";
+    case "RESTORE":
+      return "border-amber-500/25 text-amber-400";
+    case "BEKAS":
+      return "border-white/15 text-white/40";
+    default:
+      return null;
   }
-
-  return {
-    label: "PERLU CEK",
-    tone: "unknown",
-    className: "border-white/10 bg-white/[0.03] text-white/40",
-    dotClassName: "bg-white/30",
-    icon: PackageSearch,
-  };
 }
 
 function hierarchyText(node: UnitBomNode): string {
@@ -210,35 +226,10 @@ function hierarchyText(node: UnitBomNode): string {
   return parts.length > 0 ? parts.join(" > ") : "Belum masuk kelompok";
 }
 
-function hasOperationalTrace(node: UnitBomNode): boolean {
-  if (node.actualId) return true;
-  if (node.logisticStatus || node.logisticReference || node.logisticPath) return true;
-  if ((node.detail?.timeline.length ?? 0) > 0) return true;
-  if ((node.detail?.documents.length ?? 0) > 0) return true;
-  if ((node.detail?.photos ?? []).some((slot) => slot.photoCount > 0)) return true;
-  if (Number(node.progressPercent ?? 0) > 0) return true;
-  if (Number(node.remainingHours ?? 0) > 0) return true;
-  return Boolean(node.divisionId || node.divisionName);
-}
-
 function panelDetailKey(node: UnitBomNode): string | null {
-  if (node.actualId) return node.actualId;
   if (node.panelId) return `panel-${node.panelId}`;
+  if (node.actualId) return node.actualId;
   return null;
-}
-
-function stockStatusForLocation(
-  locationType: PanelFormState["defaultLocationType"],
-): PanelFormState["defaultStockStatus"] {
-  if (locationType === "UNIT") return "INSTALLED";
-  if (locationType === "GUDANG") return "IN_STORAGE";
-  return "RETRIEVED";
-}
-
-function normalizeInventoryForm(form: PanelFormState): PanelFormState {
-  if (form.defaultLocationType !== "UNIT") return form;
-  if (form.defaultStockStatus === "INSTALLED") return form;
-  return { ...form, defaultStockStatus: "INSTALLED" };
 }
 
 function emptyForm(): PanelFormState {
@@ -247,10 +238,6 @@ function emptyForm(): PanelFormState {
     name: "",
     category: "",
     sortOrder: "0",
-    qty: "1",
-    defaultLocationType: "UNIT",
-    defaultStockStatus: "INSTALLED",
-    defaultConditionType: "BEKAS",
     isActive: true,
     nodeType: "PANEL",
     nodeTypeName: "Panel",
@@ -260,72 +247,55 @@ function emptyForm(): PanelFormState {
 }
 
 function formFromRecord(record: UnitPanelRecord): PanelFormState {
-  return normalizeInventoryForm({
+  return {
     section: record.section,
     name: record.name,
     category: record.category ?? "",
     sortOrder: String(record.sortOrder),
-    qty: String(record.qty ?? 1),
-    defaultLocationType: record.defaultLocationType,
-    defaultStockStatus: record.defaultStockStatus,
-    defaultConditionType: record.defaultConditionType,
     isActive: record.isActive,
     nodeType: record.nodeType,
     nodeTypeName: record.nodeType === "PART" ? "Part" : "Panel",
     parentId: record.parentId === null ? "" : String(record.parentId),
     parentName: "",
-  });
+  };
 }
 
 function formForNode(node: UnitBomNode): PanelFormState {
   const shouldCreatePart = node.panelId !== null || node.nodeType === "PART";
-  return normalizeInventoryForm({
+  return {
     section: node.section ?? "",
     name: "",
     category: node.category ?? "",
     sortOrder: "0",
-    qty: "1",
-    defaultLocationType: "UNIT",
-    defaultStockStatus: "INSTALLED",
-    defaultConditionType: "BEKAS",
     isActive: true,
     nodeType: shouldCreatePart ? "PART" : "PANEL",
     nodeTypeName: shouldCreatePart ? "Part" : "Panel",
     parentId: node.panelId ? String(node.panelId) : "",
     parentName: node.panelId ? node.label : "",
-  });
+  };
 }
 
 function formForChild(parent: UnitPanelRecord): PanelFormState {
-  return normalizeInventoryForm({
+  return {
     section: parent.section,
     name: "",
     category: parent.category ?? "",
     sortOrder: String(parent.children.length + 1),
-    qty: "1",
-    defaultLocationType: parent.defaultLocationType,
-    defaultStockStatus: parent.defaultStockStatus,
-    defaultConditionType: parent.defaultConditionType,
     isActive: true,
     nodeType: "PART",
     nodeTypeName: "Part",
     parentId: String(parent.id),
     parentName: parent.name,
-  });
+  };
 }
 
 function buildPayload(form: PanelFormState): Omit<CreateUnitPanelRequest, "parentId"> & UpdateUnitPanelRequest {
-  const normalizedForm = normalizeInventoryForm(form);
   return {
-    section: normalizedForm.section.trim(),
-    name: normalizedForm.name.trim(),
-    category: normalizedForm.category.trim() || null,
-    sortOrder: Number.parseInt(normalizedForm.sortOrder || "0", 10) || 0,
-    qty: Number(normalizedForm.qty) > 0 ? Number(normalizedForm.qty) : 1,
-    defaultLocationType: normalizedForm.defaultLocationType,
-    defaultStockStatus: normalizedForm.defaultStockStatus,
-    defaultConditionType: normalizedForm.defaultConditionType,
-    isActive: normalizedForm.isActive,
+    section: form.section.trim(),
+    name: form.name.trim(),
+    category: form.category.trim() || null,
+    sortOrder: Number.parseInt(form.sortOrder || "0", 10) || 0,
+    isActive: form.isActive,
   };
 }
 
@@ -342,11 +312,147 @@ function displayCategory(value: string | null | undefined): string {
   return value?.trim() || "Lainnya";
 }
 
-function estimateNodeHeight(node: UnitBomNode): number {
+function averageProgress(nodes: UnitBomNode[]): number | null {
+  const values = nodes
+    .map((node) => node.progressPercent)
+    .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+  if (values.length === 0) return null;
+  return Number((values.reduce((total, value) => total + value, 0) / values.length).toFixed(2));
+}
+
+function sumRemainingHours(nodes: UnitBomNode[]): number | null {
+  const total = nodes.reduce((sum, node) => sum + Number(node.remainingHours ?? 0), 0);
+  return Number(total.toFixed(2));
+}
+
+function buildBomDetailByPanel(nodes: UnitBomNode[]): Map<number, UnitBomNode> {
+  const map = new Map<number, UnitBomNode>();
+
+  function walk(items: UnitBomNode[]) {
+    for (const item of items) {
+      if (item.panelId !== null) {
+        map.set(item.panelId, item);
+      }
+      if (item.children.length > 0) {
+        walk(item.children);
+      }
+    }
+  }
+
+  walk(nodes);
+  return map;
+}
+
+function buildPanelNode(record: UnitPanelRecord, bomDetailByPanel: Map<number, UnitBomNode>): UnitBomNode {
+  const detail = bomDetailByPanel.get(record.id);
+  const children = record.children.map((child) => buildPanelNode(child, bomDetailByPanel));
+  return {
+    nodeId: `panel:${record.id}`,
+    nodeType: "PART",
+    label: record.name,
+    category: record.category,
+    section: record.section,
+    panelId: record.id,
+    physicalStatus: detail?.physicalStatus ?? null,
+    divisionId: detail?.divisionId ?? null,
+    divisionName: detail?.divisionName ?? null,
+    progressPercent: detail?.progressPercent ?? averageProgress(children),
+    remainingHours: detail?.remainingHours ?? sumRemainingHours(children),
+    actualId: detail?.actualId ?? null,
+    logisticStatus: detail?.logisticStatus ?? null,
+    logisticReference: detail?.logisticReference ?? null,
+    logisticPath: detail?.logisticPath ?? null,
+    stockStatus: detail?.stockStatus ?? null,
+    conditionType: detail?.conditionType ?? null,
+    locationName: detail?.locationName ?? null,
+    locationDetail: detail?.locationDetail ?? null,
+    takenByName: detail?.takenByName ?? null,
+    dateOut: detail?.dateOut ?? null,
+    jobStatus: detail?.jobStatus ?? null,
+    qcLastStatus: detail?.qcLastStatus ?? null,
+    deadlineDate: detail?.deadlineDate ?? null,
+    countRevisi: detail?.countRevisi ?? null,
+    isLocked: detail?.isLocked ?? null,
+    currentDivisionName: detail?.currentDivisionName ?? detail?.divisionName ?? null,
+    detail: detail?.detail ?? null,
+    children,
+  };
+}
+
+function buildPanelTrackerTree(rows: UnitPanelRecord[], bomTree: UnitBomNode[]): UnitBomNode[] {
+  if (rows.length === 0) return bomTree;
+
+  const bomDetailByPanel = buildBomDetailByPanel(bomTree);
+  const categories = new Map<string, Map<string, UnitPanelRecord[]>>();
+
+  for (const row of rows) {
+    const category = displayCategory(row.category);
+    const sections = categories.get(category) ?? new Map<string, UnitPanelRecord[]>();
+    const panels = sections.get(row.section) ?? [];
+    panels.push(row);
+    sections.set(row.section, panels);
+    categories.set(category, sections);
+  }
+
+  return [...categories.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([category, sections]) => {
+      const sectionNodes = [...sections.entries()]
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([section, panels]) => {
+          const panelNodes = panels
+            .slice()
+            .sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name))
+            .map((panel) => buildPanelNode(panel, bomDetailByPanel));
+          return {
+            nodeId: `section:${category}:${section}`,
+            nodeType: "SECTION",
+            label: section,
+            category,
+            section,
+            panelId: null,
+            physicalStatus: null,
+            divisionId: null,
+            divisionName: null,
+            progressPercent: averageProgress(panelNodes),
+            remainingHours: sumRemainingHours(panelNodes),
+            actualId: null,
+            logisticStatus: null,
+            logisticReference: null,
+            logisticPath: null,
+            children: panelNodes,
+          } satisfies UnitBomNode;
+        });
+
+      return {
+        nodeId: `category:${category}`,
+        nodeType: "CATEGORY",
+        label: category,
+        category,
+        section: null,
+        panelId: null,
+        physicalStatus: null,
+        divisionId: null,
+        divisionName: null,
+        progressPercent: averageProgress(sectionNodes),
+        remainingHours: sumRemainingHours(sectionNodes),
+        actualId: null,
+        logisticStatus: null,
+        logisticReference: null,
+        logisticPath: null,
+        children: sectionNodes,
+      } satisfies UnitBomNode;
+    });
+}
+
+function estimateNodeHeight(node: UnitBomNode, width: number): number {
   const hierarchy = hierarchyText(node);
-  const labelLines = Math.max(1, Math.ceil(node.label.length / 22));
-  const hierarchyLines = Math.max(1, Math.ceil(hierarchy.length / 30));
-  const locationLines = node.nodeType === "PART" ? Math.max(1, Math.ceil((node.divisionName ?? "Belum ditentukan").length / 28)) : 1;
+  const labelCapacity = Math.max(16, Math.round((width / NODE_WIDTH) * 22));
+  const hierarchyCapacity = Math.max(20, Math.round((width / NODE_WIDTH) * 30));
+  const locationCapacity = Math.max(18, Math.round((width / NODE_WIDTH) * 28));
+  const labelLines = Math.max(1, Math.ceil(node.label.length / labelCapacity));
+  const hierarchyLines = Math.max(1, Math.ceil(hierarchy.length / hierarchyCapacity));
+  const locationLines = node.nodeType === "PART" ? Math.max(1, Math.ceil((node.divisionName ?? "Belum ditentukan").length / locationCapacity)) : 1;
   return NODE_HEIGHT + (labelLines - 1) * 16 + (hierarchyLines - 1) * 14 + (locationLines - 1) * 14;
 }
 
@@ -354,30 +460,41 @@ function recordMatchesCategory(record: UnitPanelRecord, category: string): boole
   return displayCategory(record.category) === category;
 }
 
-function buildCanvasLayout(nodes: UnitBomNode[], expandedNodeIds: Set<string>, isRootExpanded: boolean): CanvasLayout {
+function buildCanvasLayout(
+  nodes: UnitBomNode[],
+  expandedNodeIds: Set<string>,
+  isRootExpanded: boolean,
+  nodeDimensions: Record<string, NodeDimension>,
+  hiddenNodeIds: Set<string>,
+): CanvasLayout {
   const positioned: CanvasNode[] = [];
   let row = 0;
   let maxDepth = 1;
+  let maxRight = 860;
+  let maxBottom = 32;
 
   function walk(items: UnitBomNode[], depth: number, parentId: string | null) {
     maxDepth = Math.max(maxDepth, depth);
     for (const item of items) {
-      const nodeHeight = estimateNodeHeight(item);
-      const previousBottom = positioned.length > 0
-        ? Math.max(...positioned.map((node) => node.y + node.height))
-        : 32;
+      if (hiddenNodeIds.has(item.nodeId)) continue;
+      const savedDimension = nodeDimensions[item.nodeId];
+      const nodeWidth = savedDimension?.width ?? NODE_WIDTH;
+      const nodeHeight = savedDimension?.height ?? estimateNodeHeight(item, nodeWidth);
+      const previousBottom = maxBottom;
       const y = positioned.length > 0 ? previousBottom + ROW_GAP : 32;
-      const x = 32 + depth * (NODE_WIDTH + COLUMN_GAP);
+      const x = 32 + depth * (NODE_WIDTH + 44 + COLUMN_GAP);
       row += 1;
+      maxBottom = Math.max(maxBottom, y + nodeHeight);
       positioned.push({
         node: item,
         depth,
         x,
         y,
-        width: NODE_WIDTH,
+        width: nodeWidth,
         height: nodeHeight,
         parentId,
       });
+      maxRight = Math.max(maxRight, x + nodeWidth + 96);
       if (item.children.length > 0 && expandedNodeIds.has(item.nodeId)) {
         walk(item.children, depth + 1, item.nodeId);
       }
@@ -390,7 +507,7 @@ function buildCanvasLayout(nodes: UnitBomNode[], expandedNodeIds: Set<string>, i
 
   return {
     nodes: positioned,
-    width: Math.max(860, 64 + (maxDepth + 1) * NODE_WIDTH + maxDepth * COLUMN_GAP),
+    width: Math.max(860, maxRight, 64 + (maxDepth + 1) * (NODE_WIDTH + 44) + maxDepth * COLUMN_GAP),
     height: Math.max(520, 64 + Math.max(1, row) * (NODE_HEIGHT + ROW_GAP), 64 + Math.max(0, ...positioned.map((node) => node.y + node.height))),
   };
 }
@@ -432,13 +549,19 @@ function SearchableField({
   }
 
   return (
-    <div className="relative">
+    <div
+      className="relative"
+      onBlur={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget)) {
+          setIsOpen(false);
+        }
+      }}
+    >
       <div className="flex h-9 items-center border border-white/10 bg-[#111114] transition-colors focus-within:border-amber-500/40">
         <input
           value={value}
           disabled={disabled}
           onFocus={() => setIsOpen(true)}
-          onBlur={() => window.setTimeout(() => setIsOpen(false), 120)}
           onChange={(event) => {
             onChange(event.target.value);
             setIsOpen(true);
@@ -488,98 +611,141 @@ function SearchableField({
   );
 }
 
-function ProgressBar({ value, tone }: { value: number | null; tone: TriageTone }) {
-  const safeValue = Math.max(0, Math.min(100, Number(value ?? 0)));
-  const barClass = tone === "replace" ? "bg-rose-400" : tone === "repair" ? "bg-amber-400" : "bg-emerald-400";
-
-  return (
-    <div className="mt-3">
-      <div className="h-1.5 overflow-hidden bg-white/[0.06]">
-        <div className={`h-full transition-[width] ${barClass}`} style={{ width: `${safeValue}%` }} />
-      </div>
-      <p className="mt-1 text-[10px] tabular-nums text-white/35">{safeValue.toFixed(0)}% selesai</p>
-    </div>
-  );
-}
-
 function NodeCard({
   canvasNode,
   zoom,
-  canManage,
   panelRecord,
-  isMenuOpen,
   isExpanded,
   isSelected,
+  onInteractionStart,
   onPositionChange,
+  onDimensionChange,
   onOpenMenu,
   onToggle,
   onSelect,
-  onCreateChild,
-  onEdit,
-  onDelete,
+  onDragNodeStart,
+  onDragNodeMove,
+  onDragNodeEnd,
+  onNavigateToDetail,
 }: {
   canvasNode: CanvasNode;
   zoom: number;
-  canManage: boolean;
   panelRecord: UnitPanelRecord | null;
-  isMenuOpen: boolean;
   isExpanded: boolean;
   isSelected: boolean;
-  onPositionChange: (nodeId: string, position: NodePosition) => void;
-  onOpenMenu: (node: UnitBomNode, event?: MouseEvent) => void;
+  onInteractionStart: () => void;
+  onPositionChange: (nodeId: string, updater: (current: NodePosition) => NodePosition, initialPos?: NodePosition) => void;
+  onDimensionChange: (nodeId: string, dimension: NodeDimension) => void;
+  onOpenMenu: (node: UnitBomNode, event: MouseEvent<HTMLDivElement>) => void;
   onToggle: (node: UnitBomNode) => void;
   onSelect: (node: UnitBomNode) => void;
-  onCreateChild: (node: UnitBomNode) => void;
-  onEdit: (record: UnitPanelRecord) => void;
-  onDelete: (record: UnitPanelRecord) => void;
+  onDragNodeStart: (clientX: number, clientY: number) => void;
+  onDragNodeMove: (clientX: number, clientY: number) => void;
+  onDragNodeEnd: () => void;
+  onNavigateToDetail: (node: UnitBomNode) => void;
 }) {
   const { node, x, y, width, height } = canvasNode;
-  const triage = triageMeta(node);
-  const TriageIcon = triage.icon;
   const detailKey = panelDetailKey(node);
-  const location = triage.tone === "good" ? "Gudang" : node.divisionName ?? "Belum ditentukan";
-  const isGroup = node.nodeType !== "PART";
+  const isPanel = panelRecord?.nodeType === "PANEL";
+  const isGroupNode = node.nodeType === "CATEGORY" || node.nodeType === "SECTION";
+  const isGroup = isGroupNode || isPanel;
   const canExpand = node.children.length > 0;
   const dragRef = useRef<{
     pointerId: number;
+    lastClientX: number;
+    lastClientY: number;
+    didDrag: boolean;
+    totalDx: number;
+    totalDy: number;
+  } | null>(null);
+  const resizeRef = useRef<{
+    pointerId: number;
     startX: number;
     startY: number;
-    nodeX: number;
-    nodeY: number;
-    didDrag: boolean;
+    width: number;
+    height: number;
   } | null>(null);
   const suppressClickRef = useRef(false);
+  const cardRef = useRef<HTMLButtonElement>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    const t = setTimeout(() => setMounted(true), 10);
+    return () => clearTimeout(t);
+  }, []);
+
+  // [REFACTOR 3] ResizeObserver auto height
+  useEffect(() => {
+    const el = cardRef.current;
+    if (!el) return;
+
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      const measuredH = Math.ceil(entry.contentRect.height);
+      // Hanya report jika berbeda signifikan (>2px) dari height saat ini
+      if (Math.abs(measuredH - height) > 2) {
+        onDimensionChange(node.nodeId, { width, height: measuredH });
+      }
+    });
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [node.nodeId, width, height, onDimensionChange]);
+
 
   function handleNodePointerDown(event: PointerEvent<HTMLDivElement>) {
     if (event.button !== 0) return;
-    if (event.target instanceof Element && event.target.closest("[data-node-actions='true']")) return;
+    if (event.target instanceof Element && event.target.closest("[data-node-resize='true']")) return;
     event.stopPropagation();
+    onInteractionStart();
+    onDragNodeStart(event.clientX, event.clientY);
     dragRef.current = {
       pointerId: event.pointerId,
-      startX: event.clientX,
-      startY: event.clientY,
-      nodeX: x,
-      nodeY: y,
+      lastClientX: event.clientX,
+      lastClientY: event.clientY,
       didDrag: false,
+      totalDx: 0,
+      totalDy: 0,
     };
     event.currentTarget.setPointerCapture(event.pointerId);
   }
 
   function handleNodePointerMove(event: PointerEvent<HTMLDivElement>) {
+    onDragNodeMove(event.clientX, event.clientY);
+    const activeResize = resizeRef.current;
+    if (activeResize && activeResize.pointerId === event.pointerId) {
+      const nextWidth = Math.max(MIN_NODE_WIDTH, Math.round(activeResize.width + (event.clientX - activeResize.startX) / zoom));
+      const nextHeight = Math.max(MIN_NODE_HEIGHT, Math.round(activeResize.height + (event.clientY - activeResize.startY) / zoom));
+      onDimensionChange(node.nodeId, { width: nextWidth, height: nextHeight });
+      return;
+    }
     const drag = dragRef.current;
     if (!drag || drag.pointerId !== event.pointerId) return;
-    const dx = (event.clientX - drag.startX) / zoom;
-    const dy = (event.clientY - drag.startY) / zoom;
-    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+    const dx = (event.clientX - drag.lastClientX) / zoom;
+    const dy = (event.clientY - drag.lastClientY) / zoom;
+    drag.lastClientX = event.clientX;
+    drag.lastClientY = event.clientY;
+    drag.totalDx += dx;
+    drag.totalDy += dy;
+    if (Math.abs(drag.totalDx) > 3 || Math.abs(drag.totalDy) > 3) {
       drag.didDrag = true;
     }
-    onPositionChange(node.nodeId, {
-      x: Math.max(16, drag.nodeX + dx),
-      y: Math.max(16, drag.nodeY + dy),
-    });
+    onPositionChange(
+      node.nodeId,
+      (current) => ({ x: current.x + dx, y: current.y + dy }),
+      { x, y }
+    );
   }
 
   function handleNodePointerUp(event: PointerEvent<HTMLDivElement>) {
+    onDragNodeEnd();
+    const activeResize = resizeRef.current;
+    if (activeResize && activeResize.pointerId === event.pointerId) {
+      resizeRef.current = null;
+      event.currentTarget.releasePointerCapture(event.pointerId);
+      return;
+    }
     const drag = dragRef.current;
     if (!drag || drag.pointerId !== event.pointerId) return;
     suppressClickRef.current = drag.didDrag;
@@ -596,11 +762,34 @@ function NodeCard({
     }, 0);
   }
 
+  function handleResizePointerDown(event: PointerEvent<HTMLSpanElement>) {
+    if (event.button !== 0) return;
+    event.stopPropagation();
+    onInteractionStart();
+    resizeRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      width,
+      height,
+    };
+    onSelect(node);
+    event.currentTarget.parentElement?.setPointerCapture(event.pointerId);
+  }
+
   return (
     <div
       data-canvas-node="true"
-      className="group absolute"
-      style={{ left: x, top: y, width, minHeight: height }}
+      className="group absolute cursor-move"
+      style={{
+        left: x,
+        top: y,
+        width,
+        minHeight: height,
+        opacity: mounted ? 1 : 0,
+        transform: mounted ? 'scale(1)' : 'scale(0.95)',
+        transition: 'opacity 150ms ease, transform 150ms ease',
+      }}
       onContextMenu={(event) => onOpenMenu(node, event)}
       onPointerDown={handleNodePointerDown}
       onPointerMove={handleNodePointerMove}
@@ -608,107 +797,269 @@ function NodeCard({
       onPointerCancel={handleNodePointerUp}
     >
       <button
+        ref={cardRef}
+        aria-expanded={canExpand ? isExpanded : undefined}
+        aria-label={`${node.label}${canExpand ? ` — ${node.children.length} turunan, ${isExpanded ? 'terbuka' : 'tertutup'}` : ''}`}
+        // [REFACTOR 4B] Node hover tooltip
+        title={[
+          `Klik kanan untuk aksi · ${node.label}`,
+          node.divisionName ? `Lokasi: ${node.divisionName}` : null,
+          node.logisticReference ? `Ref: ${node.logisticReference}` : null,
+          node.progressPercent != null ? `Progress: ${node.progressPercent.toFixed(0)}%` : null,
+          node.remainingHours != null && node.remainingHours > 0
+            ? `Sisa: ${node.remainingHours}j`
+            : null,
+        ]
+          .filter(Boolean)
+          .join('\n')}
         type="button"
         onClick={() => {
           if (suppressClickRef.current) return;
         }}
-        className={`min-h-full w-full border bg-[#111114] p-3 text-left shadow-lg shadow-black/20 transition-[border-color,background-color,transform] hover:-translate-y-0.5 hover:border-amber-500/35 hover:bg-[#151518] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-500/70 ${
-          isSelected ? "border-amber-500/60" : isGroup ? "border-white/10" : detailKey ? "border-white/10" : "border-white/5"
-        }`}
+        className={`min-h-full w-full border bg-[#111114] p-3 text-left shadow-lg shadow-black/20 transition-[border-color,background-color,transform] hover:-translate-y-0.5 hover:border-amber-500/35 hover:bg-[#151518] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-500/70 ${isSelected ? "border-amber-500/60" : isGroup ? "border-white/10" : detailKey ? "border-white/10" : "border-white/5"
+          }`}
       >
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-start gap-2">
-              {canExpand ? (
-                <span className="flex h-5 w-5 shrink-0 items-center justify-center border border-white/10 text-white/35">
-                  {isExpanded ? <ChevronDown className="h-3 w-3" /> : <Plus className="h-3 w-3" />}
-                </span>
-              ) : null}
-              <span className={`mt-1.5 h-2 w-2 shrink-0 ${triage.dotClassName}`} />
-              <p className="min-w-0 whitespace-normal break-words text-[12px] font-mono leading-4 text-white/85">{node.label}</p>
+        {isGroupNode ? (
+          <>
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5">
+                  {canExpand ? (
+                    <span className="flex h-4 w-4 shrink-0 items-center justify-center border border-white/10 text-white/35">
+                      {isExpanded ? <ChevronDown className="h-2.5 w-2.5" /> : <Plus className="h-2.5 w-2.5" />}
+                    </span>
+                  ) : null}
+                  <p className="min-w-0 truncate text-[12px] font-mono font-medium text-white/85">{node.label}</p>
+                </div>
+                <p className="mt-0.5 text-[10px] text-white/35">{hierarchyText(node)}</p>
+              </div>
+              <span className="shrink-0 border border-white/10 px-1.5 py-0.5 text-[9px] font-mono uppercase text-white/30">
+                {node.nodeType}
+              </span>
             </div>
-            <p className="mt-1 whitespace-normal break-words text-[10px] leading-3 text-white/35">{hierarchyText(node)}</p>
-          </div>
-          <span className="shrink-0 border border-white/10 px-1.5 py-0.5 text-[9px] font-mono uppercase text-white/35">
-            {isGroup ? node.nodeType : panelRecord?.nodeType ?? "PART"}
-          </span>
-        </div>
-
-        <div className="mt-3 flex items-center justify-between gap-2">
-          <span className={`inline-flex items-center gap-1.5 border px-2 py-0.5 text-[9px] font-mono uppercase tracking-[0.1em] ${triage.className}`}>
-            <TriageIcon className="h-3 w-3" />
-            {triage.label}
-          </span>
-          {detailKey ? <ArrowUpRight className="h-3.5 w-3.5 text-white/35" /> : null}
-        </div>
-
-        {isGroup ? (
-          <p className="mt-3 text-[10px] font-mono text-white/28">
-            {node.children.length} turunan · {isExpanded ? "terbuka" : "tertutup"}
-          </p>
+            {node.progressPercent != null ? (
+              <div className="mt-3">
+                <div className="mb-1 flex items-center justify-between">
+                  <span className="text-[10px] font-mono text-white/35">{node.children.length} turunan</span>
+                  <span className="text-[10px] font-mono tabular-nums text-white/50">{node.progressPercent.toFixed(0)}%</span>
+                </div>
+                <div className="h-1 overflow-hidden bg-white/[0.06]">
+                  <div className="h-full bg-amber-400/60 transition-[width]" style={{ width: `${node.progressPercent}%` }} />
+                </div>
+              </div>
+            ) : null}
+            {node.remainingHours != null && node.remainingHours > 0 ? (
+              <p className="mt-2 text-[10px] font-mono text-white/35">{node.remainingHours}j tersisa</p>
+            ) : null}
+          </>
+        ) : isPanel ? (
+          <>
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5">
+                  {canExpand ? (
+                    <span className="flex h-4 w-4 shrink-0 items-center justify-center border border-white/10 text-white/35">
+                      {isExpanded ? <ChevronDown className="h-2.5 w-2.5" /> : <Plus className="h-2.5 w-2.5" />}
+                    </span>
+                  ) : null}
+                  {node.isLocked ? <Lock className="h-3 w-3 shrink-0 text-amber-400/70" /> : null}
+                  <p className="min-w-0 truncate text-[12px] font-mono font-medium text-white/85">{node.label}</p>
+                </div>
+                <p className="mt-0.5 text-[10px] text-white/35">{hierarchyText(node)}</p>
+              </div>
+              <div className="flex shrink-0 flex-col items-end gap-1">
+                <span className="border border-white/10 px-1.5 py-0.5 text-[9px] font-mono uppercase text-white/30">PANEL</span>
+                {node.conditionType && conditionBadge(node.conditionType) ? (
+                  <span className={`border px-1.5 py-0.5 text-[9px] font-mono uppercase ${conditionBadge(node.conditionType)}`}>
+                    {node.conditionType}
+                  </span>
+                ) : null}
+              </div>
+            </div>
+            <div className="mt-3 flex items-center justify-between gap-2">
+              {node.currentDivisionName ? (
+                <span className="flex min-w-0 items-center gap-1 truncate text-[10px] font-mono text-white/50">
+                  <Users className="h-3 w-3 shrink-0 text-white/30" />
+                  <span className="truncate">{node.currentDivisionName}</span>
+                </span>
+              ) : (
+                <span className="text-[10px] font-mono text-white/25">Belum ditugaskan</span>
+              )}
+              {(() => {
+                const js = jobStatusMeta(node.jobStatus);
+                return <span className={`shrink-0 border px-2 py-0.5 text-[9px] font-mono uppercase tracking-[0.08em] ${js.className}`}>{js.label}</span>;
+              })()}
+            </div>
+            {(() => {
+              const sm = stockStatusMeta(node.stockStatus);
+              const StockIcon = sm.icon;
+              return (
+                <div className="mt-2 flex items-start gap-1.5">
+                  <StockIcon className={`mt-0.5 h-3 w-3 shrink-0 ${sm.className}`} />
+                  <div className="min-w-0">
+                    <span className={`text-[10px] font-mono ${sm.className}`}>{sm.label}</span>
+                    {node.locationName ? (
+                      <p className="truncate text-[10px] text-white/35">
+                        {node.locationName}{node.locationDetail ? ` · ${node.locationDetail}` : ""}
+                      </p>
+                    ) : null}
+                    {node.stockStatus === "RETRIEVED" && node.takenByName ? (
+                      <p className="truncate text-[10px] text-white/35">
+                        Oleh: {node.takenByName}
+                        {node.dateOut ? ` · ${new Date(node.dateOut).toLocaleDateString("id-ID", { day: "numeric", month: "short" })}` : ""}
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            })()}
+            {node.progressPercent != null ? (
+              <div className="mt-3">
+                <div className="mb-1 flex items-center justify-between">
+                  <span className="text-[10px] font-mono tabular-nums text-white/50">{node.progressPercent.toFixed(0)}%</span>
+                  {node.remainingHours != null && node.remainingHours > 0 ? <span className="text-[10px] font-mono text-white/35">{node.remainingHours}j sisa</span> : null}
+                </div>
+                <div className="h-1 overflow-hidden bg-white/[0.06]">
+                  <div className={`h-full transition-[width] ${node.jobStatus === "DONE" ? "bg-emerald-400" : "bg-amber-400/70"}`} style={{ width: `${node.progressPercent}%` }} />
+                </div>
+              </div>
+            ) : null}
+            <div className="mt-2 flex items-center justify-between gap-2">
+              {node.qcLastStatus === "TIDAK_LOLOS" ? <span className="text-[9px] font-mono text-red-400/80">QC TIDAK LOLOS{node.countRevisi ? ` · rev.${node.countRevisi}` : ""}</span> : null}
+              {node.qcLastStatus === "LOLOS" ? <span className="text-[9px] font-mono text-emerald-400/70">QC LOLOS</span> : null}
+              {node.deadlineDate ? <span className="ml-auto text-[9px] font-mono text-white/30">📅 {new Date(node.deadlineDate).toLocaleDateString("id-ID", { day: "numeric", month: "short" })}</span> : null}
+            </div>
+          </>
         ) : (
           <>
-            <div className="mt-3 flex items-center gap-1.5 text-[10px] text-white/45">
-              {triage.tone === "good" ? <PackageCheck className="h-3 w-3 text-emerald-300" /> : <MapPin className="h-3 w-3 text-white/30" />}
-              <span className="min-w-0 whitespace-normal break-words leading-3">{location}</span>
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <p className="min-w-0 truncate text-[12px] font-mono font-medium text-white/85">{node.label}</p>
+                <p className="mt-0.5 text-[10px] text-white/35">{hierarchyText(node)}</p>
+              </div>
+              <div className="flex shrink-0 flex-col items-end gap-1">
+                <span className="border border-white/10 px-1.5 py-0.5 text-[9px] font-mono uppercase text-white/30">PART</span>
+                {node.conditionType && conditionBadge(node.conditionType) ? (
+                  <span className={`border px-1.5 py-0.5 text-[9px] font-mono uppercase ${conditionBadge(node.conditionType)}`}>
+                    {node.conditionType}
+                  </span>
+                ) : null}
+              </div>
             </div>
-            <ProgressBar value={node.progressPercent} tone={triage.tone} />
+            {(() => {
+              const sm = stockStatusMeta(node.stockStatus);
+              const StockIcon = sm.icon;
+              const js = jobStatusMeta(node.jobStatus);
+              return (
+                <div className="mt-3 flex items-start gap-1.5">
+                  <StockIcon className={`mt-0.5 h-3 w-3 shrink-0 ${sm.className}`} />
+                  <div className="min-w-0">
+                    <span className={`text-[10px] font-mono ${sm.className}`}>{sm.label}</span>
+                    {node.locationName ? (
+                      <p className="truncate text-[10px] text-white/35">{node.locationName}{node.locationDetail ? ` · ${node.locationDetail}` : ""}</p>
+                    ) : null}
+                    {node.stockStatus === "RETRIEVED" && node.takenByName ? (
+                      <p className="truncate text-[10px] text-white/35">
+                        Oleh: {node.takenByName}
+                        {node.dateOut ? ` · ${new Date(node.dateOut).toLocaleDateString("id-ID", { day: "numeric", month: "short" })}` : ""}
+                      </p>
+                    ) : null}
+                  </div>
+                  <span className={`ml-auto shrink-0 border px-1.5 py-0.5 text-[9px] font-mono uppercase ${js.className}`}>{js.label}</span>
+                </div>
+              );
+            })()}
+            {node.progressPercent != null ? (
+              <div className="mt-3">
+                <div className="mb-1 flex items-center justify-between">
+                  <span className="text-[10px] font-mono tabular-nums text-white/50">{node.progressPercent.toFixed(0)}%</span>
+                  {node.remainingHours != null && node.remainingHours > 0 ? <span className="text-[10px] font-mono text-white/35">{node.remainingHours}j sisa</span> : null}
+                  {node.deadlineDate ? <span className="text-[9px] font-mono text-white/30">📅 {new Date(node.deadlineDate).toLocaleDateString("id-ID", { day: "numeric", month: "short" })}</span> : null}
+                </div>
+                <div className="h-1 overflow-hidden bg-white/[0.06]">
+                  <div className={`h-full transition-[width] ${node.jobStatus === "DONE" ? "bg-emerald-400" : "bg-amber-400/70"}`} style={{ width: `${node.progressPercent}%` }} />
+                </div>
+              </div>
+            ) : null}
           </>
         )}
-      </button>
-
-      {canManage ? (
-        <div
-          data-node-actions="true"
-          className={`absolute -right-2 top-2 z-20 flex flex-col border border-white/10 bg-[#0d0d10] p-1 shadow-xl shadow-black/30 transition-opacity ${
-            isMenuOpen ? "opacity-100" : "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100"
-          }`}
-        >
-          <button
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              onCreateChild(node);
+        {detailKey ? (
+          <div
+            className="mt-2 flex cursor-pointer justify-end transition-opacity hover:opacity-80"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (suppressClickRef.current) return;
+              onNavigateToDetail(node);
             }}
-            className="flex h-8 w-8 items-center justify-center text-white/45 transition-colors hover:bg-amber-500/[0.08] hover:text-amber-400"
-            title="Tambah Part"
-            aria-label="Tambah Part"
+            title="Buka detail workflow"
           >
-            <PackagePlus className="h-4 w-4" />
-          </button>
-          {panelRecord ? (
-            <>
-              <button
-                type="button"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onEdit(panelRecord);
-                }}
-                className="flex h-8 w-8 items-center justify-center text-white/45 transition-colors hover:bg-white/[0.05] hover:text-white"
-                title="Edit"
-                aria-label="Edit"
-              >
-                <Edit3 className="h-4 w-4" />
-              </button>
-              <button
-                type="button"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onDelete(panelRecord);
-                }}
-                className="flex h-8 w-8 items-center justify-center text-red-300/45 transition-colors hover:bg-red-500/[0.08] hover:text-red-300"
-                title="Hapus"
-                aria-label="Hapus"
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
-            </>
-          ) : null}
-        </div>
-      ) : null}
+            <ArrowUpRight className="h-3.5 w-3.5 text-white/35" />
+          </div>
+        ) : null}
+      </button>
+      <span
+        data-node-resize="true"
+        className={`absolute bottom-[-4px] right-[-4px] h-3 w-3 cursor-nwse-resize border border-sky-300 bg-sky-400 transition-opacity ${
+          isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-60'
+        }`}
+        onPointerDown={handleResizePointerDown}
+      />
     </div>
   );
 }
+
+const CanvasEdges = memo(
+  ({
+    positionedNodes,
+    nodeById,
+    rootPosition,
+    selectedNodeId,
+  }: {
+    positionedNodes: CanvasNode[];
+    nodeById: Map<string, CanvasNode>;
+    rootPosition: NodePosition;
+    selectedNodeId: string | null;
+  }) => (
+    <svg className="absolute inset-0 h-full w-full pointer-events-none" aria-hidden="true">
+      <defs>
+        <marker id="arrow" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L6,3 z" fill="rgba(255,255,255,0.25)" />
+        </marker>
+      </defs>
+      {positionedNodes.map((item) => {
+        if (!item.parentId) return null;
+        const parent = item.parentId === ROOT_NODE_ID
+          ? { x: rootPosition.x, y: rootPosition.y, width: NODE_WIDTH, height: NODE_HEIGHT }
+          : nodeById.get(item.parentId);
+        if (!parent) return null;
+
+        const isHighlighted = selectedNodeId === item.node.nodeId || selectedNodeId === item.parentId;
+        const startX = parent.x + parent.width;
+        const startY = parent.y + parent.height / 2;
+        const endX = item.x;
+        const endY = item.y + item.height / 2;
+        const midX = startX + (endX - startX) / 2;
+
+        return (
+          <path
+            key={`${item.parentId}:${item.node.nodeId}`}
+            d={`M ${startX} ${startY} C ${midX} ${startY}, ${midX} ${endY}, ${endX} ${endY}`}
+            fill="none"
+            stroke={isHighlighted ? "rgba(245,158,11,0.6)" : "rgba(255,255,255,0.1)"}
+            strokeWidth={isHighlighted ? 1.5 : 0.8}
+            markerEnd="url(#arrow)"
+          />
+        );
+      })}
+    </svg>
+  ),
+  (prev, next) =>
+    prev.positionedNodes === next.positionedNodes &&
+    prev.rootPosition.x === next.rootPosition.x &&
+    prev.rootPosition.y === next.rootPosition.y &&
+    prev.selectedNodeId === next.selectedNodeId,
+);
+CanvasEdges.displayName = 'CanvasEdges';
 
 export function BomTrackerTab({
   carId,
@@ -719,17 +1070,73 @@ export function BomTrackerTab({
   canManagePanels = false,
 }: BomTrackerTabProps) {
   const router = useRouter();
-  const sweetAlert = useSweetAlert();
+  const { alertElement, notifyError, notifySuccess, confirm } = useSweetAlert();
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const hasLoadedCanvasStateRef = useRef(false);
   const skipNextCanvasSaveRef = useRef(true);
+  const sectionRef = useRef<HTMLElement | null>(null);
   const panRef = useRef<{ pointerId: number; startX: number; startY: number; left: number; top: number } | null>(null);
+  const edgeScrollRafRef = useRef<number | null>(null);
+  const hasScrolledToRootRef = useRef(false);
+  const isDraggingNodeRef = useRef(false);
+  const lastCursorRef = useRef({ clientX: 0, clientY: 0 });
+
+  const onNodeDragStart = useCallback((clientX: number, clientY: number) => {
+    isDraggingNodeRef.current = true;
+    lastCursorRef.current = { clientX, clientY };
+    edgeScrollRafRef.current = requestAnimationFrame(runEdgeScroll);
+  }, []);
+
+  const onNodeDragMove = useCallback((clientX: number, clientY: number) => {
+    lastCursorRef.current = { clientX, clientY };
+  }, []);
+
+  const onNodeDragEnd = useCallback(() => {
+    isDraggingNodeRef.current = false;
+    if (edgeScrollRafRef.current !== null) {
+      cancelAnimationFrame(edgeScrollRafRef.current);
+      edgeScrollRafRef.current = null;
+    }
+  }, []);
+
+  function runEdgeScroll() {
+    if (!isDraggingNodeRef.current || !viewportRef.current) return;
+
+    const vp = viewportRef.current;
+    const vpRect = vp.getBoundingClientRect();
+    const { clientX, clientY } = lastCursorRef.current;
+    const relX = clientX - vpRect.left;
+    const relY = clientY - vpRect.top;
+
+    // Scroll ke kanan/bawah saja
+    if (relX > vpRect.width - EDGE_SCROLL_ZONE) {
+      vp.scrollLeft += EDGE_SCROLL_SPEED;
+      setCanvasMinSize((s) => ({ ...s, width: s.width + EDGE_EXPAND_STEP }));
+    }
+    if (relY > vpRect.height - EDGE_SCROLL_ZONE) {
+      vp.scrollTop += EDGE_SCROLL_SPEED;
+      setCanvasMinSize((s) => ({ ...s, height: s.height + EDGE_EXPAND_STEP }));
+    }
+
+    // Scroll ke kiri/atas — hanya scroll viewport, TIDAK geser node, TIDAK expand
+    if (relX < EDGE_SCROLL_ZONE) vp.scrollLeft -= EDGE_SCROLL_SPEED;
+    if (relY < EDGE_SCROLL_ZONE) vp.scrollTop  -= EDGE_SCROLL_SPEED;
+
+    edgeScrollRafRef.current = requestAnimationFrame(runEdgeScroll);
+  }
+
+  useEffect(() => {
+    return () => {
+      if (edgeScrollRafRef.current !== null) {
+        cancelAnimationFrame(edgeScrollRafRef.current);
+      }
+    };
+  }, []);
+
   const rootDragRef = useRef<{
     pointerId: number;
-    startX: number;
-    startY: number;
-    nodeX: number;
-    nodeY: number;
+    lastClientX: number;
+    lastClientY: number;
     didDrag: boolean;
   } | null>(null);
   const suppressRootClickRef = useRef(false);
@@ -737,17 +1144,88 @@ export function BomTrackerTab({
   const [rows, setRows] = useState<UnitPanelRecord[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+
   const [zoom, setZoom] = useState(0.92);
   const [mode, setMode] = useState<FormMode>(null);
   const [form, setForm] = useState<PanelFormState>(emptyForm());
-  const [menuNodeId, setMenuNodeId] = useState<string | null>(null);
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [isRootExpanded, setIsRootExpanded] = useState(false);
   const [expandedNodeIds, setExpandedNodeIds] = useState<Set<string>>(() => new Set());
   const [nodePositions, setNodePositions] = useState<Record<string, NodePosition>>({});
   const [selection, setSelection] = useState<SelectionTarget>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [canvasMinSize, setCanvasMinSize] = useState({ width: 6000, height: 4000 });
+  const [hiddenNodeIds, setHiddenNodeIds] = useState<Set<string>>(() => new Set());
+  const [nodeDimensions, setNodeDimensions] = useState<Record<string, NodeDimension>>({});
+  // Draft history for canvas undo (Ctrl+Z)
+  const canvasStateRef = useRef<BomCanvasDraft>({
+    zoom: 0.92,
+    isRootExpanded: false,
+    expandedNodeIds: [],
+    nodePositions: {},
+    canvasMinSize: { width: 6000, height: 4000 },
+    hiddenNodeIds: [],
+    nodeDimensions: {},
+  });
+  const draftHistoryRef = useRef<BomCanvasDraft[]>([]);
+  const [canUndo, setCanUndo] = useState(false);
+  const [showHint, setShowHint] = useState(() => !safeStorage()?.getItem('bom:canvas:hint-dismissed'));
+  const contextMenuRef = useRef<HTMLDivElement>(null);
+  const formRef = useRef<HTMLFormElement | null>(null);
+
+  useEffect(() => {
+    if (contextMenu) {
+      const firstBtn = contextMenuRef.current?.querySelector('button');
+      firstBtn?.focus();
+    }
+  }, [contextMenu]);
+
+  const undoCanvas = useCallback(() => {
+    const history = draftHistoryRef.current;
+    if (history.length === 0) return;
+    const prev = history[history.length - 1];
+    draftHistoryRef.current = history.slice(0, -1);
+    setCanUndo(draftHistoryRef.current.length > 0);
+    setZoom(prev.zoom);
+    setIsRootExpanded(prev.isRootExpanded);
+    setExpandedNodeIds(new Set(prev.expandedNodeIds));
+    setNodePositions(prev.nodePositions);
+    setCanvasMinSize(prev.canvasMinSize);
+    setHiddenNodeIds(new Set(prev.hiddenNodeIds));
+    setNodeDimensions(prev.nodeDimensions);
+  }, []);
+
+  const fitToView = useCallback(() => {
+    const positions = Object.values(nodePositions);
+    if (positions.length === 0 || !viewportRef.current) return;
+
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const pos of positions) {
+      if (pos.x < minX) minX = pos.x;
+      if (pos.y < minY) minY = pos.y;
+      if (pos.x > maxX) maxX = pos.x;
+      if (pos.y > maxY) maxY = pos.y;
+    }
+    maxX += NODE_WIDTH + 96;
+    maxY += NODE_HEIGHT + 96;
+
+    const vpW = viewportRef.current.clientWidth;
+    const vpH = viewportRef.current.clientHeight;
+    const contentW = maxX - minX;
+    const contentH = maxY - minY;
+
+    const fitZoom = Math.min(vpW / (contentW + 160), vpH / (contentH + 160), 1.0, 1.35);
+    const roundedZoom = Number(Math.max(0.55, fitZoom).toFixed(2));
+    setZoom(roundedZoom);
+
+    window.requestAnimationFrame(() => {
+      viewportRef.current?.scrollTo({
+        left: Math.max(0, (minX - 80) * roundedZoom),
+        top: Math.max(0, (minY - 80) * roundedZoom),
+        behavior: 'smooth',
+      });
+    });
+  }, [nodePositions]);
 
   useEffect(() => {
     setWorkspace(bom);
@@ -756,7 +1234,7 @@ export function BomTrackerTab({
   useEffect(() => {
     hasLoadedCanvasStateRef.current = false;
     skipNextCanvasSaveRef.current = true;
-    const saved = parsePersistedCanvasState(window.localStorage.getItem(canvasStateKey(carId)));
+    const saved = parsePersistedCanvasState(safeStorage()?.getItem(canvasStateKey(carId)) ?? null);
     if (saved) {
       if (typeof saved.zoom === "number") {
         setZoom(Math.max(0.55, Math.min(1.35, saved.zoom)));
@@ -766,29 +1244,66 @@ export function BomTrackerTab({
       setIsRootExpanded(Boolean(saved.isRootExpanded));
       setExpandedNodeIds(new Set(saved.expandedNodeIds ?? []));
       setNodePositions(saved.nodePositions ?? {});
+      setCanvasMinSize(saved.canvasMinSize ?? { width: 6000, height: 4000 });
+      setHiddenNodeIds(new Set(saved.hiddenNodeIds ?? []));
+      setNodeDimensions(saved.nodeDimensions ?? {});
     } else {
       setZoom(0.92);
       setIsRootExpanded(false);
       setExpandedNodeIds(new Set());
       setNodePositions({});
+      setCanvasMinSize({ width: 1400, height: 1100 });
+      setHiddenNodeIds(new Set());
+      setNodeDimensions({});
     }
     hasLoadedCanvasStateRef.current = true;
   }, [carId]);
 
   useEffect(() => {
+    if (!viewportRef.current || hasScrolledToRootRef.current) return;
     if (!hasLoadedCanvasStateRef.current) return;
+    hasScrolledToRootRef.current = true;
+
+    // Scroll viewport supaya root node terlihat di tengah
+    const rootX = (nodePositions[ROOT_NODE_ID]?.x ?? 32) * zoom;
+    const rootY = (nodePositions[ROOT_NODE_ID]?.y ?? 32) * zoom;
+    const vpW = viewportRef.current.clientWidth;
+    const vpH = viewportRef.current.clientHeight;
+
+    viewportRef.current.scrollTo({
+      left: Math.max(0, rootX - vpW / 2 + (NODE_WIDTH * zoom) / 2),
+      top:  Math.max(0, rootY - vpH / 2 + (NODE_HEIGHT * zoom) / 2),
+    });
+  }, [hasLoadedCanvasStateRef.current, zoom, nodePositions]);
+
+  useEffect(() => {
+    if (!hasLoadedCanvasStateRef.current) return;
+
+    const draft: BomCanvasDraft = {
+      zoom,
+      isRootExpanded,
+      expandedNodeIds: Array.from(expandedNodeIds),
+      nodePositions: { ...nodePositions },
+      canvasMinSize: { ...canvasMinSize },
+      hiddenNodeIds: Array.from(hiddenNodeIds),
+      nodeDimensions: { ...nodeDimensions },
+    };
+
+    // Sync ref terlebih dahulu (selalu)
+    canvasStateRef.current = draft;
+
+    // Save ke localStorage (kecuali skip flag aktif)
     if (skipNextCanvasSaveRef.current) {
       skipNextCanvasSaveRef.current = false;
       return;
     }
-    const payload: PersistedCanvasState = {
-      zoom,
-      isRootExpanded,
-      expandedNodeIds: Array.from(expandedNodeIds),
-      nodePositions,
-    };
-    window.localStorage.setItem(canvasStateKey(carId), JSON.stringify(payload));
-  }, [carId, expandedNodeIds, isRootExpanded, nodePositions, zoom]);
+
+    safeStorage()?.setItem(canvasStateKey(carId), JSON.stringify(draft));
+  }, [zoom, isRootExpanded, expandedNodeIds, nodePositions, canvasMinSize, hiddenNodeIds, nodeDimensions, carId]);
+
+  // Auto-expand dihapus, diganti edge-scroll
+
+
 
   const loadPanels = useCallback(async () => {
     const result = await fetchUnitPanels("", carId);
@@ -803,7 +1318,7 @@ export function BomTrackerTab({
 
   const refreshWorkspace = useCallback(async () => {
     setIsLoading(true);
-    setError(null);
+
     const [bomResult, panelsOk] = await Promise.all([
       fetchUnitBom("", carId),
       loadPanels(),
@@ -812,15 +1327,37 @@ export function BomTrackerTab({
     if (bomResult.payload) {
       setWorkspace(bomResult.payload.data);
     } else {
-      setError("Data BOM belum bisa dimuat ulang.");
+      notifyError("Data BOM belum bisa dimuat ulang.");
     }
 
     if (!panelsOk) {
-      setError((current) => current ?? "Master panel unit belum bisa dimuat.");
+      notifyError("Master panel unit belum bisa dimuat.");
     }
 
     setIsLoading(false);
   }, [carId, loadPanels]);
+
+  useEffect(() => {
+    function handleFullscreenChange() {
+      setIsFullscreen(Boolean(document.fullscreenElement));
+    }
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
+  }, []);
+
+  function handleFullscreenToggle() {
+    if (!isFullscreen) {
+      sectionRef.current?.requestFullscreen?.().catch(() => {
+        setIsFullscreen(true);
+      });
+    } else {
+      if (document.fullscreenElement) {
+        document.exitFullscreen?.().catch(() => { });
+      } else {
+        setIsFullscreen(false);
+      }
+    }
+  }
 
   useEffect(() => {
     void loadPanels();
@@ -834,9 +1371,13 @@ export function BomTrackerTab({
     }
     return map;
   }, [flatPanelRecords]);
+  const panelTrackerTree = useMemo(
+    () => buildPanelTrackerTree(rows, workspace?.tree ?? []),
+    [rows, workspace?.tree],
+  );
   const layout = useMemo(
-    () => buildCanvasLayout(workspace?.tree ?? [], expandedNodeIds, isRootExpanded),
-    [expandedNodeIds, isRootExpanded, workspace],
+    () => buildCanvasLayout(panelTrackerTree, expandedNodeIds, isRootExpanded, nodeDimensions, hiddenNodeIds),
+    [expandedNodeIds, hiddenNodeIds, isRootExpanded, nodeDimensions, panelTrackerTree],
   );
   const rootPosition = nodePositions[ROOT_NODE_ID] ?? { x: 32, y: 32 };
   const positionedNodes = useMemo(
@@ -858,22 +1399,20 @@ export function BomTrackerTab({
         width: Math.max(bounds.width, item.x + item.width + 96),
         height: Math.max(bounds.height, item.y + item.height + 96),
       }),
-      { width: layout.width, height: layout.height },
+      { width: Math.max(layout.width, canvasMinSize.width), height: Math.max(layout.height, canvasMinSize.height) },
     );
-  }, [layout.height, layout.width, positionedNodes, rootPosition.x, rootPosition.y]);
+  }, [canvasMinSize.height, canvasMinSize.width, layout.height, layout.width, positionedNodes, rootPosition.x, rootPosition.y]);
 
   const categories = useMemo(() => {
     const cats = new Set<string>();
     for (const row of rows) {
       cats.add(displayCategory(row.category));
     }
-    if (workspace) {
-      for (const node of positionedNodes) {
-        cats.add(displayCategory(node.node.category));
-      }
+    for (const node of panelTrackerTree) {
+      cats.add(displayCategory(node.category ?? node.label));
     }
     return Array.from(cats).sort();
-  }, [positionedNodes, rows, workspace]);
+  }, [panelTrackerTree, rows]);
 
   const rowsInSelectedCategory = useMemo(() => {
     return rows.filter((row) => displayCategory(row.category) === form.category);
@@ -910,17 +1449,9 @@ export function BomTrackerTab({
   const totalPanelRecords = rows.length;
   const totalPartRecords = useMemo(() => rows.reduce((total, row) => total + row.children.length, 0), [rows]);
 
-  useEffect(() => {
-    if (error) {
-      sweetAlert.notifyError("Aksi belum berhasil", error);
-    }
-  }, [error]);
 
-  useEffect(() => {
-    if (message) {
-      sweetAlert.notifySuccess("Berhasil", message);
-    }
-  }, [message]);
+
+
 
   function getNextSortOrder(parentId: number | null, section: string) {
     if (parentId !== null) {
@@ -941,7 +1472,7 @@ export function BomTrackerTab({
 
     const result = await fetchUnitPanels("", carId);
     if (!result.payload) {
-      setError("Master panel unit belum bisa dimuat untuk disimpan.");
+      notifyError("Master panel unit belum bisa dimuat untuk disimpan.");
       return null;
     }
 
@@ -952,23 +1483,23 @@ export function BomTrackerTab({
   const openCreateRoot = useCallback(() => {
     setMode({ type: "create", sectionMode: rows.length > 0 ? "existing" : "new" });
     setForm(emptyForm());
-    setMessage(null);
-    setError(null);
+
+
   }, [rows.length]);
 
   function openCreateCategory() {
     setMode({ type: "create", sectionMode: "new" });
     setForm({ ...emptyForm(), nodeType: "PANEL", nodeTypeName: "Panel" });
     setSelection({ type: "unit" });
-    setMessage(null);
-    setError(null);
+
+
   }
 
   function openCreateSectionFromCategory(category: string) {
     setMode({ type: "create", sectionMode: "new" });
     setForm({ ...emptyForm(), category, nodeType: "PANEL", nodeTypeName: "Panel" });
-    setMessage(null);
-    setError(null);
+
+
   }
 
   function openCreatePanelFromSection(node: UnitBomNode) {
@@ -980,15 +1511,15 @@ export function BomTrackerTab({
       nodeType: "PANEL",
       nodeTypeName: "Panel",
     });
-    setMessage(null);
-    setError(null);
+
+
   }
 
   function openEditCategory(category: string) {
     setMode({ type: "edit-category", category });
     setForm({ ...emptyForm(), category });
-    setMessage(null);
-    setError(null);
+
+
   }
 
   async function handleDeleteCategory(category: string) {
@@ -1008,29 +1539,26 @@ export function BomTrackerTab({
       });
 
     if (targets.length === 0) {
-      setError("Kategori tidak memiliki panel atau part yang bisa dihapus.");
+      notifyError("Kategori tidak memiliki panel atau part yang bisa dihapus.");
       return;
     }
 
-    const confirmed = window.confirm(
-      `Hapus kategori "${category}" beserta ${targets.length} panel/part di dalamnya?`,
-    );
+    const confirmed = await confirm({ title: "Hapus Kategori?", description: `Hapus kategori "${category}" beserta ${targets.length} panel/part di dalamnya?`, tone: "error", confirmLabel: "Hapus", cancelLabel: "Batal" });
     if (!confirmed) return;
 
     setIsSubmitting(true);
-    setError(null);
-    setMessage(null);
+
 
     for (const record of targets) {
       const result = await deleteUnitPanel(carId, record.id);
       if (!result.success) {
-        setError(result.message);
+        notifyError(result.message);
         setIsSubmitting(false);
         return;
       }
     }
 
-    setMessage(`Kategori "${category}" berhasil dihapus.`);
+    notifySuccess(`Kategori "${category}" berhasil dihapus.`);
     closeForm();
     setSelection({ type: "unit" });
     await refreshWorkspace();
@@ -1040,30 +1568,31 @@ export function BomTrackerTab({
   function openEditSection(category: string, section: string) {
     setMode({ type: "edit-section", category, section });
     setForm({ ...emptyForm(), category, section });
-    setMessage(null);
-    setError(null);
+
+
   }
 
   function openCreateFromNode(node: UnitBomNode) {
     const parentRecord = node.panelId ? recordsById.get(node.panelId) ?? null : null;
     setMode({ type: "create", sectionMode: "existing", sourceNode: node });
     setForm(parentRecord ? formForChild(parentRecord) : formForNode(node));
-    setMenuNodeId(null);
-    setMessage(null);
-    setError(null);
+    setContextMenu(null);
+
+
   }
 
   function openEdit(record: UnitPanelRecord) {
     setMode({ type: "edit", record });
     setForm(formFromRecord(record));
-    setMenuNodeId(null);
-    setMessage(null);
-    setError(null);
+    setContextMenu(null);
+
+
   }
 
   function closeForm() {
     setMode(null);
     setForm(emptyForm());
+    viewportRef.current?.focus();
   }
 
   function selectNodeType(value: string) {
@@ -1126,13 +1655,12 @@ export function BomTrackerTab({
     }
 
     setIsSubmitting(true);
-    setError(null);
-    setMessage(null);
+
 
     if (mode.type === "edit-category") {
       const nextCategory = form.category.trim();
       if (!nextCategory) {
-        setError("Nama kategori wajib diisi.");
+        notifyError("Nama kategori wajib diisi.");
         setIsSubmitting(false);
         return;
       }
@@ -1142,12 +1670,12 @@ export function BomTrackerTab({
         toCategory: nextCategory,
       });
       if (!result.success) {
-        setError(result.message);
+        notifyError(result.message);
         setIsSubmitting(false);
         return;
       }
 
-      setMessage(`Nama kategori berhasil diperbarui untuk ${result.result.updatedCount} panel/part.`);
+      notifySuccess(`Nama kategori berhasil diperbarui untuk ${result.result.updatedCount} panel/part.`);
       closeForm();
       await refreshWorkspace();
       setIsSubmitting(false);
@@ -1157,7 +1685,7 @@ export function BomTrackerTab({
     if (mode.type === "edit-section") {
       const nextSection = form.section.trim();
       if (!nextSection) {
-        setError("Nama section wajib diisi.");
+        notifyError("Nama section wajib diisi.");
         setIsSubmitting(false);
         return;
       }
@@ -1172,7 +1700,7 @@ export function BomTrackerTab({
         (record) => recordMatchesCategory(record, mode.category) && record.section === mode.section,
       );
       if (targets.length === 0) {
-        setError(`Tidak ada panel atau part pada section "${mode.section}" yang bisa diperbarui.`);
+        notifyError(`Tidak ada panel atau part pada section "${mode.section}" yang bisa diperbarui.`);
         setIsSubmitting(false);
         return;
       }
@@ -1187,12 +1715,12 @@ export function BomTrackerTab({
       );
       const failed = results.find((result) => !result.success);
       if (failed) {
-        setError(failed.message);
+        notifyError(failed.message);
         setIsSubmitting(false);
         return;
       }
 
-      setMessage("Nama section berhasil diperbarui.");
+      notifySuccess("Nama section berhasil diperbarui.");
       closeForm();
       await refreshWorkspace();
       setIsSubmitting(false);
@@ -1223,7 +1751,7 @@ export function BomTrackerTab({
     };
 
     if (!payload.section || !payload.name) {
-      setError("Section dan nama wajib diisi.");
+      notifyError("Section dan nama wajib diisi.");
       setIsSubmitting(false);
       return;
     }
@@ -1233,13 +1761,13 @@ export function BomTrackerTab({
       mode.sectionMode === "existing" &&
       !["panel", "part"].includes(form.nodeTypeName.trim().toLowerCase())
     ) {
-      setError("Pilih tipe yang valid: Panel atau Part.");
+      notifyError("Pilih tipe yang valid: Panel atau Part.");
       setIsSubmitting(false);
       return;
     }
 
     if (mode.type !== "edit" && effectiveForm.nodeType === "PART" && !parentId) {
-      setError("Pilih panel parent untuk part.");
+      notifyError("Pilih panel parent untuk part.");
       setIsSubmitting(false);
       return;
     }
@@ -1248,17 +1776,17 @@ export function BomTrackerTab({
       mode.type === "edit"
         ? await updateUnitPanel(carId, mode.record.id, payload)
         : await createUnitPanel(carId, {
-            parentId,
-            ...payload,
-          });
+          parentId,
+          ...payload,
+        });
 
     if (!result.success) {
-      setError(result.message);
+      notifyError(result.message);
       setIsSubmitting(false);
       return;
     }
 
-    setMessage(
+    notifySuccess(
       mode.type === "edit"
         ? "Master panel berhasil diperbarui."
         : effectiveForm.nodeType === "PART"
@@ -1272,29 +1800,37 @@ export function BomTrackerTab({
 
   async function handleDelete(record: UnitPanelRecord) {
     if (!canManagePanels) return;
-    const confirmed = window.confirm(`Hapus ${record.nodeType === "PANEL" ? "panel" : "part"} "${record.name}"?`);
+    const confirmed = await confirm({ title: "Hapus?", description: `Hapus ${record.nodeType === "PANEL" ? "panel" : "part"} "${record.name}"?`, tone: "error", confirmLabel: "Hapus", cancelLabel: "Batal" });
     if (!confirmed) return;
 
     setIsSubmitting(true);
-    setError(null);
-    setMessage(null);
+
 
     const result = await deleteUnitPanel(carId, record.id);
     if (!result.success) {
-      setError(result.message);
+      notifyError(result.message);
       setIsSubmitting(false);
       return;
     }
 
-    setMessage(`${record.nodeType === "PANEL" ? "Panel" : "Part"} berhasil dihapus.`);
+    notifySuccess(`${record.nodeType === "PANEL" ? "Panel" : "Part"} berhasil dihapus.`);
     await refreshWorkspace();
     setIsSubmitting(false);
   }
 
-  function openMenu(node: UnitBomNode, event?: MouseEvent) {
-    event?.preventDefault();
-    event?.stopPropagation();
-    setMenuNodeId((current) => (current === node.nodeId ? null : node.nodeId));
+  function openMenu(node: UnitBomNode, event: MouseEvent<HTMLDivElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+    const bounds = sectionRef.current?.getBoundingClientRect();
+    if (!bounds) return;
+    const menuWidth = 176;
+    const menuHeight = 164;
+    setSelection({ type: "node", node });
+    setContextMenu({
+      node,
+      x: Math.max(12, Math.min(event.clientX - bounds.left, bounds.width - menuWidth - 12)),
+      y: Math.max(12, Math.min(event.clientY - bounds.top, bounds.height - menuHeight - 12)),
+    });
   }
 
   function toggleNode(node: UnitBomNode) {
@@ -1310,10 +1846,14 @@ export function BomTrackerTab({
     });
   }
 
-  function updateNodePosition(nodeId: string, position: NodePosition) {
+  function updateNodePosition(
+    nodeId: string,
+    updater: (current: NodePosition) => NodePosition,
+    initialPos?: NodePosition,
+  ) {
     setNodePositions((current) => ({
       ...current,
-      [nodeId]: position,
+      [nodeId]: updater(current[nodeId] ?? initialPos ?? { x: 32, y: 32 }),
     }));
   }
 
@@ -1322,39 +1862,95 @@ export function BomTrackerTab({
     setIsRootExpanded(false);
     setExpandedNodeIds(new Set());
     setNodePositions({});
+    setCanvasMinSize({ width: 6000, height: 4000 });
+    setHiddenNodeIds(new Set());
+    setNodeDimensions({});
     setSelection(null);
-    window.localStorage.removeItem(canvasStateKey(carId));
+    setContextMenu(null);
+    draftHistoryRef.current = [];
+    setCanUndo(false);
+    safeStorage()?.removeItem(canvasStateKey(carId));
+  }
+
+  // Called by NodeCard before drag/resize starts — snapshots current canvas state for undo
+  const handleInteractionStart = useCallback(() => {
+    draftHistoryRef.current = [...draftHistoryRef.current.slice(-19), { ...canvasStateRef.current }];
+    setCanUndo(true);
+    if (showHint) {
+      setShowHint(false);
+      safeStorage()?.setItem('bom:canvas:hint-dismissed', '1');
+    }
+  }, [showHint]);
+
+  function hideNode(nodeId: string) {
+    setHiddenNodeIds((current) => {
+      const next = new Set(current);
+      next.add(nodeId);
+      return next;
+    });
+    if (selection?.type === "node" && selection.node.nodeId === nodeId) {
+      setSelection(null);
+    }
+    setContextMenu(null);
+  }
+
+  function updateNodeDimension(nodeId: string, dimension: NodeDimension) {
+    setNodeDimensions((current) => ({
+      ...current,
+      [nodeId]: dimension,
+    }));
+  }
+
+  function resetNodeDimension(nodeId: string) {
+    setNodeDimensions((current) => {
+      const { [nodeId]: _removed, ...rest } = current;
+      return rest;
+    });
+    setContextMenu(null);
   }
 
   function handleRootPointerDown(event: PointerEvent<HTMLDivElement>) {
     if (event.button !== 0) return;
     event.stopPropagation();
+    isDraggingNodeRef.current = true;
+    lastCursorRef.current = { clientX: event.clientX, clientY: event.clientY };
+    edgeScrollRafRef.current = requestAnimationFrame(runEdgeScroll);
     rootDragRef.current = {
       pointerId: event.pointerId,
-      startX: event.clientX,
-      startY: event.clientY,
-      nodeX: rootPosition.x,
-      nodeY: rootPosition.y,
+      lastClientX: event.clientX,
+      lastClientY: event.clientY,
       didDrag: false,
     };
     event.currentTarget.setPointerCapture(event.pointerId);
   }
 
   function handleRootPointerMove(event: PointerEvent<HTMLDivElement>) {
+    lastCursorRef.current = { clientX: event.clientX, clientY: event.clientY };
     const drag = rootDragRef.current;
     if (!drag || drag.pointerId !== event.pointerId) return;
-    const dx = (event.clientX - drag.startX) / zoom;
-    const dy = (event.clientY - drag.startY) / zoom;
-    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+    const dx = (event.clientX - drag.lastClientX) / zoom;
+    const dy = (event.clientY - drag.lastClientY) / zoom;
+    drag.lastClientX = event.clientX;
+    drag.lastClientY = event.clientY;
+    if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) {
       drag.didDrag = true;
     }
-    updateNodePosition(ROOT_NODE_ID, {
-      x: Math.max(16, drag.nodeX + dx),
-      y: Math.max(16, drag.nodeY + dy),
+    // Gunakan functional updater agar tidak ada stale closure
+    setNodePositions((current) => {
+      const pos = current[ROOT_NODE_ID] ?? { x: 32, y: 32 };
+      return {
+        ...current,
+        [ROOT_NODE_ID]: { x: pos.x + dx, y: pos.y + dy },
+      };
     });
   }
 
   function handleRootPointerUp(event: PointerEvent<HTMLDivElement>) {
+    isDraggingNodeRef.current = false;
+    if (edgeScrollRafRef.current !== null) {
+      cancelAnimationFrame(edgeScrollRafRef.current);
+      edgeScrollRafRef.current = null;
+    }
     const drag = rootDragRef.current;
     if (!drag || drag.pointerId !== event.pointerId) return;
     suppressRootClickRef.current = drag.didDrag;
@@ -1372,7 +1968,7 @@ export function BomTrackerTab({
   function navigateToDetail(node: UnitBomNode) {
     const detailKey = panelDetailKey(node);
     if (!detailKey) {
-      setMenuNodeId(node.nodeId);
+      setContextMenu(null);
       return;
     }
     router.push(`/units/${carId}/panels/${detailKey}`);
@@ -1413,11 +2009,9 @@ export function BomTrackerTab({
   const parentPanelValue = selectedParentPanel?.name ?? form.parentName;
   const rootLabel = unitName?.trim() || workspace?.unitId || carId;
   const selectedNode = selection?.type === "node" ? selection.node : null;
-  const selectedRecord = selectedNode?.panelId ? recordsById.get(selectedNode.panelId) ?? null : null;
-  const selectedDetailKey = selectedNode ? panelDetailKey(selectedNode) : null;
-  const isSidePanelOpen = mode !== null || selection !== null;
-  const canvasHeightClass = isFullscreen ? "h-screen min-h-screen" : "h-[calc(100vh-180px)] min-h-[720px]";
-  const sidePanelHeightClass = isFullscreen ? "max-h-screen min-h-screen" : "max-h-[calc(100vh-180px)] min-h-[720px]";
+  const isSidePanelOpen = mode !== null;
+  const viewportStyle = isFullscreen ? { height: "100vh", minHeight: "100vh" } : undefined;
+  const sidePanelStyle = isFullscreen ? { maxHeight: "100vh", minHeight: "100vh" } : undefined;
   const drawerTitle =
     mode === null
       ? "Master Panel"
@@ -1426,13 +2020,13 @@ export function BomTrackerTab({
         : mode.type === "edit-section"
           ? "Edit Section"
           : mode.type === "edit"
-        ? `Edit ${mode.record.nodeType === "PANEL" ? "Panel" : "Part"}`
-        : mode.sectionMode === "new"
-          ? "Tambah Panel + Kategori / Section"
-          : form.nodeType === "PART"
-            ? "Tambah Part"
-            : "Tambah Panel";
-  const sidePanelTitle = mode ? drawerTitle : "Aksi Cepat";
+            ? `Edit ${mode.record.nodeType === "PANEL" ? "Panel" : "Part"}`
+            : mode.sectionMode === "new"
+              ? "Tambah Panel + Kategori / Section"
+              : form.nodeType === "PART"
+                ? "Tambah Part"
+                : "Tambah Panel";
+  const sidePanelTitle = drawerTitle;
 
   if (!workspace) {
     return (
@@ -1443,384 +2037,504 @@ export function BomTrackerTab({
     );
   }
 
+  function expandAll() {
+    const allIds = new Set(getAllNodeIds(panelTrackerTree));
+    setExpandedNodeIds(allIds);
+    setIsRootExpanded(true);
+  }
+
+  function collapseAll() {
+    setExpandedNodeIds(new Set());
+    setIsRootExpanded(false);
+  }
+
+  // [REFACTOR 2] Scroll wheel zoom
+  function handleWheel(event: React.WheelEvent<HTMLDivElement>) {
+    if (!event.ctrlKey && !event.metaKey) return;
+    event.preventDefault();
+
+    const delta = event.deltaY > 0
+      ? -Math.min(0.08, Math.abs(event.deltaY) / 500)
+      :  Math.min(0.08, Math.abs(event.deltaY) / 500);
+
+    setZoom((v) => Math.max(0.55, Math.min(1.35, Number((v + delta).toFixed(2)))));
+  }
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setContextMenu(null);
+        return;
+      }
+
+      const isCtrl = event.ctrlKey || event.metaKey;
+
+      if (selectedNode && !isCtrl) {
+        if (event.key === 'ArrowRight') {
+          const firstChild = positionedNodes.find((n) => n.parentId === selectedNode.nodeId);
+          if (firstChild) {
+            event.preventDefault();
+            setSelection({ type: 'node', node: firstChild.node });
+          }
+        }
+        if (event.key === 'ArrowLeft') {
+          const current = nodeById.get(selectedNode.nodeId);
+          if (current?.parentId && current.parentId !== ROOT_NODE_ID) {
+            const parent = nodeById.get(current.parentId);
+            if (parent) {
+              event.preventDefault();
+              setSelection({ type: 'node', node: parent.node });
+            }
+          }
+        }
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          toggleNode(selectedNode);
+        }
+      }
+
+      if (isCtrl && event.key === "z" && !event.shiftKey) {
+        event.preventDefault();
+        undoCanvas();
+        return;
+      }
+
+      if (isCtrl && event.key === "s") {
+        event.preventDefault();
+        if (formRef.current) {
+          formRef.current.requestSubmit();
+        }
+        return;
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [undoCanvas, selectedNode, nodeById, positionedNodes, toggleNode]);
+
   return (
-      <section className={`overflow-hidden border border-white/5 bg-[#111114] ${isFullscreen ? "fixed inset-0 z-50" : ""}`}>
-        {message ? (
-          <div className="border-b border-emerald-500/20 bg-emerald-500/[0.04] px-4 py-2 text-[11px] font-mono text-emerald-400">
-            {message}
+    <section ref={sectionRef} className={`relative overflow-hidden border border-white/5 bg-[#111114] ${isFullscreen ? "fixed inset-0 z-50" : ""}`}>
+
+
+
+      <div className={`grid ${isFullscreen ? "min-h-screen" : "min-h-[calc(100vh-180px)]"} ${isSidePanelOpen ? "xl:grid-cols-[minmax(0,1fr)_360px]" : "xl:grid-cols-1"} transition-[grid-template-columns] duration-300 ease-in-out`}>
+        <div className="relative min-w-0 border-r border-white/5 bg-[#0a0a0c]">
+          <div data-canvas-control="true" className="absolute left-4 top-4 z-30 flex items-center gap-1 border border-white/10 bg-[#111114]/95 p-1 shadow-lg shadow-black/20 backdrop-blur">
+            <button
+              type="button"
+              onClick={() => setZoom((value) => Math.max(0.55, Number((value - 0.05).toFixed(2))))}
+              className="flex h-8 w-8 items-center justify-center text-white/45 transition-colors hover:bg-white/[0.05] hover:text-white"
+              aria-label="Zoom out"
+            >
+              <ZoomOut className="h-4 w-4" />
+            </button>
+            <span className="w-12 text-center text-[10px] font-mono text-white/35">{Math.round(zoom * 100)}%</span>
+            <button
+              type="button"
+              onClick={() => setZoom((value) => Math.min(1.35, Number((value + 0.05).toFixed(2))))}
+              className="flex h-8 w-8 items-center justify-center text-white/45 transition-colors hover:bg-white/[0.05] hover:text-white"
+              aria-label="Zoom in"
+            >
+              <ZoomIn className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={resetCanvasLayout}
+              className="border-l border-white/10 px-2.5 text-[10px] font-mono uppercase tracking-[0.08em] text-white/35 transition-colors hover:bg-white/[0.05] hover:text-white"
+              aria-label="Reset layout canvas"
+            >
+              Reset
+            </button>
+            {/* [REFACTOR 4A] Undo button UI */}
+            {canUndo ? (
+              <button
+                type="button"
+                onClick={undoCanvas}
+                className="border-l border-white/10 px-2.5 text-[10px] font-mono uppercase tracking-[0.08em] text-amber-400/70 transition-colors hover:bg-white/[0.05] hover:text-amber-400"
+                aria-label="Undo perubahan canvas (Ctrl+Z)"
+                title="Undo (Ctrl+Z)"
+              >
+                <Undo2 className="h-3.5 w-3.5" />
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={fitToView}
+              className="border-l border-white/10 px-2.5 text-[10px] font-mono uppercase tracking-[0.08em] text-white/35 transition-colors hover:bg-white/[0.05] hover:text-white"
+              title="Fit to view / Center all"
+              aria-label="Fit semua node ke layar"
+            >
+              Fit All
+            </button>
+            <button
+              type="button"
+              onClick={expandAll}
+              className="border-l border-white/10 px-2.5 text-[10px] font-mono uppercase tracking-[0.08em] text-white/35 transition-colors hover:bg-white/[0.05] hover:text-white"
+              title="Buka semua node"
+              aria-label="Expand semua node"
+            >
+              <ChevronsUpDown className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={collapseAll}
+              className="border-l border-white/10 px-2.5 text-[10px] font-mono uppercase tracking-[0.08em] text-white/35 transition-colors hover:bg-white/[0.05] hover:text-white"
+              title="Tutup semua node"
+              aria-label="Collapse semua node"
+            >
+              <ChevronsDownUp className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={handleFullscreenToggle}
+              className="border-l border-white/10 px-2.5 text-[10px] font-mono uppercase tracking-[0.08em] text-white/35 transition-colors hover:bg-white/[0.05] hover:text-white"
+              aria-label={isFullscreen ? "Keluar fullscreen" : "Masuk fullscreen"}
+            >
+              {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+            </button>
           </div>
-        ) : null}
-        {error ? (
-          <div className="border-b border-red-500/20 bg-red-500/[0.04] px-4 py-2 text-[11px] font-mono text-red-400">
-            {error}
+
+          <div data-canvas-control="true" className="absolute right-4 top-4 z-30 flex flex-wrap items-center justify-end gap-2">
+            {hiddenNodeIds.size > 0 ? (
+              <button
+                type="button"
+                onClick={() => setHiddenNodeIds(new Set())}
+                className="inline-flex h-9 items-center gap-1.5 border border-white/10 bg-[#111114]/95 px-3 text-[10px] font-mono uppercase tracking-[0.12em] text-white/45 backdrop-blur transition-colors hover:border-white/30 hover:text-white"
+              >
+                <Eye className="h-3.5 w-3.5" />
+                Tampilkan Hidden
+              </button>
+            ) : null}
+            <span className="hidden border border-white/10 bg-[#111114]/95 px-2.5 py-2 text-[10px] font-mono text-white/35 backdrop-blur md:inline-flex">
+              {workspace.summary.totalParts} komponen / {totalPanelRecords} panel / {totalPartRecords} part
+            </span>
+            <button
+              type="button"
+              onClick={() => void refreshWorkspace()}
+              className="inline-flex h-9 items-center gap-1.5 border border-white/10 bg-[#111114]/95 px-3 text-[10px] font-mono uppercase tracking-[0.12em] text-white/45 backdrop-blur transition-colors hover:border-white/30 hover:text-white disabled:opacity-30"
+              disabled={isLoading}
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? "animate-spin" : ""}`} />
+              Refresh
+            </button>
           </div>
-        ) : null}
 
-        <div className={`grid ${isFullscreen ? "min-h-screen" : "min-h-[calc(100vh-180px)]"} ${isSidePanelOpen ? "xl:grid-cols-[minmax(0,1fr)_360px]" : "xl:grid-cols-1"}`}>
-          <div className="relative min-w-0 border-r border-white/5 bg-[#0a0a0c]">
-            <div data-canvas-control="true" className="absolute left-4 top-4 z-30 flex items-center gap-1 border border-white/10 bg-[#111114]/95 p-1 shadow-lg shadow-black/20 backdrop-blur">
-              <button
-                type="button"
-                onClick={() => setZoom((value) => Math.max(0.55, Number((value - 0.1).toFixed(2))))}
-                className="flex h-8 w-8 items-center justify-center text-white/45 transition-colors hover:bg-white/[0.05] hover:text-white"
-                aria-label="Zoom out"
-              >
-                <ZoomOut className="h-4 w-4" />
-              </button>
-              <span className="w-12 text-center text-[10px] font-mono text-white/35">{Math.round(zoom * 100)}%</span>
-              <button
-                type="button"
-                onClick={() => setZoom((value) => Math.min(1.35, Number((value + 0.1).toFixed(2))))}
-                className="flex h-8 w-8 items-center justify-center text-white/45 transition-colors hover:bg-white/[0.05] hover:text-white"
-                aria-label="Zoom in"
-              >
-                <ZoomIn className="h-4 w-4" />
-              </button>
-              <button
-                type="button"
-                onClick={resetCanvasLayout}
-                className="border-l border-white/10 px-2.5 text-[10px] font-mono uppercase tracking-[0.08em] text-white/35 transition-colors hover:bg-white/[0.05] hover:text-white"
-                aria-label="Reset layout canvas"
-              >
-                Reset
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsFullscreen((value) => !value)}
-                className="border-l border-white/10 px-2.5 text-[10px] font-mono uppercase tracking-[0.08em] text-white/35 transition-colors hover:bg-white/[0.05] hover:text-white"
-                aria-label={isFullscreen ? "Keluar fullscreen" : "Masuk fullscreen"}
-              >
-                {isFullscreen ? "Exit" : "Full"}
-              </button>
-            </div>
-
-            <div data-canvas-control="true" className="absolute right-4 top-4 z-30 flex flex-wrap items-center justify-end gap-2">
-              <span className="hidden border border-white/10 bg-[#111114]/95 px-2.5 py-2 text-[10px] font-mono text-white/35 backdrop-blur md:inline-flex">
-                {workspace.summary.totalParts} komponen / {totalPanelRecords} panel / {totalPartRecords} part
-              </span>
-              <button
-                type="button"
-                onClick={() => void refreshWorkspace()}
-                className="inline-flex h-9 items-center gap-1.5 border border-white/10 bg-[#111114]/95 px-3 text-[10px] font-mono uppercase tracking-[0.12em] text-white/45 backdrop-blur transition-colors hover:border-white/30 hover:text-white disabled:opacity-30"
-                disabled={isLoading}
-              >
-                <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? "animate-spin" : ""}`} />
-                Refresh
-              </button>
-            </div>
-
-            <div className="absolute bottom-4 left-4 z-30 hidden items-center gap-2 border border-white/10 bg-[#111114]/95 px-3 py-2 text-[10px] font-mono text-white/35 backdrop-blur md:flex">
+          {showHint ? (
+            <div className="absolute bottom-4 left-4 z-30 flex items-center gap-2 border border-white/10 bg-[#111114]/95 px-3 py-2 text-[10px] font-mono text-white/35 backdrop-blur transition-opacity duration-300">
               <Grip className="h-3.5 w-3.5 text-white/30" />
-              Drag node untuk pindah posisi. Drag area kosong untuk pan.
+              Klik kanan node untuk aksi. Drag node untuk pindah. Drag area kosong untuk pan.
             </div>
+          ) : null}
 
-            <div className="hidden">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">Aksi Cepat</p>
-                  <h3 className="mt-1 truncate text-[13px] font-mono text-white/80">
-                    {selection?.type === "unit" ? rootLabel : selectedNode?.label ?? "Pilih node dulu"}
-                  </h3>
-                  <p className="mt-1 text-[11px] text-white/35">
-                    {selection?.type === "unit"
-                      ? "Kelola kategori dari unit ini."
-                      : selectedNode?.nodeType === "CATEGORY"
-                        ? "Kelola kategori dan section di bawahnya."
-                        : selectedNode?.nodeType === "SECTION"
-                          ? "Kelola section dan panel di bawahnya."
-                          : selectedRecord?.nodeType === "PANEL"
-                            ? "Kelola panel, part, dan detail workflow."
-                            : selectedRecord?.nodeType === "PART"
-                              ? "Kelola part dan buka detail workflow."
-                              : "Klik unit, kategori, section, panel, atau part."}
-                  </p>
-                </div>
-                {selection ? (
+
+
+          {panelTrackerTree.length === 0 ? (
+            <div className={`flex ${isFullscreen ? "min-h-screen" : "min-h-[calc(100vh-180px)]"} items-center justify-center px-6`}>
+              <div className="max-w-sm border border-dashed border-white/10 bg-[#111114] px-6 py-8 text-center">
+                <Boxes className="mx-auto h-8 w-8 text-amber-500/70" />
+                <h3 className="mt-4 text-[15px] font-mono text-white/80">Belum ada master panel</h3>
+                <p className="mt-2 text-[11px] text-white/35">Mulai dari satu kategori dan panel utama agar BOM unit bisa divisualkan.</p>
+                {canManagePanels ? (
                   <button
                     type="button"
-                    onClick={() => setSelection(null)}
-                    className="flex h-7 w-7 shrink-0 items-center justify-center text-white/30 transition-colors hover:bg-white/[0.05] hover:text-white"
-                    aria-label="Tutup aksi cepat"
+                    onClick={openCreateRoot}
+                    className="mt-5 inline-flex items-center gap-2 border border-amber-500/30 bg-amber-500/[0.06] px-4 py-2 text-[10px] font-mono uppercase tracking-[0.12em] text-amber-500 transition-colors hover:bg-amber-500/10"
                   >
-                    <X className="h-4 w-4" />
+                    <Plus className="h-3.5 w-3.5" />
+                    Buat Master Panel Pertama
                   </button>
                 ) : null}
               </div>
-
-              <div className="mt-3 grid gap-2">
-                {!selection ? (
-                  <button
-                    type="button"
-                    onClick={() => setSelection({ type: "unit" })}
-                    className="border border-amber-500/30 bg-amber-500/[0.06] px-3 py-2 text-left text-[11px] font-mono text-amber-500 transition-colors hover:bg-amber-500/10"
-                  >
-                    Mulai dari unit
-                  </button>
-                ) : null}
-
-                {selection?.type === "unit" ? (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => setIsRootExpanded((value) => !value)}
-                      className="border border-white/10 px-3 py-2 text-left text-[11px] font-mono text-white/60 transition-colors hover:border-white/30 hover:text-white"
-                    >
-                      {isRootExpanded ? "Tutup cabang kategori" : "Buka cabang kategori"}
-                    </button>
-                    {canManagePanels ? (
-                      <button
-                        type="button"
-                        onClick={openCreateCategory}
-                        className="border border-amber-500/30 bg-amber-500/[0.06] px-3 py-2 text-left text-[11px] font-mono text-amber-500 transition-colors hover:bg-amber-500/10"
-                      >
-                        Tambah panel kategori baru
-                      </button>
-                    ) : null}
-                  </>
-                ) : null}
-
-                {selectedNode?.nodeType === "CATEGORY" ? (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => toggleNode(selectedNode)}
-                      className="border border-white/10 px-3 py-2 text-left text-[11px] font-mono text-white/60 transition-colors hover:border-white/30 hover:text-white"
-                    >
-                      {expandedNodeIds.has(selectedNode.nodeId) ? "Tutup section" : "Buka section"}
-                    </button>
-                    {canManagePanels && selectedNode.category ? (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => openEditCategory(selectedNode.category ?? "")}
-                          className="border border-white/10 px-3 py-2 text-left text-[11px] font-mono text-white/60 transition-colors hover:border-white/30 hover:text-white"
-                        >
-                          Edit nama kategori
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void handleDeleteCategory(displayCategory(selectedNode.category))}
-                          className="border border-red-500/25 px-3 py-2 text-left text-[11px] font-mono text-red-400/70 transition-colors hover:border-red-500/50 hover:text-red-300"
-                        >
-                          Hapus kategori
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => openCreateSectionFromCategory(selectedNode.category ?? "")}
-                          className="border border-amber-500/30 bg-amber-500/[0.06] px-3 py-2 text-left text-[11px] font-mono text-amber-500 transition-colors hover:bg-amber-500/10"
-                        >
-                          Tambah panel section baru
-                        </button>
-                      </>
-                    ) : null}
-                  </>
-                ) : null}
-
-                {selectedNode?.nodeType === "SECTION" ? (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => toggleNode(selectedNode)}
-                      className="border border-white/10 px-3 py-2 text-left text-[11px] font-mono text-white/60 transition-colors hover:border-white/30 hover:text-white"
-                    >
-                      {expandedNodeIds.has(selectedNode.nodeId) ? "Tutup panel" : "Buka panel"}
-                    </button>
-                    {canManagePanels && selectedNode.category && selectedNode.section ? (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => openEditSection(selectedNode.category ?? "", selectedNode.section ?? "")}
-                          className="border border-white/10 px-3 py-2 text-left text-[11px] font-mono text-white/60 transition-colors hover:border-white/30 hover:text-white"
-                        >
-                          Edit nama section
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => openCreatePanelFromSection(selectedNode)}
-                          className="border border-amber-500/30 bg-amber-500/[0.06] px-3 py-2 text-left text-[11px] font-mono text-amber-500 transition-colors hover:bg-amber-500/10"
-                        >
-                          Tambah panel di section ini
-                        </button>
-                      </>
-                    ) : null}
-                  </>
-                ) : null}
-
-                {selectedRecord ? (
-                  <>
-                    {selectedRecord.nodeType === "PANEL" && canManagePanels ? (
-                      <button
-                        type="button"
-                        onClick={() => openCreateFromNode(selectedNode as UnitBomNode)}
-                        className="border border-amber-500/30 bg-amber-500/[0.06] px-3 py-2 text-left text-[11px] font-mono text-amber-500 transition-colors hover:bg-amber-500/10"
-                      >
-                        Tambah part di panel ini
-                      </button>
-                    ) : null}
-                    {selectedDetailKey ? (
-                      <button
-                        type="button"
-                        onClick={() => selectedNode ? navigateToDetail(selectedNode) : undefined}
-                        className="border border-white/10 px-3 py-2 text-left text-[11px] font-mono text-white/70 transition-colors hover:border-white/30 hover:text-white"
-                      >
-                        Buka detail workflow
-                      </button>
-                    ) : null}
-                    {canManagePanels ? (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => openEdit(selectedRecord)}
-                          className="border border-white/10 px-3 py-2 text-left text-[11px] font-mono text-white/60 transition-colors hover:border-white/30 hover:text-white"
-                        >
-                          Edit {selectedRecord.nodeType === "PANEL" ? "panel" : "part"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void handleDelete(selectedRecord)}
-                          className="border border-red-500/25 px-3 py-2 text-left text-[11px] font-mono text-red-300/70 transition-colors hover:border-red-500/45 hover:text-red-300"
-                        >
-                          Hapus {selectedRecord.nodeType === "PANEL" ? "panel" : "part"}
-                        </button>
-                      </>
-                    ) : null}
-                  </>
-                ) : null}
-              </div>
             </div>
-
-            {workspace.tree.length === 0 ? (
-              <div className={`flex ${isFullscreen ? "min-h-screen" : "min-h-[calc(100vh-180px)]"} items-center justify-center px-6`}>
-                <div className="max-w-sm border border-dashed border-white/10 bg-[#111114] px-6 py-8 text-center">
-                  <Boxes className="mx-auto h-8 w-8 text-amber-500/70" />
-                  <h3 className="mt-4 text-[15px] font-mono text-white/80">Belum ada master panel</h3>
-                  <p className="mt-2 text-[11px] text-white/35">Mulai dari satu kategori dan panel utama agar BOM unit bisa divisualkan.</p>
-                  {canManagePanels ? (
-                    <button
-                      type="button"
-                      onClick={openCreateRoot}
-                      className="mt-5 inline-flex items-center gap-2 border border-amber-500/30 bg-amber-500/[0.06] px-4 py-2 text-[10px] font-mono uppercase tracking-[0.12em] text-amber-500 transition-colors hover:bg-amber-500/10"
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                      Buat Master Panel Pertama
-                    </button>
-                  ) : null}
-                </div>
-              </div>
-            ) : (
+          ) : (
+            <div
+              ref={viewportRef}
+              tabIndex={-1}
+              role="region"
+              aria-label="BOM Canvas — gunakan keyboard Arrow Keys untuk navigasi node, Ctrl+Z untuk undo"
+              className="cursor-grab overflow-auto active:cursor-grabbing"
+              style={{ ...viewportStyle, touchAction: 'none' }}
+              onWheel={handleWheel}
+              onPointerDown={handlePointerDown}
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerUp}
+              onPointerCancel={handlePointerUp}
+              onClick={() => setContextMenu(null)}
+            >
               <div
-                ref={viewportRef}
-                className={`${canvasHeightClass} cursor-grab overflow-auto active:cursor-grabbing`}
-                onPointerDown={handlePointerDown}
-                onPointerMove={handlePointerMove}
-                onPointerUp={handlePointerUp}
-                onPointerCancel={handlePointerUp}
-                onClick={() => setMenuNodeId(null)}
+                className="relative origin-top-left"
+                style={{
+                  width: canvasBounds.width,
+                  height: canvasBounds.height,
+                  transform: `scale(${zoom})`,
+                  transformOrigin: "0 0",
+                }}
               >
-                <div
-                  className="relative origin-top-left"
-                  style={{
-                    width: canvasBounds.width,
-                    height: canvasBounds.height,
-                    transform: `scale(${zoom})`,
-                    transformOrigin: "0 0",
-                  }}
-                >
-                  <svg className="absolute inset-0 h-full w-full" width={canvasBounds.width} height={canvasBounds.height} aria-hidden="true">
-                    {positionedNodes.map((item) => {
-                      if (!item.parentId) return null;
-                      const parent =
-                        item.parentId === ROOT_NODE_ID
-                          ? { x: rootPosition.x, y: rootPosition.y, width: NODE_WIDTH, height: NODE_HEIGHT }
-                          : nodeById.get(item.parentId);
-                      if (!parent) return null;
-                      const startX = parent.x + parent.width;
-                      const startY = parent.y + parent.height / 2;
-                      const endX = item.x;
-                      const endY = item.y + item.height / 2;
-                      const midX = startX + (endX - startX) / 2;
-                      return (
-                        <path
-                          key={`${item.parentId}:${item.node.nodeId}`}
-                          d={`M ${startX} ${startY} C ${midX} ${startY}, ${midX} ${endY}, ${endX} ${endY}`}
-                          fill="none"
-                          stroke="rgba(255,255,255,0.12)"
-                          strokeWidth="1"
-                        />
-                      );
-                    })}
-                  </svg>
+                <CanvasEdges
+                  positionedNodes={positionedNodes}
+                  nodeById={nodeById}
+                  rootPosition={rootPosition}
+                  selectedNodeId={selectedNode?.nodeId ?? null}
+                />
 
-                  <div
-                    data-canvas-node="true"
-                    className="absolute"
-                    style={{ left: rootPosition.x, top: rootPosition.y, width: NODE_WIDTH, height: NODE_HEIGHT }}
-                    onPointerDown={handleRootPointerDown}
-                    onPointerMove={handleRootPointerMove}
-                    onPointerUp={handleRootPointerUp}
-                    onPointerCancel={handleRootPointerUp}
+                <div
+                  data-canvas-node="true"
+                  className="absolute"
+                  style={{ left: rootPosition.x, top: rootPosition.y, width: NODE_WIDTH, height: NODE_HEIGHT }}
+                  onContextMenu={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    const bounds = sectionRef.current?.getBoundingClientRect();
+                    if (!bounds) return;
+                    setSelection({ type: "unit" });
+                    setContextMenu({
+                      node: {
+                        nodeId: ROOT_NODE_ID,
+                        nodeType: "CATEGORY",
+                        label: rootLabel,
+                        category: null,
+                        section: null,
+                        panelId: null,
+                        physicalStatus: null,
+                        divisionId: null,
+                        divisionName: null,
+                        progressPercent: averageProgress(panelTrackerTree),
+                        remainingHours: sumRemainingHours(panelTrackerTree),
+                        actualId: null,
+                        logisticStatus: null,
+                        logisticReference: null,
+                        logisticPath: null,
+                        children: panelTrackerTree,
+                      } as UnitBomNode,
+                      x: Math.max(12, Math.min(event.clientX - bounds.left, bounds.width - 220)),
+                      y: Math.max(12, Math.min(event.clientY - bounds.top, bounds.height - 200)),
+                    });
+                  }}
+                  onPointerDown={handleRootPointerDown}
+                  onPointerMove={handleRootPointerMove}
+                  onPointerUp={handleRootPointerUp}
+                  onPointerCancel={handleRootPointerUp}
+                >
+                  <button
+                    type="button"
+                    title={`Klik kanan untuk aksi · ${rootLabel}`}
+                    onClick={() => {
+                      if (suppressRootClickRef.current) return;
+                    }}
+                    className={`h-full w-full border bg-[#15120b] p-3 text-left shadow-lg shadow-black/25 transition-[border-color,background-color,transform] hover:-translate-y-0.5 hover:border-amber-500/50 hover:bg-[#18140c] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-500/70 ${selection?.type === "unit" ? "border-amber-500/70" : "border-amber-500/25"
+                      }`}
                   >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="flex h-5 w-5 shrink-0 items-center justify-center border border-amber-500/25 text-amber-400">
+                            {isRootExpanded ? <ChevronDown className="h-3 w-3" /> : <Plus className="h-3 w-3" />}
+                          </span>
+                          <span className="h-2 w-2 shrink-0 bg-amber-400 shadow-[0_0_16px_rgba(245,158,11,0.45)]" />
+                          <p className="truncate text-[12px] font-mono text-white/90">{rootLabel}</p>
+                        </div>
+                        <p className="mt-1 truncate text-[10px] text-white/38">Root unit workspace</p>
+                      </div>
+                      <span className="shrink-0 border border-amber-500/25 px-1.5 py-0.5 text-[9px] font-mono uppercase text-amber-400">
+                        UNIT
+                      </span>
+                    </div>
+                    <div className="mt-3 flex items-center justify-between gap-2">
+                      <span className="inline-flex items-center gap-1.5 border border-amber-500/25 bg-amber-500/[0.07] px-2 py-0.5 text-[9px] font-mono uppercase tracking-[0.1em] text-amber-400">
+                        <GitBranch className="h-3 w-3" />
+                        {panelTrackerTree.length} kategori
+                      </span>
+                    </div>
+                    <p className="mt-3 text-[10px] font-mono text-white/30">
+                      {isRootExpanded ? "Klik kategori untuk buka section" : "Klik untuk buka tree"}
+                    </p>
+                  </button>
+                </div>
+
+                {positionedNodes.map((item) => (
+                  <NodeCard
+                    key={item.node.nodeId}
+                    canvasNode={item}
+                    zoom={zoom}
+                    panelRecord={item.node.panelId ? recordsById.get(item.node.panelId) ?? null : null}
+                    isExpanded={expandedNodeIds.has(item.node.nodeId)}
+                    isSelected={selection?.type === "node" && selection.node.nodeId === item.node.nodeId}
+                    onInteractionStart={handleInteractionStart}
+                    onPositionChange={(nodeId, updater, initialPos) =>
+                      updateNodePosition(nodeId, updater, initialPos)
+                    }
+                    onDimensionChange={updateNodeDimension}
+                    onOpenMenu={openMenu}
+                    onToggle={toggleNode}
+                    onSelect={(node) => setSelection({ type: "node", node })}
+                    onDragNodeStart={onNodeDragStart}
+                    onDragNodeMove={onNodeDragMove}
+                    onDragNodeEnd={onNodeDragEnd}
+                    onNavigateToDetail={navigateToDetail}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {contextMenu ? (
+          <div
+            ref={contextMenuRef}
+            data-canvas-control="true"
+            className="absolute z-40 min-w-52 border border-white/10 bg-[#0d0d10] p-1 shadow-2xl shadow-black/40"
+            style={{ left: contextMenu.x, top: contextMenu.y }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {(() => {
+              const n = contextMenu.node;
+              const isRootMenu = n.nodeId === ROOT_NODE_ID;
+              const ctxRecord = n.panelId ? recordsById.get(n.panelId) ?? null : null;
+              const ctxDetailKey = panelDetailKey(n);
+              const isExpanded = expandedNodeIds.has(n.nodeId);
+
+              return (
+                <>
+                  <div className="border-b border-white/10 px-3 py-2">
+                    <p className="text-[9px] font-mono uppercase tracking-[0.12em] text-white/30">{isRootMenu ? "UNIT" : n.nodeType}</p>
+                    <p className="truncate text-[12px] font-mono font-medium text-white/80">{n.label}</p>
+                  </div>
+
+                  {isRootMenu ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (isRootExpanded) {
+                            collapseAll();
+                          } else {
+                            expandAll();
+                          }
+                          setContextMenu(null);
+                        }}
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] font-mono text-white/65 transition-colors hover:bg-white/[0.05] hover:text-white"
+                      >
+                        {isRootExpanded ? <ChevronsDownUp className="h-3.5 w-3.5" /> : <ChevronsUpDown className="h-3.5 w-3.5" />}
+                        {isRootExpanded ? "Tutup semua" : "Buka semua"}
+                      </button>
+                      {canManagePanels ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            openCreateCategory();
+                            setContextMenu(null);
+                          }}
+                          className="flex w-full items-center gap-2 border-t border-white/5 px-3 py-2 text-left text-[11px] font-mono text-amber-500/80 hover:bg-amber-500/10 hover:text-amber-400"
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                          Tambah kategori baru
+                        </button>
+                      ) : null}
+                    </>
+                  ) : null}
+
+                  {!isRootMenu && n.children.length > 0 ? (
                     <button
                       type="button"
                       onClick={() => {
-                        if (suppressRootClickRef.current) return;
+                        toggleNode(n);
+                        setContextMenu(null);
                       }}
-                      className={`h-full w-full border bg-[#15120b] p-3 text-left shadow-lg shadow-black/25 transition-[border-color,background-color,transform] hover:-translate-y-0.5 hover:border-amber-500/50 hover:bg-[#18140c] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-500/70 ${
-                        selection?.type === "unit" ? "border-amber-500/70" : "border-amber-500/25"
-                      }`}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] font-mono text-white/65 transition-colors hover:bg-white/[0.05] hover:text-white"
                     >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="flex h-5 w-5 shrink-0 items-center justify-center border border-amber-500/25 text-amber-400">
-                              {isRootExpanded ? <ChevronDown className="h-3 w-3" /> : <Plus className="h-3 w-3" />}
-                            </span>
-                            <span className="h-2 w-2 shrink-0 bg-amber-400 shadow-[0_0_16px_rgba(245,158,11,0.45)]" />
-                            <p className="truncate text-[12px] font-mono text-white/90">{rootLabel}</p>
-                          </div>
-                          <p className="mt-1 truncate text-[10px] text-white/38">Root unit workspace</p>
-                        </div>
-                        <span className="shrink-0 border border-amber-500/25 px-1.5 py-0.5 text-[9px] font-mono uppercase text-amber-400">
-                          UNIT
-                        </span>
-                      </div>
-                      <div className="mt-3 flex items-center justify-between gap-2">
-                        <span className="inline-flex items-center gap-1.5 border border-amber-500/25 bg-amber-500/[0.07] px-2 py-0.5 text-[9px] font-mono uppercase tracking-[0.1em] text-amber-400">
-                          <GitBranch className="h-3 w-3" />
-                          {workspace.tree.length} kategori
-                        </span>
-                      </div>
-                      <p className="mt-3 text-[10px] font-mono text-white/30">
-                        {isRootExpanded ? "Klik kategori untuk buka section" : "Klik untuk buka tree"}
-                      </p>
+                      {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
+                      {isExpanded ? "Tutup turunan" : "Buka turunan"}
                     </button>
-                  </div>
+                  ) : null}
 
-                  {positionedNodes.map((item) => (
-                    <NodeCard
-                      key={item.node.nodeId}
-                      canvasNode={item}
-                      zoom={zoom}
-                      canManage={false}
-                      panelRecord={item.node.panelId ? recordsById.get(item.node.panelId) ?? null : null}
-                      isMenuOpen={menuNodeId === item.node.nodeId}
-                      isExpanded={expandedNodeIds.has(item.node.nodeId)}
-                      isSelected={selection?.type === "node" && selection.node.nodeId === item.node.nodeId}
-                      onPositionChange={updateNodePosition}
-                      onOpenMenu={openMenu}
-                      onToggle={toggleNode}
-                      onSelect={(node) => setSelection({ type: "node", node })}
-                      onCreateChild={openCreateFromNode}
-                      onEdit={openEdit}
-                      onDelete={(record) => void handleDelete(record)}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
+                  {!isRootMenu && n.nodeType === "CATEGORY" && canManagePanels && n.category ? (
+                    <>
+                      <div className="border-t border-white/5" />
+                      <button type="button" onClick={() => { openEditCategory(n.category ?? ""); setContextMenu(null); }}
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] font-mono text-white/65 hover:bg-white/[0.05] hover:text-white">
+                        <Pencil className="h-3.5 w-3.5" /> Edit nama kategori
+                      </button>
+                      <button type="button" onClick={() => { openCreateSectionFromCategory(n.category ?? ""); setContextMenu(null); }}
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] font-mono text-amber-500/80 hover:bg-amber-500/10 hover:text-amber-400">
+                        <Plus className="h-3.5 w-3.5" /> Tambah section baru
+                      </button>
+                      <button type="button" onClick={() => { void handleDeleteCategory(displayCategory(n.category)); setContextMenu(null); }}
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] font-mono text-red-400/70 hover:bg-red-500/10 hover:text-red-300">
+                        <Trash2 className="h-3.5 w-3.5" /> Hapus kategori
+                      </button>
+                    </>
+                  ) : null}
+
+                  {!isRootMenu && n.nodeType === "SECTION" && canManagePanels && n.category && n.section ? (
+                    <>
+                      <div className="border-t border-white/5" />
+                      <button type="button" onClick={() => { openEditSection(n.category ?? "", n.section ?? ""); setContextMenu(null); }}
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] font-mono text-white/65 hover:bg-white/[0.05] hover:text-white">
+                        <Pencil className="h-3.5 w-3.5" /> Edit nama section
+                      </button>
+                      <button type="button" onClick={() => { openCreatePanelFromSection(n); setContextMenu(null); }}
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] font-mono text-amber-500/80 hover:bg-amber-500/10 hover:text-amber-400">
+                        <Plus className="h-3.5 w-3.5" /> Tambah panel di section ini
+                      </button>
+                    </>
+                  ) : null}
+
+                  {!isRootMenu && ctxRecord && canManagePanels ? (
+                    <>
+                      <div className="border-t border-white/5" />
+                      <button type="button" onClick={() => { openEdit(ctxRecord); setContextMenu(null); }}
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] font-mono text-white/65 hover:bg-white/[0.05] hover:text-white">
+                        <Pencil className="h-3.5 w-3.5" /> Edit {ctxRecord.nodeType === "PANEL" ? "panel" : "part"}
+                      </button>
+                      {ctxRecord.nodeType === "PANEL" ? (
+                        <button type="button" onClick={() => { openCreateFromNode(n); setContextMenu(null); }}
+                          className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] font-mono text-amber-500/80 hover:bg-amber-500/10 hover:text-amber-400">
+                          <Plus className="h-3.5 w-3.5" /> Tambah part
+                        </button>
+                      ) : null}
+                      <button type="button" onClick={() => { void handleDelete(ctxRecord); setContextMenu(null); }}
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] font-mono text-red-400/70 hover:bg-red-500/10 hover:text-red-300">
+                        <Trash2 className="h-3.5 w-3.5" /> Hapus {ctxRecord.nodeType === "PANEL" ? "panel" : "part"}
+                      </button>
+                    </>
+                  ) : null}
+
+                  {!isRootMenu && ctxDetailKey ? (
+                    <>
+                      <div className="border-t border-white/5" />
+                      <button type="button" onClick={() => { navigateToDetail(n); setContextMenu(null); }}
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] font-mono text-white/65 hover:bg-white/[0.05] hover:text-white">
+                        <FolderOpen className="h-3.5 w-3.5" /> Buka detail workflow
+                      </button>
+                    </>
+                  ) : null}
+
+                  {!isRootMenu ? (
+                    <>
+                      <div className="border-t border-white/5" />
+                      <button type="button" onClick={() => { hideNode(n.nodeId); setContextMenu(null); }}
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] font-mono text-white/40 hover:bg-white/[0.05] hover:text-white/65">
+                        <EyeOff className="h-3.5 w-3.5" /> Sembunyikan node
+                      </button>
+                    </>
+                  ) : null}
+                  {!isRootMenu && nodeDimensions[n.nodeId] ? (
+                    <button
+                      type="button"
+                      onClick={() => resetNodeDimension(n.nodeId)}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] font-mono text-white/40 hover:bg-white/[0.05] hover:text-white/65"
+                    >
+                      <RefreshCw className="h-3.5 w-3.5" />
+                      Reset ukuran node
+                    </button>
+                  ) : null}
+                </>
+              );
+            })()}
           </div>
+        ) : null}
 
-          {isSidePanelOpen ? (
+        {isSidePanelOpen ? (
           <aside className="bg-[#0d0d10]">
             <div className="flex items-center justify-between border-b border-white/5 px-4 py-3">
               <div className="flex items-center gap-2">
@@ -1829,10 +2543,7 @@ export function BomTrackerTab({
               </div>
               <button
                 type="button"
-                onClick={() => {
-                  if (mode) closeForm();
-                  else setSelection(null);
-                }}
+                onClick={closeForm}
                 className="flex h-8 w-8 items-center justify-center text-white/35 transition-colors hover:bg-white/[0.04] hover:text-white"
                 aria-label="Tutup panel"
               >
@@ -1840,124 +2551,8 @@ export function BomTrackerTab({
               </button>
             </div>
 
-            <div className={`${sidePanelHeightClass} overflow-auto px-4 py-4`}>
-              {!canManagePanels ? (
-                <div className="border border-white/5 bg-[#111114] px-4 py-4 text-[11px] font-mono text-white/30">
-                  Akses master panel hanya baca. Node tetap bisa dibuka untuk workflow detail.
-                </div>
-              ) : mode === null ? (
-                <div className="space-y-3">
-                  <div className="border border-white/5 bg-[#111114] px-3 py-3">
-                    <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">Dipilih</p>
-                    <h3 className="mt-1 truncate text-[13px] font-mono text-white/80">
-                      {selection?.type === "unit" ? rootLabel : selectedNode?.label ?? "-"}
-                    </h3>
-                    <p className="mt-1 text-[11px] text-white/35">
-                      {selection?.type === "unit"
-                        ? "Kelola kategori dari unit ini."
-                        : selectedNode?.nodeType === "CATEGORY"
-                          ? "Kelola kategori dan section di bawahnya."
-                          : selectedNode?.nodeType === "SECTION"
-                            ? "Kelola section dan panel di bawahnya."
-                            : selectedRecord?.nodeType === "PANEL"
-                              ? "Kelola panel, part, dan detail workflow."
-                              : selectedRecord?.nodeType === "PART"
-                                ? "Kelola part dan buka detail workflow."
-                                : "Pilih node di canvas."}
-                    </p>
-                  </div>
-
-                  {selection?.type === "unit" ? (
-                    <>
-                      <button type="button" onClick={() => setIsRootExpanded((value) => !value)}
-                        className="w-full border border-white/10 px-3 py-2 text-left text-[11px] font-mono text-white/60 transition-colors hover:border-white/30 hover:text-white">
-                        {isRootExpanded ? "Tutup cabang kategori" : "Buka cabang kategori"}
-                      </button>
-                      {canManagePanels ? (
-                        <button type="button" onClick={openCreateCategory}
-                          className="w-full border border-amber-500/30 bg-amber-500/[0.06] px-3 py-2 text-left text-[11px] font-mono text-amber-500 transition-colors hover:bg-amber-500/10">
-                          Tambah panel kategori baru
-                        </button>
-                      ) : null}
-                    </>
-                  ) : null}
-
-                  {selectedNode?.nodeType === "CATEGORY" ? (
-                    <>
-                      <button type="button" onClick={() => toggleNode(selectedNode)}
-                        className="w-full border border-white/10 px-3 py-2 text-left text-[11px] font-mono text-white/60 transition-colors hover:border-white/30 hover:text-white">
-                        {expandedNodeIds.has(selectedNode.nodeId) ? "Tutup section" : "Buka section"}
-                      </button>
-                      {canManagePanels && selectedNode.category ? (
-                        <>
-                          <button type="button" onClick={() => openEditCategory(selectedNode.category ?? "")}
-                            className="w-full border border-white/10 px-3 py-2 text-left text-[11px] font-mono text-white/60 transition-colors hover:border-white/30 hover:text-white">
-                            Edit nama kategori
-                          </button>
-                          <button type="button" onClick={() => void handleDeleteCategory(displayCategory(selectedNode.category))}
-                            className="w-full border border-red-500/25 px-3 py-2 text-left text-[11px] font-mono text-red-400/70 transition-colors hover:border-red-500/50 hover:text-red-300">
-                            Hapus kategori
-                          </button>
-                          <button type="button" onClick={() => openCreateSectionFromCategory(selectedNode.category ?? "")}
-                            className="w-full border border-amber-500/30 bg-amber-500/[0.06] px-3 py-2 text-left text-[11px] font-mono text-amber-500 transition-colors hover:bg-amber-500/10">
-                            Tambah panel section baru
-                          </button>
-                        </>
-                      ) : null}
-                    </>
-                  ) : null}
-
-                  {selectedNode?.nodeType === "SECTION" ? (
-                    <>
-                      <button type="button" onClick={() => toggleNode(selectedNode)}
-                        className="w-full border border-white/10 px-3 py-2 text-left text-[11px] font-mono text-white/60 transition-colors hover:border-white/30 hover:text-white">
-                        {expandedNodeIds.has(selectedNode.nodeId) ? "Tutup panel" : "Buka panel"}
-                      </button>
-                      {canManagePanels && selectedNode.category && selectedNode.section ? (
-                        <>
-                          <button type="button" onClick={() => openEditSection(selectedNode.category ?? "", selectedNode.section ?? "")}
-                            className="w-full border border-white/10 px-3 py-2 text-left text-[11px] font-mono text-white/60 transition-colors hover:border-white/30 hover:text-white">
-                            Edit nama section
-                          </button>
-                          <button type="button" onClick={() => openCreatePanelFromSection(selectedNode)}
-                            className="w-full border border-amber-500/30 bg-amber-500/[0.06] px-3 py-2 text-left text-[11px] font-mono text-amber-500 transition-colors hover:bg-amber-500/10">
-                            Tambah panel di section ini
-                          </button>
-                        </>
-                      ) : null}
-                    </>
-                  ) : null}
-
-                  {selectedRecord ? (
-                    <>
-                      {selectedRecord.nodeType === "PANEL" && canManagePanels ? (
-                        <button type="button" onClick={() => openCreateFromNode(selectedNode as UnitBomNode)}
-                          className="w-full border border-amber-500/30 bg-amber-500/[0.06] px-3 py-2 text-left text-[11px] font-mono text-amber-500 transition-colors hover:bg-amber-500/10">
-                          Tambah part di panel ini
-                        </button>
-                      ) : null}
-                      {selectedDetailKey ? (
-                        <button type="button" onClick={() => selectedNode ? navigateToDetail(selectedNode) : undefined}
-                          className="w-full border border-white/10 px-3 py-2 text-left text-[11px] font-mono text-white/70 transition-colors hover:border-white/30 hover:text-white">
-                          Buka detail workflow
-                        </button>
-                      ) : null}
-                      {canManagePanels ? (
-                        <>
-                          <button type="button" onClick={() => openEdit(selectedRecord)}
-                            className="w-full border border-white/10 px-3 py-2 text-left text-[11px] font-mono text-white/60 transition-colors hover:border-white/30 hover:text-white">
-                            Edit {selectedRecord.nodeType === "PANEL" ? "panel" : "part"}
-                          </button>
-                          <button type="button" onClick={() => void handleDelete(selectedRecord)}
-                            className="w-full border border-red-500/25 px-3 py-2 text-left text-[11px] font-mono text-red-300/70 transition-colors hover:border-red-500/45 hover:text-red-300">
-                            Hapus {selectedRecord.nodeType === "PANEL" ? "panel" : "part"}
-                          </button>
-                        </>
-                      ) : null}
-                    </>
-                  ) : null}
-                </div>
-              ) : mode.type === "edit-category" ? (
+            <div className="overflow-auto px-4 py-4" style={sidePanelStyle}>
+              {mode.type === "edit-category" ? (
                 <form className="space-y-3" onSubmit={(event) => void handleSubmit(event)}>
                   <label className="block space-y-1">
                     <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">Nama Kategori</span>
@@ -2028,22 +2623,20 @@ export function BomTrackerTab({
                         <button
                           type="button"
                           onClick={() => selectNodeType("Panel")}
-                          className={`px-2 py-1.5 text-[10px] font-mono uppercase tracking-[0.12em] transition-colors ${
-                            form.nodeType === "PANEL"
-                              ? "bg-amber-500/[0.08] text-amber-500"
-                              : "text-white/35 hover:text-white"
-                          }`}
+                          className={`px-2 py-1.5 text-[10px] font-mono uppercase tracking-[0.12em] transition-colors ${form.nodeType === "PANEL"
+                            ? "bg-amber-500/[0.08] text-amber-500"
+                            : "text-white/35 hover:text-white"
+                            }`}
                         >
                           Panel
                         </button>
                         <button
                           type="button"
                           onClick={() => selectNodeType("Part")}
-                          className={`px-2 py-1.5 text-[10px] font-mono uppercase tracking-[0.12em] transition-colors ${
-                            form.nodeType === "PART"
-                              ? "bg-amber-500/[0.08] text-amber-500"
-                              : "text-white/35 hover:text-white"
-                          }`}
+                          className={`px-2 py-1.5 text-[10px] font-mono uppercase tracking-[0.12em] transition-colors ${form.nodeType === "PART"
+                            ? "bg-amber-500/[0.08] text-amber-500"
+                            : "text-white/35 hover:text-white"
+                            }`}
                         >
                           Part
                         </button>
@@ -2096,7 +2689,6 @@ export function BomTrackerTab({
                     </label>
                   ) : null}
 
-                  <>
                     {mode.type === "edit" && mode.record.nodeType === "PART" && selectedParentPanel ? (
                       <div className="border border-amber-500/20 bg-amber-500/[0.04] px-3 py-2 text-[10px] font-mono text-amber-400">
                         Parent: {selectedParentPanel.name}
@@ -2118,7 +2710,6 @@ export function BomTrackerTab({
                         className="h-9 w-full border border-white/10 bg-[#111114] px-3 text-[11px] font-mono text-white/70 outline-none transition-colors placeholder:text-white/20 focus:border-amber-500/40"
                       />
                     </label>
-                  </>
 
                   <label className="flex items-center gap-3 border border-white/5 bg-[#111114] px-3 py-2">
                     <input
@@ -2129,65 +2720,6 @@ export function BomTrackerTab({
                     />
                     <span className="text-[10px] font-mono text-white/50">Aktifkan {form.nodeType === "PART" ? "part" : "panel"} ini</span>
                   </label>
-
-                  <div className="grid grid-cols-2 gap-2">
-                      <label className="block space-y-1">
-                        <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">Qty</span>
-                        <input
-                          type="number"
-                          min="0.01"
-                          step="0.01"
-                          value={form.qty}
-                          onChange={(event) => setForm((current) => ({ ...current, qty: event.target.value }))}
-                          className="h-9 w-full border border-white/10 bg-[#111114] px-3 text-[11px] font-mono text-white/70 outline-none transition-colors focus:border-amber-500/40"
-                        />
-                      </label>
-                      <label className="block space-y-1">
-                        <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">Lokasi</span>
-                        <select
-                          value={form.defaultLocationType}
-                          onChange={(event) => {
-                            const defaultLocationType = event.target.value as PanelFormState["defaultLocationType"];
-                            setForm((current) => ({
-                              ...current,
-                              defaultLocationType,
-                              defaultStockStatus: stockStatusForLocation(defaultLocationType),
-                            }));
-                          }}
-                          className="h-9 w-full border border-white/10 bg-[#111114] px-2 text-[10px] font-mono text-white/70 outline-none transition-colors focus:border-amber-500/40 [color-scheme:dark]"
-                        >
-                          <option value="UNIT">{LOCATION_LABEL.UNIT}</option>
-                          <option value="WORKSHOP">{LOCATION_LABEL.WORKSHOP}</option>
-                          <option value="GUDANG">{LOCATION_LABEL.GUDANG}</option>
-                        </select>
-                      </label>
-                      <label className="block space-y-1">
-                        <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">Posisi</span>
-                        <select
-                          value={form.defaultStockStatus}
-                          onChange={(event) => setForm((current) => ({ ...current, defaultStockStatus: event.target.value as PanelFormState["defaultStockStatus"] }))}
-                          disabled={form.defaultLocationType === "UNIT"}
-                          className="h-9 w-full border border-white/10 bg-[#111114] px-2 text-[10px] font-mono text-white/70 outline-none transition-colors focus:border-amber-500/40 disabled:cursor-not-allowed disabled:text-white/40 [color-scheme:dark]"
-                        >
-                          <option value="INSTALLED">{STOCK_STATUS_LABEL.INSTALLED}</option>
-                          <option value="IN_STORAGE">{STOCK_STATUS_LABEL.IN_STORAGE}</option>
-                          <option value="RETRIEVED">{STOCK_STATUS_LABEL.RETRIEVED}</option>
-                          <option value="LOST">{STOCK_STATUS_LABEL.LOST}</option>
-                        </select>
-                      </label>
-                      <label className="block space-y-1">
-                        <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">Kondisi</span>
-                        <select
-                          value={form.defaultConditionType}
-                          onChange={(event) => setForm((current) => ({ ...current, defaultConditionType: event.target.value as PanelFormState["defaultConditionType"] }))}
-                          className="h-9 w-full border border-white/10 bg-[#111114] px-2 text-[10px] font-mono text-white/70 outline-none transition-colors focus:border-amber-500/40 [color-scheme:dark]"
-                        >
-                          <option value="BEKAS">{CONDITION_LABEL.BEKAS}</option>
-                          <option value="RESTORE">{CONDITION_LABEL.RESTORE}</option>
-                          <option value="BARU">{CONDITION_LABEL.BARU}</option>
-                        </select>
-                      </label>
-                  </div>
 
                   <div className="flex gap-2 pt-1">
                     <button
@@ -2213,9 +2745,9 @@ export function BomTrackerTab({
               Foto: {canManagePhotos ? "manage" : "read"} / download {canDownloadPhotos ? "aktif" : "nonaktif"}
             </div>
           </aside>
-          ) : null}
-        </div>
-        {sweetAlert.alertElement}
-      </section>
+        ) : null}
+      </div>
+      {alertElement}
+    </section>
   );
 }

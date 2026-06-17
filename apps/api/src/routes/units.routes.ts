@@ -145,6 +145,15 @@ function mapUnitsError(request: Request, error: unknown): Response {
       return errorResponse(request, "Master panel tidak ditemukan.", 404, "UNIT_PANEL_NOT_FOUND");
     }
 
+    if (error.message === "UNIT_PANEL_DUPLICATE") {
+      return errorResponse(
+        request,
+        "Master panel dengan parent, section, kategori, dan nama yang sama sudah ada.",
+        409,
+        "UNIT_PANEL_DUPLICATE",
+      );
+    }
+
     if (error.message === "UNIT_PANEL_PARENT_NOT_FOUND") {
       return errorResponse(request, "Parent panel tidak ditemukan.", 404, "UNIT_PANEL_PARENT_NOT_FOUND");
     }

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { AuthScope } from "@smsystem/contracts/auth";
 import type {
   CreateUnitRequest,
@@ -125,6 +126,17 @@ interface BomPanelRow extends RowDataPacket {
   hasInstalled: number | null;
   progressPercent: number | null;
   remainingHours: number | null;
+  stockStatus: "IN_STORAGE" | "RETRIEVED" | "INSTALLED" | "LOST" | null;
+  conditionType: "BARU" | "RESTORE" | "BEKAS" | null;
+  locationName: string | null;
+  locationDetail: string | null;
+  takenByName: string | null;
+  dateOut: string | null;
+  jobStatus: "PLAN" | "PROSES" | "QC_READY" | "DONE" | null;
+  qcLastStatus: "LOLOS" | "TIDAK_LOLOS" | null;
+  deadlineDate: string | null;
+  countRevisi: number | null;
+  currentDivisionName: string | null;
 }
 
 interface BomActualRow extends RowDataPacket {
@@ -262,6 +274,18 @@ interface BomFlatPart {
   logisticStatus: UnitBomLogisticStatus | null;
   logisticReference: string | null;
   logisticPath: string | null;
+  stockStatus: "IN_STORAGE" | "RETRIEVED" | "INSTALLED" | "LOST" | null;
+  conditionType: "BARU" | "RESTORE" | "BEKAS" | null;
+  locationName: string | null;
+  locationDetail: string | null;
+  takenByName: string | null;
+  dateOut: string | null;
+  jobStatus: "PLAN" | "PROSES" | "QC_READY" | "DONE" | null;
+  qcLastStatus: "LOLOS" | "TIDAK_LOLOS" | null;
+  deadlineDate: string | null;
+  countRevisi: number | null;
+  isLocked: boolean;
+  currentDivisionName: string | null;
   detail: UnitBomPartDetail;
 }
 
@@ -678,6 +702,18 @@ function buildBomTree(parts: BomFlatPart[]): UnitBomWorkspace["tree"] {
               logisticStatus: part.logisticStatus,
               logisticReference: part.logisticReference,
               logisticPath: part.logisticPath,
+              stockStatus: part.stockStatus,
+              conditionType: part.conditionType,
+              locationName: part.locationName,
+              locationDetail: part.locationDetail,
+              takenByName: part.takenByName,
+              dateOut: part.dateOut,
+              jobStatus: part.jobStatus,
+              qcLastStatus: part.qcLastStatus,
+              deadlineDate: part.deadlineDate,
+              countRevisi: part.countRevisi,
+              isLocked: part.isLocked,
+              currentDivisionName: part.currentDivisionName,
               detail: part.detail,
               children: [],
             })),
@@ -1323,7 +1359,26 @@ export class UnitsRepository {
               panel_lock.currentDivisionId AS divisionId,
               d.name AS divisionName,
               panel_lock.isLocked AS isLocked,
+              d.name AS currentDivisionName,
               panel_lock.lockUpdatedAt AS lockUpdatedAt,
+              stock_latest.status AS stockStatus,
+              stock_latest.conditionType AS conditionType,
+              stock_latest.locationName AS locationName,
+              stock_latest.locationDetail AS locationDetail,
+              stock_latest.takenByName AS takenByName,
+              stock_latest.dateOut AS dateOut,
+              SUBSTRING_INDEX(
+                GROUP_CONCAT(COALESCE(cd.status, 'PLAN') ORDER BY cd.updated_at DESC SEPARATOR ','),
+                ',',
+                1
+              ) AS jobStatus,
+              SUBSTRING_INDEX(
+                GROUP_CONCAT(cd.qc_last_status ORDER BY cd.updated_at DESC SEPARATOR ','),
+                ',',
+                1
+              ) AS qcLastStatus,
+              DATE_FORMAT(MIN(cd.deadline_date), '%Y-%m-%d') AS deadlineDate,
+              MAX(cd.count_revisi) AS countRevisi,
               MAX(
                 CASE
                   WHEN COALESCE(cd.status, 'PLAN') = 'DONE' OR COALESCE(cd.actual_progress_percent, 0) >= 100
@@ -1354,6 +1409,35 @@ export class UnitsRepository {
               ON panel_lock.car_id = mp.car_id
              AND panel_lock.panel_id = mp.id
             LEFT JOIN sm_divisi d ON d.id = panel_lock.currentDivisionId
+            LEFT JOIN (
+              SELECT
+                ranked.partName,
+                ranked.status,
+                ranked.conditionType,
+                ranked.locationName,
+                ranked.locationDetail,
+                ranked.takenByName,
+                ranked.dateOut
+              FROM (
+                SELECT
+                  sc.part_name AS partName,
+                  sc.status AS status,
+                  sc.condition_type AS conditionType,
+                  sl.label AS locationName,
+                  sc.location_detail AS locationDetail,
+                  sc.taken_by_name AS takenByName,
+                  DATE_FORMAT(sc.date_out, '%Y-%m-%d') AS dateOut,
+                  ROW_NUMBER() OVER (
+                    PARTITION BY sc.part_name
+                    ORDER BY COALESCE(sc.updated_at, sc.created_at) DESC
+                  ) AS rowNo
+                FROM ${warehouseStockCard} sc
+                LEFT JOIN ${warehouseLocations} sl ON sl.id = sc.storage_location_id
+                WHERE sc.car_id = ?
+              ) ranked
+              WHERE ranked.rowNo = 1
+            ) stock_latest
+              ON stock_latest.partName = mp.name
             LEFT JOIN sm_jobdesc_countdown cd
               ON cd.car_id = mp.car_id
              AND cd.panel_id = mp.id
@@ -1367,10 +1451,16 @@ export class UnitsRepository {
               panel_lock.currentDivisionId,
               d.name,
               panel_lock.isLocked,
+              stock_latest.status,
+              stock_latest.conditionType,
+              stock_latest.locationName,
+              stock_latest.locationDetail,
+              stock_latest.takenByName,
+              stock_latest.dateOut,
               panel_lock.lockUpdatedAt
             ORDER BY mp.category ASC, mp.section ASC, mp.name ASC
           `,
-          [params.unitId, params.unitId],
+          [params.unitId, params.unitId, params.unitId],
         ),
         pool.query<BomActualRow[]>(
           `
@@ -1653,6 +1743,18 @@ export class UnitsRepository {
         logisticStatus,
         logisticReference,
         logisticPath,
+        stockStatus: row.stockStatus,
+        conditionType: row.conditionType,
+        locationName: row.locationName,
+        locationDetail: row.locationDetail,
+        takenByName: row.takenByName,
+        dateOut: row.dateOut,
+        jobStatus: row.jobStatus,
+        qcLastStatus: row.qcLastStatus,
+        deadlineDate: row.deadlineDate,
+        countRevisi: row.countRevisi === null ? null : Number(row.countRevisi),
+        isLocked: Number(row.isLocked ?? 0) > 0,
+        currentDivisionName: row.currentDivisionName,
         detail: {
           workStatusLabel: workStatusLabel(physicalStatus),
           isLocked: Number(row.isLocked ?? 0) > 0,
@@ -1814,6 +1916,53 @@ export class UnitsRepository {
     };
   }
 
+  private async assertUnitPanelNotDuplicate(
+    pool: Pick<Pool, "query">,
+    input: {
+      unitId: string;
+      parentId: number | null;
+      section: string;
+      name: string;
+      category: string | null | undefined;
+      excludePanelId?: number;
+    },
+  ) {
+    const params: unknown[] = [
+      input.unitId,
+      input.parentId,
+      input.parentId,
+      input.section.trim(),
+      input.name.trim(),
+      toNullableText(input.category) ?? "Lainnya",
+    ];
+    const excludeClause = input.excludePanelId ? "AND id <> ?" : "";
+    if (input.excludePanelId) {
+      params.push(input.excludePanelId);
+    }
+
+    const [rows] = await pool.query<AggregateCountPacket[]>(
+      `
+        SELECT COUNT(*) AS total
+        FROM master_panels
+        WHERE car_id = ?
+          AND (
+            (? IS NULL AND parent_id IS NULL)
+            OR parent_id = ?
+          )
+          AND TRIM(section) = ?
+          AND TRIM(name) = ?
+          AND COALESCE(NULLIF(TRIM(category), ''), 'Lainnya') = ?
+          AND COALESCE(is_active, 1) = 1
+          ${excludeClause}
+      `,
+      params,
+    );
+
+    if (Number(rows[0]?.total ?? 0) > 0) {
+      throw new Error("UNIT_PANEL_DUPLICATE");
+    }
+  }
+
   async createUnitPanel(
     params: ScopeParams & {
       unitId: string;
@@ -1839,6 +1988,14 @@ export class UnitsRepository {
         throw new Error("UNIT_PANEL_PARENT_INVALID");
       }
     }
+
+    await this.assertUnitPanelNotDuplicate(pool, {
+      unitId: params.unitId,
+      parentId: input.parentId ?? null,
+      section: input.section,
+      name: input.name,
+      category: input.category,
+    });
 
     const inventoryColumns = [
       schema.hasQty ? "qty" : null,
@@ -1913,6 +2070,44 @@ export class UnitsRepository {
     }
 
     const before = mapUnitPanelRecord(currentRow);
+
+    let parentIdAssignment = "";
+    const parentIdValues: (number | null)[] = [];
+
+    if (input.parentId !== undefined) {
+      if (input.parentId !== null) {
+        const parentRow = await this.findUnitPanelRow(pool, params.unitId, input.parentId);
+        if (!parentRow) {
+          throw new Error("UNIT_PANEL_NOT_FOUND");
+        }
+        if (parentRow.parentId !== null) {
+          throw new Error("UNIT_PANEL_PARENT_INVALID");
+        }
+      }
+      
+      // If we are making it a panel, make sure it has no children
+      if (input.parentId === null && currentRow.parentId !== null) {
+        const [children] = await pool.query<UnitPanelRow[]>(
+          "SELECT id FROM master_panels WHERE parent_id = ? AND car_id = ? LIMIT 1",
+          [params.panelId, params.unitId]
+        );
+        if (children.length > 0) {
+          throw new Error("UNIT_PANEL_HAS_CHILDREN");
+        }
+      }
+
+      parentIdAssignment = "parent_id = ?,";
+      parentIdValues.push(input.parentId);
+    }
+
+    await this.assertUnitPanelNotDuplicate(pool, {
+      unitId: params.unitId,
+      parentId: input.parentId === undefined ? currentRow.parentId : input.parentId,
+      section: input.section,
+      name: input.name,
+      category: input.category,
+      excludePanelId: params.panelId,
+    });
     const inventoryAssignments = [
       schema.hasQty ? "qty = ?" : null,
       schema.hasDefaultLocationType ? "default_location_type = ?" : null,
@@ -1930,6 +2125,7 @@ export class UnitsRepository {
       `
         UPDATE master_panels
         SET
+          ${parentIdAssignment}
           section = ?,
           name = ?,
           category = ?,
@@ -1942,6 +2138,7 @@ export class UnitsRepository {
         LIMIT 1
       `,
       [
+        ...parentIdValues,
         input.section.trim(),
         input.name.trim(),
         toNullableText(input.category),
@@ -2038,4 +2235,117 @@ export class UnitsRepository {
 
     return current;
   }
+
+  async upsertWarehouseStockCardFromPanel(
+    params: ScopeParams & {
+      unitId: string;
+      record: UnitPanelRecord;
+    },
+  ): Promise<void> {
+    const unitSummary = await this.findUnitSummary(params);
+    if (!unitSummary) {
+      throw new Error("UNIT_NOT_FOUND");
+    }
+
+    const pool = this.poolFactory();
+    const stockCardTable = qualifyTable(this.warehouseDb, "wh_stock_card");
+    const partCode = `MP-${params.record.id}`;
+    const uom = "pcs";
+
+    const [existingRows] = await pool.query<Array<RowDataPacket & { id: string }>>(
+      `SELECT id FROM ${stockCardTable} WHERE car_id = ? AND part_code = ? LIMIT 1`,
+      [params.unitId, partCode],
+    );
+
+    if (existingRows.length > 0) {
+      await pool.execute(
+        `
+          UPDATE ${stockCardTable}
+          SET
+            car_name = ?,
+            panel_section = ?,
+            part_name = ?,
+            condition_type = ?,
+            qty = ?,
+            uom = ?,
+            status = ?,
+            updated_at = CURRENT_TIMESTAMP
+          WHERE car_id = ?
+            AND part_code = ?
+        `,
+        [
+          unitSummary.unitName,
+          params.record.section,
+          params.record.name,
+          params.record.defaultConditionType,
+          params.record.qty,
+          uom,
+          params.record.defaultStockStatus,
+          params.unitId,
+          partCode,
+        ],
+      );
+      return;
+    }
+
+    await pool.execute(
+      `
+        INSERT INTO ${stockCardTable} (
+          id,
+          entry_no,
+          car_id,
+          car_name,
+          part_code,
+          panel_section,
+          part_name,
+          condition_type,
+          qty,
+          uom,
+          storage_location_id,
+          location_detail,
+          date_in,
+          status,
+          is_labeled,
+          created_at,
+          updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, CURRENT_DATE, ?, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      `,
+      [
+        randomUUID(),
+        partCode,
+        params.unitId,
+        unitSummary.unitName,
+        partCode,
+        params.record.section,
+        params.record.name,
+        params.record.defaultConditionType,
+        params.record.qty,
+        uom,
+        params.record.defaultStockStatus,
+      ],
+    );
+  }
+
+  async markWarehouseStockCardLostForPanel(
+    params: ScopeParams & {
+      unitId: string;
+      panelId: number;
+    },
+  ): Promise<void> {
+    const pool = this.poolFactory();
+    const stockCardTable = qualifyTable(this.warehouseDb, "wh_stock_card");
+    await pool.execute(
+      `
+        UPDATE ${stockCardTable}
+        SET
+          status = 'LOST',
+          updated_at = CURRENT_TIMESTAMP
+        WHERE car_id = ?
+          AND part_code = ?
+        LIMIT 1
+      `,
+      [params.unitId, `MP-${params.panelId}`],
+    );
+  }
+
 }

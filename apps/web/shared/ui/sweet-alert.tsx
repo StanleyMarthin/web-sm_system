@@ -1,7 +1,7 @@
 "use client";
 
 import { AlertTriangle, CheckCircle2, Info, XCircle } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ActionButton } from "@/shared/ui/compact";
 
 type SweetAlertTone = "success" | "error" | "warning" | "info";
@@ -144,7 +144,7 @@ export function useSweetAlert() {
     </>
   ), [confirmState, notices]);
 
-  function pushNotice(tone: SweetAlertTone, title: string, description?: string) {
+  const pushNotice = useCallback((tone: SweetAlertTone, title: string, description?: string) => {
     setNotices((currentValue) => [
       ...currentValue,
       {
@@ -154,39 +154,49 @@ export function useSweetAlert() {
         description,
       },
     ]);
-  }
+  }, []);
+
+  const confirm = useCallback((options: {
+    title: string;
+    description: string;
+    tone?: SweetAlertTone;
+    confirmLabel?: string;
+    cancelLabel?: string;
+  }) => {
+    return new Promise<boolean>((resolve) => {
+      setConfirmState({
+        title: options.title,
+        description: options.description,
+        tone: options.tone ?? "warning",
+        confirmLabel: options.confirmLabel ?? "Lanjutkan",
+        cancelLabel: options.cancelLabel ?? "Batal",
+        resolve,
+      });
+    });
+  }, []);
+
+  const notifySuccess = useCallback((title: string, description?: string) => {
+    pushNotice("success", title, description);
+  }, [pushNotice]);
+
+  const notifyError = useCallback((title: string, description?: string) => {
+    pushNotice("error", title, description);
+  }, [pushNotice]);
+
+  const notifyWarning = useCallback((title: string, description?: string) => {
+    pushNotice("warning", title, description);
+  }, [pushNotice]);
+
+  const notifyInfo = useCallback((title: string, description?: string) => {
+    pushNotice("info", title, description);
+  }, [pushNotice]);
 
   return {
     alertElement,
-    confirm(options: {
-      title: string;
-      description: string;
-      tone?: SweetAlertTone;
-      confirmLabel?: string;
-      cancelLabel?: string;
-    }) {
-      return new Promise<boolean>((resolve) => {
-        setConfirmState({
-          title: options.title,
-          description: options.description,
-          tone: options.tone ?? "warning",
-          confirmLabel: options.confirmLabel ?? "Lanjutkan",
-          cancelLabel: options.cancelLabel ?? "Batal",
-          resolve,
-        });
-      });
-    },
-    notifySuccess(title: string, description?: string) {
-      pushNotice("success", title, description);
-    },
-    notifyError(title: string, description?: string) {
-      pushNotice("error", title, description);
-    },
-    notifyWarning(title: string, description?: string) {
-      pushNotice("warning", title, description);
-    },
-    notifyInfo(title: string, description?: string) {
-      pushNotice("info", title, description);
-    },
+    confirm,
+    notifySuccess,
+    notifyError,
+    notifyWarning,
+    notifyInfo,
   };
 }

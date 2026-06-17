@@ -24,10 +24,6 @@ export interface UnitPanelRecordShape {
   category: string | null;
   isActive: boolean;
   sortOrder: number;
-  qty: number;
-  defaultLocationType: "GUDANG" | "WORKSHOP" | "UNIT";
-  defaultStockStatus: "IN_STORAGE" | "RETRIEVED" | "INSTALLED" | "LOST";
-  defaultConditionType: "BARU" | "RESTORE" | "BEKAS";
   countdownUsageCount: number;
   statusUsageCount: number;
   childCount: number;
@@ -47,10 +43,6 @@ export const unitPanelRecordSchema: z.ZodType<UnitPanelRecordShape> = z.lazy(() 
     category: z.string().nullable(),
     isActive: z.boolean(),
     sortOrder: z.number().int(),
-    qty: z.number(),
-    defaultLocationType: unitPanelLocationTypeSchema,
-    defaultStockStatus: unitPanelStockStatusSchema,
-    defaultConditionType: unitPanelConditionTypeSchema,
     countdownUsageCount: z.number().int().nonnegative(),
     statusUsageCount: z.number().int().nonnegative(),
     childCount: z.number().int().nonnegative(),
@@ -71,22 +63,15 @@ export const createUnitPanelRequestSchema = z.object({
   name: z.string().trim().min(1).max(100),
   category: nullableCategorySchema.default(null),
   sortOrder: z.number().int().min(0).max(9999).default(0),
-  qty: z.number().positive().max(100_000).default(1),
-  defaultLocationType: unitPanelLocationTypeSchema.default("UNIT"),
-  defaultStockStatus: unitPanelStockStatusSchema.default("INSTALLED"),
-  defaultConditionType: unitPanelConditionTypeSchema.default("BEKAS"),
   isActive: z.boolean().optional().default(true),
 });
 
 export const updateUnitPanelRequestSchema = z.object({
+  parentId: z.number().int().positive().nullable().optional(),
   section: z.string().trim().min(1).max(50),
   name: z.string().trim().min(1).max(100),
   category: nullableCategorySchema.default(null),
   sortOrder: z.number().int().min(0).max(9999).default(0),
-  qty: z.number().positive().max(100_000).default(1),
-  defaultLocationType: unitPanelLocationTypeSchema.default("UNIT"),
-  defaultStockStatus: unitPanelStockStatusSchema.default("INSTALLED"),
-  defaultConditionType: unitPanelConditionTypeSchema.default("BEKAS"),
   isActive: z.boolean().optional().default(true),
 });
 

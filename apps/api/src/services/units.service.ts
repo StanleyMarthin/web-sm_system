@@ -182,6 +182,17 @@ export class DefaultUnitsService implements UnitsService {
       },
     });
 
+    try {
+      await this.repository.upsertWarehouseStockCardFromPanel({
+        employeeId: session.user.employeeId,
+        scope: session.user.scope,
+        unitId,
+        record,
+      });
+    } catch {
+      // Warehouse sync is best-effort; master panel mutation remains authoritative.
+    }
+
     return record;
   }
 
@@ -209,6 +220,17 @@ export class DefaultUnitsService implements UnitsService {
       oldValue: result.before,
       newValue: result.after,
     });
+
+    try {
+      await this.repository.upsertWarehouseStockCardFromPanel({
+        employeeId: session.user.employeeId,
+        scope: session.user.scope,
+        unitId,
+        record: result.after,
+      });
+    } catch {
+      // Warehouse sync is best-effort; master panel mutation remains authoritative.
+    }
 
     return result.after;
   }
@@ -272,6 +294,18 @@ export class DefaultUnitsService implements UnitsService {
       },
     });
 
+    try {
+      await this.repository.markWarehouseStockCardLostForPanel({
+        employeeId: session.user.employeeId,
+        scope: session.user.scope,
+        unitId,
+        panelId,
+      });
+    } catch {
+      // Warehouse sync is best-effort; master panel mutation remains authoritative.
+    }
+
     return { deletedId: panelId };
   }
+
 }

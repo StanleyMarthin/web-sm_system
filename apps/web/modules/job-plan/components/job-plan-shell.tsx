@@ -15,6 +15,7 @@ import {
   formatDurationHHMM,
   parseDurationHHMM,
 } from "@smsystem/contracts/job-plan-schedule";
+import { isNonTechnicalDivision } from "@smsystem/contracts/division";
 import { encodeGridFilterToken } from "@smsystem/contracts/grid";
 import {
   ChevronDown,
@@ -401,6 +402,10 @@ export function JobPlanShell({
       ),
     [references.employees, workspaceForm.divisionId],
   );
+  const isWorkspaceNonTechnical = useMemo(
+    () => isNonTechnicalDivision(workspaceForm.divisionId, references.divisions),
+    [references.divisions, workspaceForm.divisionId],
+  );
   const additionalPreview = useMemo(() => {
     const row = workspaceForm.rows[0];
     const targetHours = row ? parseDurationHHMM(row.targetHours) : null;
@@ -613,8 +618,8 @@ export function JobPlanShell({
       references.employees.find((employee) => employee.value === row.assignedUserId)?.label ??
       row.assignedUserId;
     const panelName = references.panels.find((panel) => panel.value === row.panelId)?.label ?? null;
-    const jobName =
-      references.jobTypes.find((jobType) => jobType.value === row.jobTypeId)?.label ?? null;
+    const selectedJobType = references.jobTypes.find((jobType) => jobType.value === row.jobTypeId);
+    const jobName = selectedJobType?.label ?? row.jobDescription.trim() ?? null;
     const unitName = references.units.find((unit) => unit.value === row.carId)?.label ?? null;
     const divisionName =
       references.divisions.find((division) => division.value === workspaceForm.divisionId)?.label ??
@@ -628,8 +633,8 @@ export function JobPlanShell({
       unitName,
       divisionId: workspaceForm.divisionId ? Number(workspaceForm.divisionId) : null,
       divisionName,
-      panelId: row.panelId ? Number(row.panelId) : null,
-      panelName,
+      panelId: isWorkspaceNonTechnical ? null : row.panelId ? Number(row.panelId) : null,
+      panelName: isWorkspaceNonTechnical ? null : panelName,
       jobTypeId: row.jobTypeId || null,
       jobName,
       assignedUserId: row.assignedUserId,
@@ -702,11 +707,16 @@ export function JobPlanShell({
     setSelectedQuickCreateRowIds(new Set());
   }
 
-  function openCreateWorkspace() {
+  function openCreateWorkspace(forceNonTechnical = false) {
     setMessage(null);
     setError(null);
     if (!divisionFilterValue) {
       setError("Pilih divisi di header dulu agar pilihan PIC dan jobdesc langsung terfilter.");
+      return;
+    }
+
+    if (forceNonTechnical && !isNonTechnicalDivision(divisionFilterValue, references.divisions)) {
+      setError("Pilih divisi non-teknis terlebih dahulu.");
       return;
     }
 
@@ -1287,8 +1297,14 @@ export function JobPlanShell({
           return;
         }
 
-        if (row.source === "additional" && (!row.carId || !row.panelId || !row.jobTypeId)) {
+        const rowIsNonTechnical = isNonTechnicalDivision(workspaceForm.divisionId, references.divisions);
+        if (row.source === "additional" && !rowIsNonTechnical && (!row.carId || !row.panelId || !row.jobTypeId)) {
           setError("Baris sumber tambahan wajib memilih unit, panel, dan jobdesc tambahan.");
+          return;
+        }
+
+        if (row.source === "additional" && rowIsNonTechnical && (!row.assignedUserId || !targetHours || !row.jobDescription.trim())) {
+          setError("Lengkapi PIC, jam kerja, dan deskripsi aktivitas non-teknis.");
           return;
         }
       }
@@ -2070,6 +2086,14 @@ export function JobPlanShell({
   }
 
   function renderPanelCell(row: WorkspaceRowState) {
+    if (isWorkspaceNonTechnical) {
+      return (
+        <div className="flex h-[38px] items-center rounded-md border border-white/5 bg-[#111114] px-3 text-[12px] text-white/35">
+          Tanpa Countdown
+        </div>
+      );
+    }
+
     if (row.source === "additional") {
       const panelOptions = getAdditionalPanelOptions(row);
       return (
@@ -2127,6 +2151,21 @@ export function JobPlanShell({
   }
 
   function renderJobCell(row: WorkspaceRowState) {
+    if (isWorkspaceNonTechnical) {
+      return (
+        <CompactInput
+          type="text"
+          value={row.jobDescription}
+          placeholder="Activity / Jobdesc"
+          onChange={(event) =>
+            updateWorkspaceRow(row.rowId, (currentValue) => ({
+              ...currentValue,
+              jobDescription: event.target.value,
+            }))}
+        />
+      );
+    }
+
     if (row.source === "additional") {
       const selectedDivision = references.divisions.find(
         (division) => division.value === workspaceForm.divisionId,
@@ -2306,11 +2345,19 @@ export function JobPlanShell({
                   </button>
                   <button
                     type="button"
-                    onClick={openCreateWorkspace}
+                    onClick={() => openCreateWorkspace(false)}
                     className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[10px] font-mono text-white/70 transition-colors hover:bg-white/[0.02] hover:text-white"
                   >
                     <Plus className="h-3.5 w-3.5 text-amber-400" />
                     Job Tambahan
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openCreateWorkspace(true)}
+                    className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[10px] font-mono text-white/70 transition-colors hover:bg-white/[0.02] hover:text-white"
+                  >
+                    <Plus className="h-3.5 w-3.5 text-amber-400" />
+                    Tambah Job Non Teknis
                   </button>
                 </div>
               ) : null}
@@ -2427,9 +2474,11 @@ export function JobPlanShell({
           <div className="w-full max-w-5xl border border-white/10 bg-[#111114]">
             <div className="flex items-start justify-between gap-3 border-b border-white/5 px-4 py-3">
               <div>
-                <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">Job Tambahan</p>
+                <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">
+                  {isWorkspaceNonTechnical ? "Job Free Text / Non Teknis" : "Job Tambahan"}
+                </p>
                 <h3 className="mt-0.5 text-[13px] font-mono text-white/80">
-                  Job Tambahan
+                  {isWorkspaceNonTechnical ? "Job Non Teknis · Tanpa Countdown" : "Job Tambahan"}
                 </h3>
               </div>
               <button
@@ -2473,15 +2522,21 @@ export function JobPlanShell({
 
               <div className="grid gap-3 md:grid-cols-2">
                 <div>
-                  <FieldLabel required>Unit</FieldLabel>
+                  <FieldLabel required={!isWorkspaceNonTechnical}>
+                    {isWorkspaceNonTechnical ? "Unit Scope" : "Unit"}
+                  </FieldLabel>
                   {renderUnitCell(workspaceForm.rows[0]!)}
                 </div>
                 <div>
-                  <FieldLabel required>Panel / Part</FieldLabel>
+                  <FieldLabel required={!isWorkspaceNonTechnical}>
+                    {isWorkspaceNonTechnical ? "Tanpa Countdown" : "Panel / Part"}
+                  </FieldLabel>
                   {renderPanelCell(workspaceForm.rows[0]!)}
                 </div>
                 <div>
-                  <FieldLabel required>Pekerjaan</FieldLabel>
+                  <FieldLabel required>
+                    {isWorkspaceNonTechnical ? "Activity / Jobdesc" : "Pekerjaan"}
+                  </FieldLabel>
                   {renderJobCell(workspaceForm.rows[0]!)}
                 </div>
                 <div>
@@ -2503,7 +2558,7 @@ export function JobPlanShell({
                   </CompactSelect>
                 </div>
                 <div>
-                  <FieldLabel required>Total Jam</FieldLabel>
+                  <FieldLabel required>Target Hours</FieldLabel>
                   <CompactInput
                     type="text"
                     value={workspaceForm.rows[0]?.targetHours ?? ""}
@@ -2535,13 +2590,13 @@ export function JobPlanShell({
 
               <div className="grid gap-3 md:grid-cols-2">
                 <div>
-                  <FieldLabel>Jam Mulai</FieldLabel>
+                  <FieldLabel>Start Time</FieldLabel>
                   <div className="flex h-[38px] items-center rounded-md border border-white/5 bg-[#111114] px-3 text-[12px] text-amber-300">
                     {fmtTime(additionalPreview[0]?.startTime)}
                   </div>
                 </div>
                 <div>
-                  <FieldLabel>Jam Selesai</FieldLabel>
+                  <FieldLabel>Finish Time</FieldLabel>
                   <div className="flex h-[38px] items-center rounded-md border border-white/5 bg-[#111114] px-3 text-[12px] text-amber-300">
                     {fmtTime(additionalPreview[additionalPreview.length - 1]?.finishTime)}
                   </div>
@@ -2556,7 +2611,9 @@ export function JobPlanShell({
 
               <div className="grid gap-3 md:grid-cols-2">
                 <div>
-                  <FieldLabel required>Instruksi</FieldLabel>
+                  <FieldLabel required>
+                    {isWorkspaceNonTechnical ? "Description / Instruksi" : "Instruksi"}
+                  </FieldLabel>
                   <CompactTextarea
                     rows={4}
                     value={workspaceForm.rows[0]?.jobDescription ?? ""}
@@ -2569,7 +2626,7 @@ export function JobPlanShell({
                   />
                 </div>
                 <div>
-                  <FieldLabel>Catatan</FieldLabel>
+                  <FieldLabel>Note</FieldLabel>
                   <CompactTextarea
                     rows={4}
                     value={workspaceForm.rows[0]?.note ?? ""}
@@ -2594,7 +2651,7 @@ export function JobPlanShell({
                 }}
               >
                 <Save className="h-3 w-3" />
-                {workspaceSubmitting ? "Menyimpan..." : "Simpan Tambahan"}
+                {workspaceSubmitting ? "Menyimpan..." : isWorkspaceNonTechnical ? "Simpan Job Non Teknis" : "Simpan Tambahan"}
               </ActionButton>
             </div>
           </div>

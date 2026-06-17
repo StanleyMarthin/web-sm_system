@@ -1,5 +1,7 @@
 import { parseGridQueryParams } from "@smsystem/contracts/grid";
+import { createMonitoringActualRequestSchema } from "@smsystem/contracts/monitoring";
 import { permissionCodes } from "@smsystem/permissions";
+import { parseJsonBody } from "@/http/request";
 import { errorResponse, withCors } from "@/http/response";
 import { requireSession } from "@/middleware/auth.middleware";
 import { requirePermission } from "@/middleware/permission.middleware";
@@ -466,6 +468,58 @@ export async function handleMonitoringEmployeeRoute(
       "Terjadi kesalahan internal pada monitoring module.",
       500,
       "MONITORING_FAILED",
+    );
+  }
+}
+
+export async function handleMonitoringActualCreateRoute(
+  request: Request,
+  authService: AuthService,
+  monitoringService: MonitoringService,
+): Promise<Response> {
+  const sessionResult = await requireMonitoringSession(request, authService);
+  if ("response" in sessionResult) {
+    return sessionResult.response;
+  }
+
+  const bodyResult = await parseJsonBody(request, createMonitoringActualRequestSchema);
+  if (!bodyResult.success) {
+    return bodyResult.response;
+  }
+
+  try {
+    const result = await monitoringService.createActual(
+      sessionResult.session,
+      bodyResult.data,
+    );
+
+    return withCors(
+      request,
+      Response.json({
+        success: true,
+        message: "Actual berhasil disimpan.",
+        data: result,
+      }),
+    );
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message === "MANUAL_TECHNICAL_ACTUAL_REQUIRES_PLAN"
+    ) {
+      return errorResponse(
+        request,
+        "Actual teknis harus dibuat dari plan atau countdown.",
+        400,
+        "MANUAL_TECHNICAL_ACTUAL_REQUIRES_PLAN",
+      );
+    }
+
+    console.error("[monitoring] actual create failed", error);
+    return errorResponse(
+      request,
+      "Terjadi kesalahan internal saat menyimpan actual.",
+      500,
+      "MONITORING_ACTUAL_FAILED",
     );
   }
 }

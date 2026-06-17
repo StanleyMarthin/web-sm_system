@@ -29,6 +29,8 @@ export const jobPlanReferenceOptionSchema = z.object({
   value: z.string(),
   label: z.string(),
   code: z.string().nullable().optional(),
+  isTeknis: z.boolean().nullable().optional(),
+  isTechnical: z.boolean().nullable().optional(),
   parentId: z.number().int().nullable().optional(),
   parentName: z.string().nullable().optional(),
   parentCode: z.string().nullable().optional(),

@@ -1,10 +1,13 @@
 import {
+  createMonitoringActualRequestSchema,
   monitoringDivisionDetailEnvelopeSchema,
   monitoringDivisionEnvelopeSchema,
+  monitoringActualMutationEnvelopeSchema,
   monitoringGridEnvelopeSchema,
   monitoringTaskListEnvelopeSchema,
   monitoringUnitEnvelopeSchema,
 } from "@smsystem/contracts/monitoring";
+import type { CreateMonitoringActualRequest } from "@smsystem/contracts/monitoring";
 import { getApiBaseUrl } from "@/shared/api/config";
 
 function getTodayIsoDate(): string {
@@ -247,5 +250,40 @@ export async function fetchMonitoringEmployee(
   return {
     payload: await response.json(),
     status: response.status,
+  };
+}
+
+async function parseFailure(response: Response) {
+  try {
+    return (await response.json()) as { message?: string; errorCode?: string };
+  } catch {
+    return { message: "Response API tidak valid.", errorCode: "INVALID_RESPONSE" };
+  }
+}
+
+export async function createMonitoringActual(input: CreateMonitoringActualRequest) {
+  const parsed = createMonitoringActualRequestSchema.parse(input);
+  const response = await fetch(`${getApiBaseUrl()}/api/monitoring/actual`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(parsed),
+  });
+
+  if (!response.ok) {
+    const failure = await parseFailure(response);
+    return {
+      success: false as const,
+      message: failure.message ?? "Actual belum bisa disimpan.",
+      errorCode: failure.errorCode,
+    };
+  }
+
+  const payload = monitoringActualMutationEnvelopeSchema.parse(await response.json());
+  return {
+    success: true as const,
+    result: payload.data,
   };
 }
