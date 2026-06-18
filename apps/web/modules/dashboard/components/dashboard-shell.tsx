@@ -78,6 +78,14 @@ type CalRow = {
   targetDeliveryDate: string | null;
 };
 
+type UnitDeadlineProgress = {
+  actualHours: number;
+  targetHours: number;
+  progressPct: number;
+  points: number[];
+  jobCount: number;
+};
+
 function fmt(value: number) {
   return new Intl.NumberFormat("id-ID", { maximumFractionDigits: 0 }).format(value);
 }
@@ -436,6 +444,128 @@ function getSpkByDivision(
     .sort((left, right) => right.totalTarget - left.totalTarget);
 }
 
+function getUnitDeadlineProgress(rows: JobPlanRecord[]) {
+  type Accum = {
+    unitName: string;
+    actualHours: number;
+    targetHours: number;
+    jobCount: number;
+    byDate: Map<string, { actual: number; target: number }>;
+  };
+
+  const map = new Map<string, Accum>();
+
+  const ensure = (key: string, unitName: string) => {
+    const existing = map.get(key);
+    if (existing) return existing;
+
+    const created: Accum = {
+      unitName,
+      actualHours: 0,
+      targetHours: 0,
+      jobCount: 0,
+      byDate: new Map(),
+    };
+    map.set(key, created);
+    return created;
+  };
+
+  for (const row of rows) {
+    const keys = [row.draftCarId, row.unitName].filter((value): value is string => Boolean(value));
+    if (keys.length === 0) continue;
+
+    const actualHours = getJobPlanActualHours(row);
+    const taskDate = row.taskDate.split("T")[0] ?? row.taskDate;
+
+    for (const key of keys) {
+      const target = ensure(key, row.unitName);
+      target.actualHours += actualHours;
+      target.targetHours += row.targetHours;
+      target.jobCount += 1;
+
+      const existingDate = target.byDate.get(taskDate) ?? { actual: 0, target: 0 };
+      existingDate.actual += actualHours;
+      existingDate.target += row.targetHours;
+      target.byDate.set(taskDate, existingDate);
+    }
+  }
+
+  const result = new Map<string, UnitDeadlineProgress>();
+
+  for (const [key, item] of map.entries()) {
+    const sortedDates = [...item.byDate.entries()].sort(([left], [right]) => left.localeCompare(right));
+    let actualSum = 0;
+    let targetSum = 0;
+    const points = sortedDates.map(([, value]) => {
+      actualSum += value.actual;
+      targetSum += value.target;
+      return clampPct(targetSum > 0 ? (actualSum / targetSum) * 100 : 0);
+    });
+
+    result.set(key, {
+      actualHours: item.actualHours,
+      targetHours: item.targetHours,
+      progressPct: clampPct(item.targetHours > 0 ? (item.actualHours / item.targetHours) * 100 : 0),
+      points: points.length > 1 ? points : [0, points[0] ?? 0],
+      jobCount: item.jobCount,
+    });
+  }
+
+  return result;
+}
+
+function ProgressSparkline({
+  points,
+  tone,
+}: {
+  points: number[];
+  tone: "neutral" | "warn" | "danger";
+}) {
+  const safePoints = points.length > 1 ? points : [0, points[0] ?? 0];
+  const width = 96;
+  const height = 30;
+  const maxIndex = Math.max(1, safePoints.length - 1);
+  const path = safePoints
+    .map((point, index) => {
+      const x = (index / maxIndex) * width;
+      const y = height - (clampPct(point) / 100) * height;
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(" ");
+
+  const className =
+    tone === "danger"
+      ? "text-destructive"
+      : tone === "warn"
+        ? "text-app-accent-ink"
+        : "text-success";
+
+  return (
+    <svg
+      viewBox={`0 0 ${width} ${height}`}
+      role="img"
+      aria-label="Tren progress unit"
+      className={`h-[30px] w-24 shrink-0 overflow-visible ${className}`}
+    >
+      <line x1="0" y1={height - 0.5} x2={width} y2={height - 0.5} className="stroke-border" strokeWidth="1" />
+      <polyline
+        points={path}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <circle
+        cx={width}
+        cy={height - (clampPct(safePoints[safePoints.length - 1] ?? 0) / 100) * height}
+        r="3"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
 function Card({
   children,
   className = "",
@@ -579,14 +709,6 @@ function InteractiveCalendar({
     unitsByDate.get(key)?.push(row);
   }
 
-  const selectedUnits = selectedDate
-    ? unitsByDate.get(selectedDate) ?? []
-    : rows.filter((r) => {
-        if (!r.targetDeliveryDate) return false;
-        const [y, m] = r.targetDeliveryDate.split("-").map(Number);
-        return y === year && m === month + 1;
-      });
-
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -698,40 +820,6 @@ function InteractiveCalendar({
         })}
       </div>
 
-      <div className="border-t border-border pt-3">
-        {selectedUnits.length > 0 ? (
-          <div className="space-y-2">
-            <p className="font-mono text-[15px] uppercase tracking-[0.12em] text-muted-foreground">
-              {selectedDate ? `Unit deadline ${fmtDate(selectedDate)}` : `Semua unit bulan ini`} · {selectedUnits.length} unit
-            </p>
-            <div className="flex flex-wrap gap-1.5">
-              {selectedUnits.map((unit) => (
-                <Link
-                  key={unit.carId}
-                  href={buildHref("/dashboard", filters, {
-                    date: selectedDate || "all",
-                    dateFrom: null,
-                    dateTo: null,
-                    unitId: unit.carId,
-                  })}
-                  prefetch={false}
-                  className={`inline-flex items-center border px-2 py-1 font-mono text-[14px] leading-none transition ${
-                    selectedUnitId === unit.carId
-                      ? "border-primary/35 bg-primary/[0.08] text-app-accent-ink"
-                      : "border-success/25 bg-success/[0.05] text-success hover:bg-success/[0.08]"
-                  }`}
-                >
-                  {unit.unitName}
-                </Link>
-              ))}
-            </div>
-          </div>
-        ) : (
-          <p className="font-mono text-[14px] text-muted-foreground">
-            Tidak ada unit deadline pada {selectedDate ? fmtDate(selectedDate) : "bulan ini"}.
-          </p>
-        )}
-      </div>
     </div>
   );
 }
@@ -825,6 +913,7 @@ export function DashboardShell({
     .filter((row) => row.days !== null)
     .sort((left, right) => (left.days ?? Infinity) - (right.days ?? Infinity))
     .slice(0, 5);
+  const unitDeadlineProgress = getUnitDeadlineProgress(jobPlanRows);
 
   const spkRows = getSpkByDivision(jobPlanRows, spkWorkType, activeUnitName);
   const issueRows = getIssueRows(issueLogRows);
@@ -968,6 +1057,8 @@ export function DashboardShell({
                       : unit.days < 0 || unit.days <= 3
                         ? "danger"
                         : "warn";
+                  const progress = unitDeadlineProgress.get(unit.carId) ?? unitDeadlineProgress.get(unit.unitName);
+                  const progressPct = progress?.progressPct ?? 0;
 
                   return (
                     <Link
@@ -979,25 +1070,57 @@ export function DashboardShell({
                         unitId: unit.carId,
                       })}
                       prefetch={false}
-                      className="flex items-center justify-between gap-3 px-3 py-2 transition hover:bg-accent"
+                      className="grid gap-3 px-3 py-3 transition hover:bg-accent sm:grid-cols-[minmax(0,1fr)_auto]"
                     >
-                      <div className="min-w-0 space-y-0.5">
-                        <p className="truncate text-[14px] font-medium text-foreground">
-                          {unit.unitName}
-                        </p>
-                        <p className="font-mono text-[14px] text-muted-foreground">
-                          {fmtDate(unit.targetDeliveryDate)}
-                        </p>
+                      <div className="min-w-0 space-y-2">
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div className="min-w-0 space-y-0.5">
+                            <p className="truncate text-[15px] font-semibold text-foreground">
+                              {unit.unitName}
+                            </p>
+                            <p className="font-mono text-[13px] text-muted-foreground">
+                              Deadline {fmtDate(unit.targetDeliveryDate)}
+                            </p>
+                          </div>
+                          <InlineBadge tone={tone}>
+                            {unit.days == null
+                              ? "Belum pasti"
+                              : unit.days < 0
+                                ? `+${Math.abs(unit.days)}h lewat`
+                                : unit.days === 0
+                                  ? "Hari ini"
+                                  : `${unit.days}h lagi`}
+                          </InlineBadge>
+                        </div>
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between gap-2 font-mono text-[12px] text-muted-foreground">
+                            <span>Progress</span>
+                            <span className="font-semibold text-foreground">
+                              {progress ? fmtPct(progressPct) : "Belum ada SPK"}
+                            </span>
+                          </div>
+                          <div className="h-2 overflow-hidden border border-border bg-muted">
+                            <div
+                              className={`h-full ${
+                                tone === "danger"
+                                  ? "bg-destructive"
+                                  : tone === "warn"
+                                    ? "bg-primary"
+                                    : "bg-success"
+                              }`}
+                              style={{ width: `${progress ? progressPct : 0}%` }}
+                            />
+                          </div>
+                        </div>
+                        {progress ? (
+                          <p className="font-mono text-[12px] text-muted-foreground">
+                            {fmtWorkHours(progress.actualHours)} / {fmtWorkHours(progress.targetHours)} · {fmt(progress.jobCount)} pekerjaan
+                          </p>
+                        ) : null}
                       </div>
-                      <InlineBadge tone={tone}>
-                        {unit.days == null
-                          ? "Belum pasti"
-                          : unit.days < 0
-                            ? `+${Math.abs(unit.days)}h lewat`
-                            : unit.days === 0
-                              ? "Hari ini"
-                              : `${unit.days}h lagi`}
-                      </InlineBadge>
+                      <div className="flex items-center justify-end">
+                        <ProgressSparkline points={progress?.points ?? [0, 0]} tone={tone} />
+                      </div>
                     </Link>
                   );
                 })

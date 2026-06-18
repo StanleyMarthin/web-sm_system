@@ -41,6 +41,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type FormEvent,
   type MouseEvent,
   type PointerEvent,
@@ -107,6 +108,12 @@ interface CanvasLayout {
   nodes: CanvasNode[];
   width: number;
   height: number;
+}
+
+interface CanvasFocus {
+  visibleNodeIds: Set<string> | null;
+  activeEdgeKeys: Set<string>;
+  label: string | null;
 }
 
 interface NodePosition {
@@ -222,9 +229,9 @@ function jobStatusMeta(status: string | null | undefined) {
     case "PROSES":
       return { label: "PROSES", className: "border-primary/25 bg-primary/[0.07] text-app-accent-ink", dot: "bg-primary" };
     case "PLAN":
-      return { label: "PLAN", className: "border-white/10 bg-white/[0.03] text-foreground/40", dot: "bg-white/30" };
+      return { label: "PLAN", className: "border-border bg-muted text-muted-foreground", dot: "bg-muted-foreground" };
     default:
-      return { label: "BELUM ADA", className: "border-white/10 bg-white/[0.03] text-foreground/25", dot: "bg-white/20" };
+      return { label: "BELUM ADA", className: "border-border bg-muted text-muted-foreground", dot: "bg-muted" };
   }
 }
 
@@ -239,7 +246,7 @@ function stockStatusMeta(status: string | null | undefined) {
     case "LOST":
       return { label: "Hilang", icon: XCircle, className: "text-destructive" };
     default:
-      return { label: "Tidak ada", icon: PackageSearch, className: "text-foreground/30" };
+      return { label: "Tidak ada", icon: PackageSearch, className: "text-muted-foreground" };
   }
 }
 
@@ -250,7 +257,7 @@ function conditionBadge(type: string | null | undefined) {
     case "RESTORE":
       return "border-primary/25 text-app-accent-ink";
     case "BEKAS":
-      return "border-white/15 text-foreground/40";
+      return "border-border text-muted-foreground";
     default:
       return null;
   }
@@ -524,6 +531,7 @@ function buildCanvasLayout(
   isRootExpanded: boolean,
   nodeDimensions: Record<string, NodeDimension>,
   hiddenNodeIds: Set<string>,
+  focusNodeIds: Set<string> | null,
 ): CanvasLayout {
   const positioned: CanvasNode[] = [];
   let row = 0;
@@ -535,6 +543,7 @@ function buildCanvasLayout(
     maxDepth = Math.max(maxDepth, depth);
     for (const item of items) {
       if (hiddenNodeIds.has(item.nodeId)) continue;
+      if (focusNodeIds && !focusNodeIds.has(item.nodeId)) continue;
       const savedDimension = nodeDimensions[item.nodeId];
       const nodeWidth = savedDimension?.width ?? NODE_WIDTH;
       const nodeHeight = savedDimension?.height ?? estimateNodeHeight(item, nodeWidth);
@@ -567,6 +576,115 @@ function buildCanvasLayout(
     nodes: positioned,
     width: Math.max(860, maxRight, 64 + (maxDepth + 1) * (NODE_WIDTH + 44) + maxDepth * COLUMN_GAP),
     height: Math.max(520, 64 + Math.max(1, row) * (NODE_HEIGHT + ROW_GAP), 64 + Math.max(0, ...positioned.map((node) => node.y + node.height))),
+  };
+}
+
+function findNodePath(nodes: UnitBomNode[], nodeId: string): UnitBomNode[] {
+  for (const node of nodes) {
+    if (node.nodeId === nodeId) return [node];
+    const childPath = findNodePath(node.children, nodeId);
+    if (childPath.length > 0) return [node, ...childPath];
+  }
+  return [];
+}
+
+function canvasEdgeKey(parentId: string, childId: string): string {
+  return `${parentId}:${childId}`;
+}
+
+function addDirectChildEdges(parentId: string, children: UnitBomNode[], target: Set<string>) {
+  for (const child of children) {
+    target.add(canvasEdgeKey(parentId, child.nodeId));
+  }
+}
+
+function addPathEdges(path: UnitBomNode[], target: Set<string>) {
+  if (path.length === 0) return;
+
+  target.add(canvasEdgeKey(ROOT_NODE_ID, path[0].nodeId));
+
+  for (let i = 1; i < path.length; i += 1) {
+    target.add(canvasEdgeKey(path[i - 1].nodeId, path[i].nodeId));
+  }
+}
+
+function addNodeAndDirectChildren(node: UnitBomNode | null | undefined, target: Set<string>) {
+  if (!node) return;
+  target.add(node.nodeId);
+  for (const child of node.children) {
+    target.add(child.nodeId);
+  }
+}
+
+function getCanvasFocus(
+  nodes: UnitBomNode[],
+  selection: SelectionTarget,
+  recordsById: Map<number, UnitPanelRecord>,
+  showAll: boolean,
+): CanvasFocus {
+  const activeEdgeKeys = new Set<string>();
+
+  if (selection?.type === "unit") {
+    addDirectChildEdges(ROOT_NODE_ID, nodes, activeEdgeKeys);
+    return {
+      visibleNodeIds: null,
+      activeEdgeKeys,
+      label: null,
+    };
+  }
+
+  if (selection?.type !== "node") {
+    return {
+      visibleNodeIds: null,
+      activeEdgeKeys,
+      label: null,
+    };
+  }
+
+  const selectedNode = selection.node;
+  const path = findNodePath(nodes, selectedNode.nodeId);
+  const visibleNodeIds = new Set<string>();
+  const categoryNode = path.find((node) => node.nodeType === "CATEGORY") ?? null;
+  const sectionNode = path.find((node) => node.nodeType === "SECTION") ?? null;
+  const parentNode = path.length > 1 ? path[path.length - 2] : null;
+  const selectedRecord = selectedNode.panelId ? recordsById.get(selectedNode.panelId) ?? null : null;
+  const isPanelRecord = selectedRecord?.nodeType === "PANEL";
+  const isPartRecord = selectedRecord?.nodeType === "PART";
+  
+  addPathEdges(path, activeEdgeKeys);
+  for (const node of path) {
+    visibleNodeIds.add(node.nodeId);
+  }
+
+  let label: string | null = selectedNode.label;
+
+  if (selectedNode.nodeType === "CATEGORY") {
+    addDirectChildEdges(selectedNode.nodeId, selectedNode.children, activeEdgeKeys);
+    addNodeAndDirectChildren(selectedNode, visibleNodeIds);
+    label = `Kategori: ${selectedNode.label}`;
+  } else if (selectedNode.nodeType === "SECTION") {
+    addDirectChildEdges(selectedNode.nodeId, selectedNode.children, activeEdgeKeys);
+    if (categoryNode) visibleNodeIds.add(categoryNode.nodeId);
+    addNodeAndDirectChildren(selectedNode, visibleNodeIds);
+    label = `Section: ${selectedNode.label}`;
+  } else if (isPanelRecord) {
+    addDirectChildEdges(selectedNode.nodeId, selectedNode.children, activeEdgeKeys);
+    if (categoryNode) visibleNodeIds.add(categoryNode.nodeId);
+    if (sectionNode) visibleNodeIds.add(sectionNode.nodeId);
+    addNodeAndDirectChildren(selectedNode, visibleNodeIds);
+    label = `Panel: ${selectedNode.label}`;
+  } else if (isPartRecord && parentNode) {
+  if (categoryNode) visibleNodeIds.add(categoryNode.nodeId);
+  if (sectionNode) visibleNodeIds.add(sectionNode.nodeId);
+  addNodeAndDirectChildren(parentNode, visibleNodeIds);
+  visibleNodeIds.add(selectedNode.nodeId);
+  label = `Part: ${selectedNode.label}`;
+  }
+
+  return {
+    visibleNodeIds: showAll ? null : visibleNodeIds,
+    activeEdgeKeys,
+    label,
   };
 }
 
@@ -615,7 +733,7 @@ function SearchableField({
         }
       }}
     >
-      <div className="flex h-9 items-center border border-white/10 bg-card transition-colors focus-within:border-primary/40">
+      <div className="flex h-9 items-center border border-border bg-card transition-colors focus-within:border-primary/40">
         <input
           value={value}
           disabled={disabled}
@@ -625,14 +743,14 @@ function SearchableField({
             setIsOpen(true);
           }}
           placeholder={placeholder}
-          className="h-full min-w-0 flex-1 bg-transparent px-3 text-[11px] font-mono text-foreground/70 outline-none placeholder:text-foreground/20 disabled:cursor-not-allowed disabled:opacity-40"
+          className="h-full min-w-0 flex-1 bg-transparent px-3 text-[15px] font-mono text-foreground outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-40"
         />
         <button
           type="button"
           disabled={disabled}
           onMouseDown={(event) => event.preventDefault()}
           onClick={() => setIsOpen((open) => !open)}
-          className="flex h-full w-8 shrink-0 items-center justify-center text-foreground/25 transition-colors hover:text-foreground/60 disabled:cursor-not-allowed disabled:opacity-35"
+          className="flex h-full w-8 shrink-0 items-center justify-center text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-35"
           aria-label="Buka pilihan"
         >
           <ChevronDown className="h-3 w-3" />
@@ -640,7 +758,7 @@ function SearchableField({
       </div>
 
       {isOpen && !disabled ? (
-        <div className="absolute left-0 right-0 top-[calc(100%+4px)] z-50 max-h-44 overflow-auto border border-white/10 bg-card py-1 shadow-xl shadow-black/40">
+        <div className="absolute left-0 right-0 top-[calc(100%+4px)] z-50 max-h-44 overflow-auto border border-border bg-card py-1 shadow-xl shadow-black/10 dark:shadow-black/40">
           {filteredOptions.length > 0 ? (
             filteredOptions.map((option) => (
               <button
@@ -650,16 +768,16 @@ function SearchableField({
                   event.preventDefault();
                   chooseOption(option);
                 }}
-                className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-[11px] font-mono text-foreground/65 transition-colors hover:bg-primary/[0.07] hover:text-app-accent-ink"
+                className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-[15px] font-mono text-foreground transition-colors hover:bg-primary/[0.07] hover:text-app-accent-ink"
               >
                 <span className="min-w-0 truncate">{option.value}</span>
                 {option.label ? (
-                  <span className="shrink-0 text-[9px] uppercase tracking-[0.12em] text-foreground/25">{option.label}</span>
+                  <span className="shrink-0 text-[15px] uppercase tracking-[0.12em] text-muted-foreground">{option.label}</span>
                 ) : null}
               </button>
             ))
           ) : (
-            <div className="px-3 py-2 text-[10px] font-mono text-foreground/25">
+            <div className="px-3 py-2 text-[14px] font-mono text-muted-foreground">
               Tidak ada data cocok. Tekan Simpan untuk memakai teks ini.
             </div>
           )}
@@ -708,6 +826,15 @@ function NodeCard({
   const isGroupNode = node.nodeType === "CATEGORY" || node.nodeType === "SECTION";
   const isGroup = isGroupNode || isPanel;
   const canExpand = node.children.length > 0;
+  const nodeKind = isGroupNode ? node.nodeType : isPanel ? "PANEL" : "PART";
+  const progressValue = typeof node.progressPercent === "number" ? Math.max(0, Math.min(100, node.progressPercent)) : null;
+  const jobMeta = jobStatusMeta(node.jobStatus);
+  const stockMeta = stockStatusMeta(node.stockStatus);
+  const StockIcon = stockMeta.icon;
+  const conditionClass = conditionBadge(node.conditionType);
+  const contextLabel = isGroupNode
+    ? `${node.children.length} isi${node.remainingHours != null && node.remainingHours > 0 ? ` · ${node.remainingHours}j sisa` : ""}`
+    : node.currentDivisionName ?? node.divisionName ?? stockMeta.label;
   const dragRef = useRef<{
     pointerId: number;
     lastClientX: number;
@@ -874,173 +1001,71 @@ function NodeCard({
         onClick={() => {
           if (suppressClickRef.current) return;
         }}
-        className={`min-h-full w-full border bg-card p-3 text-left shadow-lg shadow-black/20 transition-[border-color,background-color,transform] hover:-translate-y-0.5 hover:border-primary/35 hover:bg-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-500/70 ${isSelected ? "border-primary/60" : isGroup ? "border-white/10" : detailKey ? "border-white/10" : "border-white/5"
+        className={`min-h-full w-full border bg-card p-3 text-left shadow-lg shadow-black/20 transition-[border-color,background-color,transform] hover:-translate-y-0.5 hover:border-primary/35 hover:bg-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary/70 ${isSelected ? "border-primary/70 bg-primary/[0.08]" : isGroup ? "border-border" : detailKey ? "border-border" : "border-border"
           }`}
       >
-        {isGroupNode ? (
-          <>
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1.5">
-                  {canExpand ? (
-                    <span className="flex h-4 w-4 shrink-0 items-center justify-center border border-white/10 text-foreground/35">
-                      {isExpanded ? <ChevronDown className="h-2.5 w-2.5" /> : <Plus className="h-2.5 w-2.5" />}
-                    </span>
-                  ) : null}
-                  <p className="min-w-0 truncate text-[12px] font-mono font-medium text-foreground/85">{node.label}</p>
-                </div>
-                <p className="mt-0.5 text-[10px] text-foreground/35">{hierarchyText(node)}</p>
+        <div className="space-y-2.5">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5">
+                {canExpand ? (
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center border border-border text-muted-foreground">
+                    {isExpanded ? <ChevronDown className="h-3 w-3" /> : <Plus className="h-3 w-3" />}
+                  </span>
+                ) : null}
+                {node.isLocked ? <Lock className="h-3.5 w-3.5 shrink-0 text-app-accent-ink" /> : null}
+                <p className="min-w-0 truncate text-[15px] font-semibold text-foreground">{node.label}</p>
               </div>
-              <span className="shrink-0 border border-white/10 px-1.5 py-0.5 text-[9px] font-mono uppercase text-foreground/30">
-                {node.nodeType}
+              <p className="mt-1 truncate text-[13px] text-muted-foreground">{hierarchyText(node)}</p>
+            </div>
+            <div className="flex shrink-0 flex-col items-end gap-1">
+              <span className="border border-border px-1.5 py-0.5 font-mono text-[12px] uppercase tracking-[0.08em] text-muted-foreground">
+                {nodeKind}
               </span>
-            </div>
-            {node.progressPercent != null ? (
-              <div className="mt-3">
-                <div className="mb-1 flex items-center justify-between">
-                  <span className="text-[10px] font-mono text-foreground/35">{node.children.length} turunan</span>
-                  <span className="text-[10px] font-mono tabular-nums text-foreground/50">{node.progressPercent.toFixed(0)}%</span>
-                </div>
-                <div className="h-1 overflow-hidden bg-white/[0.06]">
-                  <div className="h-full bg-primary/60 transition-[width]" style={{ width: `${node.progressPercent}%` }} />
-                </div>
-              </div>
-            ) : null}
-            {node.remainingHours != null && node.remainingHours > 0 ? (
-              <p className="mt-2 text-[10px] font-mono text-foreground/35">{node.remainingHours}j tersisa</p>
-            ) : null}
-          </>
-        ) : isPanel ? (
-          <>
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1.5">
-                  {canExpand ? (
-                    <span className="flex h-4 w-4 shrink-0 items-center justify-center border border-white/10 text-foreground/35">
-                      {isExpanded ? <ChevronDown className="h-2.5 w-2.5" /> : <Plus className="h-2.5 w-2.5" />}
-                    </span>
-                  ) : null}
-                  {node.isLocked ? <Lock className="h-3 w-3 shrink-0 text-app-accent-ink/70" /> : null}
-                  <p className="min-w-0 truncate text-[12px] font-mono font-medium text-foreground/85">{node.label}</p>
-                </div>
-                <p className="mt-0.5 text-[10px] text-foreground/35">{hierarchyText(node)}</p>
-              </div>
-              <div className="flex shrink-0 flex-col items-end gap-1">
-                <span className="border border-white/10 px-1.5 py-0.5 text-[9px] font-mono uppercase text-foreground/30">PANEL</span>
-                {node.conditionType && conditionBadge(node.conditionType) ? (
-                  <span className={`border px-1.5 py-0.5 text-[9px] font-mono uppercase ${conditionBadge(node.conditionType)}`}>
-                    {node.conditionType}
-                  </span>
-                ) : null}
-              </div>
-            </div>
-            <div className="mt-3 flex items-center justify-between gap-2">
-              {node.currentDivisionName ? (
-                <span className="flex min-w-0 items-center gap-1 truncate text-[10px] font-mono text-foreground/50">
-                  <Users className="h-3 w-3 shrink-0 text-foreground/30" />
-                  <span className="truncate">{node.currentDivisionName}</span>
+              {conditionClass ? (
+                <span className={`border px-1.5 py-0.5 font-mono text-[12px] uppercase tracking-[0.08em] ${conditionClass}`}>
+                  {node.conditionType}
                 </span>
-              ) : (
-                <span className="text-[10px] font-mono text-foreground/25">Belum ditugaskan</span>
-              )}
-              {(() => {
-                const js = jobStatusMeta(node.jobStatus);
-                return <span className={`shrink-0 border px-2 py-0.5 text-[9px] font-mono uppercase tracking-[0.08em] ${js.className}`}>{js.label}</span>;
-              })()}
+              ) : null}
             </div>
-            {(() => {
-              const sm = stockStatusMeta(node.stockStatus);
-              const StockIcon = sm.icon;
-              return (
-                <div className="mt-2 flex items-start gap-1.5">
-                  <StockIcon className={`mt-0.5 h-3 w-3 shrink-0 ${sm.className}`} />
-                  <div className="min-w-0">
-                    <span className={`text-[10px] font-mono ${sm.className}`}>{sm.label}</span>
-                    {node.locationName ? (
-                      <p className="truncate text-[10px] text-foreground/35">
-                        {node.locationName}{node.locationDetail ? ` · ${node.locationDetail}` : ""}
-                      </p>
-                    ) : null}
-                    {node.stockStatus === "RETRIEVED" && node.takenByName ? (
-                      <p className="truncate text-[10px] text-foreground/35">
-                        Oleh: {node.takenByName}
-                        {node.dateOut ? ` · ${new Date(node.dateOut).toLocaleDateString("id-ID", { day: "numeric", month: "short" })}` : ""}
-                      </p>
-                    ) : null}
-                  </div>
-                </div>
-              );
-            })()}
-            {node.progressPercent != null ? (
-              <div className="mt-3">
-                <div className="mb-1 flex items-center justify-between">
-                  <span className="text-[10px] font-mono tabular-nums text-foreground/50">{node.progressPercent.toFixed(0)}%</span>
-                  {node.remainingHours != null && node.remainingHours > 0 ? <span className="text-[10px] font-mono text-foreground/35">{node.remainingHours}j sisa</span> : null}
-                </div>
-                <div className="h-1 overflow-hidden bg-white/[0.06]">
-                  <div className={`h-full transition-[width] ${node.jobStatus === "DONE" ? "bg-success" : "bg-primary/70"}`} style={{ width: `${node.progressPercent}%` }} />
-                </div>
-              </div>
+          </div>
+
+          <div className="flex items-center justify-between gap-2">
+            <span className="flex min-w-0 items-center gap-1.5 truncate font-mono text-[13px] text-muted-foreground">
+              {isGroupNode ? <GitBranch className="h-3.5 w-3.5 shrink-0" /> : <StockIcon className={`h-3.5 w-3.5 shrink-0 ${stockMeta.className}`} />}
+              <span className="truncate">{contextLabel}</span>
+            </span>
+            {!isGroupNode ? (
+              <span className={`shrink-0 border px-2 py-0.5 font-mono text-[12px] uppercase tracking-[0.08em] ${jobMeta.className}`}>
+                {jobMeta.label}
+              </span>
             ) : null}
-            <div className="mt-2 flex items-center justify-between gap-2">
-              {node.qcLastStatus === "TIDAK_LOLOS" ? <span className="text-[9px] font-mono text-destructive/80">QC TIDAK LOLOS{node.countRevisi ? ` · rev.${node.countRevisi}` : ""}</span> : null}
-              {node.qcLastStatus === "LOLOS" ? <span className="text-[9px] font-mono text-success/70">QC LOLOS</span> : null}
-              {node.deadlineDate ? <span className="ml-auto text-[9px] font-mono text-foreground/30">📅 {new Date(node.deadlineDate).toLocaleDateString("id-ID", { day: "numeric", month: "short" })}</span> : null}
-            </div>
-          </>
-        ) : (
-          <>
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0 flex-1">
-                <p className="min-w-0 truncate text-[12px] font-mono font-medium text-foreground/85">{node.label}</p>
-                <p className="mt-0.5 text-[10px] text-foreground/35">{hierarchyText(node)}</p>
+          </div>
+
+          {progressValue != null ? (
+            <div className="space-y-1">
+              <div className="flex items-center justify-between font-mono text-[12px] text-muted-foreground">
+                <span>Progress</span>
+                <span className="font-semibold text-foreground">{progressValue.toFixed(0)}%</span>
               </div>
-              <div className="flex shrink-0 flex-col items-end gap-1">
-                <span className="border border-white/10 px-1.5 py-0.5 text-[9px] font-mono uppercase text-foreground/30">PART</span>
-                {node.conditionType && conditionBadge(node.conditionType) ? (
-                  <span className={`border px-1.5 py-0.5 text-[9px] font-mono uppercase ${conditionBadge(node.conditionType)}`}>
-                    {node.conditionType}
-                  </span>
-                ) : null}
+              <div className="h-1.5 overflow-hidden bg-muted">
+                <div
+                  className={`h-full transition-[width] ${node.jobStatus === "DONE" ? "bg-success" : "bg-primary"}`}
+                  style={{ width: `${progressValue}%` }}
+                />
               </div>
             </div>
-            {(() => {
-              const sm = stockStatusMeta(node.stockStatus);
-              const StockIcon = sm.icon;
-              const js = jobStatusMeta(node.jobStatus);
-              return (
-                <div className="mt-3 flex items-start gap-1.5">
-                  <StockIcon className={`mt-0.5 h-3 w-3 shrink-0 ${sm.className}`} />
-                  <div className="min-w-0">
-                    <span className={`text-[10px] font-mono ${sm.className}`}>{sm.label}</span>
-                    {node.locationName ? (
-                      <p className="truncate text-[10px] text-foreground/35">{node.locationName}{node.locationDetail ? ` · ${node.locationDetail}` : ""}</p>
-                    ) : null}
-                    {node.stockStatus === "RETRIEVED" && node.takenByName ? (
-                      <p className="truncate text-[10px] text-foreground/35">
-                        Oleh: {node.takenByName}
-                        {node.dateOut ? ` · ${new Date(node.dateOut).toLocaleDateString("id-ID", { day: "numeric", month: "short" })}` : ""}
-                      </p>
-                    ) : null}
-                  </div>
-                  <span className={`ml-auto shrink-0 border px-1.5 py-0.5 text-[9px] font-mono uppercase ${js.className}`}>{js.label}</span>
-                </div>
-              );
-            })()}
-            {node.progressPercent != null ? (
-              <div className="mt-3">
-                <div className="mb-1 flex items-center justify-between">
-                  <span className="text-[10px] font-mono tabular-nums text-foreground/50">{node.progressPercent.toFixed(0)}%</span>
-                  {node.remainingHours != null && node.remainingHours > 0 ? <span className="text-[10px] font-mono text-foreground/35">{node.remainingHours}j sisa</span> : null}
-                  {node.deadlineDate ? <span className="text-[9px] font-mono text-foreground/30">📅 {new Date(node.deadlineDate).toLocaleDateString("id-ID", { day: "numeric", month: "short" })}</span> : null}
-                </div>
-                <div className="h-1 overflow-hidden bg-white/[0.06]">
-                  <div className={`h-full transition-[width] ${node.jobStatus === "DONE" ? "bg-success" : "bg-primary/70"}`} style={{ width: `${node.progressPercent}%` }} />
-                </div>
-              </div>
-            ) : null}
-          </>
-        )}
+          ) : null}
+
+          {(node.remainingHours != null && node.remainingHours > 0) || node.deadlineDate || node.qcLastStatus ? (
+            <div className="flex flex-wrap items-center gap-1.5 font-mono text-[12px] text-muted-foreground">
+              {node.remainingHours != null && node.remainingHours > 0 ? <span>{node.remainingHours}j sisa</span> : null}
+              {node.deadlineDate ? <span>Deadline {new Date(node.deadlineDate).toLocaleDateString("id-ID", { day: "numeric", month: "short" })}</span> : null}
+              {node.qcLastStatus === "TIDAK_LOLOS" ? <span className="text-destructive">QC gagal{node.countRevisi ? ` · rev.${node.countRevisi}` : ""}</span> : null}
+              {node.qcLastStatus === "LOLOS" ? <span className="text-success">QC lolos</span> : null}
+            </div>
+          ) : null}
+        </div>
         {detailKey ? (
           <button
             type="button"
@@ -1053,7 +1078,7 @@ function NodeCard({
             }}
             title="Buka detail workflow"
           >
-            <ArrowUpRight className="h-3.5 w-3.5 text-foreground/35" />
+            <ArrowUpRight className="h-3.5 w-3.5 text-muted-foreground" />
           </button>
         ) : null}
       </button>
@@ -1073,17 +1098,24 @@ const CanvasEdges = memo(
     positionedNodes,
     nodeById,
     rootPosition,
-    selectedNodeId,
+    activeEdgeKeys,
   }: {
     positionedNodes: CanvasNode[];
     nodeById: Map<string, CanvasNode>;
     rootPosition: NodePosition;
-    selectedNodeId: string | null;
+    activeEdgeKeys: Set<string>;
   }) => (
     <svg className="absolute inset-0 h-full w-full pointer-events-none" aria-hidden="true">
       <defs>
         <marker id="arrow" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
-          <path d="M0,0 L0,6 L6,3 z" fill="rgba(255,255,255,0.25)" />
+          <path
+            d="M0,0 L0,6 L6,3 z"
+            fill="var(--muted-foreground)"
+            opacity="0.65"
+          />
+        </marker>
+        <marker id="arrow-active" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+          <path d="M0,0 L0,7 L7,3.5 z" fill="var(--primary)" />
         </marker>
       </defs>
       {positionedNodes.map((item) => {
@@ -1093,7 +1125,7 @@ const CanvasEdges = memo(
           : nodeById.get(item.parentId);
         if (!parent) return null;
 
-        const isHighlighted = selectedNodeId === item.node.nodeId || selectedNodeId === item.parentId;
+        const isHighlighted = activeEdgeKeys.has(canvasEdgeKey(item.parentId, item.node.nodeId));
         const startX = parent.x + parent.width;
         const startY = parent.y + parent.height / 2;
         const endX = item.x;
@@ -1105,9 +1137,9 @@ const CanvasEdges = memo(
             key={`${item.parentId}:${item.node.nodeId}`}
             d={`M ${startX} ${startY} C ${midX} ${startY}, ${midX} ${endY}, ${endX} ${endY}`}
             fill="none"
-            stroke={isHighlighted ? "rgba(245,158,11,0.6)" : "rgba(255,255,255,0.1)"}
-            strokeWidth={isHighlighted ? 1.5 : 0.8}
-            markerEnd="url(#arrow)"
+            stroke={isHighlighted ? "var(--primary)" : "var(--border)"}
+            strokeWidth={isHighlighted ? 2.5 : 0.8}
+            markerEnd={isHighlighted ? "url(#arrow-active)" : "url(#arrow)"}
           />
         );
       })}
@@ -1117,7 +1149,7 @@ const CanvasEdges = memo(
     prev.positionedNodes === next.positionedNodes &&
     prev.rootPosition.x === next.rootPosition.x &&
     prev.rootPosition.y === next.rootPosition.y &&
-    prev.selectedNodeId === next.selectedNodeId,
+    prev.activeEdgeKeys === next.activeEdgeKeys,
 );
 CanvasEdges.displayName = 'CanvasEdges';
 
@@ -1217,6 +1249,7 @@ export function BomTrackerTab({
   const [canvasMinSize, setCanvasMinSize] = useState({ width: 6000, height: 4000 });
   const [hiddenNodeIds, setHiddenNodeIds] = useState<Set<string>>(() => new Set());
   const [nodeDimensions, setNodeDimensions] = useState<Record<string, NodeDimension>>({});
+  const [showFocusedHidden, setShowFocusedHidden] = useState(false);
   // Draft history for canvas undo (Ctrl+Z)
   const canvasStateRef = useRef<BomCanvasDraft>({
     zoom: 0.92,
@@ -1435,9 +1468,18 @@ export function BomTrackerTab({
     () => buildPanelTrackerTree(rows, workspace?.tree ?? []),
     [rows, workspace?.tree],
   );
+  const selectedNode = selection?.type === "node" ? selection.node : null;
+  const selectedNodeId = selectedNode?.nodeId ?? null;
+  const canvasFocus = useMemo(
+    () => getCanvasFocus(panelTrackerTree, selection, recordsById, showFocusedHidden),
+    [panelTrackerTree, recordsById, selection, showFocusedHidden],
+  );
+  useEffect(() => {
+    setShowFocusedHidden(false);
+  }, [selectedNodeId]);
   const layout = useMemo(
-    () => buildCanvasLayout(panelTrackerTree, expandedNodeIds, isRootExpanded, nodeDimensions, hiddenNodeIds),
-    [expandedNodeIds, hiddenNodeIds, isRootExpanded, nodeDimensions, panelTrackerTree],
+    () => buildCanvasLayout(panelTrackerTree, expandedNodeIds, isRootExpanded, nodeDimensions, hiddenNodeIds, canvasFocus.visibleNodeIds),
+    [canvasFocus.visibleNodeIds, expandedNodeIds, hiddenNodeIds, isRootExpanded, nodeDimensions, panelTrackerTree],
   );
   const rootPosition = nodePositions[ROOT_NODE_ID] ?? { x: 32, y: 32 };
   const positionedNodes = useMemo(
@@ -1897,8 +1939,59 @@ export function BomTrackerTab({
     });
   }
 
+  function getSelectionAfterCollapse(node: UnitBomNode): SelectionTarget {
+    const path = findNodePath(panelTrackerTree, node.nodeId);
+    const categoryNode = path.find((item) => item.nodeType === "CATEGORY") ?? null;
+    const sectionNode = path.find((item) => item.nodeType === "SECTION") ?? null;
+    const record = node.panelId ? recordsById.get(node.panelId) ?? null : null;
+
+    if (node.nodeType === "CATEGORY") {
+      return { type: "unit" };
+    }
+
+    if (node.nodeType === "SECTION") {
+      return categoryNode ? { type: "node", node: categoryNode } : { type: "unit" };
+    }
+
+    if (record?.nodeType === "PANEL") {
+      if (sectionNode) return { type: "node", node: sectionNode };
+      if (categoryNode) return { type: "node", node: categoryNode };
+      return { type: "unit" };
+    }
+
+    const parentNode = path.length > 1 ? path[path.length - 2] : null;
+    return parentNode ? { type: "node", node: parentNode } : { type: "unit" };
+  }
+
+  function getSelectionAfterPartToggle(node: UnitBomNode): SelectionTarget {
+    const path = findNodePath(panelTrackerTree, node.nodeId);
+    const sectionNode = path.find((item) => item.nodeType === "SECTION") ?? null;
+    const categoryNode = path.find((item) => item.nodeType === "CATEGORY") ?? null;
+
+    if (sectionNode) return { type: "node", node: sectionNode };
+    if (categoryNode) return { type: "node", node: categoryNode };
+    return { type: "unit" };
+  }
+
+  function selectCanvasNode(node: UnitBomNode) {
+    const record = node.panelId ? recordsById.get(node.panelId) ?? null : null;
+    const isSamePart =
+      record?.nodeType === "PART" &&
+      selection?.type === "node" &&
+      selection.node.nodeId === node.nodeId;
+
+    if (isSamePart) {
+      setSelection(getSelectionAfterPartToggle(node));
+      return;
+    }
+
+    setSelection({ type: "node", node });
+  }
+
   function toggleNode(node: UnitBomNode) {
     if (node.children.length === 0) return;
+
+    const isClosing = expandedNodeIds.has(node.nodeId);
     setExpandedNodeIds((current) => {
       const next = new Set(current);
       if (next.has(node.nodeId)) {
@@ -1908,6 +2001,8 @@ export function BomTrackerTab({
       }
       return next;
     });
+    setSelection(isClosing ? getSelectionAfterCollapse(node) : { type: "node", node });
+    setShowFocusedHidden(false);
   }
 
   function updateNodePosition(
@@ -2021,8 +2116,10 @@ export function BomTrackerTab({
     rootDragRef.current = null;
     event.currentTarget.releasePointerCapture(event.pointerId);
     if (!drag.didDrag) {
-      setSelection({ type: "unit" });
+      const isClosing = isRootExpanded;
+      setSelection(isClosing ? null : { type: "unit" });
       setIsRootExpanded((value) => !value);
+      setShowFocusedHidden(false);
     }
     window.setTimeout(() => {
       suppressRootClickRef.current = false;
@@ -2046,6 +2143,9 @@ export function BomTrackerTab({
     ) {
       return;
     }
+
+    event.preventDefault();
+
     panRef.current = {
       pointerId: event.pointerId,
       startX: event.clientX,
@@ -2059,6 +2159,9 @@ export function BomTrackerTab({
   function handlePointerMove(event: PointerEvent<HTMLDivElement>) {
     const pan = panRef.current;
     if (!pan || pan.pointerId !== event.pointerId || !viewportRef.current) return;
+
+    event.preventDefault();
+
     viewportRef.current.scrollLeft = pan.left - (event.clientX - pan.startX);
     viewportRef.current.scrollTop = pan.top - (event.clientY - pan.startY);
   }
@@ -2072,9 +2175,18 @@ export function BomTrackerTab({
 
   const parentPanelValue = selectedParentPanel?.name ?? form.parentName;
   const rootLabel = unitName?.trim() || workspace?.unitId || carId;
-  const selectedNode = selection?.type === "node" ? selection.node : null;
   const isSidePanelOpen = mode !== null;
-  const viewportStyle = isFullscreen ? { height: "100vh", minHeight: "100vh" } : undefined;
+  const viewportStyle: CSSProperties = isFullscreen
+    ? {
+        height: "100vh",
+        minHeight: "100vh",
+        maxHeight: "100vh",
+      }
+    : {
+        height: "calc(100vh - 180px)",
+        minHeight: 520,
+        maxHeight: "calc(100vh - 180px)",
+      };
   const sidePanelStyle = isFullscreen ? { maxHeight: "100vh", minHeight: "100vh" } : undefined;
   const drawerTitle =
     mode === null
@@ -2096,11 +2208,15 @@ export function BomTrackerTab({
     const allIds = new Set(getAllNodeIds(panelTrackerTree));
     setExpandedNodeIds(allIds);
     setIsRootExpanded(true);
+    setSelection({ type: "unit" });
+    setShowFocusedHidden(true);
   }
 
   function collapseAll() {
     setExpandedNodeIds(new Set());
     setIsRootExpanded(false);
+    setSelection(null);
+    setShowFocusedHidden(false);
   }
 
   // [REFACTOR 2] Scroll wheel zoom
@@ -2169,34 +2285,34 @@ export function BomTrackerTab({
 
   if (!workspace) {
     return (
-      <section className="border border-white/5 bg-card px-4 py-3">
-        <p className="text-[11px] uppercase tracking-[0.2em] text-app-accent-ink/70">Katalog Part</p>
+      <section className="border border-border bg-card px-4 py-3">
+        <p className="text-[15px] uppercase tracking-[0.2em] text-app-accent-ink/70">Katalog Part</p>
         <h2 className="mt-3 text-xl font-light text-foreground">Data BOM belum bisa dimuat</h2>
       </section>
     );
   }
 
   return (
-    <section ref={sectionRef} className={`relative overflow-hidden border border-white/5 bg-card ${isFullscreen ? "fixed inset-0 z-50" : ""}`}>
+    <section ref={sectionRef} className={`relative overflow-hidden border border-border bg-card ${isFullscreen ? "fixed inset-0 z-50" : ""}`}>
 
 
 
       <div className={`grid ${isFullscreen ? "min-h-screen" : "min-h-[calc(100vh-180px)]"} ${isSidePanelOpen ? "xl:grid-cols-[minmax(0,1fr)_360px]" : "xl:grid-cols-1"} transition-[grid-template-columns] duration-300 ease-in-out`}>
-        <div className="relative min-w-0 border-r border-white/5 bg-background">
-          <div data-canvas-control="true" className="absolute left-4 top-4 z-30 flex items-center gap-1 border border-white/10 bg-card/95 p-1 shadow-lg shadow-black/20 backdrop-blur">
+        <div className="relative min-w-0 border-r border-border bg-background">
+          <div data-canvas-control="true" className="absolute left-4 top-4 z-30 flex items-center gap-1 border border-border bg-card/95 p-1 shadow-lg shadow-black/20 backdrop-blur">
             <button
               type="button"
               onClick={() => setZoom((value) => Math.max(0.55, Number((value - 0.05).toFixed(2))))}
-              className="flex h-8 w-8 items-center justify-center text-foreground/45 transition-colors hover:bg-white/[0.05] hover:text-foreground"
+              className="flex h-8 w-8 items-center justify-center text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               aria-label="Zoom out"
             >
               <ZoomOut className="h-4 w-4" />
             </button>
-            <span className="w-12 text-center text-[10px] font-mono text-foreground/35">{Math.round(zoom * 100)}%</span>
+            <span className="w-12 text-center text-[14px] font-mono text-muted-foreground">{Math.round(zoom * 100)}%</span>
             <button
               type="button"
               onClick={() => setZoom((value) => Math.min(1.35, Number((value + 0.05).toFixed(2))))}
-              className="flex h-8 w-8 items-center justify-center text-foreground/45 transition-colors hover:bg-white/[0.05] hover:text-foreground"
+              className="flex h-8 w-8 items-center justify-center text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               aria-label="Zoom in"
             >
               <ZoomIn className="h-4 w-4" />
@@ -2204,7 +2320,7 @@ export function BomTrackerTab({
             <button
               type="button"
               onClick={resetCanvasLayout}
-              className="border-l border-white/10 px-2.5 text-[10px] font-mono uppercase tracking-[0.08em] text-foreground/35 transition-colors hover:bg-white/[0.05] hover:text-foreground"
+              className="border-l border-border px-2.5 text-[14px] font-mono uppercase tracking-[0.08em] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               aria-label="Reset layout canvas"
             >
               Reset
@@ -2214,7 +2330,7 @@ export function BomTrackerTab({
               <button
                 type="button"
                 onClick={undoCanvas}
-                className="border-l border-white/10 px-2.5 text-[10px] font-mono uppercase tracking-[0.08em] text-app-accent-ink/70 transition-colors hover:bg-white/[0.05] hover:text-app-accent-ink"
+                className="border-l border-border px-2.5 text-[14px] font-mono uppercase tracking-[0.08em] text-app-accent-ink/70 transition-colors hover:bg-muted hover:text-app-accent-ink"
                 aria-label="Undo perubahan canvas (Ctrl+Z)"
                 title="Undo (Ctrl+Z)"
               >
@@ -2224,7 +2340,7 @@ export function BomTrackerTab({
             <button
               type="button"
               onClick={fitToView}
-              className="border-l border-white/10 px-2.5 text-[10px] font-mono uppercase tracking-[0.08em] text-foreground/35 transition-colors hover:bg-white/[0.05] hover:text-foreground"
+              className="border-l border-border px-2.5 text-[14px] font-mono uppercase tracking-[0.08em] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               title="Fit to view / Center all"
               aria-label="Fit semua node ke layar"
             >
@@ -2233,7 +2349,7 @@ export function BomTrackerTab({
             <button
               type="button"
               onClick={expandAll}
-              className="border-l border-white/10 px-2.5 text-[10px] font-mono uppercase tracking-[0.08em] text-foreground/35 transition-colors hover:bg-white/[0.05] hover:text-foreground"
+              className="border-l border-border px-2.5 text-[14px] font-mono uppercase tracking-[0.08em] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               title="Buka semua node"
               aria-label="Expand semua node"
             >
@@ -2242,7 +2358,7 @@ export function BomTrackerTab({
             <button
               type="button"
               onClick={collapseAll}
-              className="border-l border-white/10 px-2.5 text-[10px] font-mono uppercase tracking-[0.08em] text-foreground/35 transition-colors hover:bg-white/[0.05] hover:text-foreground"
+              className="border-l border-border px-2.5 text-[14px] font-mono uppercase tracking-[0.08em] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               title="Tutup semua node"
               aria-label="Collapse semua node"
             >
@@ -2251,31 +2367,44 @@ export function BomTrackerTab({
             <button
               type="button"
               onClick={handleFullscreenToggle}
-              className="border-l border-white/10 px-2.5 text-[10px] font-mono uppercase tracking-[0.08em] text-foreground/35 transition-colors hover:bg-white/[0.05] hover:text-foreground"
+              className="border-l border-border px-2.5 text-[14px] font-mono uppercase tracking-[0.08em] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               aria-label={isFullscreen ? "Keluar fullscreen" : "Masuk fullscreen"}
             >
               {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
             </button>
           </div>
 
-          <div data-canvas-control="true" className="absolute right-4 top-4 z-30 flex flex-wrap items-center justify-end gap-2">
+          <div data-canvas-control="true" className="absolute right-4 top-4 z-30 flex max-w-[min(780px,calc(100%-2rem))] flex-wrap items-center justify-end gap-2">
+            {canvasFocus.label ? (
+              <div className="flex h-9 min-w-0 max-w-[460px] items-center gap-2 border border-primary/25 bg-card/95 px-2.5 text-[13px] font-mono text-muted-foreground shadow-lg shadow-black/10 backdrop-blur dark:shadow-black/30">
+                <button
+                  type="button"
+                  onClick={() => setShowFocusedHidden((value) => !value)}
+                  className="ml-1 inline-flex h-6 shrink-0 items-center gap-1 border border-border px-2 text-[12px] uppercase tracking-[0.08em] text-muted-foreground transition-colors hover:border-primary/35 hover:text-app-accent-ink"
+                  title={showFocusedHidden ? "Kembali ke mode fokus" : "Lihat seluruh tree sementara"}
+                >
+                  {showFocusedHidden ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                  {showFocusedHidden ? "Fokus" : "Lihat Semua"}
+                </button>
+              </div>
+            ) : null}
             {hiddenNodeIds.size > 0 ? (
               <button
                 type="button"
                 onClick={() => setHiddenNodeIds(new Set())}
-                className="inline-flex h-9 items-center gap-1.5 border border-white/10 bg-card/95 px-3 text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/45 backdrop-blur transition-colors hover:border-white/30 hover:text-foreground"
+                className="inline-flex h-9 items-center gap-1.5 border border-border bg-card/95 px-3 text-[13px] font-mono text-muted-foreground shadow-lg shadow-black/10 backdrop-blur transition-colors hover:border-border hover:text-foreground dark:shadow-black/30"
               >
                 <Eye className="h-3.5 w-3.5" />
                 Tampilkan Hidden
               </button>
             ) : null}
-            <span className="hidden border border-white/10 bg-card/95 px-2.5 py-2 text-[10px] font-mono text-foreground/35 backdrop-blur md:inline-flex">
-              {workspace.summary.totalParts} komponen / {totalPanelRecords} panel / {totalPartRecords} part
+            <span className="hidden h-9 items-center border border-border bg-card/95 px-3 text-[13px] font-mono text-muted-foreground shadow-lg shadow-black/10 backdrop-blur md:inline-flex dark:shadow-black/30">
+              {workspace.summary.totalParts} komponen · {totalPanelRecords} panel · {totalPartRecords} part
             </span>
             <button
               type="button"
               onClick={() => void refreshWorkspace()}
-              className="inline-flex h-9 items-center gap-1.5 border border-white/10 bg-card/95 px-3 text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/45 backdrop-blur transition-colors hover:border-white/30 hover:text-foreground disabled:opacity-30"
+              className="inline-flex h-9 items-center gap-1.5 border border-border bg-card/95 px-3 text-[13px] font-mono text-muted-foreground shadow-lg shadow-black/10 backdrop-blur transition-colors hover:border-border hover:text-foreground disabled:opacity-30 dark:shadow-black/30"
               disabled={isLoading}
             >
               <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? "animate-spin" : ""}`} />
@@ -2284,8 +2413,8 @@ export function BomTrackerTab({
           </div>
 
           {showHint ? (
-            <div className="absolute bottom-4 left-4 z-30 flex items-center gap-2 border border-white/10 bg-card/95 px-3 py-2 text-[10px] font-mono text-foreground/35 backdrop-blur transition-opacity duration-300">
-              <Grip className="h-3.5 w-3.5 text-foreground/30" />
+            <div className="absolute bottom-4 left-4 z-30 flex items-center gap-2 border border-border bg-card/95 px-3 py-2 text-[14px] font-mono text-muted-foreground backdrop-blur transition-opacity duration-300">
+              <Grip className="h-3.5 w-3.5 text-muted-foreground" />
               Klik kanan node untuk aksi. Drag node untuk pindah. Drag area kosong untuk pan.
             </div>
           ) : null}
@@ -2294,15 +2423,15 @@ export function BomTrackerTab({
 
           {panelTrackerTree.length === 0 ? (
             <div className={`flex ${isFullscreen ? "min-h-screen" : "min-h-[calc(100vh-180px)]"} items-center justify-center px-6`}>
-              <div className="max-w-sm border border-dashed border-white/10 bg-card px-6 py-8 text-center">
+              <div className="max-w-sm border border-dashed border-border bg-card px-6 py-8 text-center">
                 <Boxes className="mx-auto h-8 w-8 text-app-accent-ink/70" />
-                <h3 className="mt-4 text-[15px] font-mono text-foreground/80">Belum ada master panel</h3>
-                <p className="mt-2 text-[11px] text-foreground/35">Mulai dari satu kategori dan panel utama agar BOM unit bisa divisualkan.</p>
+                <h3 className="mt-4 text-[15px] font-mono text-foreground">Belum ada master panel</h3>
+                <p className="mt-2 text-[15px] text-muted-foreground">Mulai dari satu kategori dan panel utama agar BOM unit bisa divisualkan.</p>
                 {canManagePanels ? (
                   <button
                     type="button"
                     onClick={openCreateRoot}
-                    className="mt-5 inline-flex items-center gap-2 border border-primary/30 bg-primary/[0.06] px-4 py-2 text-[10px] font-mono uppercase tracking-[0.12em] text-app-accent-ink transition-colors hover:bg-primary/10"
+                    className="mt-5 inline-flex items-center gap-2 border border-primary/30 bg-primary/[0.06] px-4 py-2 text-[14px] font-mono uppercase tracking-[0.12em] text-app-accent-ink transition-colors hover:bg-primary/10"
                   >
                     <Plus className="h-3.5 w-3.5" />
                     Buat Master Panel Pertama
@@ -2317,7 +2446,7 @@ export function BomTrackerTab({
               role="region"
               aria-label="BOM Canvas — gunakan keyboard Arrow Keys untuk navigasi node, Ctrl+Z untuk undo"
               className="cursor-grab overflow-auto active:cursor-grabbing"
-              style={{ ...viewportStyle, touchAction: 'none' }}
+              style={{ ...viewportStyle, touchAction: 'none', overscrollBehavior: 'contain' }}
               onWheel={handleWheel}
               onPointerDown={handlePointerDown}
               onPointerMove={handlePointerMove}
@@ -2338,7 +2467,7 @@ export function BomTrackerTab({
                   positionedNodes={positionedNodes}
                   nodeById={nodeById}
                   rootPosition={rootPosition}
-                  selectedNodeId={selectedNode?.nodeId ?? null}
+                  activeEdgeKeys={canvasFocus.activeEdgeKeys}
                 />
 
                 <div
@@ -2395,21 +2524,21 @@ export function BomTrackerTab({
                             {isRootExpanded ? <ChevronDown className="h-3 w-3" /> : <Plus className="h-3 w-3" />}
                           </span>
                           <span className="h-2 w-2 shrink-0 bg-primary shadow-[0_0_16px_rgba(245,158,11,0.45)]" />
-                          <p className="truncate text-[12px] font-mono text-foreground/90">{rootLabel}</p>
+                          <p className="truncate text-[14px] font-mono text-foreground/90">{rootLabel}</p>
                         </div>
-                        <p className="mt-1 truncate text-[10px] text-foreground/38">Root unit workspace</p>
+                        <p className="mt-1 truncate text-[14px] text-muted-foreground">Root unit workspace</p>
                       </div>
-                      <span className="shrink-0 border border-primary/25 px-1.5 py-0.5 text-[9px] font-mono uppercase text-app-accent-ink">
+                      <span className="shrink-0 border border-primary/25 px-1.5 py-0.5 text-[15px] font-mono uppercase text-app-accent-ink">
                         UNIT
                       </span>
                     </div>
                     <div className="mt-3 flex items-center justify-between gap-2">
-                      <span className="inline-flex items-center gap-1.5 border border-primary/25 bg-primary/[0.07] px-2 py-0.5 text-[9px] font-mono uppercase tracking-[0.1em] text-app-accent-ink">
+                      <span className="inline-flex items-center gap-1.5 border border-primary/25 bg-primary/[0.07] px-2 py-0.5 text-[15px] font-mono uppercase tracking-[0.1em] text-app-accent-ink">
                         <GitBranch className="h-3 w-3" />
                         {panelTrackerTree.length} kategori
                       </span>
                     </div>
-                    <p className="mt-3 text-[10px] font-mono text-foreground/30">
+                    <p className="mt-3 text-[14px] font-mono text-muted-foreground">
                       {isRootExpanded ? "Klik kategori untuk buka section" : "Klik untuk buka tree"}
                     </p>
                   </button>
@@ -2430,7 +2559,7 @@ export function BomTrackerTab({
                     onDimensionChange={updateNodeDimension}
                     onOpenMenu={openMenu}
                     onToggle={toggleNode}
-                    onSelect={(node) => setSelection({ type: "node", node })}
+                    onSelect={selectCanvasNode}
                     onDragNodeStart={onNodeDragStart}
                     onDragNodeMove={onNodeDragMove}
                     onDragNodeEnd={onNodeDragEnd}
@@ -2446,7 +2575,7 @@ export function BomTrackerTab({
           <div
             ref={contextMenuRef}
             data-canvas-control="true"
-            className="absolute z-40 min-w-52 border border-white/10 bg-card p-1 shadow-2xl shadow-black/40"
+            className="absolute z-40 min-w-52 border border-border bg-card p-1 shadow-2xl shadow-black/10 dark:shadow-black/40"
             style={{ left: contextMenu.x, top: contextMenu.y }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -2459,9 +2588,9 @@ export function BomTrackerTab({
 
               return (
                 <>
-                  <div className="border-b border-white/10 px-3 py-2">
-                    <p className="text-[9px] font-mono uppercase tracking-[0.12em] text-foreground/30">{isRootMenu ? "UNIT" : n.nodeType}</p>
-                    <p className="truncate text-[12px] font-mono font-medium text-foreground/80">{n.label}</p>
+                  <div className="border-b border-border px-3 py-2">
+                    <p className="text-[15px] font-mono uppercase tracking-[0.12em] text-muted-foreground">{isRootMenu ? "UNIT" : n.nodeType}</p>
+                    <p className="truncate text-[14px] font-mono font-medium text-foreground">{n.label}</p>
                   </div>
 
                   {isRootMenu ? (
@@ -2476,7 +2605,7 @@ export function BomTrackerTab({
                           }
                           setContextMenu(null);
                         }}
-                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] font-mono text-foreground/65 transition-colors hover:bg-white/[0.05] hover:text-foreground"
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[15px] font-mono text-foreground transition-colors hover:bg-muted hover:text-foreground"
                       >
                         {isRootExpanded ? <ChevronsDownUp className="h-3.5 w-3.5" /> : <ChevronsUpDown className="h-3.5 w-3.5" />}
                         {isRootExpanded ? "Tutup semua" : "Buka semua"}
@@ -2488,7 +2617,7 @@ export function BomTrackerTab({
                             openCreateCategory();
                             setContextMenu(null);
                           }}
-                          className="flex w-full items-center gap-2 border-t border-white/5 px-3 py-2 text-left text-[11px] font-mono text-app-accent-ink/80 hover:bg-primary/10 hover:text-app-accent-ink"
+                          className="flex w-full items-center gap-2 border-t border-border px-3 py-2 text-left text-[15px] font-mono text-app-accent-ink/80 hover:bg-primary/10 hover:text-app-accent-ink"
                         >
                           <Plus className="h-3.5 w-3.5" />
                           Tambah kategori baru
@@ -2504,7 +2633,7 @@ export function BomTrackerTab({
                         toggleNode(n);
                         setContextMenu(null);
                       }}
-                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] font-mono text-foreground/65 transition-colors hover:bg-white/[0.05] hover:text-foreground"
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-[15px] font-mono text-foreground transition-colors hover:bg-muted hover:text-foreground"
                     >
                       {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
                       {isExpanded ? "Tutup turunan" : "Buka turunan"}
@@ -2513,17 +2642,17 @@ export function BomTrackerTab({
 
                   {!isRootMenu && n.nodeType === "CATEGORY" && canManagePanels && n.category ? (
                     <>
-                      <div className="border-t border-white/5" />
+                      <div className="border-t border-border" />
                       <button type="button" onClick={() => { openEditCategory(n.category ?? ""); setContextMenu(null); }}
-                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] font-mono text-foreground/65 hover:bg-white/[0.05] hover:text-foreground">
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[15px] font-mono text-foreground hover:bg-muted hover:text-foreground">
                         <Pencil className="h-3.5 w-3.5" /> Edit nama kategori
                       </button>
                       <button type="button" onClick={() => { openCreateSectionFromCategory(n.category ?? ""); setContextMenu(null); }}
-                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] font-mono text-app-accent-ink/80 hover:bg-primary/10 hover:text-app-accent-ink">
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[15px] font-mono text-app-accent-ink/80 hover:bg-primary/10 hover:text-app-accent-ink">
                         <Plus className="h-3.5 w-3.5" /> Tambah section baru
                       </button>
                       <button type="button" onClick={() => { void handleDeleteCategory(displayCategory(n.category)); setContextMenu(null); }}
-                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] font-mono text-destructive/70 hover:bg-destructive/10 hover:text-destructive">
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[15px] font-mono text-destructive/70 hover:bg-destructive/10 hover:text-destructive">
                         <Trash2 className="h-3.5 w-3.5" /> Hapus kategori
                       </button>
                     </>
@@ -2531,13 +2660,13 @@ export function BomTrackerTab({
 
                   {!isRootMenu && n.nodeType === "SECTION" && canManagePanels && n.category && n.section ? (
                     <>
-                      <div className="border-t border-white/5" />
+                      <div className="border-t border-border" />
                       <button type="button" onClick={() => { openEditSection(n.category ?? "", n.section ?? ""); setContextMenu(null); }}
-                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] font-mono text-foreground/65 hover:bg-white/[0.05] hover:text-foreground">
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[15px] font-mono text-foreground hover:bg-muted hover:text-foreground">
                         <Pencil className="h-3.5 w-3.5" /> Edit nama section
                       </button>
                       <button type="button" onClick={() => { openCreatePanelFromSection(n); setContextMenu(null); }}
-                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] font-mono text-app-accent-ink/80 hover:bg-primary/10 hover:text-app-accent-ink">
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[15px] font-mono text-app-accent-ink/80 hover:bg-primary/10 hover:text-app-accent-ink">
                         <Plus className="h-3.5 w-3.5" /> Tambah panel di section ini
                       </button>
                     </>
@@ -2545,19 +2674,19 @@ export function BomTrackerTab({
 
                   {!isRootMenu && ctxRecord && canManagePanels ? (
                     <>
-                      <div className="border-t border-white/5" />
+                      <div className="border-t border-border" />
                       <button type="button" onClick={() => { openEdit(ctxRecord); setContextMenu(null); }}
-                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] font-mono text-foreground/65 hover:bg-white/[0.05] hover:text-foreground">
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[15px] font-mono text-foreground hover:bg-muted hover:text-foreground">
                         <Pencil className="h-3.5 w-3.5" /> Edit {ctxRecord.nodeType === "PANEL" ? "panel" : "part"}
                       </button>
                       {ctxRecord.nodeType === "PANEL" ? (
                         <button type="button" onClick={() => { openCreateFromNode(n); setContextMenu(null); }}
-                          className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] font-mono text-app-accent-ink/80 hover:bg-primary/10 hover:text-app-accent-ink">
+                          className="flex w-full items-center gap-2 px-3 py-2 text-left text-[15px] font-mono text-app-accent-ink/80 hover:bg-primary/10 hover:text-app-accent-ink">
                           <Plus className="h-3.5 w-3.5" /> Tambah part
                         </button>
                       ) : null}
                       <button type="button" onClick={() => { void handleDelete(ctxRecord); setContextMenu(null); }}
-                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] font-mono text-destructive/70 hover:bg-destructive/10 hover:text-destructive">
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[15px] font-mono text-destructive/70 hover:bg-destructive/10 hover:text-destructive">
                         <Trash2 className="h-3.5 w-3.5" /> Hapus {ctxRecord.nodeType === "PANEL" ? "panel" : "part"}
                       </button>
                     </>
@@ -2565,9 +2694,9 @@ export function BomTrackerTab({
 
                   {!isRootMenu && ctxDetailKey ? (
                     <>
-                      <div className="border-t border-white/5" />
+                      <div className="border-t border-border" />
                       <button type="button" onClick={() => { navigateToDetail(n); setContextMenu(null); }}
-                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] font-mono text-foreground/65 hover:bg-white/[0.05] hover:text-foreground">
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[15px] font-mono text-foreground hover:bg-muted hover:text-foreground">
                         <FolderOpen className="h-3.5 w-3.5" /> Buka detail workflow
                       </button>
                     </>
@@ -2575,9 +2704,9 @@ export function BomTrackerTab({
 
                   {!isRootMenu ? (
                     <>
-                      <div className="border-t border-white/5" />
+                      <div className="border-t border-border" />
                       <button type="button" onClick={() => { hideNode(n.nodeId); setContextMenu(null); }}
-                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] font-mono text-foreground/40 hover:bg-white/[0.05] hover:text-foreground/65">
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[15px] font-mono text-muted-foreground hover:bg-muted hover:text-foreground">
                         <EyeOff className="h-3.5 w-3.5" /> Sembunyikan node
                       </button>
                     </>
@@ -2586,7 +2715,7 @@ export function BomTrackerTab({
                     <button
                       type="button"
                       onClick={() => resetNodeDimension(n.nodeId)}
-                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] font-mono text-foreground/40 hover:bg-white/[0.05] hover:text-foreground/65"
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-[15px] font-mono text-muted-foreground hover:bg-muted hover:text-foreground"
                     >
                       <RefreshCw className="h-3.5 w-3.5" />
                       Reset ukuran node
@@ -2600,15 +2729,15 @@ export function BomTrackerTab({
 
         {isSidePanelOpen ? (
           <aside className="bg-card">
-            <div className="flex items-center justify-between border-b border-white/5 px-4 py-3">
+            <div className="flex items-center justify-between border-b border-border px-4 py-3">
               <div className="flex items-center gap-2">
                 <Boxes className="h-3.5 w-3.5 text-app-accent-ink" />
-                <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/35">{sidePanelTitle}</span>
+                <span className="text-[14px] font-mono uppercase tracking-[0.12em] text-muted-foreground">{sidePanelTitle}</span>
               </div>
               <button
                 type="button"
                 onClick={closeForm}
-                className="flex h-8 w-8 items-center justify-center text-foreground/35 transition-colors hover:bg-white/[0.04] hover:text-foreground"
+                className="flex h-8 w-8 items-center justify-center text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                 aria-label="Tutup panel"
               >
                 <X className="h-4 w-4" />
@@ -2619,29 +2748,29 @@ export function BomTrackerTab({
               {mode.type === "edit-category" ? (
                 <form className="space-y-3" onSubmit={(event) => void handleSubmit(event)}>
                   <label className="block space-y-1">
-                    <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30">Nama Kategori</span>
+                    <span className="text-[14px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Nama Kategori</span>
                     <input
                       value={form.category}
                       onChange={(event) => setForm((current) => ({ ...current, category: event.target.value }))}
-                      className="h-9 w-full border border-white/10 bg-card px-3 text-[11px] font-mono text-foreground/70 outline-none transition-colors focus:border-primary/40"
+                      className="h-9 w-full border border-border bg-card px-3 text-[15px] font-mono text-foreground outline-none transition-colors focus:border-primary/40"
                       autoFocus
                     />
                   </label>
-                  <p className="border border-white/5 bg-card px-3 py-2 text-[10px] text-foreground/30">
+                  <p className="border border-border bg-card px-3 py-2 text-[14px] text-muted-foreground">
                     Semua panel dan part di kategori ini akan ikut memakai nama kategori baru.
                   </p>
                   <div className="flex gap-2 pt-1">
                     <button
                       type="submit"
                       disabled={isSubmitting}
-                      className="border border-primary/40 bg-primary/[0.06] px-3 py-2 text-[10px] font-mono uppercase tracking-[0.12em] text-app-accent-ink transition-colors hover:bg-primary/10 disabled:opacity-30"
+                      className="border border-primary/40 bg-primary/[0.06] px-3 py-2 text-[14px] font-mono uppercase tracking-[0.12em] text-app-accent-ink transition-colors hover:bg-primary/10 disabled:opacity-30"
                     >
                       {isSubmitting ? "Menyimpan..." : "Simpan"}
                     </button>
                     <button
                       type="button"
                       onClick={closeForm}
-                      className="border border-white/10 px-3 py-2 text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/40 transition-colors hover:text-foreground"
+                      className="border border-border px-3 py-2 text-[14px] font-mono uppercase tracking-[0.12em] text-muted-foreground transition-colors hover:text-foreground"
                     >
                       Batal
                     </button>
@@ -2650,29 +2779,29 @@ export function BomTrackerTab({
               ) : mode.type === "edit-section" ? (
                 <form className="space-y-3" onSubmit={(event) => void handleSubmit(event)}>
                   <label className="block space-y-1">
-                    <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30">Nama Section</span>
+                    <span className="text-[14px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Nama Section</span>
                     <input
                       value={form.section}
                       onChange={(event) => setForm((current) => ({ ...current, section: event.target.value }))}
-                      className="h-9 w-full border border-white/10 bg-card px-3 text-[11px] font-mono text-foreground/70 outline-none transition-colors focus:border-primary/40"
+                      className="h-9 w-full border border-border bg-card px-3 text-[15px] font-mono text-foreground outline-none transition-colors focus:border-primary/40"
                       autoFocus
                     />
                   </label>
-                  <p className="border border-white/5 bg-card px-3 py-2 text-[10px] text-foreground/30">
+                  <p className="border border-border bg-card px-3 py-2 text-[14px] text-muted-foreground">
                     Semua panel dan part di section ini akan ikut memakai nama section baru.
                   </p>
                   <div className="flex gap-2 pt-1">
                     <button
                       type="submit"
                       disabled={isSubmitting}
-                      className="border border-primary/40 bg-primary/[0.06] px-3 py-2 text-[10px] font-mono uppercase tracking-[0.12em] text-app-accent-ink transition-colors hover:bg-primary/10 disabled:opacity-30"
+                      className="border border-primary/40 bg-primary/[0.06] px-3 py-2 text-[14px] font-mono uppercase tracking-[0.12em] text-app-accent-ink transition-colors hover:bg-primary/10 disabled:opacity-30"
                     >
                       {isSubmitting ? "Menyimpan..." : "Simpan"}
                     </button>
                     <button
                       type="button"
                       onClick={closeForm}
-                      className="border border-white/10 px-3 py-2 text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/40 transition-colors hover:text-foreground"
+                      className="border border-border px-3 py-2 text-[14px] font-mono uppercase tracking-[0.12em] text-muted-foreground transition-colors hover:text-foreground"
                     >
                       Batal
                     </button>
@@ -2682,14 +2811,14 @@ export function BomTrackerTab({
                 <form className="space-y-3" onSubmit={(event) => void handleSubmit(event)}>
                   {mode.type === "create" && mode.sectionMode === "existing" ? (
                     <div className="space-y-1">
-                      <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30">Buat</span>
-                      <div className="grid grid-cols-2 gap-1 border border-white/10 bg-card p-1">
+                      <span className="text-[14px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Buat</span>
+                      <div className="grid grid-cols-2 gap-1 border border-border bg-card p-1">
                         <button
                           type="button"
                           onClick={() => selectNodeType("Panel")}
-                          className={`px-2 py-1.5 text-[10px] font-mono uppercase tracking-[0.12em] transition-colors ${form.nodeType === "PANEL"
+                          className={`px-2 py-1.5 text-[14px] font-mono uppercase tracking-[0.12em] transition-colors ${form.nodeType === "PANEL"
                             ? "bg-primary/[0.08] text-app-accent-ink"
-                            : "text-foreground/35 hover:text-foreground"
+                            : "text-muted-foreground hover:text-foreground"
                             }`}
                         >
                           Panel
@@ -2697,9 +2826,9 @@ export function BomTrackerTab({
                         <button
                           type="button"
                           onClick={() => selectNodeType("Part")}
-                          className={`px-2 py-1.5 text-[10px] font-mono uppercase tracking-[0.12em] transition-colors ${form.nodeType === "PART"
+                          className={`px-2 py-1.5 text-[14px] font-mono uppercase tracking-[0.12em] transition-colors ${form.nodeType === "PART"
                             ? "bg-primary/[0.08] text-app-accent-ink"
-                            : "text-foreground/35 hover:text-foreground"
+                            : "text-muted-foreground hover:text-foreground"
                             }`}
                         >
                           Part
@@ -2709,7 +2838,7 @@ export function BomTrackerTab({
                   ) : null}
 
                   <label className="block space-y-1">
-                    <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30">Kategori</span>
+                    <span className="text-[14px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Kategori</span>
                     <SearchableField
                       value={form.category}
                       options={categoryOptions}
@@ -2721,13 +2850,13 @@ export function BomTrackerTab({
                   </label>
 
                   <label className="block space-y-1">
-                    <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30">Section</span>
+                    <span className="text-[14px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Section</span>
                     {mode.type === "create" && mode.sectionMode === "new" ? (
                       <input
                         value={form.section}
                         onChange={(event) => setForm((current) => ({ ...current, section: event.target.value }))}
                         placeholder="Nama section baru"
-                        className="h-9 w-full border border-white/10 bg-card px-3 text-[11px] font-mono text-foreground/70 outline-none transition-colors placeholder:text-foreground/20 focus:border-primary/40"
+                        className="h-9 w-full border border-border bg-card px-3 text-[15px] font-mono text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-primary/40"
                       />
                     ) : (
                       <SearchableField
@@ -2742,7 +2871,7 @@ export function BomTrackerTab({
 
                   {mode.type === "create" && form.nodeType === "PART" ? (
                     <label className="block space-y-1">
-                      <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30">Panel Parent</span>
+                      <span className="text-[14px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Panel Parent</span>
                       <SearchableField
                         value={parentPanelValue}
                         options={parentPanelOptions}
@@ -2754,13 +2883,13 @@ export function BomTrackerTab({
                   ) : null}
 
                     {mode.type === "edit" && mode.record.nodeType === "PART" && selectedParentPanel ? (
-                      <div className="border border-primary/20 bg-primary/[0.04] px-3 py-2 text-[10px] font-mono text-app-accent-ink">
+                      <div className="border border-primary/20 bg-primary/[0.04] px-3 py-2 text-[14px] font-mono text-app-accent-ink">
                         Parent: {selectedParentPanel.name}
                       </div>
                     ) : null}
 
                     <label className="block space-y-1">
-                      <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30">
+                      <span className="text-[14px] font-mono uppercase tracking-[0.12em] text-muted-foreground">
                         {mode.type === "create" && mode.sectionMode === "new"
                           ? "Nama Panel Pertama"
                           : form.nodeType === "PART"
@@ -2771,34 +2900,34 @@ export function BomTrackerTab({
                         value={form.name}
                         onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
                         placeholder={mode.type === "create" && mode.sectionMode === "new" ? "Contoh: Body Depan" : undefined}
-                        className="h-9 w-full border border-white/10 bg-card px-3 text-[11px] font-mono text-foreground/70 outline-none transition-colors placeholder:text-foreground/20 focus:border-primary/40"
+                        className="h-9 w-full border border-border bg-card px-3 text-[15px] font-mono text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-primary/40"
                       />
                     </label>
 
-                  <label className="flex items-center gap-3 border border-white/5 bg-card px-3 py-2">
+                  <label className="flex items-center gap-3 border border-border bg-card px-3 py-2">
                     <input
                       type="checkbox"
                       checked={form.isActive}
                       onChange={(event) => setForm((current) => ({ ...current, isActive: event.target.checked }))}
-                      className="h-4 w-4 border-white/20 bg-transparent"
+                      className="h-4 w-4 border-border bg-transparent"
                     />
-                    <span className="text-[10px] font-mono text-foreground/50">Aktifkan {form.nodeType === "PART" ? "part" : "panel"} ini</span>
+                    <span className="text-[14px] font-mono text-muted-foreground">Aktifkan {form.nodeType === "PART" ? "part" : "panel"} ini</span>
                   </label>
 
                   <div className="grid grid-cols-2 gap-2">
                     <label className="block space-y-1">
-                      <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30">Qty</span>
+                      <span className="text-[14px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Qty</span>
                       <input
                         type="number"
                         min="0.01"
                         step="0.01"
                         value={form.qty}
                         onChange={(event) => setForm((current) => ({ ...current, qty: event.target.value }))}
-                        className="h-9 w-full border border-white/10 bg-card px-3 text-[11px] font-mono text-foreground/70 outline-none transition-colors focus:border-primary/40"
+                        className="h-9 w-full border border-border bg-card px-3 text-[15px] font-mono text-foreground outline-none transition-colors focus:border-primary/40"
                       />
                     </label>
                     <label className="block space-y-1">
-                      <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30">Lokasi</span>
+                      <span className="text-[14px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Lokasi</span>
                       <select
                         value={form.defaultLocationType}
                         onChange={(event) => {
@@ -2809,7 +2938,7 @@ export function BomTrackerTab({
                             defaultStockStatus: stockStatusForLocation(defaultLocationType),
                           }));
                         }}
-                        className="h-9 w-full border border-white/10 bg-card px-2 text-[10px] font-mono text-foreground/70 outline-none transition-colors focus:border-primary/40 [color-scheme:dark]"
+                        className="h-9 w-full border border-border bg-card px-2 text-[14px] font-mono text-foreground outline-none transition-colors focus:border-primary/40 dark:[color-scheme:dark]"
                       >
                         <option value="UNIT">{LOCATION_LABEL.UNIT}</option>
                         <option value="WORKSHOP">{LOCATION_LABEL.WORKSHOP}</option>
@@ -2817,7 +2946,7 @@ export function BomTrackerTab({
                       </select>
                     </label>
                     <label className="block space-y-1">
-                      <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30">Posisi</span>
+                      <span className="text-[14px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Posisi</span>
                       <select
                         value={form.defaultStockStatus}
                         onChange={(event) =>
@@ -2827,7 +2956,7 @@ export function BomTrackerTab({
                           }))
                         }
                         disabled={form.defaultLocationType === "UNIT"}
-                        className="h-9 w-full border border-white/10 bg-card px-2 text-[10px] font-mono text-foreground/70 outline-none transition-colors focus:border-primary/40 disabled:cursor-not-allowed disabled:text-foreground/40 [color-scheme:dark]"
+                        className="h-9 w-full border border-border bg-card px-2 text-[14px] font-mono text-foreground outline-none transition-colors focus:border-primary/40 disabled:cursor-not-allowed disabled:text-muted-foreground dark:[color-scheme:dark]"
                       >
                         <option value="INSTALLED">{STOCK_STATUS_LABEL.INSTALLED}</option>
                         <option value="IN_STORAGE">{STOCK_STATUS_LABEL.IN_STORAGE}</option>
@@ -2836,7 +2965,7 @@ export function BomTrackerTab({
                       </select>
                     </label>
                     <label className="block space-y-1">
-                      <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30">Kondisi Barang</span>
+                      <span className="text-[14px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Kondisi Barang</span>
                       <select
                         value={form.defaultConditionType}
                         onChange={(event) =>
@@ -2845,7 +2974,7 @@ export function BomTrackerTab({
                             defaultConditionType: event.target.value as PanelFormState["defaultConditionType"],
                           }))
                         }
-                        className="h-9 w-full border border-white/10 bg-card px-2 text-[10px] font-mono text-foreground/70 outline-none transition-colors focus:border-primary/40 [color-scheme:dark]"
+                        className="h-9 w-full border border-border bg-card px-2 text-[14px] font-mono text-foreground outline-none transition-colors focus:border-primary/40 dark:[color-scheme:dark]"
                       >
                         <option value="BEKAS">{CONDITION_LABEL.BEKAS}</option>
                         <option value="RESTORE">{CONDITION_LABEL.RESTORE}</option>
@@ -2858,14 +2987,14 @@ export function BomTrackerTab({
                     <button
                       type="submit"
                       disabled={isSubmitting}
-                      className="border border-primary/40 bg-primary/[0.06] px-3 py-2 text-[10px] font-mono uppercase tracking-[0.12em] text-app-accent-ink transition-colors hover:bg-primary/10 disabled:opacity-30"
+                      className="border border-primary/40 bg-primary/[0.06] px-3 py-2 text-[14px] font-mono uppercase tracking-[0.12em] text-app-accent-ink transition-colors hover:bg-primary/10 disabled:opacity-30"
                     >
                       {isSubmitting ? "Menyimpan..." : "Simpan"}
                     </button>
                     <button
                       type="button"
                       onClick={closeForm}
-                      className="border border-white/10 px-3 py-2 text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/40 transition-colors hover:text-foreground"
+                      className="border border-border px-3 py-2 text-[14px] font-mono uppercase tracking-[0.12em] text-muted-foreground transition-colors hover:text-foreground"
                     >
                       Batal
                     </button>
@@ -2874,7 +3003,7 @@ export function BomTrackerTab({
               )}
             </div>
 
-            <div className="border-t border-white/5 px-4 py-3 text-[10px] font-mono text-foreground/25">
+            <div className="border-t border-border px-4 py-3 text-[14px] font-mono text-muted-foreground">
               Foto: {canManagePhotos ? "manage" : "read"} / download {canDownloadPhotos ? "aktif" : "nonaktif"}
             </div>
           </aside>

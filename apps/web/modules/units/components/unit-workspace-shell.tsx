@@ -30,10 +30,10 @@ function SummaryCard({
   helper?: string;
 }) {
   return (
-    <div className="border border-white/5 bg-card px-4 py-3">
-      <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30">{label}</p>
+    <div className="border border-border bg-card px-4 py-3">
+      <p className="text-[14px] font-mono uppercase tracking-[0.12em] text-muted-foreground">{label}</p>
       <p className="mt-1 text-[14px] font-mono text-foreground">{value}</p>
-      {helper ? <p className="mt-0.5 text-[10px] text-foreground/30">{helper}</p> : null}
+      {helper ? <p className="mt-0.5 text-[14px] text-muted-foreground">{helper}</p> : null}
     </div>
   );
 }
@@ -59,7 +59,7 @@ const UNIT_STATUS_CONFIG: Record<UnitStatusKey, { label: string; cls: string }> 
   },
   HOLD: {
     label: "Hold",
-    cls: "border-white/10 text-foreground/45",
+    cls: "border-border text-muted-foreground",
   },
 };
 
@@ -82,7 +82,7 @@ type UnitWorkspaceExtended = UnitWorkspace & {
 };
 
 const summaryLinkClass =
-  "text-foreground/60 transition-colors hover:text-app-accent-ink group-hover:text-foreground/70";
+  "text-foreground transition-colors hover:text-app-accent-ink group-hover:text-foreground";
 
 function gridHref(path: string, filters: Record<string, string | number | null | undefined>, extras?: Record<string, string>) {
   const params = new URLSearchParams(extras);
@@ -169,17 +169,17 @@ export function UnitWorkspaceShell({
 
   return (
     <div className="space-y-6">
-      <div className="border border-white/5 bg-card px-4 py-3">
+      <div className="border border-border bg-card px-4 py-3">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <h1 className="mt-0.5 text-[14px] font-mono text-foreground">{unit.unitName}</h1>
-            <p className="mt-0.5 text-[11px] font-mono text-foreground/40">
+            <p className="mt-0.5 text-[15px] font-mono text-muted-foreground">
               {unit.customerName ?? "-"} · {unit.unitId}
             </p>
           </div>
           <Link
             href="/units"
-            className="inline-flex items-center gap-2 border border-white/10 px-3 py-1.5 text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/40 hover:text-foreground transition-colors"
+            className="inline-flex items-center gap-2 border border-border px-3 py-1.5 text-[14px] font-mono uppercase tracking-[0.12em] text-muted-foreground hover:text-foreground transition-colors"
           >
             <ArrowLeft className="h-4 w-4" />
             Kembali ke Daftar Unit
@@ -187,7 +187,7 @@ export function UnitWorkspaceShell({
         </div>
       </div>
 
-      <div className="border-b border-white/5">
+      <div className="border-b border-border">
         <div className="flex flex-wrap items-center gap-2">
           {([
             { id: "summary", label: "Summary" },
@@ -198,10 +198,10 @@ export function UnitWorkspaceShell({
               key={tab.id}
               type="button"
               onClick={() => updateTab(tab.id)}
-              className={`px-4 py-2 text-[10px] font-mono uppercase tracking-[0.12em] transition-colors ${
+              className={`px-4 py-2 text-[14px] font-mono uppercase tracking-[0.12em] transition-colors ${
                 activeTab === tab.id
                   ? "border-b-2 border-primary text-app-accent-ink"
-                  : "border-b-2 border-transparent text-foreground/40 hover:text-foreground/70"
+                  : "border-b-2 border-transparent text-muted-foreground hover:text-foreground"
               }`}
             >
               {tab.label}
@@ -231,14 +231,14 @@ export function UnitWorkspaceShell({
           </div>
 
           <div className="grid gap-4 xl:grid-cols-4">
-            <section className="group border border-white/5 bg-card px-4 py-3">
+            <section className="group border border-border bg-card px-4 py-3">
               <div className="flex items-center gap-3">
                 <FileText className="h-3.5 w-3.5 text-app-accent-ink" />
-                <h2 className="text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30">
+                <h2 className="text-[14px] font-mono uppercase tracking-[0.12em] text-muted-foreground">
                   Ringkasan Countdown
                 </h2>
               </div>
-              <div className="mt-2 grid grid-cols-2 gap-y-1 gap-x-3 text-[11px] font-mono text-foreground/60">
+              <div className="mt-2 grid grid-cols-2 gap-y-1 gap-x-3 text-[15px] font-mono text-foreground">
                 <p>Total: {workspace.countdownSummary.total}</p>
                 <p>Plan: {workspace.countdownSummary.plan}</p>
                 <p>Proses: {workspace.countdownSummary.proses}</p>
@@ -248,14 +248,14 @@ export function UnitWorkspaceShell({
               </div>
             </section>
 
-            <section className="group border border-white/5 bg-card px-4 py-3">
+            <section className="group border border-border bg-card px-4 py-3">
               <div className="flex items-center gap-3">
                 <FileText className="h-3.5 w-3.5 text-app-accent-ink" />
-                <h2 className="text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30">
+                <h2 className="text-[14px] font-mono uppercase tracking-[0.12em] text-muted-foreground">
                   Ringkasan WO
                 </h2>
               </div>
-              <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] font-mono">
+              <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[15px] font-mono">
                 <Link
                   href={gridHref("/wo", { carId: unit.unitId, status: "DONE" }, { viewMode: "done" })}
                   className={summaryLinkClass}
@@ -268,7 +268,7 @@ export function UnitWorkspaceShell({
                 >
                   Belum Dikerjakan: {woOpenCount}
                 </Link>
-                <div className="col-span-2 my-1 border-t border-white/5" />
+                <div className="col-span-2 my-1 border-t border-border" />
                 <Link
                   href={gridHref("/wo", { carId: unit.unitId, status: "REJECTED" }, { viewMode: "done" })}
                   className={summaryLinkClass}
@@ -284,14 +284,14 @@ export function UnitWorkspaceShell({
               </div>
             </section>
 
-            <section className="group border border-white/5 bg-card px-4 py-3">
+            <section className="group border border-border bg-card px-4 py-3">
               <div className="flex items-center gap-3">
                 <AlertTriangle className="h-3.5 w-3.5 text-app-accent-ink" />
-                <h2 className="text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30">
+                <h2 className="text-[14px] font-mono uppercase tracking-[0.12em] text-muted-foreground">
                   Pembahasan
                 </h2>
               </div>
-              <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] font-mono">
+              <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[15px] font-mono">
                 <Link
                   href={gridHref("/issues", { carId: unit.unitId, status: "OPEN" })}
                   className={summaryLinkClass}
@@ -313,14 +313,14 @@ export function UnitWorkspaceShell({
               </div>
             </section>
 
-            <section className="group border border-white/5 bg-card px-4 py-3">
+            <section className="group border border-border bg-card px-4 py-3">
               <div className="flex items-center gap-3">
                 <AlertTriangle className="h-3.5 w-3.5 text-app-accent-ink" />
-                <h2 className="text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30">
+                <h2 className="text-[14px] font-mono uppercase tracking-[0.12em] text-muted-foreground">
                   Temuan QC
                 </h2>
               </div>
-              <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] font-mono">
+              <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[15px] font-mono">
                 <Link
                   href={gridHref("/qc/dashboard", { carId: unit.unitId, status: "OPEN" })}
                   className={summaryLinkClass}
@@ -349,17 +349,17 @@ export function UnitWorkspaceShell({
             </section>
           </div>
 
-          <div className="border border-white/5 bg-card px-4 py-3">
+          <div className="border border-border bg-card px-4 py-3">
             <div className="flex items-center gap-3">
               <Wrench className="h-3.5 w-3.5 text-app-accent-ink" />
-              <h2 className="text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30">
+              <h2 className="text-[14px] font-mono uppercase tracking-[0.12em] text-muted-foreground">
                 Catatan Status
               </h2>
             </div>
-            <p className="mt-2 text-[11px] text-foreground/50">{workspace.deliveryRisk.reason}</p>
+            <p className="mt-2 text-[15px] text-muted-foreground">{workspace.deliveryRisk.reason}</p>
             <span
-              className={`mt-2 inline-flex border px-2 py-0.5 text-[10px] font-mono uppercase tracking-[0.1em] ${
-                statusConfig?.cls ?? "border-white/10 text-foreground/30"
+              className={`mt-2 inline-flex border px-2 py-0.5 text-[14px] font-mono uppercase tracking-[0.1em] ${
+                statusConfig?.cls ?? "border-border text-muted-foreground"
               }`}
             >
               {statusConfig?.label ?? humanizeCodeLabel(unit.riskLevel)}
@@ -367,33 +367,33 @@ export function UnitWorkspaceShell({
           </div>
 
           {/* Progress per Divisi Teknis */}
-          <section className="border border-white/5 bg-card">
-            <div className="flex items-center justify-between gap-2 border-b border-white/5 px-4 py-2">
+          <section className="border border-border bg-card">
+            <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-2">
               <div className="flex items-center gap-3">
                 <Wrench className="h-3.5 w-3.5 text-app-accent-ink" />
-                <h2 className="text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30">
+                <h2 className="text-[14px] font-mono uppercase tracking-[0.12em] text-muted-foreground">
                   Progress per Divisi
                 </h2>
               </div>
-              <span className="text-xs text-foreground/35">{divisionStats.length} divisi</span>
+              <span className="text-xs text-muted-foreground">{divisionStats.length} divisi</span>
             </div>
 
             {divisionStats.length === 0 ? (
-              <p className="px-4 py-5 text-sm text-foreground/40">Belum ada data countdown untuk unit ini.</p>
+              <p className="px-4 py-5 text-sm text-muted-foreground">Belum ada data countdown untuk unit ini.</p>
             ) : (
-              <div className="divide-y divide-white/[0.04]">
+              <div className="divide-y divide-border">
                 {divisionStats.map((div) => (
                   <div key={div.divisionName} className="flex items-center gap-4 px-4 py-3">
                     <div className="min-w-[140px]">
                       <p className="text-sm font-medium text-foreground">{div.divisionName}</p>
-                      <p className="mt-0.5 text-[11px] text-foreground/35">{div.totalItems} item</p>
+                      <p className="mt-0.5 text-[15px] text-muted-foreground">{div.totalItems} item</p>
                     </div>
                     <div className="flex-1">
-                      <div className="flex items-center justify-between gap-2 text-[11px] text-foreground/45 mb-1">
+                      <div className="flex items-center justify-between gap-2 text-[15px] text-muted-foreground mb-1">
                         <span>Progress</span>
-                        <span className="tabular-nums font-medium text-foreground/70">{Math.round(div.avgProgress)}%</span>
+                        <span className="tabular-nums font-medium text-foreground">{Math.round(div.avgProgress)}%</span>
                       </div>
-                      <div className="h-1.5 bg-white/[0.06]">
+                      <div className="h-1.5 bg-muted">
                         <div
                           className="h-1.5 bg-primary transition-[width]"
                           style={{ width: `${Math.round(div.avgProgress)}%` }}
@@ -401,8 +401,8 @@ export function UnitWorkspaceShell({
                       </div>
                     </div>
                     <div className="text-right min-w-[110px]">
-                      <p className="text-[11px] text-foreground/35">Sisa</p>
-                      <p className="mt-0.5 tabular-nums text-sm text-foreground/80">{div.remainingHours.toFixed(1)} jam</p>
+                      <p className="text-[15px] text-muted-foreground">Sisa</p>
+                      <p className="mt-0.5 tabular-nums text-sm text-foreground">{div.remainingHours.toFixed(1)} jam</p>
                     </div>
                   </div>
                 ))}
