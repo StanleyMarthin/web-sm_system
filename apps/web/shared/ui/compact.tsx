@@ -24,11 +24,11 @@ export function PageHeader({
       <div className="flex min-w-0 items-center gap-2">
         {eyebrow && (
           <>
-            <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-gray-600 dark:text-white/45">{eyebrow}</p>
-            <span className="text-gray-300 dark:text-white/25">·</span>
+            <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground dark:text-foreground/45">{eyebrow}</p>
+            <span className="text-muted-foreground dark:text-foreground/25">·</span>
           </>
         )}
-        <h1 className="truncate text-[16px] font-semibold text-gray-950 dark:text-white">{title}</h1>
+        <h1 className="truncate text-[16px] font-semibold text-foreground dark:text-foreground">{title}</h1>
       </div>
       {actions && <div className="flex flex-wrap items-center gap-1.5">{actions}</div>}
     </div>
@@ -43,18 +43,18 @@ export function MetricBar({ items }: {
   items: { label: string; value: string | number; tone?: "warn" | "down" | "up" | "muted" }[];
 }) {
   return (
-    <div className="flex flex-wrap items-stretch border border-gray-200 bg-white shadow-sm dark:border-white/[0.05] dark:bg-[#111114] dark:shadow-none">
+    <div className="flex flex-wrap items-stretch border border-border bg-card shadow-sm dark:border-white/[0.05] dark:bg-card dark:shadow-none">
       {items.map((item) => {
         const vc =
-          item.tone === "down"  ? "text-red-600 dark:text-red-400/90" :
-          item.tone === "warn"  ? "text-amber-700 dark:text-amber-400/90" :
-          item.tone === "up"    ? "text-emerald-700 dark:text-emerald-400/90" :
-          item.tone === "muted" ? "text-gray-500 dark:text-white/35" :
-          "text-gray-950 dark:text-white";
+          item.tone === "down"  ? "text-destructive dark:text-destructive/90" :
+          item.tone === "warn"  ? "text-app-accent-ink dark:text-app-accent-ink/90" :
+          item.tone === "up"    ? "text-success dark:text-success/90" :
+          item.tone === "muted" ? "text-muted-foreground dark:text-foreground/35" :
+          "text-foreground dark:text-foreground";
         return (
           <div key={item.label}
-            className="flex min-w-[88px] flex-1 flex-col gap-0.5 border-r border-gray-200 px-3 py-2 last:border-r-0 dark:border-white/[0.05]">
-            <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-gray-600 dark:text-white/45">{item.label}</p>
+            className="flex min-w-[88px] flex-1 flex-col gap-0.5 border-r border-border px-3 py-2 last:border-r-0 dark:border-white/[0.05]">
+            <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground dark:text-foreground/45">{item.label}</p>
             <p className={`font-mono text-[16px] font-semibold leading-none tabular-nums ${vc}`}>{item.value}</p>
           </div>
         );
@@ -79,11 +79,11 @@ export function SectionCard({
   className?: string;
 }) {
   return (
-    <section className={`border border-gray-200 bg-white shadow-sm dark:border-white/[0.05] dark:bg-[#111114] dark:shadow-none ${className}`}>
-      <div className="flex items-center justify-between gap-2 border-b border-gray-200 px-3 py-2 dark:border-white/[0.05]">
-        <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-gray-600 dark:text-white/45">{label}</p>
+    <section className={`border border-border bg-card shadow-sm dark:border-white/[0.05] dark:bg-card dark:shadow-none ${className}`}>
+      <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2 dark:border-white/[0.05]">
+        <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground dark:text-foreground/45">{label}</p>
         {count !== undefined && (
-          <span className="border border-gray-200 px-2 py-0.5 font-mono text-[11px] text-gray-600 dark:border-white/[0.08] dark:text-white/45">
+          <span className="border border-border px-2 py-0.5 font-mono text-[11px] text-muted-foreground dark:border-white/[0.08] dark:text-foreground/45">
             {count}
           </span>
         )}
@@ -117,10 +117,10 @@ export function ActionButton({
   title?: string;
 }) {
   const styles: Record<string, string> = {
-    default:  "border border-gray-300 text-gray-600 hover:border-gray-400 hover:bg-gray-50 hover:text-gray-950 dark:border-white/[0.08] dark:text-white/60 dark:hover:text-white",
-    primary:  "border border-amber-600/35 text-amber-700 hover:bg-amber-50 dark:border-amber-500/35 dark:text-amber-300 dark:hover:bg-amber-500/10",
-    danger:   "border border-red-600/25 text-red-700 hover:border-red-600/45 hover:bg-red-50 dark:border-red-500/20 dark:text-red-300/80 dark:hover:border-red-500/40 dark:hover:bg-red-500/10",
-    success:  "border border-emerald-700/25 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-500/30 dark:text-emerald-300 dark:hover:bg-emerald-500/10",
+    default:  "border border-border text-muted-foreground hover:border-border hover:bg-muted hover:text-foreground dark:border-white/[0.08] dark:text-foreground/60 dark:hover:text-foreground",
+    primary:  "border border-primary/35 text-app-accent-ink hover:bg-primary/10 dark:border-primary/35 dark:text-app-accent-ink dark:hover:bg-primary/10",
+    danger:   "border border-destructive/25 text-destructive hover:border-destructive/45 hover:bg-destructive/10 dark:border-destructive/20 dark:text-destructive/80 dark:hover:border-destructive/40 dark:hover:bg-destructive/10",
+    success:  "border border-success/25 text-success hover:bg-success/10 dark:border-success/30 dark:text-success dark:hover:bg-success/10",
   };
 
   return (
@@ -141,7 +141,7 @@ export function ActionButton({
 /* ------------------------------------------------------------------ */
 
 const inputBase =
-  "h-9 w-full border border-gray-300 bg-white px-3 text-[13px] text-gray-950 outline-none transition-colors placeholder:text-gray-400 focus:border-amber-600/55 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400 dark:border-white/[0.08] dark:bg-[#0f0f12] dark:text-white/90 dark:placeholder:text-white/35 dark:focus:border-amber-500/45 dark:disabled:opacity-50 dark:[color-scheme:dark]";
+  "h-9 w-full border border-border bg-card px-3 text-[13px] text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-primary/55 disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground dark:border-white/[0.08] dark:bg-muted dark:text-foreground/90 dark:placeholder:text-foreground/35 dark:focus:border-primary/45 dark:disabled:opacity-50 dark:[color-scheme:dark]";
 
 export function CompactInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
   return <input {...props} className={`${inputBase} ${props.className ?? ""}`} />;
@@ -179,6 +179,7 @@ export function CompactDateInput({
     year: "numeric",
     timeZone: "UTC",
   }).format(isoToUtcDate(viewMonth));
+  const selectedLabel = formatCompactDate(value);
 
   function toggleOpen() {
     setOpen((currentValue) => {
@@ -197,21 +198,21 @@ export function CompactDateInput({
         onClick={toggleOpen}
         className={`${inputBase} flex items-center justify-between gap-2 pl-8 text-left`}
       >
-        <CalendarDays className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-500 dark:text-white/30" />
-        <span className="truncate">{value}</span>
-        <ChevronDown className={`h-3.5 w-3.5 shrink-0 text-gray-500 transition-transform dark:text-white/30 ${open ? "rotate-180" : ""}`} />
+        <CalendarDays className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground dark:text-foreground/30" />
+        <span className="truncate">{selectedLabel}</span>
+        <ChevronDown className={`h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform dark:text-foreground/30 ${open ? "rotate-180" : ""}`} />
       </button>
 
       {open ? (
         <div
-          className={`absolute right-0 z-30 mt-1 w-[320px] overflow-hidden border border-gray-200 bg-white shadow-lg dark:border-white/[0.08] dark:bg-[#0a0a0c] ${panelClassName}`}
+          className={`absolute right-0 z-50 mt-1 w-[320px] overflow-hidden border border-border bg-popover shadow-lg dark:border-white/[0.08] dark:bg-popover ${panelClassName}`}
         >
-          <div className="border-b border-gray-200 bg-gray-50 px-3 py-2 dark:border-white/[0.08] dark:bg-white/[0.03]">
+          <div className="border-b border-border bg-muted px-3 py-2 dark:border-white/[0.08] dark:bg-muted">
             <div className="flex items-center justify-between gap-3">
-              <p className="font-mono text-[12px] text-gray-800 dark:text-white/80">{monthLabel}</p>
-              <p className="font-mono text-[11px] text-gray-600 dark:text-white/45">1 hari</p>
+              <p className="font-mono text-[12px] font-semibold text-foreground">{monthLabel}</p>
+              <p className="font-mono text-[11px] text-muted-foreground">1 hari</p>
             </div>
-            <p className="mt-1 text-[11px] text-gray-600 dark:text-white/45">{value}</p>
+            <p className="mt-1 text-[11px] text-muted-foreground">{selectedLabel}</p>
           </div>
 
           <div className="space-y-3 p-3">
@@ -219,28 +220,31 @@ export function CompactDateInput({
               <button
                 type="button"
                 onClick={() => setViewMonth((currentValue) => startOfUtcMonth(addUtcMonths(currentValue, -1)))}
-                className="flex h-7 w-7 items-center justify-center border border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-white/[0.08] dark:text-white/70 dark:hover:bg-white/[0.05]"
+                className="flex h-7 w-7 items-center justify-center border border-border text-muted-foreground hover:bg-muted hover:text-foreground dark:border-white/[0.08]"
               >
                 <ChevronLeft className="h-3.5 w-3.5" />
               </button>
-              <p className="font-mono text-[13px] text-gray-900 dark:text-white/90">{monthLabel}</p>
+              <p className="font-mono text-[13px] font-semibold text-foreground">{monthLabel}</p>
               <button
                 type="button"
                 onClick={() => setViewMonth((currentValue) => startOfUtcMonth(addUtcMonths(currentValue, 1)))}
-                className="flex h-7 w-7 items-center justify-center border border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-white/[0.08] dark:text-white/70 dark:hover:bg-white/[0.05]"
+                className="flex h-7 w-7 items-center justify-center border border-border text-muted-foreground hover:bg-muted hover:text-foreground dark:border-white/[0.08]"
               >
                 <ChevronRight className="h-3.5 w-3.5" />
               </button>
             </div>
 
             <div className="grid grid-cols-7 gap-1 text-center">
-              {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((label) => (
-                <span key={label} className="py-1 text-[11px] text-gray-500 dark:text-white/45">
+              {["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"].map((label) => (
+                <span key={label} className="py-1 text-[11px] text-muted-foreground">
                   {label}
                 </span>
               ))}
               {monthCells.map((cell) => {
                 const isActive = cell.iso === value;
+                if (!cell.inMonth) {
+                  return <div key={cell.iso} className="h-9" aria-hidden="true" />;
+                }
                 return (
                   <button
                     key={cell.iso}
@@ -250,12 +254,10 @@ export function CompactDateInput({
                       setOpen(false);
                     }}
                     className={[
-                      "flex h-9 items-center justify-center text-[13px] transition-colors",
-                      cell.inMonth
-                        ? "text-gray-900 dark:text-white/85"
-                        : "text-gray-300 dark:text-white/20",
+                      "flex h-9 items-center justify-center text-[13px] transition-colors hover:bg-muted",
+                      "text-foreground",
                       isActive
-                        ? "rounded-full bg-amber-500 text-white"
+                        ? "rounded-full bg-primary font-semibold text-primary-foreground hover:bg-primary"
                         : "",
                     ].join(" ")}
                   >
@@ -265,11 +267,11 @@ export function CompactDateInput({
               })}
             </div>
 
-            <div className="flex items-center justify-end border-t border-gray-200 pt-2 dark:border-white/[0.08]">
+            <div className="flex items-center justify-end border-t border-border pt-2 dark:border-white/[0.08]">
               <button
                 type="button"
                 onClick={() => setOpen(false)}
-                className="text-[12px] text-gray-600 hover:text-gray-900 dark:text-white/55 dark:hover:text-white/90"
+                className="font-mono text-[12px] uppercase tracking-[0.08em] text-muted-foreground hover:text-foreground"
               >
                 Tutup
               </button>
@@ -300,6 +302,23 @@ function utcDateToIso(value: Date): string {
   const month = String(value.getUTCMonth() + 1).padStart(2, "0");
   const day = String(value.getUTCDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function formatCompactDate(value: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return value || "-";
+  }
+
+  try {
+    return new Intl.DateTimeFormat("id-ID", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      timeZone: "UTC",
+    }).format(isoToUtcDate(value));
+  } catch {
+    return value;
+  }
 }
 
 function addUtcDays(value: string, days: number): string {
@@ -401,6 +420,7 @@ export function CompactDateRangeInput({
     year: "numeric",
     timeZone: "UTC",
   }).format(isoToUtcDate(viewMonth));
+  const rangeLabel = `${formatCompactDate(activeRange.from)} - ${formatCompactDate(activeRange.to)}`;
 
   function applySelection(nextFrom: string, nextTo: string) {
     const normalized = normalizeIsoRange(nextFrom, nextTo);
@@ -449,24 +469,24 @@ export function CompactDateRangeInput({
         onClick={toggleOpen}
         className={`${inputBase} flex items-center justify-between gap-2 pl-8 text-left`}
       >
-        <CalendarDays className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-500 dark:text-white/30" />
-        <span className="truncate">{activeRange.from} - {activeRange.to}</span>
-        <ChevronDown className={`h-3.5 w-3.5 shrink-0 text-gray-500 transition-transform dark:text-white/30 ${open ? "rotate-180" : ""}`} />
+        <CalendarDays className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground dark:text-foreground/30" />
+        <span className="truncate">{rangeLabel}</span>
+        <ChevronDown className={`h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform dark:text-foreground/30 ${open ? "rotate-180" : ""}`} />
       </button>
 
       {open ? (
         <div
-          className={`absolute right-0 z-30 mt-1 w-[320px] overflow-hidden border border-gray-200 bg-white shadow-lg dark:border-white/[0.08] dark:bg-[#0a0a0c] ${panelClassName}`}
+          className={`absolute right-0 z-50 mt-1 w-[320px] overflow-hidden border border-border bg-popover shadow-lg dark:border-white/[0.08] dark:bg-popover ${panelClassName}`}
         >
-          <div className="border-b border-gray-200 bg-gray-50 px-3 py-2 dark:border-white/[0.08] dark:bg-white/[0.03]">
+          <div className="border-b border-border bg-muted px-3 py-2 dark:border-white/[0.08] dark:bg-muted">
             <div className="flex items-center justify-between gap-3">
-              <p className="font-mono text-[12px] text-gray-800 dark:text-white/80">{monthLabel}</p>
-              <p className="font-mono text-[11px] text-gray-600 dark:text-white/45">
+              <p className="font-mono text-[12px] font-semibold text-foreground">{monthLabel}</p>
+              <p className="font-mono text-[11px] text-muted-foreground">
                 {selectedDays} hari
               </p>
             </div>
-            <p className="mt-1 text-[11px] text-gray-600 dark:text-white/45">
-              {anchorDate ? `Mulai ${anchorDate}, pilih tanggal akhir` : `${activeRange.from} - ${activeRange.to}`}
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              {anchorDate ? `Mulai ${formatCompactDate(anchorDate)}, pilih tanggal akhir` : rangeLabel}
             </p>
           </div>
 
@@ -475,29 +495,32 @@ export function CompactDateRangeInput({
               <button
                 type="button"
                 onClick={() => setViewMonth((value) => startOfUtcMonth(addUtcMonths(value, -1)))}
-                className="flex h-7 w-7 items-center justify-center border border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-white/[0.08] dark:text-white/70 dark:hover:bg-white/[0.05]"
+                className="flex h-7 w-7 items-center justify-center border border-border text-muted-foreground hover:bg-muted hover:text-foreground dark:border-white/[0.08]"
               >
                 <ChevronLeft className="h-3.5 w-3.5" />
               </button>
-              <p className="font-mono text-[13px] text-gray-900 dark:text-white/90">{monthLabel}</p>
+              <p className="font-mono text-[13px] font-semibold text-foreground">{monthLabel}</p>
               <button
                 type="button"
                 onClick={() => setViewMonth((value) => startOfUtcMonth(addUtcMonths(value, 1)))}
-                className="flex h-7 w-7 items-center justify-center border border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-white/[0.08] dark:text-white/70 dark:hover:bg-white/[0.05]"
+                className="flex h-7 w-7 items-center justify-center border border-border text-muted-foreground hover:bg-muted hover:text-foreground dark:border-white/[0.08]"
               >
                 <ChevronRight className="h-3.5 w-3.5" />
               </button>
             </div>
 
             <div className="grid grid-cols-7 gap-1 text-center">
-              {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((label) => (
-                <span key={label} className="py-1 text-[11px] text-gray-500 dark:text-white/45">
+              {["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"].map((label) => (
+                <span key={label} className="py-1 text-[11px] text-muted-foreground">
                   {label}
                 </span>
               ))}
               {monthCells.map((cell) => {
                 const isActive = isSelected(cell.iso);
                 const isEdge = isRangeEdge(cell.iso);
+                if (!cell.inMonth) {
+                  return <div key={cell.iso} className="h-9" aria-hidden="true" />;
+                }
 
                 return (
                   <button
@@ -506,17 +529,15 @@ export function CompactDateRangeInput({
                     onClick={() => handleDayClick(cell.iso)}
                     className={[
                       "flex h-9 items-center justify-center text-[13px] transition-colors",
-                      cell.inMonth
-                        ? "text-gray-900 dark:text-white/85"
-                        : "text-gray-300 dark:text-white/20",
+                      "text-foreground hover:bg-muted",
                       isActive && !isEdge
-                        ? "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-200"
+                        ? "bg-primary/15 text-app-accent-ink dark:bg-primary/20 dark:text-app-accent-ink"
                         : "",
                       isEdge
-                        ? "rounded-full bg-amber-500 text-white"
+                        ? "rounded-full bg-primary font-semibold text-primary-foreground hover:bg-primary"
                         : "",
                       anchorDate === cell.iso && !isEdge
-                        ? "rounded-full border border-amber-500 text-amber-600 dark:text-amber-300"
+                        ? "rounded-full border border-primary text-app-accent-ink dark:text-app-accent-ink"
                         : "",
                     ].join(" ")}
                   >
@@ -526,21 +547,21 @@ export function CompactDateRangeInput({
               })}
             </div>
 
-            <div className="flex items-center justify-between border-t border-gray-200 pt-2 dark:border-white/[0.08]">
+            <div className="flex items-center justify-between border-t border-border pt-2 dark:border-white/[0.08]">
               <button
                 type="button"
                 onClick={() => {
                   setAnchorDate(null);
                   setViewMonth(startOfUtcMonth(from));
                 }}
-                className="text-[12px] text-gray-600 hover:text-gray-900 dark:text-white/55 dark:hover:text-white/90"
+                className="font-mono text-[12px] uppercase tracking-[0.08em] text-muted-foreground hover:text-foreground"
               >
                 Reset
               </button>
               <button
                 type="button"
                 onClick={() => setOpen(false)}
-                className="text-[12px] text-gray-600 hover:text-gray-900 dark:text-white/55 dark:hover:text-white/90"
+                className="font-mono text-[12px] uppercase tracking-[0.08em] text-muted-foreground hover:text-foreground"
               >
                 Tutup
               </button>
@@ -627,24 +648,24 @@ export function SearchableSelect({
         type="button"
         disabled={disabled}
         onClick={() => !disabled && setOpen(!open)}
-        className="flex h-9 w-full items-center justify-between gap-2 border border-gray-300 bg-white px-3 text-[13px] text-gray-950 outline-none transition-colors hover:bg-gray-50 focus:border-amber-600/55 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400 dark:border-white/[0.08] dark:bg-[#0f0f12] dark:text-white/90 dark:hover:bg-white/[0.04] dark:focus:border-amber-500/45 dark:disabled:opacity-50"
+        className="flex h-9 w-full items-center justify-between gap-2 border border-border bg-card px-3 text-[13px] text-foreground outline-none transition-colors hover:bg-muted focus:border-primary/55 disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground dark:border-white/[0.08] dark:bg-muted dark:text-foreground/90 dark:hover:bg-white/[0.04] dark:focus:border-primary/45 dark:disabled:opacity-50"
       >
-        <span className="truncate">{selected ? selected.label : <span className="text-gray-400 dark:text-white/40">{placeholder}</span>}</span>
-        <ChevronDown className="h-3.5 w-3.5 shrink-0 text-gray-400 dark:text-white/30" />
+        <span className="truncate">{selected ? selected.label : <span className="text-muted-foreground dark:text-foreground/40">{placeholder}</span>}</span>
+        <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground dark:text-foreground/30" />
       </button>
 
       {open && (
-        <div className="absolute z-50 mt-1 w-full min-w-[200px] max-w-[90vw] overflow-hidden border border-gray-200 bg-white shadow-lg dark:border-white/[0.05] dark:bg-[#111114] dark:shadow-none">
+        <div className="absolute z-50 mt-1 w-full min-w-[200px] max-w-[90vw] overflow-hidden border border-border bg-popover shadow-lg dark:border-white/[0.05] dark:bg-popover dark:shadow-none">
           {showSearch ? (
-            <div className="flex items-center gap-2 border-b border-gray-200 bg-gray-50 px-2.5 py-1.5 dark:border-white/[0.05] dark:bg-[#0a0a0c]">
-              <Search className="h-3 w-3 text-gray-400 dark:text-white/30" />
+            <div className="flex items-center gap-2 border-b border-border bg-muted px-2.5 py-1.5 dark:border-white/[0.05] dark:bg-background">
+              <Search className="h-3 w-3 text-muted-foreground dark:text-foreground/30" />
               <input
                 type="text"
                 autoFocus
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Cari..."
-                className="w-full bg-transparent text-[13px] text-gray-950 outline-none placeholder:text-gray-400 dark:text-white dark:placeholder:text-white/35"
+                className="w-full bg-transparent text-[13px] text-foreground outline-none placeholder:text-muted-foreground dark:text-foreground dark:placeholder:text-foreground/35"
               />
             </div>
           ) : null}
@@ -652,19 +673,19 @@ export function SearchableSelect({
             <button
               type="button"
               onClick={() => { onChange(""); setOpen(false); }}
-              className={`w-full px-3 py-2 text-left text-[13px] transition-colors hover:bg-gray-50 dark:hover:bg-white/[0.05] ${!value ? "border border-amber-600/35 bg-transparent text-amber-700 dark:border-amber-500/30 dark:text-amber-300" : "text-gray-700 dark:text-white/70"}`}
+              className={`w-full px-3 py-2 text-left text-[13px] transition-colors hover:bg-muted dark:hover:bg-white/[0.05] ${!value ? "border border-primary/35 bg-transparent text-app-accent-ink dark:border-primary/30 dark:text-app-accent-ink" : "text-foreground dark:text-foreground/70"}`}
             >
               {placeholder}
             </button>
             {filtered.length === 0 ? (
-              <div className="px-3 py-3 text-center text-[12px] text-gray-500 dark:text-white/45">Tidak ada hasil</div>
+              <div className="px-3 py-3 text-center text-[12px] text-muted-foreground dark:text-foreground/45">Tidak ada hasil</div>
             ) : (
               filtered.map((o) => (
                 <button
                   key={o.value}
                   type="button"
                   onClick={() => { onChange(o.value); setOpen(false); }}
-                  className={`w-full truncate px-3 py-2 text-left text-[13px] transition-colors hover:bg-gray-50 dark:hover:bg-white/[0.05] ${value === o.value ? "border border-amber-600/35 bg-transparent text-amber-700 dark:border-amber-500/30 dark:text-amber-300" : "text-gray-800 dark:text-white/85"}`}
+                  className={`w-full truncate px-3 py-2 text-left text-[13px] transition-colors hover:bg-muted dark:hover:bg-white/[0.05] ${value === o.value ? "border border-primary/35 bg-transparent text-app-accent-ink dark:border-primary/30 dark:text-app-accent-ink" : "text-foreground dark:text-foreground/85"}`}
                 >
                   {o.label}
                 </button>
@@ -681,15 +702,15 @@ export function CompactTextarea(props: React.TextareaHTMLAttributes<HTMLTextArea
   return (
     <textarea
       {...props}
-      className={`w-full border border-gray-300 bg-white px-3 py-2.5 text-[13px] leading-5 text-gray-950 outline-none transition-colors placeholder:text-gray-400 focus:border-amber-600/55 dark:border-white/[0.08] dark:bg-[#0f0f12] dark:text-white dark:placeholder:text-white/35 dark:focus:border-amber-500/45 ${props.className ?? ""}`}
+      className={`w-full border border-border bg-card px-3 py-2.5 text-[13px] leading-5 text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-primary/55 dark:border-white/[0.08] dark:bg-muted dark:text-foreground dark:placeholder:text-foreground/35 dark:focus:border-primary/45 ${props.className ?? ""}`}
     />
   );
 }
 
 export function FieldLabel({ children, required }: { children: ReactNode; required?: boolean }) {
   return (
-    <p className="mb-1.5 font-mono text-[11px] uppercase tracking-[0.08em] text-gray-600 dark:text-white/50">
-      {children}{required && <span className="ml-0.5 text-red-600/80 dark:text-red-400/70">*</span>}
+    <p className="mb-1.5 font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground dark:text-foreground/50">
+      {children}{required && <span className="ml-0.5 text-destructive/80 dark:text-destructive/70">*</span>}
     </p>
   );
 }
@@ -702,8 +723,8 @@ export function Toast({ message, variant }: { message: string | null; variant: "
   if (!message) return null;
   const s =
     variant === "ok"
-      ? "border-emerald-700/20 bg-emerald-50 text-emerald-800 dark:border-emerald-500/25 dark:bg-emerald-500/8 dark:text-emerald-200"
-      : "border-red-600/20 bg-red-50 text-red-800 dark:border-red-500/25 dark:bg-red-500/8 dark:text-red-200";
+      ? "border-success/20 bg-success/10 text-success dark:border-success/25 dark:bg-success/8 dark:text-success"
+      : "border-destructive/20 bg-destructive/10 text-destructive dark:border-destructive/25 dark:bg-destructive/8 dark:text-destructive";
   return (
     <div className={`rounded-lg border px-3 py-2 text-[13px] ${s}`}>{message}</div>
   );
@@ -715,7 +736,7 @@ export function Toast({ message, variant }: { message: string | null; variant: "
 
 export function EmptyRow({ message }: { message: string }) {
   return (
-    <div className="rounded-lg border border-dashed border-gray-300 bg-white px-3 py-4 text-[13px] text-gray-600 dark:border-white/[0.08] dark:bg-white/[0.02] dark:text-white/45">
+    <div className="rounded-lg border border-dashed border-border bg-card px-3 py-4 text-[13px] text-muted-foreground dark:border-white/[0.08] dark:bg-muted/40 dark:text-foreground/45">
       {message}
     </div>
   );

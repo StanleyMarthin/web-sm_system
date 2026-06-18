@@ -244,36 +244,36 @@ export function RequestsDashboardShell({
     endDate;
 
   return (
-    <div className="space-y-0 bg-slate-50 dark:bg-[#0a0a0c]">
+    <div className="space-y-0 bg-muted dark:bg-background">
 
       {/* ── FILTER BAR ─────────────────────────────────────────────────── */}
-      <div className="flex items-center gap-2 border-b border-gray-300 dark:border-white/5 px-0 py-2">
+      <div className="flex items-center gap-2 border-b border-border dark:border-white/5 px-0 py-2">
         <div className="relative">
           <select
             value={activeTab}
             onChange={(e) => setActiveTab(e.target.value as "ALL" | "WO" | "PR" | "WOV")}
-            className="h-7 border border-gray-300 dark:border-white/10 bg-white dark:bg-[#111114] px-2 pr-6 text-[11px] font-mono uppercase tracking-[0.08em] text-gray-700 dark:text-white/60 outline-none focus:border-amber-500/40 appearance-none cursor-pointer"
+            className="h-7 border border-border dark:border-white/10 bg-white dark:bg-card px-2 pr-6 text-[11px] font-mono uppercase tracking-[0.08em] text-foreground dark:text-foreground/60 outline-none focus:border-primary/40 appearance-none cursor-pointer"
           >
             <option value="ALL">SEMUA JENIS</option>
             <option value="WO">WORK ORDER</option>
             <option value="PR">PURCHASE REQUEST</option>
             <option value="WOV">VENDOR WO</option>
           </select>
-          <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 dark:text-white/20 text-[10px]">▾</span>
+          <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground dark:text-foreground/20 text-[10px]">▾</span>
         </div>
 
         <div className="relative">
           <select
             value={filterUnit}
             onChange={(e) => setFilterUnit(e.target.value)}
-            className="h-7 border border-gray-300 dark:border-white/10 bg-white dark:bg-[#111114] px-2 pr-6 text-[11px] font-mono uppercase tracking-[0.08em] text-gray-700 dark:text-white/60 outline-none focus:border-amber-500/40 appearance-none cursor-pointer"
+            className="h-7 border border-border dark:border-white/10 bg-white dark:bg-card px-2 pr-6 text-[11px] font-mono uppercase tracking-[0.08em] text-foreground dark:text-foreground/60 outline-none focus:border-primary/40 appearance-none cursor-pointer"
           >
             <option value="">SEMUA UNIT</option>
             {unitsList.map((u: any) => (
               <option key={u.value} value={u.value}>{u.label}</option>
             ))}
           </select>
-          <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 dark:text-white/20 text-[10px]">▾</span>
+          <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground dark:text-foreground/20 text-[10px]">▾</span>
         </div>
 
         <div className="relative">
@@ -281,7 +281,7 @@ export function RequestsDashboardShell({
             value={filterDivision}
             disabled={isDivisionLeadScope}
             onChange={(e) => setFilterDivision(e.target.value)}
-            className="h-7 border border-gray-300 dark:border-white/10 bg-white dark:bg-[#111114] px-2 pr-6 text-[11px] font-mono uppercase tracking-[0.08em] text-gray-700 dark:text-white/60 outline-none focus:border-amber-500/40 appearance-none cursor-pointer disabled:opacity-40"
+            className="h-7 border border-border dark:border-white/10 bg-white dark:bg-card px-2 pr-6 text-[11px] font-mono uppercase tracking-[0.08em] text-foreground dark:text-foreground/60 outline-none focus:border-primary/40 appearance-none cursor-pointer disabled:opacity-40"
           >
             {isDivisionLeadScope ? (
               <option value={user.divisionName}>{user.divisionName?.toUpperCase()}</option>
@@ -294,7 +294,7 @@ export function RequestsDashboardShell({
               </>
             )}
           </select>
-          <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 dark:text-white/20 text-[10px]">▾</span>
+          <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground dark:text-foreground/20 text-[10px]">▾</span>
         </div>
 
         <div className="flex items-center gap-1 ml-auto">
@@ -302,14 +302,14 @@ export function RequestsDashboardShell({
             type="date"
             value={startDate}
             onChange={(e) => setStartDate(e.target.value)}
-            className="h-7 border border-gray-300 dark:border-white/10 bg-white dark:bg-[#111114] px-2 text-[11px] font-mono text-gray-700 dark:text-white/60 outline-none focus:border-amber-500/40 [color-scheme:dark] cursor-pointer"
+            className="h-7 border border-border dark:border-white/10 bg-white dark:bg-card px-2 text-[11px] font-mono text-foreground dark:text-foreground/60 outline-none focus:border-primary/40 [color-scheme:dark] cursor-pointer"
           />
-          <span className="text-gray-400 dark:text-white/20 text-[10px] font-mono">—</span>
+          <span className="text-muted-foreground dark:text-foreground/20 text-[10px] font-mono">—</span>
           <input
             type="date"
             value={endDate}
             onChange={(e) => setEndDate(e.target.value)}
-            className="h-7 border border-gray-300 dark:border-white/10 bg-white dark:bg-[#111114] px-2 text-[11px] font-mono text-gray-700 dark:text-white/60 outline-none focus:border-amber-500/40 [color-scheme:dark] cursor-pointer"
+            className="h-7 border border-border dark:border-white/10 bg-white dark:bg-card px-2 text-[11px] font-mono text-foreground dark:text-foreground/60 outline-none focus:border-primary/40 [color-scheme:dark] cursor-pointer"
           />
           {hasActiveFilters && (
             <button
@@ -320,7 +320,7 @@ export function RequestsDashboardShell({
                 if (!isDivisionLeadScope) setFilterDivision("");
               }}
               title="Reset Filters"
-              className="h-7 w-7 flex items-center justify-center border border-gray-300 dark:border-white/5 bg-white dark:bg-[#111114] text-gray-500 dark:text-white/30 hover:text-gray-800 dark:text-white/70 transition-colors"
+              className="h-7 w-7 flex items-center justify-center border border-border dark:border-white/5 bg-white dark:bg-card text-muted-foreground dark:text-foreground/30 hover:text-foreground dark:text-foreground/70 transition-colors"
             >
               <RotateCcw className="h-3 w-3" />
             </button>
@@ -329,68 +329,68 @@ export function RequestsDashboardShell({
       </div>
 
       {/* ── STAT STRIP: WO / PR / WOV ──────────────────────────────────── */}
-      <div className="grid grid-cols-3 border-b border-gray-300 dark:border-white/5">
+      <div className="grid grid-cols-3 border-b border-border dark:border-white/5">
         {/* WO */}
         {(activeTab === "ALL" || activeTab === "WO") && (
-          <div className="flex flex-col justify-center px-5 py-3 h-16 border-r border-gray-300 dark:border-white/5 gap-0.5">
+          <div className="flex flex-col justify-center px-5 py-3 h-16 border-r border-border dark:border-white/5 gap-0.5">
             <div className="flex items-baseline gap-2">
-              <span className="text-3xl font-mono text-gray-950 dark:text-white leading-none">{activeWo.length}</span>
-              <span className="text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/30 font-mono">WO AKTIF</span>
+              <span className="text-3xl font-mono text-foreground dark:text-foreground leading-none">{activeWo.length}</span>
+              <span className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30 font-mono">WO AKTIF</span>
             </div>
-            <div className="flex items-center gap-3 text-[10px] font-mono text-gray-500 dark:text-white/25">
+            <div className="flex items-center gap-3 text-[10px] font-mono text-muted-foreground dark:text-foreground/25">
               <span>
                 Urgent:{" "}
-                <span className={urgentWo > 0 ? "text-amber-500" : "text-gray-500 dark:text-white/30"}>
+                <span className={urgentWo > 0 ? "text-app-accent-ink" : "text-muted-foreground dark:text-foreground/30"}>
                   {urgentWo}
                 </span>
               </span>
-              <span className="text-white/10">·</span>
+              <span className="text-foreground/10">·</span>
               <span>{totalWoHours} jam est.</span>
             </div>
           </div>
         )}
         {(activeTab !== "ALL" && activeTab !== "WO") && (
-          <div className="h-16 border-r border-gray-300 dark:border-white/5" />
+          <div className="h-16 border-r border-border dark:border-white/5" />
         )}
 
         {/* PR */}
         {(activeTab === "ALL" || activeTab === "PR") && (
-          <div className="flex flex-col justify-center px-5 py-3 h-16 border-r border-gray-300 dark:border-white/5 gap-0.5">
+          <div className="flex flex-col justify-center px-5 py-3 h-16 border-r border-border dark:border-white/5 gap-0.5">
             <div className="flex items-baseline gap-2">
-              <span className="text-3xl font-mono text-gray-950 dark:text-white leading-none">{activePr.length}</span>
-              <span className="text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/30 font-mono">PR AKTIF</span>
+              <span className="text-3xl font-mono text-foreground dark:text-foreground leading-none">{activePr.length}</span>
+              <span className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30 font-mono">PR AKTIF</span>
             </div>
-            <div className="flex items-center gap-3 text-[10px] font-mono text-gray-500 dark:text-white/25">
+            <div className="flex items-center gap-3 text-[10px] font-mono text-muted-foreground dark:text-foreground/25">
               <span>
                 Urgent:{" "}
-                <span className={urgentPr > 0 ? "text-amber-500" : "text-gray-500 dark:text-white/30"}>
+                <span className={urgentPr > 0 ? "text-app-accent-ink" : "text-muted-foreground dark:text-foreground/30"}>
                   {urgentPr}
                 </span>
               </span>
-              <span className="text-white/10">·</span>
+              <span className="text-foreground/10">·</span>
               <span className="truncate">Rp {totalPrValue.toLocaleString("id-ID")}</span>
             </div>
           </div>
         )}
         {(activeTab !== "ALL" && activeTab !== "PR") && (
-          <div className="h-16 border-r border-gray-300 dark:border-white/5" />
+          <div className="h-16 border-r border-border dark:border-white/5" />
         )}
 
         {/* WOV */}
         {(activeTab === "ALL" || activeTab === "WOV") && (
           <div className="flex flex-col justify-center px-5 py-3 h-16 gap-0.5">
             <div className="flex items-baseline gap-2">
-              <span className="text-3xl font-mono text-gray-950 dark:text-white leading-none">{activeWov.length}</span>
-              <span className="text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/30 font-mono">WOV AKTIF</span>
+              <span className="text-3xl font-mono text-foreground dark:text-foreground leading-none">{activeWov.length}</span>
+              <span className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30 font-mono">WOV AKTIF</span>
             </div>
-            <div className="flex items-center gap-3 text-[10px] font-mono text-gray-500 dark:text-white/25">
+            <div className="flex items-center gap-3 text-[10px] font-mono text-muted-foreground dark:text-foreground/25">
               <span>
                 Kembali:{" "}
-                <span className={completedWov.length > 0 ? "text-gray-500 dark:text-white/50" : "text-gray-500 dark:text-white/30"}>
+                <span className={completedWov.length > 0 ? "text-muted-foreground dark:text-foreground/50" : "text-muted-foreground dark:text-foreground/30"}>
                   {completedWov.length}
                 </span>
               </span>
-              <span className="text-white/10">·</span>
+              <span className="text-foreground/10">·</span>
               <span>{new Set(activeWov.map((v: any) => v.vendorName)).size} rekanan</span>
             </div>
           </div>
@@ -401,18 +401,18 @@ export function RequestsDashboardShell({
       </div>
 
       {/* ── ALUR STATUS: OPEN → DISTRIBUSI → DIPROSES → SELESAI ─────────── */}
-      <div className="grid grid-cols-4 border-b border-gray-300 dark:border-white/5">
-        <div className="flex flex-col justify-center items-center h-12 border-r border-gray-300 dark:border-white/5 gap-0.5">
-          <span className="text-[9px] uppercase tracking-[0.14em] text-gray-500 dark:text-white/25 font-mono">OPEN / BARU</span>
-          <span className="text-base font-mono font-light text-gray-950 dark:text-white leading-none">{statusCounts["OPEN"] || 0}</span>
+      <div className="grid grid-cols-4 border-b border-border dark:border-white/5">
+        <div className="flex flex-col justify-center items-center h-12 border-r border-border dark:border-white/5 gap-0.5">
+          <span className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground dark:text-foreground/25 font-mono">OPEN / BARU</span>
+          <span className="text-base font-mono font-light text-foreground dark:text-foreground leading-none">{statusCounts["OPEN"] || 0}</span>
         </div>
-        <div className="flex flex-col justify-center items-center h-12 border-r border-gray-300 dark:border-white/5 gap-0.5">
-          <span className="text-[9px] uppercase tracking-[0.14em] text-gray-500 dark:text-white/25 font-mono">DISTRIBUSI</span>
-          <span className="text-base font-mono font-light text-amber-500/80 leading-none">{statusCounts["APPROVED"] || 0}</span>
+        <div className="flex flex-col justify-center items-center h-12 border-r border-border dark:border-white/5 gap-0.5">
+          <span className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground dark:text-foreground/25 font-mono">DISTRIBUSI</span>
+          <span className="text-base font-mono font-light text-app-accent-ink/80 leading-none">{statusCounts["APPROVED"] || 0}</span>
         </div>
-        <div className="flex flex-col justify-center items-center h-12 border-r border-gray-300 dark:border-white/5 gap-0.5">
-          <span className="text-[9px] uppercase tracking-[0.14em] text-gray-500 dark:text-white/25 font-mono">DIPROSES</span>
-          <span className="text-base font-mono font-light text-gray-950 dark:text-white leading-none">
+        <div className="flex flex-col justify-center items-center h-12 border-r border-border dark:border-white/5 gap-0.5">
+          <span className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground dark:text-foreground/25 font-mono">DIPROSES</span>
+          <span className="text-base font-mono font-light text-foreground dark:text-foreground leading-none">
             {(statusCounts["SUBMITTED"] || 0) +
               (statusCounts["PROSES_VENDOR"] || 0) +
               (statusCounts["HUNTING"] || 0) +
@@ -421,8 +421,8 @@ export function RequestsDashboardShell({
           </span>
         </div>
         <div className="flex flex-col justify-center items-center h-12 gap-0.5">
-          <span className="text-[9px] uppercase tracking-[0.14em] text-gray-500 dark:text-white/25 font-mono">SELESAI</span>
-          <span className="text-base font-mono font-light text-gray-700 dark:text-white/60 leading-none">
+          <span className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground dark:text-foreground/25 font-mono">SELESAI</span>
+          <span className="text-base font-mono font-light text-foreground dark:text-foreground/60 leading-none">
             {(statusCounts["DONE"] || 0) +
               (statusCounts["RECEIVED"] || 0) +
               (statusCounts["ARRIVED"] || 0)}
@@ -431,19 +431,19 @@ export function RequestsDashboardShell({
       </div>
 
       {/* ── MAIN BODY: TIMELINE + DIVISION LOAD ─────────────────────────── */}
-      <div className="grid lg:grid-cols-12 border-b border-gray-300 dark:border-white/5">
+      <div className="grid lg:grid-cols-12 border-b border-border dark:border-white/5">
 
         {/* Left: Division Load (8 cols) */}
         {(activeTab === "ALL" || activeTab === "WO") && (
-          <div className="lg:col-span-8 border-r border-gray-300 dark:border-white/5">
-            <div className="px-5 py-2.5 border-b border-gray-300 dark:border-white/5">
-              <span className="text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/30 font-mono">
+          <div className="lg:col-span-8 border-r border-border dark:border-white/5">
+            <div className="px-5 py-2.5 border-b border-border dark:border-white/5">
+              <span className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30 font-mono">
                 DISTRIBUSI BEBAN KERJA ANTAR DIVISI
               </span>
             </div>
             <div className="px-5 py-3 space-y-2.5">
               {Object.keys(divisionLoad).length === 0 ? (
-                <p className="text-[11px] font-mono text-gray-400 dark:text-white/20 py-3">— Tidak ada antrean aktif</p>
+                <p className="text-[11px] font-mono text-muted-foreground dark:text-foreground/20 py-3">— Tidak ada antrean aktif</p>
               ) : (
                 Object.entries(divisionLoad)
                   .sort((a, b) => b[1] - a[1])
@@ -452,12 +452,12 @@ export function RequestsDashboardShell({
                     return (
                       <div key={div} className="space-y-1">
                         <div className="flex items-center justify-between text-[10px] font-mono">
-                          <span className="text-gray-800 dark:text-white/70">{div}</span>
-                          <span className="text-amber-500">{count} · {percentage}%</span>
+                          <span className="text-foreground dark:text-foreground/70">{div}</span>
+                          <span className="text-app-accent-ink">{count} · {percentage}%</span>
                         </div>
                         <div className="h-px w-full bg-white/[0.03] overflow-hidden">
                           <div
-                            className="h-full bg-amber-500/60 transition-all duration-500"
+                            className="h-full bg-primary/60 transition-all duration-500"
                             style={{ width: `${percentage}%` }}
                           />
                         </div>
@@ -469,43 +469,43 @@ export function RequestsDashboardShell({
           </div>
         )}
         {(activeTab !== "ALL" && activeTab !== "WO") && (
-          <div className="lg:col-span-8 border-r border-gray-300 dark:border-white/5" />
+          <div className="lg:col-span-8 border-r border-border dark:border-white/5" />
         )}
 
         {/* Right: Timeline Kritis (4 cols) */}
         <div className="lg:col-span-4">
-          <div className="px-5 py-2.5 border-b border-gray-300 dark:border-white/5 flex items-center justify-between">
-            <span className="text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/30 font-mono">
+          <div className="px-5 py-2.5 border-b border-border dark:border-white/5 flex items-center justify-between">
+            <span className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30 font-mono">
               TIMELINE KRITIS &amp; TARGET
             </span>
-            <AlertTriangle className="h-3 w-3 text-amber-500 shrink-0" />
+            <AlertTriangle className="h-3 w-3 text-app-accent-ink shrink-0" />
           </div>
           <div className="px-5 py-3 space-y-2 max-h-[260px] overflow-y-auto">
             {displayCriticals.length === 0 ? (
-              <p className="text-[10px] font-mono text-gray-400 dark:text-white/20 py-2">— Tidak ada item kritis</p>
+              <p className="text-[10px] font-mono text-muted-foreground dark:text-foreground/20 py-2">— Tidak ada item kritis</p>
             ) : (
               displayCriticals.map((item) => (
                 <div
                   key={item.id}
                   className={`py-2 px-3 border-l-2 space-y-1 ${
-                    item.isUrgent ? "border-amber-500/60 bg-amber-500/[0.03]" : "border-gray-300 dark:border-white/10 bg-white/[0.01]"
+                    item.isUrgent ? "border-primary/60 bg-primary/[0.03]" : "border-border dark:border-white/10 bg-white/[0.01]"
                   }`}
                 >
                   <div className="flex items-center justify-between">
                     <span className={`text-[8px] font-mono font-extrabold uppercase px-1.5 py-px border ${
                       item.type === "WO"
-                        ? "border-amber-500/30 text-amber-500"
+                        ? "border-primary/30 text-app-accent-ink"
                         : item.type === "PR"
-                        ? "border-white/15 text-gray-500 dark:text-white/50"
-                        : "border-gray-300 dark:border-white/10 text-gray-400 dark:text-white/40"
+                        ? "border-white/15 text-muted-foreground dark:text-foreground/50"
+                        : "border-border dark:border-white/10 text-muted-foreground dark:text-foreground/40"
                     }`}>
                       {item.type}
                     </span>
-                    <span className="text-[9px] text-gray-500 dark:text-white/25 font-mono">{item.number}</span>
+                    <span className="text-[9px] text-muted-foreground dark:text-foreground/25 font-mono">{item.number}</span>
                   </div>
-                  <p className="text-[10px] font-mono text-gray-900 dark:text-white/80 truncate">{item.unit} · {item.title}</p>
-                  <p className="text-[9px] font-mono text-gray-500 dark:text-white/30">{item.info}</p>
-                  <div className="flex items-center gap-1 text-[8px] text-gray-400 dark:text-white/20 font-mono pt-0.5 border-t border-gray-300 dark:border-white/5">
+                  <p className="text-[10px] font-mono text-foreground dark:text-foreground/80 truncate">{item.unit} · {item.title}</p>
+                  <p className="text-[9px] font-mono text-muted-foreground dark:text-foreground/30">{item.info}</p>
+                  <div className="flex items-center gap-1 text-[8px] text-muted-foreground dark:text-foreground/20 font-mono pt-0.5 border-t border-border dark:border-white/5">
                     <Calendar className="h-2 w-2" />
                     <span>Target: {item.date || "—"}</span>
                   </div>
@@ -518,17 +518,17 @@ export function RequestsDashboardShell({
 
       {/* ── REKAPITULASI STRIP ──────────────────────────────────────────── */}
       <div className="grid grid-cols-3">
-        <div className="flex items-center gap-3 px-5 py-2.5 border-r border-gray-300 dark:border-white/5 h-10">
-          <span className="text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/25 font-mono">WD SELESAI</span>
-          <span className="text-sm font-mono font-light text-gray-800 dark:text-white/70">{completedWo.length}</span>
+        <div className="flex items-center gap-3 px-5 py-2.5 border-r border-border dark:border-white/5 h-10">
+          <span className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/25 font-mono">WD SELESAI</span>
+          <span className="text-sm font-mono font-light text-foreground dark:text-foreground/70">{completedWo.length}</span>
         </div>
-        <div className="flex items-center gap-3 px-5 py-2.5 border-r border-gray-300 dark:border-white/5 h-10">
-          <span className="text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/25 font-mono">PR TIBA</span>
-          <span className="text-sm font-mono font-light text-gray-800 dark:text-white/70">{completedPr.length}</span>
+        <div className="flex items-center gap-3 px-5 py-2.5 border-r border-border dark:border-white/5 h-10">
+          <span className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/25 font-mono">PR TIBA</span>
+          <span className="text-sm font-mono font-light text-foreground dark:text-foreground/70">{completedPr.length}</span>
         </div>
         <div className="flex items-center gap-3 px-5 py-2.5 h-10">
-          <span className="text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/25 font-mono">WOV KEMBALI</span>
-          <span className="text-sm font-mono font-light text-gray-800 dark:text-white/70">{completedWov.length}</span>
+          <span className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/25 font-mono">WOV KEMBALI</span>
+          <span className="text-sm font-mono font-light text-foreground dark:text-foreground/70">{completedWov.length}</span>
         </div>
       </div>
 

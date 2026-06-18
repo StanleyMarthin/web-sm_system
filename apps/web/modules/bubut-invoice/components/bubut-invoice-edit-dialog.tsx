@@ -137,15 +137,15 @@ export function BubutInvoiceEditDialog({
       />
     ) : null}
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 p-4 pt-16 print:hidden">
-      <div className="w-full max-w-4xl border border-white/10 bg-[#111114] text-white">
+      <div className="w-full max-w-4xl border border-white/10 bg-card text-foreground">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-white/5 px-4 py-3">
           <div>
-            <p className="font-mono text-[12px] uppercase tracking-[0.1em] text-white">
+            <p className="font-mono text-[12px] uppercase tracking-[0.1em] text-foreground">
               Edit Invoice {existingInvoice?.invoiceType === "CUSTOMER" ? "Customer" : "Direksi"}
             </p>
           </div>
-          <button type="button" onClick={onClose} className="p-2 text-white/40 hover:text-white transition-colors">
+          <button type="button" onClick={onClose} className="p-2 text-foreground/40 hover:text-foreground transition-colors">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -154,35 +154,35 @@ export function BubutInvoiceEditDialog({
           {/* Input fields */}
           <div className="grid gap-3 md:grid-cols-3">
             <label className="space-y-1">
-              <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-white/30">Tanggal Invoice</span>
+              <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-foreground/30">Tanggal Invoice</span>
               <input
                 type="date"
                 value={salesInvoiceDate}
                 onChange={(event) => setSalesInvoiceDate(event.target.value)}
-                className="h-8 w-full border border-white/10 bg-[#0a0a0c] px-2 text-[11px] font-mono text-white/70 outline-none focus:border-amber-500/40 [color-scheme:dark]"
+                className="h-8 w-full border border-white/10 bg-background px-2 text-[11px] font-mono text-foreground/70 outline-none focus:border-primary/40 [color-scheme:dark]"
               />
             </label>
             <label className="space-y-1">
-              <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-white/30">PO No.</span>
+              <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-foreground/30">PO No.</span>
               <input
                 value={poNo}
                 onChange={(event) => setPoNo(event.target.value)}
-                className="h-8 w-full border border-white/10 bg-[#0a0a0c] px-2 text-[11px] font-mono text-white/70 outline-none focus:border-amber-500/40"
+                className="h-8 w-full border border-white/10 bg-background px-2 text-[11px] font-mono text-foreground/70 outline-none focus:border-primary/40"
               />
             </label>
             <label className="space-y-1">
-              <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-white/30">PO Date</span>
+              <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-foreground/30">PO Date</span>
               <input
                 type="date"
                 value={poDate}
                 onChange={(event) => setPoDate(event.target.value)}
-                className="h-8 w-full border border-white/10 bg-[#0a0a0c] px-2 text-[11px] font-mono text-white/70 outline-none focus:border-amber-500/40 [color-scheme:dark]"
+                className="h-8 w-full border border-white/10 bg-background px-2 text-[11px] font-mono text-foreground/70 outline-none focus:border-primary/40 [color-scheme:dark]"
               />
             </label>
           </div>
 
           {error ? (
-            <p className="mt-3 border border-red-500/20 bg-red-500/[0.04] px-3 py-2 text-[11px] font-mono text-red-400">
+            <p className="mt-3 border border-destructive/20 bg-destructive/[0.04] px-3 py-2 text-[11px] font-mono text-destructive">
               {error}
             </p>
           ) : null}
@@ -191,21 +191,21 @@ export function BubutInvoiceEditDialog({
             <div className="mt-4 space-y-4">
               {/* Stat boxes */}
               <div className="grid gap-2 md:grid-cols-4">
-                <div className="border border-white/5 bg-[#0a0a0c] p-3">
-                  <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-white/30">WO</p>
-                  <p className="text-[12px] font-mono text-white font-semibold">{preview.sourceWobNo}</p>
+                <div className="border border-white/5 bg-background p-3">
+                  <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-foreground/30">WO</p>
+                  <p className="text-[12px] font-mono text-foreground font-semibold">{preview.sourceWobNo}</p>
                 </div>
-                <div className="border border-white/5 bg-[#0a0a0c] p-3">
-                  <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-white/30">Unit</p>
-                  <p className="text-[12px] font-mono text-white font-semibold">{preview.carType ?? "-"}</p>
+                <div className="border border-white/5 bg-background p-3">
+                  <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-foreground/30">Unit</p>
+                  <p className="text-[12px] font-mono text-foreground font-semibold">{preview.carType ?? "-"}</p>
                 </div>
-                <div className="border border-white/5 bg-[#0a0a0c] p-3">
-                  <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-white/30">Jam Kerja</p>
-                  <p className="text-[12px] font-mono text-white font-semibold">{preview.totals.totalWorkHourText}</p>
+                <div className="border border-white/5 bg-background p-3">
+                  <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-foreground/30">Jam Kerja</p>
+                  <p className="text-[12px] font-mono text-foreground font-semibold">{preview.totals.totalWorkHourText}</p>
                 </div>
-                <div className="border border-white/5 bg-[#0a0a0c] p-3">
-                  <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-white/30">Total Bubut</p>
-                  <p className="text-[12px] font-mono text-white font-semibold">{rupiah(preview.totals.totalPriceBubut)}</p>
+                <div className="border border-white/5 bg-background p-3">
+                  <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-foreground/30">Total Bubut</p>
+                  <p className="text-[12px] font-mono text-foreground font-semibold">{rupiah(preview.totals.totalPriceBubut)}</p>
                 </div>
               </div>
 
@@ -213,19 +213,19 @@ export function BubutInvoiceEditDialog({
               <table className="w-full border-collapse">
                 <thead>
                   <tr className="border-b border-white/10">
-                    <th className="py-2 text-left font-mono text-[10px] uppercase tracking-[0.12em] text-white/30">Material</th>
-                    <th className="py-2 text-left font-mono text-[10px] uppercase tracking-[0.12em] text-white/30">Qty</th>
-                    <th className="py-2 text-left font-mono text-[10px] uppercase tracking-[0.12em] text-white/30">Harga</th>
-                    <th className="py-2 text-left font-mono text-[10px] uppercase tracking-[0.12em] text-white/30">Total</th>
+                    <th className="py-2 text-left font-mono text-[10px] uppercase tracking-[0.12em] text-foreground/30">Material</th>
+                    <th className="py-2 text-left font-mono text-[10px] uppercase tracking-[0.12em] text-foreground/30">Qty</th>
+                    <th className="py-2 text-left font-mono text-[10px] uppercase tracking-[0.12em] text-foreground/30">Harga</th>
+                    <th className="py-2 text-left font-mono text-[10px] uppercase tracking-[0.12em] text-foreground/30">Total</th>
                   </tr>
                 </thead>
                 <tbody>
                   {preview.materials.map((item) => (
                     <tr key={`${item.no}-${item.materialName}`} className="border-b border-white/[0.04] hover:bg-white/[0.02]">
-                      <td className="py-2 text-[11px] font-mono text-white/70">{item.materialName}</td>
-                      <td className="py-2 text-[11px] font-mono text-white/70">{item.qty} {item.unit ?? ""}</td>
-                      <td className="py-2 text-[11px] font-mono text-white/70">{rupiah(item.price)}</td>
-                      <td className="py-2 text-[11px] font-mono text-white/70">{rupiah(item.total)}</td>
+                      <td className="py-2 text-[11px] font-mono text-foreground/70">{item.materialName}</td>
+                      <td className="py-2 text-[11px] font-mono text-foreground/70">{item.qty} {item.unit ?? ""}</td>
+                      <td className="py-2 text-[11px] font-mono text-foreground/70">{rupiah(item.price)}</td>
+                      <td className="py-2 text-[11px] font-mono text-foreground/70">{rupiah(item.total)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -233,28 +233,28 @@ export function BubutInvoiceEditDialog({
 
               {existingInvoice?.invoiceType === "CUSTOMER" ? (
                 <div className="grid gap-2 md:grid-cols-2">
-                  <div className="border border-white/5 bg-[#0a0a0c] p-3">
-                    <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-white/30">UP 235%</p>
-                    <p className="text-[12px] font-mono font-semibold text-amber-500">{rupiah(preview.totals.priceAfterMarkup)}</p>
+                  <div className="border border-white/5 bg-background p-3">
+                    <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-foreground/30">UP 235%</p>
+                    <p className="text-[12px] font-mono font-semibold text-app-accent-ink">{rupiah(preview.totals.priceAfterMarkup)}</p>
                   </div>
-                  <div className="border border-white/5 bg-[#0a0a0c] p-3">
-                    <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-white/30">Price Rounding</p>
-                    <p className="text-[12px] font-mono font-semibold text-amber-500">{rupiah(preview.totals.priceRounding)}</p>
+                  <div className="border border-white/5 bg-background p-3">
+                    <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-foreground/30">Price Rounding</p>
+                    <p className="text-[12px] font-mono font-semibold text-app-accent-ink">{rupiah(preview.totals.priceRounding)}</p>
                   </div>
                 </div>
               ) : null}
 
-              <div className="border border-white/5 bg-[#0a0a0c] p-3">
+              <div className="border border-white/5 bg-background p-3">
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <div>
-                    <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-white/30">
+                    <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-foreground/30">
                       Dokumentasi Invoice
                     </p>
-                    <p className="mt-1 text-[11px] text-white/45">
+                    <p className="mt-1 text-[11px] text-foreground/45">
                       Pilih foto yang akan ditempel sebagai before dan after di invoice.
                     </p>
                   </div>
-                  <p className="shrink-0 font-mono text-[10px] uppercase tracking-[0.12em] text-white/25">
+                  <p className="shrink-0 font-mono text-[10px] uppercase tracking-[0.12em] text-foreground/25">
                     Before {beforePictureUrls.length}/1 · After {afterPictureUrls.length}/1
                   </p>
                 </div>
@@ -269,8 +269,8 @@ export function BubutInvoiceEditDialog({
                         <div
                           key={`${picture.url}-${index}`}
                           className={[
-                            "overflow-hidden border bg-[#111114]",
-                            isBefore || isAfter ? "border-amber-500/50" : "border-white/5",
+                            "overflow-hidden border bg-card",
+                            isBefore || isAfter ? "border-primary/50" : "border-white/5",
                           ].join(" ")}
                         >
                           <img
@@ -285,8 +285,8 @@ export function BubutInvoiceEditDialog({
                               className={[
                                 "h-8 border-r border-white/5 font-mono text-[10px] uppercase tracking-[0.1em] transition-colors",
                                 isBefore
-                                  ? "bg-amber-500/15 text-amber-400"
-                                  : "text-white/45 hover:bg-white/[0.04] hover:text-white/75",
+                                  ? "bg-primary/15 text-app-accent-ink"
+                                  : "text-foreground/45 hover:bg-white/[0.04] hover:text-foreground/75",
                               ].join(" ")}
                             >
                               Before
@@ -297,8 +297,8 @@ export function BubutInvoiceEditDialog({
                               className={[
                                 "h-8 font-mono text-[10px] uppercase tracking-[0.1em] transition-colors",
                                 isAfter
-                                  ? "bg-sky-500/15 text-sky-300"
-                                  : "text-white/45 hover:bg-white/[0.04] hover:text-white/75",
+                                  ? "bg-info/15 text-info"
+                                  : "text-foreground/45 hover:bg-white/[0.04] hover:text-foreground/75",
                               ].join(" ")}
                             >
                               After
@@ -309,14 +309,14 @@ export function BubutInvoiceEditDialog({
                     })}
                   </div>
                 ) : (
-                  <div className="border border-dashed border-white/10 px-3 py-8 text-center font-mono text-[11px] uppercase tracking-[0.12em] text-white/30">
+                  <div className="border border-dashed border-white/10 px-3 py-8 text-center font-mono text-[11px] uppercase tracking-[0.12em] text-foreground/30">
                     Belum ada dokumentasi untuk WO ini
                   </div>
                 )}
               </div>
             </div>
           ) : (
-            <p className="mt-4 font-mono text-[11px] text-white/30">Memuat preview...</p>
+            <p className="mt-4 font-mono text-[11px] text-foreground/30">Memuat preview...</p>
           )}
         </div>
 
@@ -326,14 +326,14 @@ export function BubutInvoiceEditDialog({
             type="button"
             onClick={printPreviewDraft}
             disabled={!preview}
-            className="border border-white/10 h-8 px-3 text-[10px] font-mono uppercase text-white/55 hover:text-white disabled:opacity-30 transition-colors"
+            className="border border-white/10 h-8 px-3 text-[10px] font-mono uppercase text-foreground/55 hover:text-foreground disabled:opacity-30 transition-colors"
           >
             Print Draft
           </button>
           <button
             type="button"
             onClick={onClose}
-            className="border border-white/10 h-8 px-3 text-[10px] font-mono uppercase text-white/40 hover:text-white transition-colors"
+            className="border border-white/10 h-8 px-3 text-[10px] font-mono uppercase text-foreground/40 hover:text-foreground transition-colors"
           >
             Batal
           </button>
@@ -341,7 +341,7 @@ export function BubutInvoiceEditDialog({
             type="button"
             disabled={isPending || !preview}
             onClick={confirmUpdate}
-            className="flex items-center gap-2 rounded-sm bg-amber-500 px-6 py-2.5 font-mono text-[11px] font-bold uppercase tracking-[0.1em] text-amber-950 transition-colors hover:bg-amber-400 disabled:opacity-50"
+            className="flex items-center gap-2 rounded-sm bg-primary px-6 py-2.5 font-mono text-[11px] font-bold uppercase tracking-[0.1em] text-primary-foreground transition-colors hover:bg-primary disabled:opacity-50"
           >
             {isPending ? "Menyimpan..." : "Simpan Perubahan"}
           </button>
@@ -365,9 +365,9 @@ function DraftPrintView({
   const isCustomer = invoiceType === "CUSTOMER";
 
   return (
-    <main className="hidden bg-white p-10 text-black print:block">
+    <main className="hidden bg-white p-10 text-primary-foreground print:block">
       <section className="border border-black p-4">
-        <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-gray-500">
+        <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
           Draft - Belum Rilis
         </p>
         <div className="mt-2 flex justify-between gap-6 text-[11px]">
@@ -391,7 +391,7 @@ function DraftPrintView({
         <thead>
           <tr>
             {["No", "Material", "Qty", "Unit", ...(!isCustomer ? ["Price", "Total"] : [])].map((label) => (
-              <th key={label} className="border border-black bg-gray-100 px-2 py-1 text-left uppercase">
+              <th key={label} className="border border-black bg-muted px-2 py-1 text-left uppercase">
                 {label}
               </th>
             ))}
@@ -421,7 +421,7 @@ function DraftPrintView({
         <thead>
           <tr>
             {["Date", "Start", "Break", "Finish", "Hours", ...(!isCustomer ? ["Total"] : [])].map((label) => (
-              <th key={label} className="border border-black bg-gray-100 px-2 py-1 text-left uppercase">
+              <th key={label} className="border border-black bg-muted px-2 py-1 text-left uppercase">
                 {label}
               </th>
             ))}
@@ -450,8 +450,8 @@ function DraftPrintView({
                 <td className="border border-black px-2 py-1 text-right">{rupiah(preview.totals.priceAfterMarkup)}</td>
               </tr>
               <tr>
-                <td className="border border-black bg-gray-100 px-2 py-1 font-bold">Price Rounding</td>
-                <td className="border border-black bg-gray-100 px-2 py-1 text-right font-bold">{rupiah(preview.totals.priceRounding)}</td>
+                <td className="border border-black bg-muted px-2 py-1 font-bold">Price Rounding</td>
+                <td className="border border-black bg-muted px-2 py-1 text-right font-bold">{rupiah(preview.totals.priceRounding)}</td>
               </tr>
             </>
           ) : (
@@ -465,8 +465,8 @@ function DraftPrintView({
                 <td className="border border-black px-2 py-1 text-right">{rupiah(preview.totals.workingHourTotal)}</td>
               </tr>
               <tr>
-                <td className="border border-black bg-gray-100 px-2 py-1 font-bold">Total Price Bubut</td>
-                <td className="border border-black bg-gray-100 px-2 py-1 text-right font-bold">{rupiah(preview.totals.totalPriceBubut)}</td>
+                <td className="border border-black bg-muted px-2 py-1 font-bold">Total Price Bubut</td>
+                <td className="border border-black bg-muted px-2 py-1 text-right font-bold">{rupiah(preview.totals.totalPriceBubut)}</td>
               </tr>
             </>
           )}

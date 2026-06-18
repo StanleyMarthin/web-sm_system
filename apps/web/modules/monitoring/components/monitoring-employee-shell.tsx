@@ -287,11 +287,11 @@ export function MonitoringEmployeeShell({
 
     return (
         <div className="space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-4 rounded-[14px] border border-white/[0.06] bg-[#0a0a0c] px-4 py-3">
+            <div className="flex flex-wrap items-center justify-between gap-4 rounded-[14px] border border-white/[0.06] bg-background px-4 py-3">
                 <div className="flex items-center gap-3">
-                    <h1 className="text-[14px] font-medium text-white">Monitoring Karyawan</h1>
+                    <h1 className="text-[14px] font-medium text-foreground">Monitoring Karyawan</h1>
                     <div className="h-4 w-px bg-white/[0.06]" />
-                    <span className="text-[11px] text-white/40">{matrixData.length} Karyawan</span>
+                    <span className="text-[11px] text-foreground/40">{matrixData.length} Karyawan</span>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-3">
@@ -304,8 +304,8 @@ export function MonitoringEmployeeShell({
                                 className={[
                                     "rounded-md px-3 py-1.5 text-[10px] uppercase tracking-wider transition-colors",
                                     activeSpan === span
-                                        ? "bg-amber-500/10 text-amber-500"
-                                        : "text-white/40 hover:text-white/70",
+                                        ? "bg-primary/10 text-app-accent-ink"
+                                        : "text-foreground/40 hover:text-foreground/70",
                                 ].join(" ")}
                             >
                                 {span === "daily" ? "Harian" : "Mingguan"}
@@ -337,14 +337,14 @@ export function MonitoringEmployeeShell({
                 </div>
             </div>
 
-            <section className="overflow-hidden rounded-[14px] border border-white/[0.06] bg-[#0a0a0c]">
+            <section className="overflow-hidden rounded-[14px] border border-white/[0.06] bg-background">
                     <div className="overflow-x-auto">
                         <table className="min-w-full border-collapse text-sm">
                             <thead>
                                 <tr>
                                     <th
                                         rowSpan={2}
-                                        className="border-b border-r border-white/[0.06] bg-white/[0.01] px-4 py-3 text-left text-[11px] font-medium uppercase tracking-[0.1em] text-white/40 align-middle"
+                                        className="border-b border-r border-white/[0.06] bg-white/[0.01] px-4 py-3 text-left text-[11px] font-medium uppercase tracking-[0.1em] text-foreground/40 align-middle"
                                     >
                                         Nama
                                     </th>
@@ -352,7 +352,7 @@ export function MonitoringEmployeeShell({
                                         <th
                                             key={d}
                                             colSpan={2}
-                                            className="border-b border-r border-white/[0.06] bg-amber-500/10 px-2 py-2.5 text-center text-[11px] font-semibold text-amber-500"
+                                            className="border-b border-r border-white/[0.06] bg-primary/10 px-2 py-2.5 text-center text-[11px] font-semibold text-app-accent-ink"
                                         >
                                             {formatMatrixDate(d)}
                                         </th>
@@ -361,10 +361,10 @@ export function MonitoringEmployeeShell({
                                 <tr>
                                     {matrixDates.map((d) => (
                                         <React.Fragment key={`sub-${d}`}>
-                                            <th className="border-b border-r border-white/[0.06] bg-white/[0.01] px-2 py-2 text-center text-[10px] uppercase tracking-wider text-white/50">
+                                            <th className="border-b border-r border-white/[0.06] bg-white/[0.01] px-2 py-2 text-center text-[10px] uppercase tracking-wider text-foreground/50">
                                                 Work Hour
                                             </th>
-                                            <th className="border-b border-r border-white/[0.06] bg-white/[0.01] px-2 py-2 text-center text-[10px] uppercase tracking-wider text-amber-500/50">
+                                            <th className="border-b border-r border-white/[0.06] bg-white/[0.01] px-2 py-2 text-center text-[10px] uppercase tracking-wider text-app-accent-ink/50">
                                                 Lembur
                                             </th>
                                         </React.Fragment>
@@ -376,7 +376,7 @@ export function MonitoringEmployeeShell({
                                     <tr>
                                         <td
                                             colSpan={matrixDates.length * 2 + 1}
-                                            className="px-4 py-12 text-center text-[12px] italic text-white/30"
+                                            className="px-4 py-12 text-center text-[12px] italic text-foreground/30"
                                         >
                                             Tidak ada data karyawan pada periode yang dipilih.
                                         </td>
@@ -393,8 +393,8 @@ export function MonitoringEmployeeShell({
                                                     className="border-b border-white/[0.04] transition-colors hover:bg-white/[0.02] cursor-pointer"
                                                     onClick={() => toggleEmp(empKey)}
                                                 >
-                                                    <td className="border-r border-white/[0.06] px-4 py-2.5 text-[11px] font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                                                        <button type="button" className="text-white/40 hover:text-white">
+                                                    <td className="border-r border-white/[0.06] px-4 py-2.5 text-[11px] font-bold text-foreground uppercase tracking-wider flex items-center gap-2">
+                                                        <button type="button" className="text-foreground/40 hover:text-foreground">
                                                             {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                                                         </button>
                                                         {emp.employeeName}
@@ -404,7 +404,7 @@ export function MonitoringEmployeeShell({
                                                         return (
                                                             <React.Fragment key={`cell-${empKey}-${d}`}>
                                                                 <td
-                                                                    className="border-r border-white/[0.06] px-2 py-2.5 text-center tabular-nums text-white/70 bg-white/[0.01] cursor-pointer hover:bg-white/[0.04]"
+                                                                    className="border-r border-white/[0.06] px-2 py-2.5 text-center tabular-nums text-foreground/70 bg-white/[0.01] cursor-pointer hover:bg-white/[0.04]"
                                                                     onClick={(event) => {
                                                                         event.stopPropagation();
                                                                         setDrilldown({ employeeKey: empKey, date: d, isOvertime: false });
@@ -413,7 +413,7 @@ export function MonitoringEmployeeShell({
                                                                     {cell?.normal ? fmt(cell.normal) : ""}
                                                                 </td>
                                                                 <td
-                                                                    className="border-r border-white/[0.06] px-2 py-2.5 text-center tabular-nums text-amber-500/80 bg-white/[0.01] cursor-pointer hover:bg-white/[0.04]"
+                                                                    className="border-r border-white/[0.06] px-2 py-2.5 text-center tabular-nums text-app-accent-ink/80 bg-white/[0.01] cursor-pointer hover:bg-white/[0.04]"
                                                                     onClick={(event) => {
                                                                         event.stopPropagation();
                                                                         setDrilldown({ employeeKey: empKey, date: d, isOvertime: true });
@@ -428,18 +428,18 @@ export function MonitoringEmployeeShell({
                                                 
                                                 {/* Expanded Units Rows */}
                                                 {isExpanded && Array.from(emp.units.values()).sort((a, b) => a.unitName.localeCompare(b.unitName)).map((unit) => (
-                                                    <tr key={`${empKey}-unit-${unit.carId}`} className="border-b border-white/[0.02] bg-[#050505] transition-colors hover:bg-white/[0.02]">
-                                                        <td className="border-r border-white/[0.06] pl-10 pr-4 py-2 text-[10px] text-white/50 uppercase tracking-wider">
+                                                    <tr key={`${empKey}-unit-${unit.carId}`} className="border-b border-white/[0.02] bg-card transition-colors hover:bg-white/[0.02]">
+                                                        <td className="border-r border-white/[0.06] pl-10 pr-4 py-2 text-[10px] text-foreground/50 uppercase tracking-wider">
                                                             {unit.unitName}
                                                         </td>
                                                         {matrixDates.map((d) => {
                                                             const cell = unit.days[d];
                                                             return (
                                                                 <React.Fragment key={`cell-${empKey}-unit-${unit.carId}-${d}`}>
-                                                                    <td className="border-r border-white/[0.06] px-2 py-2 text-center tabular-nums text-[10px] text-white/40">
+                                                                    <td className="border-r border-white/[0.06] px-2 py-2 text-center tabular-nums text-[10px] text-foreground/40">
                                                                         {cell?.normal ? fmt(cell.normal) : ""}
                                                                     </td>
-                                                                    <td className="border-r border-white/[0.06] px-2 py-2 text-center tabular-nums text-[10px] text-amber-500/50">
+                                                                    <td className="border-r border-white/[0.06] px-2 py-2 text-center tabular-nums text-[10px] text-app-accent-ink/50">
                                                                         {cell?.overtime ? fmt(cell.overtime) : ""}
                                                                     </td>
                                                                 </React.Fragment>
@@ -457,26 +457,26 @@ export function MonitoringEmployeeShell({
                 </section>
             {drilldown ? (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-                    <div className="w-full max-w-3xl border border-white/10 bg-[#111114]">
+                    <div className="w-full max-w-3xl border border-white/10 bg-card">
                         <div className="flex items-center justify-between border-b border-white/5 px-4 py-3">
-                            <p className="text-[12px] font-mono text-white/70">Actual Activity</p>
-                            <button type="button" onClick={() => setDrilldown(null)} className="text-white/40 hover:text-white">
+                            <p className="text-[12px] font-mono text-foreground/70">Actual Activity</p>
+                            <button type="button" onClick={() => setDrilldown(null)} className="text-foreground/40 hover:text-foreground">
                                 <X className="h-4 w-4" />
                             </button>
                         </div>
                         <div className="max-h-[60vh] overflow-auto p-4">
                             {drilldownActivities.length === 0 ? (
-                                <p className="py-8 text-center text-[12px] text-white/35">Belum ada detail actual pada cell ini.</p>
+                                <p className="py-8 text-center text-[12px] text-foreground/35">Belum ada detail actual pada cell ini.</p>
                             ) : (
                                 <div className="space-y-2">
                                     {drilldownActivities.map((activity) => (
-                                        <div key={activity.planId} className="border border-white/5 bg-[#0a0a0c] p-3 text-[12px] text-white/65">
+                                        <div key={activity.planId} className="border border-white/5 bg-background p-3 text-[12px] text-foreground/65">
                                             <div className="flex flex-wrap items-center justify-between gap-2">
-                                                <p className="font-medium text-white">{activity.unitName}</p>
-                                                <span className="font-mono text-[10px] text-amber-400">{Number(activity.targetTotalHours ?? 0) <= 0 ? "MANUAL" : "PLAN"}</span>
+                                                <p className="font-medium text-foreground">{activity.unitName}</p>
+                                                <span className="font-mono text-[10px] text-app-accent-ink">{Number(activity.targetTotalHours ?? 0) <= 0 ? "MANUAL" : "PLAN"}</span>
                                             </div>
-                                            <p className="mt-1 text-white/45">{activity.divisionName ?? "-"} · {activity.jobDescription}</p>
-                                            <p className="mt-2 font-mono text-[11px] text-white/55">
+                                            <p className="mt-1 text-foreground/45">{activity.divisionName ?? "-"} · {activity.jobDescription}</p>
+                                            <p className="mt-2 font-mono text-[11px] text-foreground/55">
                                                 {activity.actualStartTime ?? "-"} - {activity.actualFinishTime ?? "-"} · {activity.actualDurationHours ?? activity.totalActualHours}j · {activity.progressPercent}% · {activity.executionStatus}
                                             </p>
                                         </div>
@@ -490,13 +490,13 @@ export function MonitoringEmployeeShell({
 
             {actualOpen ? (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-                    <div className="w-full max-w-4xl border border-white/10 bg-[#111114]">
+                    <div className="w-full max-w-4xl border border-white/10 bg-card">
                         <div className="flex items-center justify-between border-b border-white/5 px-4 py-3">
                             <div>
-                                <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">Input Actual Tanpa Plan</p>
-                                <h3 className="text-[13px] font-mono text-white/80">Input Actual</h3>
+                                <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30">Input Actual Tanpa Plan</p>
+                                <h3 className="text-[13px] font-mono text-foreground/80">Input Actual</h3>
                             </div>
-                            <button type="button" onClick={() => setActualOpen(false)} className="text-white/40 hover:text-white">
+                            <button type="button" onClick={() => setActualOpen(false)} className="text-foreground/40 hover:text-foreground">
                                 <X className="h-4 w-4" />
                             </button>
                         </div>
@@ -581,11 +581,11 @@ export function MonitoringEmployeeShell({
                                 <FieldLabel>Actual Result</FieldLabel>
                                 <CompactTextarea rows={3} value={actualForm.resultNote} onChange={(event) => setActualForm((current) => ({ ...current, resultNote: event.target.value }))} />
                             </div>
-                            <label className="flex items-center gap-2 text-[12px] text-white/65">
-                                <input type="checkbox" checked={actualForm.isOvertime} onChange={(event) => setActualForm((current) => ({ ...current, isOvertime: event.target.checked }))} className="h-3.5 w-3.5 accent-amber-500" />
+                            <label className="flex items-center gap-2 text-[12px] text-foreground/65">
+                                <input type="checkbox" checked={actualForm.isOvertime} onChange={(event) => setActualForm((current) => ({ ...current, isOvertime: event.target.checked }))} className="h-3.5 w-3.5 accent-primary" />
                                 Overtime
                             </label>
-                            {actualError ? <p className="md:col-span-3 text-[12px] text-red-300">{actualError}</p> : null}
+                            {actualError ? <p className="md:col-span-3 text-[12px] text-destructive">{actualError}</p> : null}
                         </div>
                         <div className="flex justify-end gap-2 border-t border-white/5 px-4 py-3">
                             <ActionButton onClick={() => setActualOpen(false)}>Batal</ActionButton>

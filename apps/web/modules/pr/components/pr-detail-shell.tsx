@@ -35,9 +35,9 @@ function InfoCard({
 }) {
   return (
     <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-5">
-      <p className="text-[10px] uppercase tracking-[0.18em] text-white/35">{label}</p>
-      <p className="mt-3 text-lg text-white">{value}</p>
-      {helper ? <p className="mt-2 text-sm text-white/40">{helper}</p> : null}
+      <p className="text-[10px] uppercase tracking-[0.18em] text-foreground/35">{label}</p>
+      <p className="mt-3 text-lg text-foreground">{value}</p>
+      {helper ? <p className="mt-2 text-sm text-foreground/40">{helper}</p> : null}
     </div>
   );
 }
@@ -95,12 +95,12 @@ export function PrDetailShell({
       <div className="flex flex-wrap items-center gap-3">
         <Link
           href="/pr"
-          className="inline-flex items-center gap-2 rounded-full bg-white/[0.03] px-3 py-1.5 text-[11px] uppercase tracking-[0.16em] text-white/55 ring-1 ring-white/[0.06] hover:text-white/80"
+          className="inline-flex items-center gap-2 rounded-full bg-white/[0.03] px-3 py-1.5 text-[11px] uppercase tracking-[0.16em] text-foreground/55 ring-1 ring-white/[0.06] hover:text-foreground/80"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
           Kembali ke PR
         </Link>
-        <div className="rounded-full bg-amber-500/10 px-3 py-1.5 text-[11px] uppercase tracking-[0.16em] text-amber-300 ring-1 ring-amber-500/25">
+        <div className="rounded-full bg-primary/10 px-3 py-1.5 text-[11px] uppercase tracking-[0.16em] text-app-accent-ink ring-1 ring-primary/25">
           {header.prNumber}
         </div>
       </div>
@@ -120,16 +120,16 @@ export function PrDetailShell({
         />
       </section>
 
-      <section className="rounded-[28px] border border-white/[0.06] bg-[#050505] p-6 shadow-[0_0_0_1px_rgba(255,255,255,0.02)]">
+      <section className="rounded-[28px] border border-white/[0.06] bg-card p-6 shadow-[0_0_0_1px_rgba(255,255,255,0.02)]">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div className="max-w-2xl">
-            <p className="text-[11px] uppercase tracking-[0.18em] text-amber-500/70">
+            <p className="text-[11px] uppercase tracking-[0.18em] text-app-accent-ink/70">
               Detail PR
             </p>
-            <h3 className="mt-1 text-lg font-medium text-white">
+            <h3 className="mt-1 text-lg font-medium text-foreground">
               {header.unitName} · {header.divisionName}
             </h3>
-            <p className="mt-3 text-sm leading-6 text-white/45">
+            <p className="mt-3 text-sm leading-6 text-foreground/45">
               Vendor summary saat ini: {header.vendorSummary}. Total item {header.totalItems} dengan
               total estimasi Rp {header.totalEstimatedPrice.toLocaleString("id-ID")}.
             </p>
@@ -146,7 +146,7 @@ export function PrDetailShell({
                     "PR berhasil disetujui.",
                   );
                 }}
-                className="inline-flex items-center gap-2 rounded-full bg-emerald-400 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-black transition-colors hover:bg-emerald-300 disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-full bg-success px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-primary-foreground transition-colors hover:bg-success/80 disabled:opacity-50"
               >
                 <CheckCheck className="h-3.5 w-3.5" />
                 Setujui
@@ -173,7 +173,7 @@ export function PrDetailShell({
                     "PR berhasil ditandai ordered.",
                   );
                 }}
-                className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-black transition-colors hover:bg-white/90 disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-primary-foreground transition-colors hover:bg-white/90 disabled:opacity-50"
               >
                 <PackageOpen className="h-3.5 w-3.5" />
                 Pesan
@@ -199,7 +199,7 @@ export function PrDetailShell({
                     "PR berhasil ditandai datang.",
                   );
                 }}
-                className="inline-flex items-center gap-2 rounded-full bg-amber-500 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-black transition-colors hover:bg-amber-400 disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-full bg-primary px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-primary-foreground transition-colors hover:bg-primary disabled:opacity-50"
               >
                 <PackageOpen className="h-3.5 w-3.5" />
                 Terima
@@ -209,31 +209,31 @@ export function PrDetailShell({
         </div>
 
         {message ? (
-          <p className="mt-5 rounded-2xl border border-emerald-500/15 bg-emerald-500/[0.08] px-3 py-2 text-sm text-emerald-200">
+          <p className="mt-5 rounded-2xl border border-success/15 bg-success/[0.08] px-3 py-2 text-sm text-success">
             {message}
           </p>
         ) : null}
         {error ? (
-          <p className="mt-5 rounded-2xl border border-red-500/15 bg-red-500/[0.08] px-3 py-2 text-sm text-red-200">
+          <p className="mt-5 rounded-2xl border border-destructive/15 bg-destructive/[0.08] px-3 py-2 text-sm text-destructive">
             {error}
           </p>
         ) : null}
 
         <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.9fr)]">
           <div className="rounded-3xl border border-white/[0.06] bg-white/[0.025] p-4">
-            <p className="text-[11px] uppercase tracking-[0.18em] text-amber-500/70">
+            <p className="text-[11px] uppercase tracking-[0.18em] text-app-accent-ink/70">
               Catatan Persetujuan
             </p>
             <textarea
               value={approvalNotes}
               onChange={(event) => setApprovalNotes(event.target.value)}
               placeholder="Catatan persetujuan..."
-              className="mt-3 min-h-24 w-full rounded-3xl border border-white/[0.06] bg-white/[0.03] px-4 py-3 text-sm text-white outline-none placeholder:text-white/15 focus:border-amber-500/30"
+              className="mt-3 min-h-24 w-full rounded-3xl border border-white/[0.06] bg-white/[0.03] px-4 py-3 text-sm text-foreground outline-none placeholder:text-foreground/15 focus:border-primary/30"
             />
           </div>
 
           <div className="rounded-3xl border border-white/[0.06] bg-white/[0.025] p-4">
-            <p className="text-[11px] uppercase tracking-[0.18em] text-amber-500/70">
+            <p className="text-[11px] uppercase tracking-[0.18em] text-app-accent-ink/70">
               Pesan / Terima
             </p>
             <div className="mt-3 grid gap-3">
@@ -241,45 +241,45 @@ export function PrDetailShell({
                 value={vendorName}
                 onChange={(event) => setVendorName(event.target.value)}
                 placeholder="Nama vendor"
-                className="h-11 rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 text-sm text-white outline-none placeholder:text-white/20 focus:border-amber-500/30"
+                className="h-11 rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 text-sm text-foreground outline-none placeholder:text-foreground/20 focus:border-primary/30"
               />
               <input
                 value={actualPrice}
                 onChange={(event) => setActualPrice(event.target.value)}
                 placeholder="Harga aktual"
-                className="h-11 rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 text-sm text-white outline-none placeholder:text-white/20 focus:border-amber-500/30"
+                className="h-11 rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 text-sm text-foreground outline-none placeholder:text-foreground/20 focus:border-primary/30"
               />
               <input
                 type="date"
                 value={arrivalDate}
                 onChange={(event) => setArrivalDate(event.target.value)}
-                className="h-11 rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 text-sm text-white outline-none focus:border-amber-500/30"
+                className="h-11 rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 text-sm text-foreground outline-none focus:border-primary/30"
               />
               <textarea
                 value={orderNotes}
                 onChange={(event) => setOrderNotes(event.target.value)}
                 placeholder="Catatan pemesanan"
-                className="min-h-20 rounded-3xl border border-white/[0.06] bg-white/[0.03] px-4 py-3 text-sm text-white outline-none placeholder:text-white/15 focus:border-amber-500/30"
+                className="min-h-20 rounded-3xl border border-white/[0.06] bg-white/[0.03] px-4 py-3 text-sm text-foreground outline-none placeholder:text-foreground/15 focus:border-primary/30"
               />
               <textarea
                 value={receiveNotes}
                 onChange={(event) => setReceiveNotes(event.target.value)}
                 placeholder="Catatan penerimaan"
-                className="min-h-20 rounded-3xl border border-white/[0.06] bg-white/[0.03] px-4 py-3 text-sm text-white outline-none placeholder:text-white/15 focus:border-amber-500/30"
+                className="min-h-20 rounded-3xl border border-white/[0.06] bg-white/[0.03] px-4 py-3 text-sm text-foreground outline-none placeholder:text-foreground/15 focus:border-primary/30"
               />
             </div>
           </div>
 
           {canOrder && header.status !== "ARRIVED" && header.status !== "CANCELLED" ? (
-            <div className="rounded-3xl border border-red-500/12 bg-red-500/[0.05] p-4">
-              <p className="text-[11px] uppercase tracking-[0.18em] text-red-300/75">
+            <div className="rounded-3xl border border-destructive/12 bg-destructive/[0.05] p-4">
+              <p className="text-[11px] uppercase tracking-[0.18em] text-destructive/75">
                 Batalkan PR
               </p>
               <textarea
                 value={cancelReason}
                 onChange={(event) => setCancelReason(event.target.value)}
                 placeholder="Alasan pembatalan..."
-                className="mt-3 min-h-28 w-full rounded-3xl border border-white/[0.06] bg-black/30 px-4 py-3 text-sm text-white outline-none placeholder:text-white/15 focus:border-red-400/30"
+                className="mt-3 min-h-28 w-full rounded-3xl border border-white/[0.06] bg-black/30 px-4 py-3 text-sm text-foreground outline-none placeholder:text-foreground/15 focus:border-destructive/30"
               />
               <button
                 type="button"
@@ -290,7 +290,7 @@ export function PrDetailShell({
                     "PR berhasil dibatalkan.",
                   );
                 }}
-                className="mt-3 inline-flex items-center gap-2 rounded-full bg-red-500/90 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-white transition-colors hover:bg-red-400 disabled:opacity-50"
+                className="mt-3 inline-flex items-center gap-2 rounded-full bg-destructive/90 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-foreground transition-colors hover:bg-destructive disabled:opacity-50"
               >
                 <XCircle className="h-3.5 w-3.5" />
                 Batalkan
@@ -299,10 +299,10 @@ export function PrDetailShell({
           ) : (
             <div className="rounded-3xl border border-white/[0.06] bg-white/[0.025] p-4">
               <div className="flex items-center gap-3">
-                <ShieldAlert className="h-5 w-5 text-amber-400" />
+                <ShieldAlert className="h-5 w-5 text-app-accent-ink" />
                 <div>
-                  <p className="text-sm text-white">Status terkunci</p>
-                  <p className="text-sm text-white/40">
+                  <p className="text-sm text-foreground">Status terkunci</p>
+                  <p className="text-sm text-foreground/40">
                     Pembatalan tidak tersedia untuk PR yang sudah datang atau ditutup.
                   </p>
                 </div>
@@ -312,12 +312,12 @@ export function PrDetailShell({
         </div>
       </section>
 
-      <section className="overflow-hidden rounded-[28px] border border-white/[0.06] bg-[#050505] shadow-[0_0_0_1px_rgba(255,255,255,0.02)]">
+      <section className="overflow-hidden rounded-[28px] border border-white/[0.06] bg-card shadow-[0_0_0_1px_rgba(255,255,255,0.02)]">
         <div className="border-b border-white/[0.06] px-5 py-4">
-          <p className="text-[11px] uppercase tracking-[0.18em] text-amber-500/70">
+          <p className="text-[11px] uppercase tracking-[0.18em] text-app-accent-ink/70">
             Rincian Item
           </p>
-          <p className="text-sm text-white/40">
+          <p className="text-sm text-foreground/40">
             Semua aksi pesan dan terima di halaman ini diterapkan ke item yang dipilih.
           </p>
         </div>
@@ -325,7 +325,7 @@ export function PrDetailShell({
           {items.map((item) => (
             <div
               key={item.itemId}
-              className="grid grid-cols-[1.1fr_0.8fr_0.8fr_0.8fr_0.9fr_0.7fr] gap-3 px-5 py-4 text-sm text-white/75"
+              className="grid grid-cols-[1.1fr_0.8fr_0.8fr_0.8fr_0.9fr_0.7fr] gap-3 px-5 py-4 text-sm text-foreground/75"
             >
               <div>
                 <div className="flex items-start gap-3">
@@ -346,8 +346,8 @@ export function PrDetailShell({
                     </button>
                   ) : null}
                   <div>
-                    <p className="font-medium text-white">{item.itemName}</p>
-                    <p className="mt-1 text-xs text-white/35">{item.description ?? "-"}</p>
+                    <p className="font-medium text-foreground">{item.itemName}</p>
+                    <p className="mt-1 text-xs text-foreground/35">{item.description ?? "-"}</p>
                   </div>
                 </div>
               </div>
@@ -355,7 +355,7 @@ export function PrDetailShell({
               <span>{item.qty} {item.uom}</span>
               <span>{item.vendorName ?? "-"}</span>
               <span>{item.status ?? "-"}</span>
-              <span className="text-white/35">{item.arrivalDate ?? "-"}</span>
+              <span className="text-foreground/35">{item.arrivalDate ?? "-"}</span>
             </div>
           ))}
         </div>

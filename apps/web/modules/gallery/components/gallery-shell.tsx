@@ -101,8 +101,8 @@ export function GalleryShell({
         label: "Pekerjaan",
         filterKey: "jobSearch",
         renderCell: (value) => (
-          <span className="inline-flex items-center gap-2 text-left text-amber-300">
-            <Camera className="h-3.5 w-3.5 text-amber-500/80" />
+          <span className="inline-flex items-center gap-2 text-left text-app-accent-ink">
+            <Camera className="h-3.5 w-3.5 text-app-accent-ink/80" />
             <span>{value ? String(value) : "-"}</span>
           </span>
         ),
@@ -150,12 +150,12 @@ export function GalleryShell({
         headerActions={
           <div className="flex items-center gap-3">
             <label className="flex items-center gap-2 rounded-lg border border-white/[0.08] bg-white/[0.03] px-2 py-1">
-              <span className="text-[10px] uppercase tracking-[0.16em] text-white/35">Tanggal</span>
+              <span className="text-[10px] uppercase tracking-[0.16em] text-foreground/35">Tanggal</span>
               <input
                 type="date"
                 defaultValue={state.date}
                 onChange={(e) => handleDateChange(e.target.value)}
-                className="bg-transparent text-[11px] text-white outline-none [color-scheme:dark]"
+                className="bg-transparent text-[11px] text-foreground outline-none [color-scheme:dark]"
               />
             </label>
           </div>

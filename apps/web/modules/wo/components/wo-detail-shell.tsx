@@ -29,9 +29,9 @@ function InfoCard({
 }) {
   return (
     <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-5">
-      <p className="text-[10px] uppercase tracking-[0.18em] text-white/35">{label}</p>
-      <p className="mt-3 text-lg text-white">{value}</p>
-      {helper ? <p className="mt-2 text-sm text-white/40">{helper}</p> : null}
+      <p className="text-[10px] uppercase tracking-[0.18em] text-foreground/35">{label}</p>
+      <p className="mt-3 text-lg text-foreground">{value}</p>
+      {helper ? <p className="mt-2 text-sm text-foreground/40">{helper}</p> : null}
     </div>
   );
 }
@@ -75,12 +75,12 @@ export function WoDetailShell({
       <div className="flex flex-wrap items-center gap-3">
         <Link
           href="/wo"
-          className="inline-flex items-center gap-2 rounded-full bg-white/[0.03] px-3 py-1.5 text-[11px] uppercase tracking-[0.16em] text-white/55 ring-1 ring-white/[0.06] hover:text-white/80"
+          className="inline-flex items-center gap-2 rounded-full bg-white/[0.03] px-3 py-1.5 text-[11px] uppercase tracking-[0.16em] text-foreground/55 ring-1 ring-white/[0.06] hover:text-foreground/80"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
           Kembali ke WO
         </Link>
-        <div className="rounded-full bg-amber-500/10 px-3 py-1.5 text-[11px] uppercase tracking-[0.16em] text-amber-300 ring-1 ring-amber-500/25">
+        <div className="rounded-full bg-primary/10 px-3 py-1.5 text-[11px] uppercase tracking-[0.16em] text-app-accent-ink ring-1 ring-primary/25">
           {ticket.woNumber}
         </div>
       </div>
@@ -108,33 +108,33 @@ export function WoDetailShell({
         />
       </section>
 
-      <section className="rounded-[28px] border border-white/[0.06] bg-[#050505] p-6 shadow-[0_0_0_1px_rgba(255,255,255,0.02)]">
+      <section className="rounded-[28px] border border-white/[0.06] bg-card p-6 shadow-[0_0_0_1px_rgba(255,255,255,0.02)]">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div className="max-w-2xl">
-            <p className="text-[11px] uppercase tracking-[0.18em] text-amber-500/70">
+            <p className="text-[11px] uppercase tracking-[0.18em] text-app-accent-ink/70">
               Detail WO
             </p>
-            <h3 className="mt-1 text-lg font-medium text-white">
+            <h3 className="mt-1 text-lg font-medium text-foreground">
               {ticket.unitName} · {ticket.customerName}
             </h3>
-            <p className="mt-3 text-sm leading-6 text-white/45">
+            <p className="mt-3 text-sm leading-6 text-foreground/45">
               {ticket.jobDetail}
             </p>
-            <div className="mt-5 grid gap-3 text-sm text-white/65 xl:grid-cols-2">
+            <div className="mt-5 grid gap-3 text-sm text-foreground/65 xl:grid-cols-2">
               <div>
-                <p className="text-white/35">Panel</p>
+                <p className="text-foreground/35">Panel</p>
                 <p className="mt-1">{ticket.panelName ?? "-"}</p>
               </div>
               <div>
-                <p className="text-white/35">Estimasi</p>
+                <p className="text-foreground/35">Estimasi</p>
                 <p className="mt-1">{ticket.estimatedHours ?? 0} jam</p>
               </div>
               <div>
-                <p className="text-white/35">Prioritas</p>
+                <p className="text-foreground/35">Prioritas</p>
                 <p className="mt-1">{ticket.isPriority ? "Tinggi" : "Normal"}</p>
               </div>
               <div>
-                <p className="text-white/35">Notes</p>
+                <p className="text-foreground/35">Notes</p>
                 <p className="mt-1">{ticket.notes ?? "-"}</p>
               </div>
             </div>
@@ -151,7 +151,7 @@ export function WoDetailShell({
                     "WO berhasil diapprove.",
                   );
                 }}
-                className="inline-flex items-center gap-2 rounded-full bg-emerald-400 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-black transition-colors hover:bg-emerald-300 disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-full bg-success px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-primary-foreground transition-colors hover:bg-success/80 disabled:opacity-50"
               >
                 <CheckCheck className="h-3.5 w-3.5" />
                 Setujui
@@ -168,7 +168,7 @@ export function WoDetailShell({
                     "WO berhasil ditandai selesai.",
                   );
                 }}
-                className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-black transition-colors hover:bg-white/90 disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-primary-foreground transition-colors hover:bg-white/90 disabled:opacity-50"
               >
                 <CheckCheck className="h-3.5 w-3.5" />
                 Tandai Selesai
@@ -178,26 +178,26 @@ export function WoDetailShell({
         </div>
 
         {message ? (
-          <p className="mt-5 rounded-2xl border border-emerald-500/15 bg-emerald-500/[0.08] px-3 py-2 text-sm text-emerald-200">
+          <p className="mt-5 rounded-2xl border border-success/15 bg-success/[0.08] px-3 py-2 text-sm text-success">
             {message}
           </p>
         ) : null}
         {error ? (
-          <p className="mt-5 rounded-2xl border border-red-500/15 bg-red-500/[0.08] px-3 py-2 text-sm text-red-200">
+          <p className="mt-5 rounded-2xl border border-destructive/15 bg-destructive/[0.08] px-3 py-2 text-sm text-destructive">
             {error}
           </p>
         ) : null}
 
         {canReject && ["OPEN", "SUBMITTED"].includes(ticket.status) ? (
           <div className="mt-5 rounded-3xl border border-white/[0.06] bg-white/[0.025] p-4">
-            <p className="text-[11px] uppercase tracking-[0.18em] text-amber-500/70">
+            <p className="text-[11px] uppercase tracking-[0.18em] text-app-accent-ink/70">
               Tolak WO
             </p>
             <textarea
               value={rejectReason}
               onChange={(event) => setRejectReason(event.target.value)}
               placeholder="Alasan penolakan..."
-              className="mt-3 min-h-24 w-full rounded-3xl border border-white/[0.06] bg-white/[0.03] px-4 py-3 text-sm text-white outline-none transition-colors placeholder:text-white/15 focus:border-amber-500/30"
+              className="mt-3 min-h-24 w-full rounded-3xl border border-white/[0.06] bg-white/[0.03] px-4 py-3 text-sm text-foreground outline-none transition-colors placeholder:text-foreground/15 focus:border-primary/30"
             />
             <button
               type="button"
@@ -208,7 +208,7 @@ export function WoDetailShell({
                   "WO berhasil direject.",
                 );
               }}
-              className="mt-3 inline-flex items-center gap-2 rounded-full bg-red-500/90 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-white transition-colors hover:bg-red-400 disabled:opacity-50"
+              className="mt-3 inline-flex items-center gap-2 rounded-full bg-destructive/90 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-foreground transition-colors hover:bg-destructive disabled:opacity-50"
             >
               <XCircle className="h-3.5 w-3.5" />
               Tolak
@@ -217,14 +217,14 @@ export function WoDetailShell({
         ) : null}
       </section>
 
-      <section className="overflow-hidden rounded-[28px] border border-white/[0.06] bg-[#050505] shadow-[0_0_0_1px_rgba(255,255,255,0.02)]">
+      <section className="overflow-hidden rounded-[28px] border border-white/[0.06] bg-card shadow-[0_0_0_1px_rgba(255,255,255,0.02)]">
         <div className="flex items-center gap-3 border-b border-white/[0.06] px-5 py-4">
-          <Link2 className="h-4 w-4 text-amber-400" />
+          <Link2 className="h-4 w-4 text-app-accent-ink" />
           <div>
-            <p className="text-[11px] uppercase tracking-[0.18em] text-amber-500/70">
+            <p className="text-[11px] uppercase tracking-[0.18em] text-app-accent-ink/70">
               Countdown Terkait
             </p>
-            <p className="text-sm text-white/40">
+            <p className="text-sm text-foreground/40">
               Countdown dicari dari relasi `sm_jobdesc_countdown.ref_taks_id = woId`.
             </p>
           </div>
@@ -232,24 +232,24 @@ export function WoDetailShell({
 
         <div className="divide-y divide-white/[0.04]">
           {linkedCountdowns.length === 0 ? (
-            <div className="px-5 py-8 text-sm text-white/35">
+            <div className="px-5 py-8 text-sm text-foreground/35">
               Belum ada countdown yang terhubung.
             </div>
           ) : (
             linkedCountdowns.map((row) => (
               <div
                 key={row.coreId}
-                className="grid grid-cols-[1fr_0.9fr_0.8fr_0.8fr] gap-3 px-5 py-4 text-sm text-white/75"
+                className="grid grid-cols-[1fr_0.9fr_0.8fr_0.8fr] gap-3 px-5 py-4 text-sm text-foreground/75"
               >
                 <Link
                   href={`/countdown/${row.coreId}`}
-                  className="font-mono text-amber-400 transition-colors hover:text-amber-300"
+                  className="font-mono text-app-accent-ink transition-colors hover:text-app-accent-ink"
                 >
                   {row.coreId}
                 </Link>
                 <span>{row.divisionName}</span>
                 <span>{row.status}</span>
-                <span className="text-white/35">{fmtDateTime(row.createdAt)}</span>
+                <span className="text-foreground/35">{fmtDateTime(row.createdAt)}</span>
               </div>
             ))
           )}

@@ -447,28 +447,28 @@ function ScopeDialog({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/80 px-4 py-6 backdrop-blur-sm">
-      <div className="mx-auto flex h-full max-w-4xl flex-col border border-gray-300 dark:border-white/10 bg-slate-50 dark:bg-[#0a0a0c]">
-        <div className="flex items-start justify-between gap-4 border-b border-gray-300 dark:border-white/5 px-6 py-4">
+      <div className="mx-auto flex h-full max-w-4xl flex-col border border-border dark:border-white/10 bg-muted dark:bg-background">
+        <div className="flex items-start justify-between gap-4 border-b border-border dark:border-white/5 px-6 py-4">
           <div>
-            <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-gray-500 dark:text-white/30">
+            <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30">
               {isDivision ? "Scope Divisi" : "Scope Unit"}
             </p>
-            <h3 className="text-[13px] font-mono text-gray-950 dark:text-white mt-0.5">
+            <h3 className="text-[13px] font-mono text-foreground dark:text-foreground mt-0.5">
               {isDivision ? "Atur lingkup divisi" : "Atur lingkup unit"}
             </h3>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="border border-gray-300 dark:border-white/10 p-1.5 text-gray-400 dark:text-white/40 hover:text-gray-950 dark:text-white transition-colors"
+            className="border border-border dark:border-white/10 p-1.5 text-muted-foreground dark:text-foreground/40 hover:text-foreground dark:text-foreground transition-colors"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
 
         <div className="grid min-h-0 flex-1 gap-6 overflow-hidden px-6 py-5 lg:grid-cols-[380px_minmax(0,1fr)]">
-          <div className="border border-gray-300 dark:border-white/5 bg-white dark:bg-[#111114] p-4">
-            <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-gray-500 dark:text-white/30">
+          <div className="border border-border dark:border-white/5 bg-white dark:bg-card p-4">
+            <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30">
               Pilih model akses
             </p>
             <div className="mt-3 space-y-2">
@@ -483,14 +483,14 @@ function ScopeDialog({
                     className={[
                       "w-full border px-3 py-2.5 text-left transition-colors",
                       selected
-                        ? "border-amber-500/30 bg-amber-500/[0.04]"
-                        : "border-gray-300 dark:border-white/5 bg-slate-50 dark:bg-[#0a0a0c] hover:border-gray-300 dark:border-white/10",
+                        ? "border-primary/30 bg-primary/[0.04]"
+                        : "border-border dark:border-white/5 bg-muted dark:bg-background hover:border-border dark:border-white/10",
                     ].join(" ")}
                   >
                     <div className="flex items-start justify-between gap-3">
-                      <p className="text-[11px] font-mono text-gray-950 dark:text-white">{option.label}</p>
+                      <p className="text-[11px] font-mono text-foreground dark:text-foreground">{option.label}</p>
                       {selected ? (
-                        <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 text-amber-400" />
+                        <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 text-app-accent-ink" />
                       ) : null}
                     </div>
                   </button>
@@ -499,9 +499,9 @@ function ScopeDialog({
             </div>
           </div>
 
-          <div className="flex min-h-0 flex-col border border-gray-300 dark:border-white/5 bg-white dark:bg-[#111114] p-4">
+          <div className="flex min-h-0 flex-col border border-border dark:border-white/5 bg-white dark:bg-card p-4">
             <div className="flex items-start justify-between gap-4">
-              <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-gray-500 dark:text-white/30">
+              <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30">
                 {listTitle}
               </p>
               {usesList ? (
@@ -509,7 +509,7 @@ function ScopeDialog({
                   type="button"
                   onClick={removeSelectedValue}
                   disabled={!canEdit || !activeRowValue}
-                  className="border border-red-500/20 px-2 py-1 text-[10px] font-mono uppercase text-red-400 hover:border-red-500/40 transition-colors disabled:opacity-40"
+                  className="border border-destructive/20 px-2 py-1 text-[10px] font-mono uppercase text-destructive hover:border-destructive/40 transition-colors disabled:opacity-40"
                 >
                   Hapus
                 </button>
@@ -520,7 +520,7 @@ function ScopeDialog({
               <>
                 <div className="mt-5 grid gap-3 lg:grid-cols-[minmax(0,1fr)_240px_auto]">
                   <label className="space-y-1">
-                    <span className="text-[11px] uppercase tracking-[0.14em] text-gray-400 dark:text-white/40">
+                    <span className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground dark:text-foreground/40">
                       Cari {isDivision ? "divisi" : "unit"}
                     </span>
                     <input
@@ -528,19 +528,19 @@ function ScopeDialog({
                       onChange={(event) => setSearch(event.target.value)}
                       disabled={!canEdit}
                       placeholder={`Ketik nama ${isDivision ? "divisi" : "unit"}`}
-                      className="h-8 w-full border border-gray-300 dark:border-white/10 bg-slate-50 dark:bg-[#0a0a0c] px-2 text-[11px] font-mono text-gray-950 dark:text-white outline-none focus:border-amber-500/40"
+                      className="h-8 w-full border border-border dark:border-white/10 bg-muted dark:bg-background px-2 text-[11px] font-mono text-foreground dark:text-foreground outline-none focus:border-primary/40"
                     />
                   </label>
 
                   <label className="space-y-1">
-                    <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-gray-500 dark:text-white/30">
+                    <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30">
                       Pilih data
                     </span>
                     <select
                       value={pickerValue}
                       onChange={(event) => setPickerValue(event.target.value)}
                       disabled={!canEdit}
-                      className="h-8 w-full border border-gray-300 dark:border-white/10 bg-slate-50 dark:bg-[#0a0a0c] px-2 text-[11px] font-mono text-gray-950 dark:text-white outline-none focus:border-amber-500/40"
+                      className="h-8 w-full border border-border dark:border-white/10 bg-muted dark:bg-background px-2 text-[11px] font-mono text-foreground dark:text-foreground outline-none focus:border-primary/40"
                     >
                       <option value="">{pickerPlaceholder}</option>
                       {filteredOptions.map((option) => (
@@ -556,21 +556,21 @@ function ScopeDialog({
                       type="button"
                       onClick={addSelectedValue}
                       disabled={!canEdit || !pickerValue}
-                      className="inline-flex h-8 items-center justify-center border border-amber-500/30 bg-amber-500/[0.04] px-3 text-amber-400 hover:bg-amber-500/10 transition-colors disabled:opacity-40"
+                      className="inline-flex h-8 items-center justify-center border border-primary/30 bg-primary/[0.04] px-3 text-app-accent-ink hover:bg-primary/10 transition-colors disabled:opacity-40"
                     >
                       <ChevronRight className="h-4 w-4" />
                     </button>
                   </div>
                 </div>
 
-                <div className="mt-4 min-h-0 flex-1 overflow-hidden border border-gray-300 dark:border-white/5">
-                  <div className="grid grid-cols-[48px_minmax(0,1fr)] border-b border-gray-300 dark:border-white/5 px-3 py-1.5 text-[10px] font-mono uppercase tracking-[0.12em] text-gray-500 dark:text-white/25">
+                <div className="mt-4 min-h-0 flex-1 overflow-hidden border border-border dark:border-white/5">
+                  <div className="grid grid-cols-[48px_minmax(0,1fr)] border-b border-border dark:border-white/5 px-3 py-1.5 text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/25">
                     <span>No</span>
                     <span>{isDivision ? "Divisi" : "Unit"}</span>
                   </div>
                   <div className="max-h-[340px] overflow-y-auto">
                     {selectedIds.length === 0 ? (
-                      <div className="px-3 py-6 text-[11px] font-mono text-gray-500 dark:text-white/25">
+                      <div className="px-3 py-6 text-[11px] font-mono text-muted-foreground dark:text-foreground/25">
                         — Belum ada data pegangan.
                       </div>
                     ) : (
@@ -585,11 +585,11 @@ function ScopeDialog({
                             className={[
                               "grid w-full grid-cols-[48px_minmax(0,1fr)] border-b border-white/[0.04] px-3 py-2 text-left transition-colors",
                               selected
-                                ? "bg-amber-500/[0.06] text-gray-950 dark:text-white"
-                                : "text-gray-700 dark:text-white/60 hover:bg-gray-100 dark:hover:bg-white/[0.02]",
+                                ? "bg-primary/[0.06] text-foreground dark:text-foreground"
+                                : "text-foreground dark:text-foreground/60 hover:bg-muted dark:hover:bg-white/[0.02]",
                             ].join(" ")}
                           >
-                            <span className="text-[10px] font-mono text-gray-500 dark:text-white/25">{index + 1}</span>
+                            <span className="text-[10px] font-mono text-muted-foreground dark:text-foreground/25">{index + 1}</span>
                             <span className="text-[11px] font-mono">{option?.label ?? value}</span>
                           </button>
                         );
@@ -599,18 +599,18 @@ function ScopeDialog({
                 </div>
               </>
             ) : (
-              <div className="mt-4 border border-gray-300 dark:border-white/5 px-3 py-4 text-[11px] font-mono text-gray-500 dark:text-white/30">
+              <div className="mt-4 border border-border dark:border-white/5 px-3 py-4 text-[11px] font-mono text-muted-foreground dark:text-foreground/30">
                 — Mode ini tidak memerlukan daftar pegangan.
               </div>
             )}
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-3 border-t border-gray-300 dark:border-white/5 px-6 py-3">
+        <div className="flex items-center justify-end gap-3 border-t border-border dark:border-white/5 px-6 py-3">
           <button
             type="button"
             onClick={onClose}
-            className="border border-gray-300 dark:border-white/10 px-3 py-1.5 text-[10px] font-mono uppercase tracking-[0.12em] text-gray-500 dark:text-white/50 hover:text-gray-950 dark:text-white transition-colors"
+            className="border border-border dark:border-white/10 px-3 py-1.5 text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/50 hover:text-foreground dark:text-foreground transition-colors"
           >
             Tutup
           </button>
@@ -618,7 +618,7 @@ function ScopeDialog({
             type="button"
             onClick={applyChanges}
             disabled={!canEdit}
-            className="inline-flex items-center gap-1.5 border border-amber-500/40 bg-amber-500/[0.06] px-3 py-1.5 text-[10px] font-mono uppercase tracking-[0.12em] text-amber-500 hover:bg-amber-500/10 transition-colors disabled:opacity-40"
+            className="inline-flex items-center gap-1.5 border border-primary/40 bg-primary/[0.06] px-3 py-1.5 text-[10px] font-mono uppercase tracking-[0.12em] text-app-accent-ink hover:bg-primary/10 transition-colors disabled:opacity-40"
           >
             <Save className="h-3 w-3" />
             Gunakan Setting
@@ -1014,23 +1014,23 @@ export function RoleMatrixShell({
   return (
     <div className="space-y-4">
       {message ? (
-        <div className="border border-emerald-500/20 bg-emerald-500/[0.04] px-3 py-2 text-[11px] font-mono text-emerald-400">
+        <div className="border border-success/20 bg-success/[0.04] px-3 py-2 text-[11px] font-mono text-success">
           {message}
         </div>
       ) : null}
       {error ? (
-        <div className="border border-red-500/20 bg-red-500/[0.04] px-3 py-2 text-[11px] font-mono text-red-400">
+        <div className="border border-destructive/20 bg-destructive/[0.04] px-3 py-2 text-[11px] font-mono text-destructive">
           {error}
         </div>
       ) : null}
 
-      <div className="border border-gray-300 dark:border-white/5 bg-white dark:bg-[#111114] p-4">
-        <div className="flex flex-col gap-3 border-b border-gray-300 dark:border-white/5 pb-3 xl:flex-row xl:items-center xl:justify-between">
+      <div className="border border-border dark:border-white/5 bg-white dark:bg-card p-4">
+        <div className="flex flex-col gap-3 border-b border-border dark:border-white/5 pb-3 xl:flex-row xl:items-center xl:justify-between">
           <div>
-            <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-gray-500 dark:text-white/30">
+            <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30">
               Role Management
             </p>
-            <h2 className="text-[13px] font-mono text-gray-900 dark:text-white/80 mt-0.5">
+            <h2 className="text-[13px] font-mono text-foreground dark:text-foreground/80 mt-0.5">
               Cari role, cek ringkasannya, lalu buka edit bila perlu
             </h2>
           </div>
@@ -1038,7 +1038,7 @@ export function RoleMatrixShell({
           <button
             type="button"
             onClick={openCreateRole}
-            className="flex items-center gap-1.5 border border-gray-300 dark:border-white/10 bg-slate-50 dark:bg-[#0a0a0c] px-3 py-1.5 text-[10px] font-mono uppercase tracking-[0.12em] text-gray-500 dark:text-white/50 hover:text-gray-950 dark:text-white hover:border-white/30 transition-colors"
+            className="flex items-center gap-1.5 border border-border dark:border-white/10 bg-muted dark:bg-background px-3 py-1.5 text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/50 hover:text-foreground dark:text-foreground hover:border-white/30 transition-colors"
           >
             <Plus className="h-3 w-3" />
             Tambah Role
@@ -1048,25 +1048,25 @@ export function RoleMatrixShell({
         <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,390px)_minmax(0,1fr)]">
           <div className="space-y-0">
             <label className="space-y-1">
-              <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-gray-500 dark:text-white/30">
+              <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30">
                 Cari nama role
               </span>
-              <div className="flex items-center gap-2 border-b border-gray-300 dark:border-white/10 px-2">
-                <Search className="h-3.5 w-3.5 text-gray-500 dark:text-white/25 shrink-0" />
+              <div className="flex items-center gap-2 border-b border-border dark:border-white/10 px-2">
+                <Search className="h-3.5 w-3.5 text-muted-foreground dark:text-foreground/25 shrink-0" />
                 <input
                   value={roleSearch}
                   onChange={(event) => setRoleSearch(event.target.value)}
                   placeholder="Ketik nama role..."
-                  className="h-8 w-full bg-transparent text-[11px] font-mono text-gray-950 dark:text-white outline-none placeholder:text-gray-400 dark:text-white/20"
+                  className="h-8 w-full bg-transparent text-[11px] font-mono text-foreground dark:text-foreground outline-none placeholder:text-muted-foreground dark:text-foreground/20"
                 />
               </div>
             </label>
 
             {showSearchResults ? (
-              <div className="border border-gray-300 dark:border-white/5 bg-slate-50 dark:bg-[#0a0a0c]">
+              <div className="border border-border dark:border-white/5 bg-muted dark:bg-background">
                 <div className="max-h-[260px] overflow-y-auto">
                   {filteredRoles.length === 0 ? (
-                    <div className="px-3 py-3 text-[10px] font-mono text-gray-500 dark:text-white/25">
+                    <div className="px-3 py-3 text-[10px] font-mono text-muted-foreground dark:text-foreground/25">
                       — Role tidak ditemukan.
                     </div>
                   ) : (
@@ -1078,20 +1078,20 @@ export function RoleMatrixShell({
                           type="button"
                           onClick={() => selectExistingRole(role.id)}
                           className={[
-                            "w-full border-b border-gray-300 dark:border-white/5 px-3 py-2 text-left transition-colors",
+                            "w-full border-b border-border dark:border-white/5 px-3 py-2 text-left transition-colors",
                             selected
-                              ? "bg-amber-500/[0.06] border-l-2 border-l-amber-500"
-                              : "hover:bg-gray-100 dark:hover:bg-white/[0.02]",
+                              ? "bg-primary/[0.06] border-l-2 border-l-amber-500"
+                              : "hover:bg-muted dark:hover:bg-white/[0.02]",
                           ].join(" ")}
                         >
                           <div className="flex items-start justify-between gap-3">
                             <div>
-                              <p className="text-[11px] font-mono text-gray-950 dark:text-white">{role.roleName}</p>
-                              <p className="text-[10px] text-gray-500 dark:text-white/30 mt-0.5">
+                              <p className="text-[11px] font-mono text-foreground dark:text-foreground">{role.roleName}</p>
+                              <p className="text-[10px] text-muted-foreground dark:text-foreground/30 mt-0.5">
                                 {role.description ?? "Belum ada catatan role."}
                               </p>
                             </div>
-                            <span className="font-mono text-[10px] text-gray-500 dark:text-white/30 border border-gray-300 dark:border-white/10 px-1.5 py-0.5 shrink-0">
+                            <span className="font-mono text-[10px] text-muted-foreground dark:text-foreground/30 border border-border dark:border-white/10 px-1.5 py-0.5 shrink-0">
                               L{role.profile?.roleLevel ?? "-"}
                             </span>
                           </div>
@@ -1104,13 +1104,13 @@ export function RoleMatrixShell({
             ) : null}
           </div>
 
-          <div className="border border-gray-300 dark:border-white/5 bg-slate-50 dark:bg-[#0a0a0c] p-4">
+          <div className="border border-border dark:border-white/5 bg-muted dark:bg-background p-4">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <div className="min-w-0">
-                <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-gray-500 dark:text-white/30">
+                <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30">
                   Role aktif
                 </p>
-                <h3 className="text-[13px] font-mono text-gray-950 dark:text-white mt-0.5">
+                <h3 className="text-[13px] font-mono text-foreground dark:text-foreground mt-0.5">
                   {editorMode === "create"
                     ? "Role baru"
                     : selectedRole?.roleName ?? "Belum ada role terpilih"}
@@ -1118,23 +1118,23 @@ export function RoleMatrixShell({
               </div>
 
               <div className="grid gap-2 sm:grid-cols-3 lg:min-w-[420px]">
-                <div className="border border-gray-300 dark:border-white/5 bg-white dark:bg-[#111114] px-3 py-2">
-                  <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-gray-500 dark:text-white/30">
+                <div className="border border-border dark:border-white/5 bg-white dark:bg-card px-3 py-2">
+                  <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30">
                     Level
                   </p>
-                  <p className="text-[12px] font-mono text-gray-950 dark:text-white mt-0.5">{form.roleLevel || "-"}</p>
+                  <p className="text-[12px] font-mono text-foreground dark:text-foreground mt-0.5">{form.roleLevel || "-"}</p>
                 </div>
-                <div className="border border-gray-300 dark:border-white/5 bg-white dark:bg-[#111114] px-3 py-2">
-                  <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-gray-500 dark:text-white/30">
+                <div className="border border-border dark:border-white/5 bg-white dark:bg-card px-3 py-2">
+                  <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30">
                     Approval
                   </p>
-                  <p className="text-[12px] font-mono text-gray-950 dark:text-white mt-0.5">{form.approvalRank || "-"}</p>
+                  <p className="text-[12px] font-mono text-foreground dark:text-foreground mt-0.5">{form.approvalRank || "-"}</p>
                 </div>
-                <div className="border border-gray-300 dark:border-white/5 bg-white dark:bg-[#111114] px-3 py-2">
-                  <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-gray-500 dark:text-white/30">
+                <div className="border border-border dark:border-white/5 bg-white dark:bg-card px-3 py-2">
+                  <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30">
                     Runtime Scope
                   </p>
-                  <p className="text-[12px] font-mono text-gray-950 dark:text-white mt-0.5">{humanizeDerivedScope(derivedScopeBasis)}</p>
+                  <p className="text-[12px] font-mono text-foreground dark:text-foreground mt-0.5">{humanizeDerivedScope(derivedScopeBasis)}</p>
                 </div>
               </div>
             </div>
@@ -1142,17 +1142,17 @@ export function RoleMatrixShell({
         </div>
       </div>
 
-      <div className="border border-gray-300 dark:border-white/5 bg-white dark:bg-[#111114] p-4">
-        <div className="flex flex-col gap-3 border-b border-gray-300 dark:border-white/5 pb-3 lg:flex-row lg:items-start lg:justify-between">
+      <div className="border border-border dark:border-white/5 bg-white dark:bg-card p-4">
+        <div className="flex flex-col gap-3 border-b border-border dark:border-white/5 pb-3 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-gray-500 dark:text-white/30">
+            <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30">
               Pengaturan Role
             </p>
-            <h1 className="text-[13px] font-mono text-gray-950 dark:text-white mt-0.5">
+            <h1 className="text-[13px] font-mono text-foreground dark:text-foreground mt-0.5">
               {editorMode === "create" ? "Role Baru" : selectedRole?.roleName ?? "Pilih Role"}
             </h1>
             {isReservedSuperAdmin ? (
-              <p className="mt-2 border border-amber-500/25 bg-amber-500/[0.04] px-2 py-1.5 text-[10px] font-mono text-amber-400">
+              <p className="mt-2 border border-primary/25 bg-primary/[0.04] px-2 py-1.5 text-[10px] font-mono text-app-accent-ink">
                 Role MIS dikunci sebagai Super Admin.
               </p>
             ) : null}
@@ -1163,7 +1163,7 @@ export function RoleMatrixShell({
               <button
                 type="button"
                 onClick={isEditing ? cancelEditing : startEditing}
-                className="flex items-center gap-1.5 border border-gray-300 dark:border-white/10 px-3 py-1.5 text-[10px] font-mono uppercase tracking-[0.12em] text-gray-500 dark:text-white/50 hover:text-gray-950 dark:text-white transition-colors"
+                className="flex items-center gap-1.5 border border-border dark:border-white/10 px-3 py-1.5 text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/50 hover:text-foreground dark:text-foreground transition-colors"
               >
                 {isEditing ? <X className="h-3 w-3" /> : <Pencil className="h-3 w-3" />}
                 {isEditing ? "Batal Ubah" : "Buka Edit"}
@@ -1180,7 +1180,7 @@ export function RoleMatrixShell({
                 !form.roleLevel.trim() ||
                 (!form.webEnabled && !form.mobileEnabled)
               }
-              className="flex items-center gap-1.5 border border-amber-500/40 bg-amber-500/[0.06] px-3 py-1.5 text-[10px] font-mono uppercase tracking-[0.12em] text-amber-500 hover:bg-amber-500/10 transition-colors disabled:opacity-30"
+              className="flex items-center gap-1.5 border border-primary/40 bg-primary/[0.06] px-3 py-1.5 text-[10px] font-mono uppercase tracking-[0.12em] text-app-accent-ink hover:bg-primary/10 transition-colors disabled:opacity-30"
             >
               <Save className="h-3 w-3" />
               Simpan Role
@@ -1190,7 +1190,7 @@ export function RoleMatrixShell({
 
         <div className="mt-4 grid gap-4 md:grid-cols-2">
           <label className="space-y-1">
-            <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-gray-500 dark:text-white/30">
+            <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30">
               Nama Role
             </span>
             <input
@@ -1202,12 +1202,12 @@ export function RoleMatrixShell({
                 }))
               }
               disabled={!canEditProfile || isReservedSuperAdmin}
-              className="h-8 w-full border border-gray-300 dark:border-white/10 bg-slate-50 dark:bg-[#0a0a0c] px-2 text-[11px] font-mono text-gray-950 dark:text-white outline-none focus:border-amber-500/40 disabled:cursor-not-allowed disabled:opacity-70"
+              className="h-8 w-full border border-border dark:border-white/10 bg-muted dark:bg-background px-2 text-[11px] font-mono text-foreground dark:text-foreground outline-none focus:border-primary/40 disabled:cursor-not-allowed disabled:opacity-70"
             />
           </label>
 
           <label className="space-y-1">
-            <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-gray-500 dark:text-white/30">
+            <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30">
               Catatan Role
             </span>
             <input
@@ -1219,19 +1219,19 @@ export function RoleMatrixShell({
                 }))
               }
               disabled={!canEditProfile || isReservedSuperAdmin}
-              className="h-8 w-full border border-gray-300 dark:border-white/10 bg-slate-50 dark:bg-[#0a0a0c] px-2 text-[11px] font-mono text-gray-950 dark:text-white outline-none focus:border-amber-500/40 disabled:cursor-not-allowed disabled:opacity-70"
+              className="h-8 w-full border border-border dark:border-white/10 bg-muted dark:bg-background px-2 text-[11px] font-mono text-foreground dark:text-foreground outline-none focus:border-primary/40 disabled:cursor-not-allowed disabled:opacity-70"
               placeholder="Contoh: advisor upholstery, admin gudang bahan"
             />
           </label>
 
-          <div className="md:col-span-2 border border-gray-300 dark:border-white/5 bg-slate-50 dark:bg-[#0a0a0c] p-4">
+          <div className="md:col-span-2 border border-border dark:border-white/5 bg-muted dark:bg-background p-4">
             <div className="flex items-start justify-between gap-4">
-              <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-gray-500 dark:text-white/30">
+              <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30">
                 Lane Approval &amp; Tingkatan
               </p>
-              <div className="border border-gray-300 dark:border-white/5 bg-white dark:bg-[#111114] px-3 py-2 text-right shrink-0">
-                <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-gray-500 dark:text-white/30">Nilai aktif</p>
-                <p className="text-[12px] font-mono text-gray-950 dark:text-white mt-0.5">
+              <div className="border border-border dark:border-white/5 bg-white dark:bg-card px-3 py-2 text-right shrink-0">
+                <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30">Nilai aktif</p>
+                <p className="text-[12px] font-mono text-foreground dark:text-foreground mt-0.5">
                   Level {form.roleLevel || "-"} · Approval {form.approvalRank || "-"}
                 </p>
               </div>
@@ -1249,17 +1249,17 @@ export function RoleMatrixShell({
                     className={[
                       "border px-4 py-3 text-left transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-40",
                       selected
-                        ? "border-amber-500/30 bg-amber-500/[0.04]"
-                        : "border-gray-300 dark:border-white/5 bg-white dark:bg-[#111114] hover:border-gray-300 dark:border-white/10",
+                        ? "border-primary/30 bg-primary/[0.04]"
+                        : "border-border dark:border-white/5 bg-white dark:bg-card hover:border-border dark:border-white/10",
                     ].join(" ")}
                   >
                     <div className="flex items-start justify-between gap-3">
-                      <p className="text-[11px] font-mono text-gray-950 dark:text-white">{blueprint.label}</p>
+                      <p className="text-[11px] font-mono text-foreground dark:text-foreground">{blueprint.label}</p>
                       {selected ? (
-                        <ShieldCheck className="mt-0.5 h-3.5 w-3.5 text-amber-400 shrink-0" />
+                        <ShieldCheck className="mt-0.5 h-3.5 w-3.5 text-app-accent-ink shrink-0" />
                       ) : null}
                     </div>
-                    <div className="mt-2 flex flex-wrap gap-2 text-[10px] font-mono uppercase tracking-[0.12em] text-gray-500 dark:text-white/30">
+                    <div className="mt-2 flex flex-wrap gap-2 text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30">
                       <span>L{blueprint.roleLevel}</span>
                       <span>Rank {blueprint.approvalRank || "-"}</span>
                     </div>
@@ -1269,32 +1269,32 @@ export function RoleMatrixShell({
             </div>
           </div>
 
-          <div className="md:col-span-2 border border-gray-300 dark:border-white/5 bg-slate-50 dark:bg-[#0a0a0c] p-4">
+          <div className="md:col-span-2 border border-border dark:border-white/5 bg-muted dark:bg-background p-4">
             <div className="flex items-start justify-between gap-4">
-              <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-gray-500 dark:text-white/30">
+              <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30">
                 Lingkup Data
               </p>
-              <div className="border border-gray-300 dark:border-white/5 bg-white dark:bg-[#111114] px-3 py-1.5 text-[11px] font-mono text-gray-500 dark:text-white/50 shrink-0">
+              <div className="border border-border dark:border-white/5 bg-white dark:bg-card px-3 py-1.5 text-[11px] font-mono text-muted-foreground dark:text-foreground/50 shrink-0">
                 {humanizeDerivedScope(derivedScopeBasis)}
               </div>
             </div>
 
             <div className="mt-4 grid gap-3 xl:grid-cols-2">
-              <div className="border border-gray-300 dark:border-white/5 bg-white dark:bg-[#111114] px-4 py-3">
+              <div className="border border-border dark:border-white/5 bg-white dark:bg-card px-4 py-3">
                 <div className="flex items-start justify-between gap-4">
-                  <p className="text-[11px] font-mono text-gray-950 dark:text-white">Akses Divisi</p>
+                  <p className="text-[11px] font-mono text-foreground dark:text-foreground">Akses Divisi</p>
                   <button
                     type="button"
                     onClick={() => setScopeDialog("division")}
                     disabled={!canEditProfile || isReservedSuperAdmin}
-                    className="border border-gray-300 dark:border-white/10 px-2 py-1 text-[10px] font-mono uppercase text-gray-400 dark:text-white/40 hover:text-gray-950 dark:text-white transition-colors disabled:opacity-40"
+                    className="border border-border dark:border-white/10 px-2 py-1 text-[10px] font-mono uppercase text-muted-foreground dark:text-foreground/40 hover:text-foreground dark:text-foreground transition-colors disabled:opacity-40"
                   >
                     Atur
                   </button>
                 </div>
 
                 <div className="mt-3 flex flex-wrap gap-1.5">
-                  <span className="border border-gray-300 dark:border-white/10 px-2 py-0.5 text-[10px] font-mono uppercase text-gray-400 dark:text-white/40">
+                  <span className="border border-border dark:border-white/10 px-2 py-0.5 text-[10px] font-mono uppercase text-muted-foreground dark:text-foreground/40">
                     {divisionModeOptions.find(
                       (option) => option.value === form.scopePreset.divisionMode,
                     )?.label ?? "Tidak dipakai"}
@@ -1302,34 +1302,34 @@ export function RoleMatrixShell({
                   {divisionLabels.slice(0, 4).map((label) => (
                     <span
                       key={label}
-                      className="border border-amber-500/20 px-2 py-0.5 text-[10px] font-mono text-amber-400"
+                      className="border border-primary/20 px-2 py-0.5 text-[10px] font-mono text-app-accent-ink"
                     >
                       {label}
                     </span>
                   ))}
                   {divisionLabels.length > 4 ? (
-                    <span className="border border-gray-300 dark:border-white/10 px-2 py-0.5 text-[10px] font-mono text-gray-500 dark:text-white/30">
+                    <span className="border border-border dark:border-white/10 px-2 py-0.5 text-[10px] font-mono text-muted-foreground dark:text-foreground/30">
                       +{divisionLabels.length - 4} divisi
                     </span>
                   ) : null}
                 </div>
               </div>
 
-              <div className="border border-gray-300 dark:border-white/5 bg-white dark:bg-[#111114] px-4 py-3">
+              <div className="border border-border dark:border-white/5 bg-white dark:bg-card px-4 py-3">
                 <div className="flex items-start justify-between gap-4">
-                  <p className="text-[11px] font-mono text-gray-950 dark:text-white">Akses Unit</p>
+                  <p className="text-[11px] font-mono text-foreground dark:text-foreground">Akses Unit</p>
                   <button
                     type="button"
                     onClick={() => setScopeDialog("unit")}
                     disabled={!canEditProfile || isReservedSuperAdmin}
-                    className="border border-gray-300 dark:border-white/10 px-2 py-1 text-[10px] font-mono uppercase text-gray-400 dark:text-white/40 hover:text-gray-950 dark:text-white transition-colors disabled:opacity-40"
+                    className="border border-border dark:border-white/10 px-2 py-1 text-[10px] font-mono uppercase text-muted-foreground dark:text-foreground/40 hover:text-foreground dark:text-foreground transition-colors disabled:opacity-40"
                   >
                     Atur
                   </button>
                 </div>
 
                 <div className="mt-3 flex flex-wrap gap-1.5">
-                  <span className="border border-gray-300 dark:border-white/10 px-2 py-0.5 text-[10px] font-mono uppercase text-gray-400 dark:text-white/40">
+                  <span className="border border-border dark:border-white/10 px-2 py-0.5 text-[10px] font-mono uppercase text-muted-foreground dark:text-foreground/40">
                     {unitModeOptions.find(
                       (option) => option.value === form.scopePreset.unitMode,
                     )?.label ?? "Tidak dipakai"}
@@ -1337,13 +1337,13 @@ export function RoleMatrixShell({
                   {unitLabels.slice(0, 4).map((label) => (
                     <span
                       key={label}
-                      className="border border-amber-500/20 px-2 py-0.5 text-[10px] font-mono text-amber-400"
+                      className="border border-primary/20 px-2 py-0.5 text-[10px] font-mono text-app-accent-ink"
                     >
                       {label}
                     </span>
                   ))}
                   {unitLabels.length > 4 ? (
-                    <span className="border border-gray-300 dark:border-white/10 px-2 py-0.5 text-[10px] font-mono text-gray-500 dark:text-white/30">
+                    <span className="border border-border dark:border-white/10 px-2 py-0.5 text-[10px] font-mono text-muted-foreground dark:text-foreground/30">
                       +{unitLabels.length - 4} unit
                     </span>
                   ) : null}
@@ -1353,7 +1353,7 @@ export function RoleMatrixShell({
           </div>
 
           <label className="space-y-1 md:col-span-2">
-            <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-gray-500 dark:text-white/30">
+            <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30">
               Catatan Teknis
             </span>
             <textarea
@@ -1366,13 +1366,13 @@ export function RoleMatrixShell({
               }
               disabled={!canEditProfile || isReservedSuperAdmin}
               rows={3}
-              className="w-full border border-gray-300 dark:border-white/10 bg-slate-50 dark:bg-[#0a0a0c] px-2 py-2 text-[11px] font-mono text-gray-950 dark:text-white outline-none focus:border-amber-500/40 disabled:cursor-not-allowed disabled:opacity-70"
+              className="w-full border border-border dark:border-white/10 bg-muted dark:bg-background px-2 py-2 text-[11px] font-mono text-foreground dark:text-foreground outline-none focus:border-primary/40 disabled:cursor-not-allowed disabled:opacity-70"
               placeholder="Catatan teknis role..."
             />
           </label>
 
           <div className="grid gap-2 md:col-span-2 md:grid-cols-2">
-            <label className="flex items-center gap-3 border border-gray-300 dark:border-white/5 bg-slate-50 dark:bg-[#0a0a0c] px-4 py-2">
+            <label className="flex items-center gap-3 border border-border dark:border-white/5 bg-muted dark:bg-background px-4 py-2">
               <input
                 type="checkbox"
                 checked={form.webEnabled}
@@ -1383,12 +1383,12 @@ export function RoleMatrixShell({
                   }))
                 }
                 disabled={!canEditProfile || isReservedSuperAdmin}
-                className="h-4 w-4 rounded border-white/20 bg-transparent text-amber-500"
+                className="h-4 w-4 rounded border-white/20 bg-transparent text-app-accent-ink"
               />
-              <p className="text-[11px] font-mono text-gray-950 dark:text-white">Aktif di Web</p>
+              <p className="text-[11px] font-mono text-foreground dark:text-foreground">Aktif di Web</p>
             </label>
 
-            <label className="flex items-center gap-3 border border-gray-300 dark:border-white/5 bg-slate-50 dark:bg-[#0a0a0c] px-4 py-2">
+            <label className="flex items-center gap-3 border border-border dark:border-white/5 bg-muted dark:bg-background px-4 py-2">
               <input
                 type="checkbox"
                 checked={form.mobileEnabled}
@@ -1399,25 +1399,25 @@ export function RoleMatrixShell({
                   }))
                 }
                 disabled={!canEditProfile || isReservedSuperAdmin}
-                className="h-4 w-4 rounded border-white/20 bg-transparent text-amber-500"
+                className="h-4 w-4 rounded border-white/20 bg-transparent text-app-accent-ink"
               />
-              <p className="text-[11px] font-mono text-gray-950 dark:text-white">Aktif di Mobile</p>
+              <p className="text-[11px] font-mono text-foreground dark:text-foreground">Aktif di Mobile</p>
             </label>
           </div>
         </div>
       </div>
 
-      <div className="border border-gray-300 dark:border-white/5 bg-white dark:bg-[#111114] p-4">
+      <div className="border border-border dark:border-white/5 bg-white dark:bg-card p-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-gray-500 dark:text-white/30">
+            <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30">
               Checklist Akses
             </p>
-            <h2 className="text-[13px] font-mono text-gray-900 dark:text-white/80 mt-0.5">
+            <h2 className="text-[13px] font-mono text-foreground dark:text-foreground/80 mt-0.5">
               Permission per Fitur
             </h2>
             {isReservedSuperAdmin ? (
-              <p className="mt-1 text-[10px] font-mono text-amber-400/80">
+              <p className="mt-1 text-[10px] font-mono text-app-accent-ink/80">
                 Checklist role MIS selalu penuh.
               </p>
             ) : null}
@@ -1434,7 +1434,7 @@ export function RoleMatrixShell({
               isReservedSuperAdmin ||
               !canEditProfile
             }
-            className="flex items-center gap-1.5 border border-amber-500/40 bg-amber-500/[0.06] px-3 py-1.5 text-[10px] font-mono uppercase tracking-[0.12em] text-amber-500 hover:bg-amber-500/10 transition-colors disabled:opacity-30"
+            className="flex items-center gap-1.5 border border-primary/40 bg-primary/[0.06] px-3 py-1.5 text-[10px] font-mono uppercase tracking-[0.12em] text-app-accent-ink hover:bg-primary/10 transition-colors disabled:opacity-30"
           >
             <Save className="h-3 w-3" />
             Simpan Checklist
@@ -1442,7 +1442,7 @@ export function RoleMatrixShell({
         </div>
 
         <div className="mt-4 flex flex-wrap items-center gap-3">
-          <div className="flex border-b border-gray-300 dark:border-white/5">
+          <div className="flex border-b border-border dark:border-white/5">
             {[
               { key: "WEB", label: "Web" },
               { key: "MOBILE", label: "Mobile" },
@@ -1456,8 +1456,8 @@ export function RoleMatrixShell({
                   className={[
                     "px-4 py-1.5 text-[11px] font-mono uppercase tracking-[0.12em] transition-colors",
                     selected
-                      ? "text-amber-500 border-b-2 border-amber-500"
-                      : "text-gray-500 dark:text-white/30 hover:text-gray-700 dark:text-white/60",
+                      ? "text-app-accent-ink border-b-2 border-primary"
+                      : "text-muted-foreground dark:text-foreground/30 hover:text-foreground dark:text-foreground/60",
                   ].join(" ")}
                 >
                   {filter.label}
@@ -1466,7 +1466,7 @@ export function RoleMatrixShell({
             })}
           </div>
 
-          <div className="border border-gray-300 dark:border-white/5 px-2 py-0.5 text-[10px] font-mono text-gray-500 dark:text-white/30">
+          <div className="border border-border dark:border-white/5 px-2 py-0.5 text-[10px] font-mono text-muted-foreground dark:text-foreground/30">
             {permissionViewFilter === "WEB"
               ? "Lane akses web aktif"
               : "Lane akses mobile aktif"}
@@ -1474,21 +1474,21 @@ export function RoleMatrixShell({
         </div>
 
         <div className="mt-4 flex justify-end">
-          <div className="border border-gray-300 dark:border-white/5 bg-slate-50 dark:bg-[#0a0a0c] px-3 py-2">
-            <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-gray-500 dark:text-white/30">Ringkasan lane</p>
-            <p className="text-[11px] font-mono text-gray-950 dark:text-white mt-0.5">
+          <div className="border border-border dark:border-white/5 bg-muted dark:bg-background px-3 py-2">
+            <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30">Ringkasan lane</p>
+            <p className="text-[11px] font-mono text-foreground dark:text-foreground mt-0.5">
               {permissionGroups.length} modul · {permissionRows.length} permission
             </p>
           </div>
         </div>
 
         {editorMode === "create" ? (
-          <p className="mt-4 text-sm text-gray-600 dark:text-white/45">
+          <p className="mt-4 text-sm text-muted-foreground dark:text-foreground/45">
             Simpan role baru dulu, setelah itu checklist akses akan aktif.
           </p>
         ) : null}
         {isFetchingPermissions ? (
-          <p className="mt-4 text-sm text-gray-600 dark:text-white/45">
+          <p className="mt-4 text-sm text-muted-foreground dark:text-foreground/45">
             Checklist akses sedang dimuat...
           </p>
         ) : null}
@@ -1497,13 +1497,13 @@ export function RoleMatrixShell({
           value={permissionSearch}
           onChange={(e) => setPermissionSearch(e.target.value)}
           placeholder="Filter modul atau kode permission..."
-          className="h-7 w-full border-b border-gray-300 dark:border-white/10 bg-transparent px-4 text-[11px] font-mono text-gray-700 dark:text-white/60 outline-none placeholder:text-gray-400 dark:text-white/20"
+          className="h-7 w-full border-b border-border dark:border-white/10 bg-transparent px-4 text-[11px] font-mono text-foreground dark:text-foreground/60 outline-none placeholder:text-muted-foreground dark:text-foreground/20"
         />
 
-        <div className="mt-0 border border-gray-300 dark:border-white/5 overflow-hidden">
+        <div className="mt-0 border border-border dark:border-white/5 overflow-hidden">
           <div className="overflow-auto max-h-[480px]">
             <table className="min-w-full text-left">
-              <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-[#0a0a0c] text-[11px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/30 border-b border-gray-300 dark:border-white/10">
+              <thead className="sticky top-0 z-10 bg-muted dark:bg-background text-[11px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30 border-b border-border dark:border-white/10">
                 <tr>
                   <th className="px-4 py-1.5 font-mono">Akses</th>
                   <th className="px-4 py-1.5 font-mono">Catatan</th>
@@ -1515,7 +1515,7 @@ export function RoleMatrixShell({
                   <tr>
                     <td
                       colSpan={3}
-                      className="px-4 py-10 text-center text-sm text-gray-500 dark:text-white/35"
+                      className="px-4 py-10 text-center text-sm text-muted-foreground dark:text-foreground/35"
                     >
                       Belum ada permission pada lane platform ini.
                     </td>
@@ -1523,13 +1523,13 @@ export function RoleMatrixShell({
                 ) : (
                   filteredPermissionGroups.map((group) => (
                     <Fragment key={group.moduleName}>
-                      <tr className="border-t border-gray-300 dark:border-white/5 bg-slate-50 dark:bg-[#0a0a0c]">
+                      <tr className="border-t border-border dark:border-white/5 bg-muted dark:bg-background">
                         <td colSpan={3} className="px-4 py-1.5">
                           <div className="flex items-center justify-between gap-3">
-                            <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-gray-500 dark:text-white/30">
+                            <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30">
                               {group.moduleName}
                             </span>
-                            <span className="border border-gray-300 dark:border-white/10 px-1.5 py-0.5 text-[10px] font-mono text-gray-500 dark:text-white/30">
+                            <span className="border border-border dark:border-white/10 px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground dark:text-foreground/30">
                               {group.items.length}
                             </span>
                           </div>
@@ -1541,17 +1541,17 @@ export function RoleMatrixShell({
                         return (
                           <tr
                             key={permission.id}
-                            className="border-t border-white/[0.04] hover:bg-gray-100 dark:hover:bg-white/[0.02] transition-colors"
+                            className="border-t border-white/[0.04] hover:bg-muted dark:hover:bg-white/[0.02] transition-colors"
                           >
                             <td className="px-4 py-1.5">
-                              <p className="text-[11px] font-mono text-gray-800 dark:text-white/70">
+                              <p className="text-[11px] font-mono text-foreground dark:text-foreground/70">
                                 {humanizePermissionCode(permission.permissionCode)}
                               </p>
-                              <p className="text-[10px] font-mono text-gray-500 dark:text-white/25 mt-0.5">
+                              <p className="text-[10px] font-mono text-muted-foreground dark:text-foreground/25 mt-0.5">
                                 {permission.permissionCode}
                               </p>
                             </td>
-                            <td className="px-4 py-1.5 text-[10px] text-gray-500 dark:text-white/30">
+                            <td className="px-4 py-1.5 text-[10px] text-muted-foreground dark:text-foreground/30">
                               {permission.description ?? "Belum ada catatan permission."}
                             </td>
                             <td className="px-4 py-1.5 text-center">
@@ -1565,9 +1565,9 @@ export function RoleMatrixShell({
                                     isReservedSuperAdmin ||
                                     !canEditProfile
                                   }
-                                  className="h-4 w-4 rounded border-white/20 bg-transparent text-amber-500 disabled:opacity-40"
+                                  className="h-4 w-4 rounded border-white/20 bg-transparent text-app-accent-ink disabled:opacity-40"
                                 />
-                                <span className="text-[10px] font-mono text-gray-500 dark:text-white/30">
+                                <span className="text-[10px] font-mono text-muted-foreground dark:text-foreground/30">
                                   {checked ? "Aktif" : "Mati"}
                                 </span>
                               </div>

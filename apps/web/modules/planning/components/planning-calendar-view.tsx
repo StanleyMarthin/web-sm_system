@@ -235,7 +235,7 @@ export function PlanningCalendarView({
               </ActionButton>
             )}
           />
-          <p className="max-w-2xl text-[12px] leading-5 text-gray-600 dark:text-white/45">
+          <p className="max-w-2xl text-[14px] leading-5 text-muted-foreground dark:text-muted-foreground">
             Kalender ini dipakai untuk melihat hari kerja aktif, hari libur, kapasitas normal,
             dan slot lembur per tanggal. Klik tanggal untuk melihat delivery, SPK, dan SPL yang
             terkait di hari itu.
@@ -245,7 +245,7 @@ export function PlanningCalendarView({
               <ChevronLeft className="h-3.5 w-3.5" />
               Bulan Sebelumnya
             </ActionButton>
-            <span className="border border-gray-200 bg-white px-3 py-1 font-mono text-[11px] uppercase tracking-[0.12em] text-gray-700 shadow-sm dark:border-white/[0.05] dark:bg-[#0a0a0c] dark:text-white/70">
+            <span className="border border-border bg-card px-3 py-1 font-mono text-[15px] uppercase tracking-[0.12em] text-foreground shadow-sm dark:border-border dark:bg-background dark:text-foreground">
               {monthLabel}
             </span>
             <ActionButton onClick={() => navigateMonth(1)}>
@@ -257,35 +257,35 @@ export function PlanningCalendarView({
 
         <SectionCard label="Ringkasan" className="space-y-2">
           <div className="grid gap-2 sm:grid-cols-2">
-            <div className="border border-emerald-500/20 bg-emerald-500/[0.05] px-3 py-3">
-              <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-emerald-700/70 dark:text-emerald-300/60">
+            <div className="border border-success/20 bg-success/[0.05] px-3 py-3">
+              <p className="font-mono text-[14px] uppercase tracking-[0.12em] text-success/70 dark:text-success/60">
                 Hari Kerja
               </p>
-              <p className="mt-2 font-mono text-[20px] font-semibold text-emerald-700 dark:text-emerald-300">
+              <p className="mt-2 font-mono text-[20px] font-semibold text-success dark:text-success">
                 {totalWorkDays}
               </p>
             </div>
-            <div className="border border-red-500/20 bg-red-500/[0.05] px-3 py-3">
-              <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-red-700/70 dark:text-red-300/60">
+            <div className="border border-destructive/20 bg-destructive/[0.05] px-3 py-3">
+              <p className="font-mono text-[14px] uppercase tracking-[0.12em] text-destructive/70 dark:text-destructive/60">
                 Hari Libur
               </p>
-              <p className="mt-2 font-mono text-[20px] font-semibold text-red-700 dark:text-red-300">
+              <p className="mt-2 font-mono text-[20px] font-semibold text-destructive dark:text-destructive">
                 {totalHolidays}
               </p>
             </div>
-            <div className="border border-gray-200 bg-white px-3 py-3 shadow-sm dark:border-white/[0.05] dark:bg-[#0a0a0c] dark:shadow-none">
-              <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/30">
+            <div className="border border-border bg-card px-3 py-3 shadow-sm dark:border-border dark:bg-background dark:shadow-none">
+              <p className="font-mono text-[14px] uppercase tracking-[0.12em] text-muted-foreground dark:text-muted-foreground">
                 Total Kapasitas
               </p>
-              <p className="mt-2 font-mono text-[20px] font-semibold text-gray-950 dark:text-white">
+              <p className="mt-2 font-mono text-[20px] font-semibold text-foreground dark:text-foreground">
                 {totalCapacity.toFixed(0)}j
               </p>
             </div>
-            <div className="border border-amber-500/20 bg-amber-500/[0.05] px-3 py-3">
-              <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-amber-700/70 dark:text-amber-300/60">
+            <div className="border border-primary/20 bg-primary/[0.05] px-3 py-3">
+              <p className="font-mono text-[14px] uppercase tracking-[0.12em] text-app-accent-ink/70 dark:text-app-accent-ink/60">
                 Slot Lembur
               </p>
-              <p className="mt-2 font-mono text-[20px] font-semibold text-amber-700 dark:text-amber-300">
+              <p className="mt-2 font-mono text-[20px] font-semibold text-app-accent-ink dark:text-app-accent-ink">
                 {totalOvertime.toFixed(0)}j
               </p>
             </div>
@@ -295,25 +295,25 @@ export function PlanningCalendarView({
 
       {/* Feedback */}
       {message && (
-        <div className="border border-emerald-500/25 bg-emerald-500/[0.05] px-4 py-2 text-[12px] text-emerald-400">
+        <div className="border border-success/25 bg-success/[0.05] px-4 py-2 text-[14px] text-success">
           {message}
         </div>
       )}
       {error && (
-        <div className="border border-red-500/25 bg-red-500/[0.05] px-4 py-2 text-[12px] text-red-400">
+        <div className="border border-destructive/25 bg-destructive/[0.05] px-4 py-2 text-[14px] text-destructive">
           {error}
         </div>
       )}
 
       {/* Settings panel (collapsible) */}
       {showSettings && (
-        <SectionCard label="Aturan jam kerja" className="space-y-4 border-amber-500/20 bg-amber-500/[0.02]">
+        <SectionCard label="Aturan jam kerja" className="space-y-4 border-primary/20 bg-primary/[0.02]">
           <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
             <div>
-              <h3 className="text-[15px] font-semibold text-amber-500">
+              <h3 className="text-[15px] font-semibold text-app-accent-ink">
                 Pengaturan Jam Dasar Kalender
               </h3>
-              <p className="mt-1 max-w-xl text-[12px] leading-relaxed text-amber-800/65 dark:text-amber-200/50">
+              <p className="mt-1 max-w-xl text-[14px] leading-relaxed text-app-accent-ink/65 dark:text-app-accent-ink/50">
                 Atur standar jam kerja, batas lembur, dan faktor efisiensi yang jadi basis
                 hitung kapasitas di planning.
               </p>
@@ -340,85 +340,85 @@ export function PlanningCalendarView({
 
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {/* TANGGAL */}
-            <div className="space-y-3 rounded border border-gray-200 bg-white p-4 shadow-sm dark:border-white/[0.04] dark:bg-[#0c0c0f]/50 dark:shadow-none">
+            <div className="space-y-3 rounded border border-border bg-card p-4 shadow-sm dark:border-border dark:bg-card/50 dark:shadow-none">
               <div>
-                <label className="text-[11px] font-semibold text-gray-800 dark:text-white">Berlaku Mulai</label>
+                <label className="text-[15px] font-semibold text-foreground dark:text-foreground">Berlaku Mulai</label>
               </div>
               <input
                 type="date"
                 value={configForm.weekStartDate}
                 onChange={(e) => setConfigForm((prev) => ({ ...prev, weekStartDate: e.target.value }))}
                 disabled={!canManage}
-                className="h-9 w-full rounded border border-gray-300 bg-white px-3 text-[12px] text-gray-950 outline-none focus:border-amber-600/55 disabled:opacity-50 dark:border-white/[0.08] dark:bg-[#111114] dark:text-white dark:focus:border-amber-500/50 dark:[color-scheme:dark]"
+                className="h-9 w-full rounded border border-border bg-card px-3 text-[14px] text-foreground outline-none focus:border-primary/55 disabled:opacity-50 dark:border-border dark:bg-card dark:text-foreground dark:focus:border-primary/50 dark:[color-scheme:dark]"
               />
             </div>
 
             {/* JAM REGULER */}
-            <div className="space-y-3 rounded border border-gray-200 bg-white p-4 shadow-sm dark:border-white/[0.04] dark:bg-[#0c0c0f]/50 dark:shadow-none">
+            <div className="space-y-3 rounded border border-border bg-card p-4 shadow-sm dark:border-border dark:bg-card/50 dark:shadow-none">
               <div>
-                <label className="text-[11px] font-semibold text-gray-800 dark:text-white">Jam Kerja Normal</label>
+                <label className="text-[15px] font-semibold text-foreground dark:text-foreground">Jam Kerja Normal</label>
               </div>
               <div className="grid grid-cols-3 gap-2">
                 <div>
-                  <span className="mb-1 block text-[9px] uppercase text-gray-500 dark:text-white/40">Sen-Jum</span>
-                  <input type="number" value={configForm.weekdayHours} onChange={(e) => setConfigForm((prev) => ({ ...prev, weekdayHours: e.target.value }))} disabled={!canManage} className="h-8 w-full rounded border border-gray-300 bg-white px-2 text-[12px] text-gray-950 dark:border-white/[0.08] dark:bg-[#111114] dark:text-white" />
+                  <span className="mb-1 block text-[15px] uppercase text-muted-foreground dark:text-muted-foreground">Sen-Jum</span>
+                  <input type="number" value={configForm.weekdayHours} onChange={(e) => setConfigForm((prev) => ({ ...prev, weekdayHours: e.target.value }))} disabled={!canManage} className="h-8 w-full rounded border border-border bg-card px-2 text-[14px] text-foreground dark:border-border dark:bg-card dark:text-foreground" />
                 </div>
                 <div>
-                  <span className="mb-1 block text-[9px] uppercase text-gray-500 dark:text-white/40">Sabtu</span>
-                  <input type="number" value={configForm.saturdayHours} onChange={(e) => setConfigForm((prev) => ({ ...prev, saturdayHours: e.target.value }))} disabled={!canManage} className="h-8 w-full rounded border border-gray-300 bg-white px-2 text-[12px] text-gray-950 dark:border-white/[0.08] dark:bg-[#111114] dark:text-white" />
+                  <span className="mb-1 block text-[15px] uppercase text-muted-foreground dark:text-muted-foreground">Sabtu</span>
+                  <input type="number" value={configForm.saturdayHours} onChange={(e) => setConfigForm((prev) => ({ ...prev, saturdayHours: e.target.value }))} disabled={!canManage} className="h-8 w-full rounded border border-border bg-card px-2 text-[14px] text-foreground dark:border-border dark:bg-card dark:text-foreground" />
                 </div>
                 <div>
-                  <span className="mb-1 block text-[9px] uppercase text-gray-500 dark:text-white/40">Minggu</span>
-                  <input type="number" value={configForm.sundayHours} onChange={(e) => setConfigForm((prev) => ({ ...prev, sundayHours: e.target.value }))} disabled={!canManage} className="h-8 w-full rounded border border-gray-300 bg-white px-2 text-[12px] text-gray-950 dark:border-white/[0.08] dark:bg-[#111114] dark:text-white" />
+                  <span className="mb-1 block text-[15px] uppercase text-muted-foreground dark:text-muted-foreground">Minggu</span>
+                  <input type="number" value={configForm.sundayHours} onChange={(e) => setConfigForm((prev) => ({ ...prev, sundayHours: e.target.value }))} disabled={!canManage} className="h-8 w-full rounded border border-border bg-card px-2 text-[14px] text-foreground dark:border-border dark:bg-card dark:text-foreground" />
                 </div>
               </div>
             </div>
 
             {/* BATAS LEMBUR */}
-            <div className="space-y-3 rounded border border-gray-200 bg-white p-4 shadow-sm dark:border-white/[0.04] dark:bg-[#0c0c0f]/50 dark:shadow-none">
+            <div className="space-y-3 rounded border border-border bg-card p-4 shadow-sm dark:border-border dark:bg-card/50 dark:shadow-none">
               <div>
-                <label className="text-[11px] font-semibold text-gray-800 dark:text-white">Batas Maksimal Lembur</label>
+                <label className="text-[15px] font-semibold text-foreground dark:text-foreground">Batas Maksimal Lembur</label>
               </div>
               <div className="grid grid-cols-3 gap-2">
                 <div>
-                  <span className="mb-1 block text-[9px] uppercase text-gray-500 dark:text-white/40">Sen-Jum</span>
-                  <input type="number" value={configForm.weekdayOvertimeHours} onChange={(e) => setConfigForm((prev) => ({ ...prev, weekdayOvertimeHours: e.target.value }))} disabled={!canManage} className="h-8 w-full rounded border border-gray-300 bg-white px-2 text-[12px] text-gray-950 dark:border-white/[0.08] dark:bg-[#111114] dark:text-white" />
+                  <span className="mb-1 block text-[15px] uppercase text-muted-foreground dark:text-muted-foreground">Sen-Jum</span>
+                  <input type="number" value={configForm.weekdayOvertimeHours} onChange={(e) => setConfigForm((prev) => ({ ...prev, weekdayOvertimeHours: e.target.value }))} disabled={!canManage} className="h-8 w-full rounded border border-border bg-card px-2 text-[14px] text-foreground dark:border-border dark:bg-card dark:text-foreground" />
                 </div>
                 <div>
-                  <span className="mb-1 block text-[9px] uppercase text-gray-500 dark:text-white/40">Sabtu</span>
-                  <input type="number" value={configForm.saturdayOvertimeHours} onChange={(e) => setConfigForm((prev) => ({ ...prev, saturdayOvertimeHours: e.target.value }))} disabled={!canManage} className="h-8 w-full rounded border border-gray-300 bg-white px-2 text-[12px] text-gray-950 dark:border-white/[0.08] dark:bg-[#111114] dark:text-white" />
+                  <span className="mb-1 block text-[15px] uppercase text-muted-foreground dark:text-muted-foreground">Sabtu</span>
+                  <input type="number" value={configForm.saturdayOvertimeHours} onChange={(e) => setConfigForm((prev) => ({ ...prev, saturdayOvertimeHours: e.target.value }))} disabled={!canManage} className="h-8 w-full rounded border border-border bg-card px-2 text-[14px] text-foreground dark:border-border dark:bg-card dark:text-foreground" />
                 </div>
                 <div>
-                  <span className="mb-1 block text-[9px] uppercase text-gray-500 dark:text-white/40">Minggu</span>
-                  <input type="number" value={configForm.sundayOvertimeHours} onChange={(e) => setConfigForm((prev) => ({ ...prev, sundayOvertimeHours: e.target.value }))} disabled={!canManage} className="h-8 w-full rounded border border-gray-300 bg-white px-2 text-[12px] text-gray-950 dark:border-white/[0.08] dark:bg-[#111114] dark:text-white" />
+                  <span className="mb-1 block text-[15px] uppercase text-muted-foreground dark:text-muted-foreground">Minggu</span>
+                  <input type="number" value={configForm.sundayOvertimeHours} onChange={(e) => setConfigForm((prev) => ({ ...prev, sundayOvertimeHours: e.target.value }))} disabled={!canManage} className="h-8 w-full rounded border border-border bg-card px-2 text-[14px] text-foreground dark:border-border dark:bg-card dark:text-foreground" />
                 </div>
               </div>
             </div>
             
             {/* EFISIENSI */}
-            <div className="space-y-3 rounded border border-gray-200 bg-white p-4 shadow-sm md:col-span-2 lg:col-span-3 dark:border-white/[0.04] dark:bg-[#0c0c0f]/50 dark:shadow-none">
+            <div className="space-y-3 rounded border border-border bg-card p-4 shadow-sm md:col-span-2 lg:col-span-3 dark:border-border dark:bg-card/50 dark:shadow-none">
               <div className="flex flex-wrap items-center gap-6">
                 <div className="min-w-0 flex-1">
-                  <label className="text-[11px] font-semibold text-gray-800 dark:text-white">Efisiensi Pekerjaan</label>
-                  <p className="mt-1 text-[11px] leading-5 text-gray-500 dark:text-white/40">
+                  <label className="text-[15px] font-semibold text-foreground dark:text-foreground">Efisiensi Pekerjaan</label>
+                  <p className="mt-1 text-[15px] leading-5 text-muted-foreground dark:text-muted-foreground">
                     Faktor pengali kapasitas efektif untuk seluruh hari kerja pada periode ini.
                   </p>
                 </div>
-                <input type="number" step="0.1" value={configForm.efficiencyFactor} onChange={(e) => setConfigForm((prev) => ({ ...prev, efficiencyFactor: e.target.value }))} disabled={!canManage} className="h-9 w-24 rounded border border-gray-300 bg-white px-2 text-center text-[12px] text-gray-950 dark:border-white/[0.08] dark:bg-[#111114] dark:text-white" />
+                <input type="number" step="0.1" value={configForm.efficiencyFactor} onChange={(e) => setConfigForm((prev) => ({ ...prev, efficiencyFactor: e.target.value }))} disabled={!canManage} className="h-9 w-24 rounded border border-border bg-card px-2 text-center text-[14px] text-foreground dark:border-border dark:bg-card dark:text-foreground" />
               </div>
             </div>
             
           </div>
           
-          <div className="mt-5 flex items-center justify-between border-t border-amber-500/10 pt-4">
-            <span className="text-[11px] text-amber-800/55 dark:text-amber-300/40">
+          <div className="mt-5 flex items-center justify-between border-t border-primary/10 pt-4">
+            <span className="text-[15px] text-app-accent-ink/55 dark:text-app-accent-ink/40">
               {weeklyConfigs.length} aturan tersimpan
             </span>
             <button
               type="button"
               disabled={isSaving || !canManage}
               onClick={() => void handleSaveConfig()}
-              className="inline-flex h-9 items-center gap-2 border border-amber-500/30 bg-amber-500/[0.1] px-5 font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-amber-300 transition-colors hover:bg-amber-500/[0.16] disabled:opacity-50"
+              className="inline-flex h-9 items-center gap-2 border border-primary/30 bg-primary/[0.1] px-5 font-mono text-[15px] font-semibold uppercase tracking-[0.12em] text-app-accent-ink transition-colors hover:bg-primary/[0.16] disabled:opacity-50"
             >
               <Save className="h-4 w-4" />
               {isSaving ? "Menyimpan..." : "Simpan Aturan"}
@@ -429,12 +429,12 @@ export function PlanningCalendarView({
 
       {/* Calendar Grid */}
       <SectionCard label="Kalender bulan ini" className="space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-2 border border-gray-200 bg-white px-3 py-2 shadow-sm dark:border-white/[0.05] dark:bg-[#0a0a0c] dark:shadow-none">
-          <p className="text-[12px] leading-5 text-gray-600 dark:text-white/55">
+        <div className="flex flex-wrap items-center justify-between gap-2 border border-border bg-card px-3 py-2 shadow-sm dark:border-border dark:bg-background dark:shadow-none">
+          <p className="text-[14px] leading-5 text-muted-foreground dark:text-muted-foreground">
             Highlight amber menandai hari ini. Badge `DL` menandai ada target delivery pada tanggal
             tersebut.
           </p>
-          <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/35">
+          <span className="font-mono text-[14px] uppercase tracking-[0.12em] text-muted-foreground dark:text-muted-foreground">
             Klik tanggal untuk detail
           </span>
         </div>
@@ -444,10 +444,10 @@ export function PlanningCalendarView({
             <div
               key={name}
               className={[
-                "py-1.5 text-center font-mono text-[10px] uppercase tracking-[0.1em]",
+                "py-1.5 text-center font-mono text-[14px] uppercase tracking-[0.1em]",
                 i >= 5
-                  ? "text-amber-500/60"
-                  : "text-gray-500 dark:text-white/30",
+                  ? "text-app-accent-ink/60"
+                  : "text-muted-foreground dark:text-muted-foreground",
               ].join(" ")}
             >
               {name}
@@ -480,28 +480,28 @@ export function PlanningCalendarView({
                 onClick={() => setSelectedDate(cell.date)}
                 key={cell.date}
                 className={[
-                  "relative flex min-h-[88px] flex-col border p-2 text-left transition-colors hover:border-amber-500/50 hover:bg-amber-500/[0.05]",
+                  "relative flex min-h-[88px] flex-col border p-2 text-left transition-colors hover:border-primary/50 hover:bg-primary/[0.05]",
                   isToday
-                    ? "border-amber-500/50 bg-amber-500/[0.06] ring-1 ring-amber-500/20"
+                    ? "border-primary/50 bg-primary/[0.06] ring-1 ring-primary/20"
                     : isLibur
-                      ? "border-red-500/20 bg-red-500/[0.04]"
+                      ? "border-destructive/20 bg-destructive/[0.04]"
                       : isWeekend
-                        ? "border-gray-200 bg-gray-50 dark:border-white/[0.04] dark:bg-white/[0.01]"
-                        : "border-gray-200 bg-white dark:border-white/[0.05] dark:bg-[#0c0c0f]",
+                        ? "border-border bg-muted dark:border-border dark:bg-muted"
+                        : "border-border bg-card dark:border-border dark:bg-card",
                 ].join(" ")}
               >
                 {/* Date number */}
                 <div className="flex items-start justify-between">
                   <span
                     className={[
-                      "flex h-6 w-6 items-center justify-center font-mono text-[12px] font-semibold",
+                      "flex h-6 w-6 items-center justify-center font-mono text-[14px] font-semibold",
                       isToday
-                        ? "rounded bg-amber-500 text-black"
+                        ? "rounded bg-primary text-primary-foreground"
                         : isLibur
-                          ? "text-red-400"
+                          ? "text-destructive"
                           : isWeekend
-                          ? "text-gray-500 dark:text-white/35"
-                          : "text-gray-900 dark:text-white/80",
+                          ? "text-muted-foreground dark:text-muted-foreground"
+                          : "text-foreground dark:text-foreground",
                     ].join(" ")}
                   >
                     {cell.dateNum}
@@ -511,10 +511,10 @@ export function PlanningCalendarView({
                   {day && (
                     <span
                       className={[
-                        "font-mono text-[9px] font-medium",
+                        "font-mono text-[15px] font-medium",
                         isLibur
-                          ? "text-red-400/60"
-                          : "text-gray-500 dark:text-white/30",
+                          ? "text-destructive/60"
+                          : "text-muted-foreground dark:text-muted-foreground",
                       ].join(" ")}
                     >
                       {day.totalCapacityHours}j
@@ -525,35 +525,35 @@ export function PlanningCalendarView({
                 {/* Status label & Deliveries */}
                 <div className="mt-auto flex flex-col justify-end pt-2">
                   {hasOverride && (
-                    <div className="mb-1 border border-amber-500/20 bg-amber-500/[0.08] px-1 py-0.5 font-mono text-[8px] font-semibold uppercase tracking-[0.06em] text-amber-500">
+                    <div className="mb-1 border border-primary/20 bg-primary/[0.08] px-1 py-0.5 font-mono text-[15px] font-semibold uppercase tracking-[0.06em] text-app-accent-ink">
                       Jam khusus
                     </div>
                   )}
                   {hasDelivery && (
-                    <div className="mb-1 flex items-center gap-1 rounded bg-amber-500/10 px-1 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-[0.05em] text-amber-500">
+                    <div className="mb-1 flex items-center gap-1 rounded bg-primary/10 px-1 py-0.5 font-mono text-[15px] font-semibold uppercase tracking-[0.05em] text-app-accent-ink">
                       <Car className="h-2.5 w-2.5" />
                       {dateDeliveries.length} DL
                     </div>
                   )}
                   {day ? (
                     isLibur ? (
-                      <span className="font-mono text-[9px] font-semibold uppercase tracking-[0.05em] text-red-400">
+                      <span className="font-mono text-[15px] font-semibold uppercase tracking-[0.05em] text-destructive">
                         Libur
                       </span>
                     ) : (
-                      <div className="flex items-center justify-between font-mono text-[9px]">
-                        <p className="text-gray-600 dark:text-white/45">
+                      <div className="flex items-center justify-between font-mono text-[15px]">
+                        <p className="text-muted-foreground dark:text-muted-foreground">
                           {day.workingHours}j
                         </p>
                         {hasOvertime && (
-                          <p className="text-amber-500">
+                          <p className="text-app-accent-ink">
                             +{day.overtimeHours}j
                           </p>
                         )}
                       </div>
                     )
                   ) : (
-                    <span className="font-mono text-[9px] text-gray-400 dark:text-white/15">
+                    <span className="font-mono text-[15px] text-muted-foreground dark:text-muted-foreground">
                       Tanpa data
                     </span>
                   )}
@@ -565,26 +565,26 @@ export function PlanningCalendarView({
       </SectionCard>
 
       {/* Legend */}
-      <div className="flex flex-wrap items-center gap-4 px-1 font-mono text-[10px] uppercase tracking-wider">
+      <div className="flex flex-wrap items-center gap-4 px-1 font-mono text-[14px] uppercase tracking-wider">
         <div className="flex items-center gap-1.5">
-          <div className="h-3 w-3 border border-gray-200 bg-white dark:border-white/[0.05] dark:bg-[#0c0c0f]" />
-          <span className="text-gray-500 dark:text-white/40">Hari Kerja</span>
+          <div className="h-3 w-3 border border-border bg-card dark:border-border dark:bg-card" />
+          <span className="text-muted-foreground dark:text-muted-foreground">Hari Kerja</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <div className="h-3 w-3 border border-red-500/20 bg-red-500/[0.04]" />
-          <span className="text-gray-500 dark:text-white/40">Libur</span>
+          <div className="h-3 w-3 border border-destructive/20 bg-destructive/[0.04]" />
+          <span className="text-muted-foreground dark:text-muted-foreground">Libur</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <div className="h-3 w-3 border border-gray-200 bg-gray-50 dark:border-white/[0.04] dark:bg-white/[0.01]" />
-          <span className="text-gray-500 dark:text-white/40">Akhir Pekan</span>
+          <div className="h-3 w-3 border border-border bg-muted dark:border-border dark:bg-muted" />
+          <span className="text-muted-foreground dark:text-muted-foreground">Akhir Pekan</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <div className="h-3 w-3 border border-amber-500/50 bg-amber-500/[0.06]" />
-          <span className="text-gray-500 dark:text-white/40">Hari Ini</span>
+          <div className="h-3 w-3 border border-primary/50 bg-primary/[0.06]" />
+          <span className="text-muted-foreground dark:text-muted-foreground">Hari Ini</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <div className="flex h-3 items-center justify-center rounded bg-amber-500/10 px-1 font-mono text-[8px] font-semibold text-amber-500">DL</div>
-          <span className="text-gray-500 dark:text-white/40">Deadline</span>
+          <div className="flex h-3 items-center justify-center rounded bg-primary/10 px-1 font-mono text-[15px] font-semibold text-app-accent-ink">DL</div>
+          <span className="text-muted-foreground dark:text-muted-foreground">Deadline</span>
         </div>
       </div>
 

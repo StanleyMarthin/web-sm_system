@@ -185,14 +185,14 @@ export function MonitoringUnitShell({
         <div className="space-y-4">
 
             {/* ── Header bar ──────────────────────────────────────────────────────── */}
-            <div className="flex flex-wrap items-center justify-between gap-4 rounded-[14px] border border-white/[0.06] bg-[#0a0a0c] px-4 py-3">
+            <div className="flex flex-wrap items-center justify-between gap-4 rounded-[14px] border border-white/[0.06] bg-background px-4 py-3">
                 <div className="flex items-center gap-3">
-                    <h1 className="text-[14px] font-medium text-white">Monitoring Unit</h1>
+                    <h1 className="text-[14px] font-medium text-foreground">Monitoring Unit</h1>
                     <div className="h-4 w-px bg-white/[0.06]" />
                     <select
                         value={selectedUnitId}
                         onChange={(e) => changeUnit(e.target.value)}
-                        className="w-48 appearance-none bg-transparent text-[13px] text-white outline-none ring-0 [&>option]:bg-[#111114] [&>option]:text-white"
+                        className="w-48 appearance-none bg-transparent text-[13px] text-foreground outline-none ring-0 [&>option]:bg-card [&>option]:text-foreground"
                         disabled={units.length === 0}
                     >
                         {units.length === 0 && <option value="">Belum ada unit</option>}
@@ -215,8 +215,8 @@ export function MonitoringUnitShell({
                                 className={[
                                     "rounded-md px-3 py-1.5 text-[10px] uppercase tracking-wider transition-colors",
                                     activeSpan === span
-                                        ? "bg-amber-500/10 text-amber-500"
-                                        : "text-white/40 hover:text-white/70",
+                                        ? "bg-primary/10 text-app-accent-ink"
+                                        : "text-foreground/40 hover:text-foreground/70",
                                 ].join(" ")}
                             >
                                 {span === "daily" ? "Harian" : "Mingguan"}
@@ -247,13 +247,13 @@ export function MonitoringUnitShell({
 
             {/* ── Spreadsheet Matrix ──────────────────────────────────────────────────────── */}
             {selectedUnitId ? (
-                <section className="overflow-hidden rounded-[14px] border border-white/[0.06] bg-[#0a0a0c]">
+                <section className="overflow-hidden rounded-[14px] border border-white/[0.06] bg-background">
                     {/* Matrix Header */}
-                    <div className="border-b border-white/[0.06] bg-[#111114] py-3 text-center">
-                        <h2 className="text-[13px] font-bold uppercase tracking-[0.05em] text-white">
+                    <div className="border-b border-white/[0.06] bg-card py-3 text-center">
+                        <h2 className="text-[13px] font-bold uppercase tracking-[0.05em] text-foreground">
                             {selectedUnitDetails?.unitName}
                             {selectedUnitDetails?.customerName && (
-                                <span className="ml-2 font-normal text-white/50">
+                                <span className="ml-2 font-normal text-foreground/50">
                                     {selectedUnitDetails.customerName}
                                 </span>
                             )}
@@ -266,7 +266,7 @@ export function MonitoringUnitShell({
                                 <tr>
                                     <th
                                         rowSpan={2}
-                                        className="border-b border-r border-white/[0.06] bg-white/[0.01] px-4 py-3 text-center text-[11px] font-medium uppercase tracking-[0.1em] text-white/40 align-middle"
+                                        className="border-b border-r border-white/[0.06] bg-white/[0.01] px-4 py-3 text-center text-[11px] font-medium uppercase tracking-[0.1em] text-foreground/40 align-middle"
                                     >
                                         Nama
                                     </th>
@@ -274,7 +274,7 @@ export function MonitoringUnitShell({
                                         <th
                                             key={d}
                                             colSpan={2}
-                                            className="border-b border-r border-white/[0.06] bg-amber-500/10 px-2 py-2.5 text-center text-[11px] font-semibold text-amber-500"
+                                            className="border-b border-r border-white/[0.06] bg-primary/10 px-2 py-2.5 text-center text-[11px] font-semibold text-app-accent-ink"
                                         >
                                             {formatMatrixDate(d)}
                                         </th>
@@ -283,10 +283,10 @@ export function MonitoringUnitShell({
                                 <tr>
                                     {matrixDates.map((d) => (
                                         <React.Fragment key={`sub-${d}`}>
-                                            <th className="border-b border-r border-white/[0.06] bg-white/[0.01] px-2 py-2 text-center text-[10px] uppercase tracking-wider text-white/50">
+                                            <th className="border-b border-r border-white/[0.06] bg-white/[0.01] px-2 py-2 text-center text-[10px] uppercase tracking-wider text-foreground/50">
                                                 Jam Normal
                                             </th>
-                                            <th className="border-b border-r border-white/[0.06] bg-white/[0.01] px-2 py-2 text-center text-[10px] uppercase tracking-wider text-white/50">
+                                            <th className="border-b border-r border-white/[0.06] bg-white/[0.01] px-2 py-2 text-center text-[10px] uppercase tracking-wider text-foreground/50">
                                                 Jam Lembur
                                             </th>
                                         </React.Fragment>
@@ -298,7 +298,7 @@ export function MonitoringUnitShell({
                                     <tr>
                                         <td
                                             colSpan={matrixDates.length * 2 + 1}
-                                            className="px-4 py-12 text-center text-[12px] italic text-white/30"
+                                            className="px-4 py-12 text-center text-[12px] italic text-foreground/30"
                                         >
                                             Tidak ada data karyawan untuk unit ini pada periode yang dipilih.
                                         </td>
@@ -306,17 +306,17 @@ export function MonitoringUnitShell({
                                 ) : (
                                     matrixData.map((emp) => (
                                         <tr key={emp.employeeName} className="border-b border-white/[0.04] transition-colors hover:bg-white/[0.02]">
-                                            <td className="border-r border-white/[0.06] px-4 py-2.5 text-[11px] font-bold text-white uppercase tracking-wider">
+                                            <td className="border-r border-white/[0.06] px-4 py-2.5 text-[11px] font-bold text-foreground uppercase tracking-wider">
                                                 {emp.employeeName}
                                             </td>
                                             {matrixDates.map((d) => {
                                                 const cell = emp.days[d];
                                                 return (
                                                     <React.Fragment key={`cell-${emp.employeeName}-${d}`}>
-                                                        <td className="border-r border-white/[0.06] px-2 py-2.5 text-center tabular-nums text-white/70">
+                                                        <td className="border-r border-white/[0.06] px-2 py-2.5 text-center tabular-nums text-foreground/70">
                                                             {cell?.normal ? fmt(cell.normal) : ""}
                                                         </td>
-                                                        <td className="border-r border-white/[0.06] px-2 py-2.5 text-center tabular-nums text-amber-500/80">
+                                                        <td className="border-r border-white/[0.06] px-2 py-2.5 text-center tabular-nums text-app-accent-ink/80">
                                                             {cell?.overtime ? fmt(cell.overtime) : ""}
                                                         </td>
                                                     </React.Fragment>
@@ -330,7 +330,7 @@ export function MonitoringUnitShell({
                     </div>
                 </section>
             ) : (
-                <div className="rounded-[14px] border border-white/[0.06] bg-[#0a0a0c] px-4 py-12 text-center text-[12px] text-white/30">
+                <div className="rounded-[14px] border border-white/[0.06] bg-background px-4 py-12 text-center text-[12px] text-foreground/30">
                     Silakan pilih filter unit dan waktu untuk melihat matriks pengerjaan.
                 </div>
             )}

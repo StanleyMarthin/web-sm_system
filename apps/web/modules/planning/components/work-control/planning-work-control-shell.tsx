@@ -62,18 +62,18 @@ function SummaryCards({ items }: { items: PlanningSummaryCardItem[] }) {
       {items.map((item) => {
         const textColor =
           item.tone === "ok"
-            ? "text-emerald-400"
+            ? "text-success"
             : item.tone === "warn"
-              ? "text-amber-500"
+              ? "text-app-accent-ink"
               : item.tone === "danger"
-                ? "text-red-400"
+                ? "text-destructive"
                 : item.tone === "muted"
-                  ? "text-white/30"
-                  : "text-white/80";
+                  ? "text-muted-foreground"
+                  : "text-foreground";
 
         return (
-          <div key={item.label} className="border border-white/5 bg-[#111114] px-4 py-3">
-            <p className="font-mono text-[9px] uppercase tracking-[0.12em] text-white/25">{item.label}</p>
+          <div key={item.label} className="border border-border bg-card px-4 py-3">
+            <p className="font-mono text-[15px] uppercase tracking-[0.12em] text-muted-foreground">{item.label}</p>
             <p className={`mt-1 font-mono text-[20px] font-semibold tabular-nums ${textColor}`}>{item.value}</p>
           </div>
         );
@@ -589,12 +589,12 @@ export function PlanningWorkControlShell({
 
   return (
     <div className="space-y-4">
-      <section className="border border-white/5 bg-[#111114] px-4 py-3">
+      <section className="border border-border bg-card px-4 py-3">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-white/30">Work Control</p>
-            <h2 className="mt-0.5 text-[13px] font-mono text-white/80">Minggu ini kerja apa, unit mana</h2>
-            <p className="mt-1 text-[11px] text-white/35">Pantau kondisi &gt; atur target &gt; cek siap kerja &gt; service masuk</p>
+            <p className="font-mono text-[14px] uppercase tracking-[0.14em] text-muted-foreground">Work Control</p>
+            <h2 className="mt-0.5 text-[15px] font-mono text-foreground">Minggu ini kerja apa, unit mana</h2>
+            <p className="mt-1 text-[15px] text-muted-foreground">Pantau kondisi &gt; atur target &gt; cek siap kerja &gt; service masuk</p>
           </div>
           <div className="flex flex-wrap gap-2">
             {[
@@ -610,10 +610,10 @@ export function PlanningWorkControlShell({
                   type="button"
                   onClick={() => setAdaptiveView(tab.id as AdaptiveView)}
                   className={[
-                    "inline-flex h-9 items-center border px-3 font-mono text-[10px] uppercase tracking-[0.12em] transition-colors",
+                    "inline-flex h-9 items-center border px-3 font-mono text-[14px] uppercase tracking-[0.12em] transition-colors",
                     isActive
-                      ? "border-amber-500/30 bg-amber-500/[0.08] text-amber-500"
-                      : "border-white/10 text-white/40 hover:border-white/30 hover:bg-white/[0.04] hover:text-white",
+                      ? "border-primary/30 bg-primary/[0.08] text-app-accent-ink"
+                      : "border-border text-muted-foreground hover:border-border hover:bg-border hover:text-foreground",
                   ].join(" ")}
                 >
                   {tab.label}
@@ -625,16 +625,16 @@ export function PlanningWorkControlShell({
 
       </section>
 
-      <section className="border border-white/5 bg-[#111114] px-4 py-3 flex flex-wrap items-center justify-between gap-4">
+      <section className="border border-border bg-card px-4 py-3 flex flex-wrap items-center justify-between gap-4">
         <div>
-          <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-white/30">Work Control</p>
-          <h2 className="text-[13px] font-mono text-white/80">{activeViewCopy[adaptiveView].title}</h2>
-          <p className="mt-1 text-[11px] text-white/35">{activeViewCopy[adaptiveView].help}</p>
+          <p className="font-mono text-[14px] uppercase tracking-[0.14em] text-muted-foreground">Work Control</p>
+          <h2 className="text-[15px] font-mono text-foreground">{activeViewCopy[adaptiveView].title}</h2>
+          <p className="mt-1 text-[15px] text-muted-foreground">{activeViewCopy[adaptiveView].help}</p>
         </div>
         <div className="flex items-center gap-2">
-          <span className="border border-white/10 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-white/40">{periodLabel}</span>
+          <span className="border border-border px-3 py-1.5 font-mono text-[14px] uppercase tracking-[0.12em] text-muted-foreground">{periodLabel}</span>
           {!canManage && (
-            <span className="border border-amber-500/30 bg-amber-500/[0.08] px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-amber-500">
+            <span className="border border-primary/30 bg-primary/[0.08] px-3 py-1.5 font-mono text-[14px] uppercase tracking-[0.12em] text-app-accent-ink">
               Mode baca saja
             </span>
           )}

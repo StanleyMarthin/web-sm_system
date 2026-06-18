@@ -67,17 +67,17 @@ function BoardList({ title, rows, emptyMessage }: {
             <div key={row.planId} className="border-b border-white/5 px-2 py-2 last:border-b-0">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="truncate text-[12px] text-gray-950 dark:text-white">{row.unitName}</p>
-                  <p className="mt-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/30">
+                  <p className="truncate text-[12px] text-foreground dark:text-foreground">{row.unitName}</p>
+                  <p className="mt-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30">
                     {row.divisionName ?? "—"} · {row.panelName ?? row.jobDescription}
                   </p>
-                  <p className="mt-0.5 text-[11px] text-gray-400 dark:text-white/40">
+                  <p className="mt-0.5 text-[11px] text-muted-foreground dark:text-foreground/40">
                     {row.employeeName ?? "Belum ada PIC"} · {row.taskDate}
                   </p>
                 </div>
                 <div className="shrink-0 text-right">
-                  <p className="font-mono text-[11px] text-gray-700 dark:text-white/60">{row.remainingHours.toFixed(1)}j</p>
-                  <p className="font-mono text-[10px] text-gray-500 dark:text-white/30">{row.progressPercent.toFixed(0)}%</p>
+                  <p className="font-mono text-[11px] text-foreground dark:text-foreground/60">{row.remainingHours.toFixed(1)}j</p>
+                  <p className="font-mono text-[10px] text-muted-foreground dark:text-foreground/30">{row.progressPercent.toFixed(0)}%</p>
                 </div>
               </div>
             </div>
@@ -132,7 +132,7 @@ export function MonitoringShell({
         filterKey: "carId",
         filterOptions: references.units,
         renderCell: (value, row) => (
-          <Link href={`/units/${String(row.carId)}`} className="text-amber-400 hover:text-amber-300">
+          <Link href={`/units/${String(row.carId)}`} className="text-app-accent-ink hover:text-app-accent-ink">
             {String(value)}
           </Link>
         ),
@@ -191,18 +191,18 @@ export function MonitoringShell({
           const totalHours = actualDuration ?? Number(row.totalActualHours ?? 0);
 
           if (start === "-" && finish === "-") {
-            return <span className="text-[11px] text-white/20">Belum ada aktual</span>;
+            return <span className="text-[11px] text-foreground/20">Belum ada aktual</span>;
           }
 
           return (
             <div className="flex flex-col gap-1 text-[11px]">
-              <span className="font-mono text-white/80">
+              <span className="font-mono text-foreground/80">
                 {start} — {finish}
               </span>
-              <div className="flex gap-3 text-white/45">
-                <span>Total: <span className="font-mono text-amber-400/80">{totalHours}j</span></span>
+              <div className="flex gap-3 text-foreground/45">
+                <span>Total: <span className="font-mono text-app-accent-ink/80">{totalHours}j</span></span>
                 {breakMins > 0 && (
-                  <span>Istirahat: <span className="font-mono text-amber-400/80">{breakMins}m</span></span>
+                  <span>Istirahat: <span className="font-mono text-app-accent-ink/80">{breakMins}m</span></span>
                 )}
               </div>
             </div>
@@ -309,8 +309,8 @@ export function MonitoringShell({
               className={[
                 "border px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] transition-colors",
                 !isRangeMode
-                  ? "border-amber-500/30 bg-amber-500/10 text-amber-400"
-                  : "border-white/10 text-white/40 hover:text-white",
+                  ? "border-primary/30 bg-primary/10 text-app-accent-ink"
+                  : "border-white/10 text-foreground/40 hover:text-foreground",
               ].join(" ")}
             >
               Harian
@@ -321,8 +321,8 @@ export function MonitoringShell({
               className={[
                 "border px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] transition-colors",
                 isRangeMode
-                  ? "border-amber-500/30 bg-amber-500/10 text-amber-400"
-                  : "border-white/10 text-white/40 hover:text-white",
+                  ? "border-primary/30 bg-primary/10 text-app-accent-ink"
+                  : "border-white/10 text-foreground/40 hover:text-foreground",
               ].join(" ")}
             >
               Rentang
@@ -349,8 +349,8 @@ export function MonitoringShell({
               className={[
                 "border px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] transition-colors",
                 activeMode === "all"
-                  ? "border-amber-500/30 bg-amber-500/10 text-amber-400"
-                  : "border-white/10 text-white/40 hover:text-white",
+                  ? "border-primary/30 bg-primary/10 text-app-accent-ink"
+                  : "border-white/10 text-foreground/40 hover:text-foreground",
               ].join(" ")}
             >
               Semua
@@ -361,8 +361,8 @@ export function MonitoringShell({
               className={[
                 "border px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] transition-colors",
                 activeMode === "normal"
-                  ? "border-amber-500/30 bg-amber-500/10 text-amber-400"
-                  : "border-white/10 text-white/40 hover:text-white",
+                  ? "border-primary/30 bg-primary/10 text-app-accent-ink"
+                  : "border-white/10 text-foreground/40 hover:text-foreground",
               ].join(" ")}
             >
               Normal
@@ -373,8 +373,8 @@ export function MonitoringShell({
               className={[
                 "border px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] transition-colors",
                 activeMode === "overtime"
-                  ? "border-amber-500/30 bg-amber-500/10 text-amber-400"
-                  : "border-white/10 text-white/40 hover:text-white",
+                  ? "border-primary/30 bg-primary/10 text-app-accent-ink"
+                  : "border-white/10 text-foreground/40 hover:text-foreground",
               ].join(" ")}
             >
               Lembur

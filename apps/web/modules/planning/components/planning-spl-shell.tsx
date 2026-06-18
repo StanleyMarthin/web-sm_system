@@ -6,7 +6,7 @@
 import { RefreshCcw } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { PlanningSplRecommendation } from "@/shared/api/work-control";
-import { ActionButton, CompactInput, MetricBar, PageHeader, SectionCard } from "@/shared/ui/compact";
+import { ActionButton, CompactDateInput, MetricBar, SectionCard } from "@/shared/ui/compact";
 
 interface PlanningSplShellProps {
   asOfDate: string;
@@ -70,84 +70,66 @@ export function PlanningSplShell({
   }
 
   return (
-    <div className="space-y-2">
-      <div className="grid gap-2 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
-        <SectionCard label="Planning" className="space-y-2">
-          <PageHeader
-            title="Rekomendasi SPL Planning"
-            eyebrow="Tersambung dari target planning yang dirilis"
-          />
-          <p className="max-w-2xl text-[12px] leading-5 text-white/45">
-            Halaman ini membaca kekurangan jam dari target planning yang sudah dirilis ke SPK.
-            Jadi angka di sini, SPK, ETA unit, dan review plan sekarang memakai alur sumber yang sama.
-          </p>
-          <div className="flex flex-wrap items-center gap-2">
-            <ActionButton onClick={openLinkedPlanning}>
-              Buka Planning
-            </ActionButton>
-            <ActionButton onClick={openLinkedSpk}>
-              Buka SPK
-            </ActionButton>
-            <div className="w-40">
-              <CompactInput
-                type="date"
-                value={asOfDate}
-                onChange={(event) => pushReferenceDate(event.target.value)}
-              />
-            </div>
-            <span className="border border-white/5 bg-[#0a0a0c] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-white/55">
-              {formatDisplayDate(weekStartDate)} s.d. {formatDisplayDate(weekEndDate)}
-            </span>
-            <span className="border border-white/5 bg-[#0a0a0c] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-white/40">
-              Basis: planning_targets + overtime_recommendations
-            </span>
+    <div className="space-y-3">
+      <SectionCard label="Rekomendasi SPL" className="space-y-3">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0">
+            <h2 className="text-[18px] font-semibold text-foreground">Jam lembur yang perlu disiapkan</h2>
+            <p className="mt-1 max-w-2xl text-[14px] leading-6 text-muted-foreground">
+              Sistem menghitung kekurangan jam dari target planning yang sudah dirilis ke SPK.
+            </p>
           </div>
-        </SectionCard>
-
-        <SectionCard label="Ringkasan" className="space-y-2">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <MetricBar
-              items={[
-                { label: "Jam Kurang", value: formatHours(totalShortageHours), tone: totalShortageHours > 0 ? "warn" : "muted" },
-                { label: "Jam Direkomendasikan", value: formatHours(totalRecommendedHours), tone: totalRecommendedHours > 0 ? "warn" : "muted" },
-                { label: "Unit Terdampak", value: totalUnits, tone: "muted" },
-                { label: "Target Terdampak", value: totalTargets, tone: "muted" },
-              ]}
-            />
+          <div className="flex flex-wrap gap-2">
+            <ActionButton onClick={openLinkedPlanning}>Buka Planning</ActionButton>
+            <ActionButton onClick={openLinkedSpk}>Buka SPK</ActionButton>
             <ActionButton onClick={() => router.refresh()}>
               <RefreshCcw className="h-3 w-3" />
               Refresh
             </ActionButton>
           </div>
-        </SectionCard>
-      </div>
-
-      <div className="border border-amber-500/20 bg-amber-500/[0.03] px-4 py-2 text-[11px] font-mono text-amber-400">
-        SPL di sini adalah kebutuhan tambahan jam dari target planning yang melebihi kapasitas normal,
-        bukan bundle lembur mingguan manual dari modul planning lama.
-      </div>
-
-      <SectionCard label="Per Divisi & Target Planning" count={rows.length}>
-        <div className="flex flex-wrap items-center justify-between gap-2 border border-white/[0.05] bg-[#0a0a0c] px-3 py-2">
-          <p className="text-[12px] text-white/50">
-            Semua rekomendasi di bawah ini berasal dari target planning yang sudah dirilis ke SPK minggu
-            <span className="ml-1 font-mono text-white/70">{weekStartDate}</span>.
-          </p>
-          <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-white/35">
-            Linked to release target
-          </span>
         </div>
+
+        <div className="grid gap-3 border border-border bg-background p-3 md:grid-cols-[220px_1fr]">
+          <label className="space-y-1">
+            <span className="block font-mono text-[12px] uppercase tracking-[0.12em] text-muted-foreground">
+              Tanggal acuan
+            </span>
+            <CompactDateInput value={asOfDate} onChange={pushReferenceDate} />
+          </label>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <div className="border border-border bg-card px-3 py-2">
+              <p className="font-mono text-[12px] uppercase tracking-[0.12em] text-muted-foreground">Periode minggu</p>
+              <p className="mt-1 font-mono text-[14px] font-semibold text-foreground">
+                {formatDisplayDate(weekStartDate)} s.d. {formatDisplayDate(weekEndDate)}
+              </p>
+            </div>
+            <div className="border border-primary/25 bg-primary/[0.06] px-3 py-2">
+              <p className="font-mono text-[12px] uppercase tracking-[0.12em] text-app-accent-ink">Sumber data</p>
+              <p className="mt-1 text-[14px] text-foreground">Target planning yang sudah rilis</p>
+            </div>
+          </div>
+        </div>
+      </SectionCard>
+
+      <MetricBar
+        items={[
+          { label: "Jam Kurang", value: formatHours(totalShortageHours), tone: totalShortageHours > 0 ? "warn" : "muted" },
+          { label: "SPL Disarankan", value: formatHours(totalRecommendedHours), tone: totalRecommendedHours > 0 ? "warn" : "muted" },
+          { label: "Unit", value: totalUnits, tone: "muted" },
+          { label: "Target", value: totalTargets, tone: "muted" },
+        ]}
+      />
+
+      <SectionCard label="Rekomendasi per divisi" count={rows.length}>
         <div className="overflow-x-auto">
-          <table className="min-w-full text-[12px] text-white/70">
-            <thead className="sticky top-0 z-10 bg-[#111114]">
-              <tr className="border-b border-white/[0.06] text-left font-mono text-[10px] uppercase tracking-[0.12em] text-white/30">
-                <th className="px-3 py-2">Periode</th>
+          <table className="min-w-full text-[14px] text-foreground">
+            <thead className="sticky top-0 z-10 bg-card">
+              <tr className="border-b border-border text-left font-mono text-[14px] uppercase tracking-[0.12em] text-muted-foreground">
                 <th className="px-3 py-2">Divisi</th>
                 <th className="px-3 py-2 text-right">Jam Kurang</th>
-                <th className="px-3 py-2 text-right">Rekomendasi SPL</th>
-                <th className="px-3 py-2 text-right">Unit</th>
-                <th className="px-3 py-2 text-right">Target</th>
-                <th className="px-3 py-2">Rentang Butuh</th>
+                <th className="px-3 py-2 text-right">SPL Disarankan</th>
+                <th className="px-3 py-2 text-right">Dampak</th>
+                <th className="px-3 py-2">Tanggal Dibutuhkan</th>
                 <th className="px-3 py-2">Alasan</th>
               </tr>
             </thead>
@@ -155,32 +137,30 @@ export function PlanningSplShell({
               {rows.length > 0 ? rows.map((row) => (
                 <tr
                   key={`${row.planningTargetId}:${row.divisionId}`}
-                  className="border-b border-white/[0.04] hover:bg-white/[0.02]"
+                  className="border-b border-border hover:bg-muted"
                 >
-                  <td className="px-3 py-2 font-mono text-white/50">
-                    {row.periodStart}
-                    <span className="block text-[9px] text-white/25">{row.planningTargetId.slice(0, 8)}</span>
-                  </td>
-                  <td className="px-3 py-2 text-white">{row.divisionName}</td>
-                  <td className="px-3 py-2 text-right font-mono tabular-nums text-red-300">
+                  <td className="px-3 py-2 text-foreground">{row.divisionName}</td>
+                  <td className="px-3 py-2 text-right font-mono tabular-nums text-destructive">
                     {formatHours(row.shortageHours)}
                   </td>
-                  <td className="px-3 py-2 text-right font-mono tabular-nums text-amber-400">
+                  <td className="px-3 py-2 text-right font-mono tabular-nums text-app-accent-ink">
                     {formatHours(row.recommendedOvertimeHours)}
                   </td>
-                  <td className="px-3 py-2 text-right font-mono tabular-nums">{row.unitCount}</td>
-                  <td className="px-3 py-2 text-right font-mono tabular-nums">{row.targetCount}</td>
-                  <td className="px-3 py-2 font-mono text-white/45">
+                  <td className="px-3 py-2 text-right font-mono tabular-nums">
+                    {row.unitCount} unit
+                    <span className="block text-[12px] text-muted-foreground">{row.targetCount} target</span>
+                  </td>
+                  <td className="px-3 py-2 font-mono text-muted-foreground">
                     {formatDisplayDate(row.firstNeedDate)}
-                    <span className="block text-[9px] text-white/25">
+                    <span className="block text-[12px] text-muted-foreground">
                       s.d. {formatDisplayDate(row.lastNeedDate)}
                     </span>
                   </td>
-                  <td className="px-3 py-2 text-white/50">{row.reason ?? "-"}</td>
+                  <td className="px-3 py-2 text-muted-foreground">{row.reason ?? "-"}</td>
                 </tr>
               )) : (
                 <tr>
-                  <td colSpan={8} className="px-3 py-10 text-center text-sm text-white/35">
+                  <td colSpan={6} className="px-3 py-10 text-center text-sm text-muted-foreground">
                     Belum ada kebutuhan SPL dari planning yang dirilis pada minggu ini.
                   </td>
                 </tr>

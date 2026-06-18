@@ -32,7 +32,7 @@ interface QaInspectionFormProps {
 }
 
 const inputCls =
-  "h-10 rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 text-sm text-white outline-none transition-colors focus:border-amber-500/30 [color-scheme:dark]";
+  "h-10 rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 text-sm text-foreground outline-none transition-colors focus:border-primary/30 [color-scheme:dark]";
 
 export function QaInspectionForm({ initialValues, references, canEdit, isPending, onSubmit }: QaInspectionFormProps) {
   const { register, handleSubmit } = useForm<QaInspectionFormValues>({
@@ -61,69 +61,69 @@ export function QaInspectionForm({ initialValues, references, canEdit, isPending
 
   return (
     <form onSubmit={handleSubmit(handleFormSubmit)} className="grid gap-3 md:grid-cols-2">
-      <label className="grid gap-1.5 text-sm text-white/70">
+      <label className="grid gap-1.5 text-sm text-foreground/70">
         <span>Jenis masalah</span>
         <select {...register("issueType")} disabled={!canEdit || isPending} className={inputCls}>
-          <option className="bg-[#0a0a0a] text-white" value="">Pilih</option>
+          <option className="bg-background text-foreground" value="">Pilih</option>
           {references.issueTypes.map((option) => (
-            <option className="bg-[#0a0a0a] text-white" key={option.value} value={option.value}>
+            <option className="bg-background text-foreground" key={option.value} value={option.value}>
               {option.label}
             </option>
           ))}
         </select>
       </label>
 
-      <label className="grid gap-1.5 text-sm text-white/70">
+      <label className="grid gap-1.5 text-sm text-foreground/70">
         <span>Area masalah</span>
         <select {...register("issueArea")} disabled={!canEdit || isPending} className={inputCls}>
-          <option className="bg-[#0a0a0a] text-white" value="">Pilih</option>
+          <option className="bg-background text-foreground" value="">Pilih</option>
           {references.issueAreas.map((option) => (
-            <option className="bg-[#0a0a0a] text-white" key={option.value} value={option.value}>
+            <option className="bg-background text-foreground" key={option.value} value={option.value}>
               {option.label}
             </option>
           ))}
         </select>
       </label>
 
-      <label className="grid gap-1.5 text-sm text-white/70">
+      <label className="grid gap-1.5 text-sm text-foreground/70">
         <span>Prioritas</span>
         <select {...register("priorityLevel")} disabled={!canEdit || isPending} className={inputCls}>
-          <option className="bg-[#0a0a0a] text-white" value="">Pilih</option>
+          <option className="bg-background text-foreground" value="">Pilih</option>
           {references.priorityLevels.map((option) => (
-            <option className="bg-[#0a0a0a] text-white" key={option.value} value={option.value}>
+            <option className="bg-background text-foreground" key={option.value} value={option.value}>
               {option.label}
             </option>
           ))}
         </select>
       </label>
 
-      <label className="grid gap-1.5 text-sm text-white/70">
+      <label className="grid gap-1.5 text-sm text-foreground/70">
         <span>Status follow-up</span>
         <select {...register("followupStatus")} disabled={!canEdit || isPending} className={inputCls}>
-          <option className="bg-[#0a0a0a] text-white" value="">Pilih</option>
+          <option className="bg-background text-foreground" value="">Pilih</option>
           {references.followupStatuses.map((option) => (
-            <option className="bg-[#0a0a0a] text-white" key={option.value} value={option.value}>
+            <option className="bg-background text-foreground" key={option.value} value={option.value}>
               {option.label}
             </option>
           ))}
         </select>
       </label>
 
-      <label className="grid gap-1.5 text-sm text-white/70 md:col-span-2">
+      <label className="grid gap-1.5 text-sm text-foreground/70 md:col-span-2">
         <span>Penyebab masalah</span>
         <textarea
           {...register("issueCause")}
           disabled={!canEdit || isPending}
-          className="min-h-28 rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-sm text-white outline-none transition-colors focus:border-amber-500/30"
+          className="min-h-28 rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-sm text-foreground outline-none transition-colors focus:border-primary/30"
         />
       </label>
 
-      <label className="grid gap-1.5 text-sm text-white/70 md:col-span-2">
+      <label className="grid gap-1.5 text-sm text-foreground/70 md:col-span-2">
         <span>Rekomendasi perbaikan</span>
         <textarea
           {...register("recommendation")}
           disabled={!canEdit || isPending}
-          className="min-h-28 rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-sm text-white outline-none transition-colors focus:border-amber-500/30"
+          className="min-h-28 rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-sm text-foreground outline-none transition-colors focus:border-primary/30"
         />
       </label>
 
@@ -131,7 +131,7 @@ export function QaInspectionForm({ initialValues, references, canEdit, isPending
         <button
           type="submit"
           disabled={!canEdit || isPending}
-          className="rounded-full bg-amber-500 px-4 py-2 text-sm font-semibold text-black disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isPending ? "Menyimpan..." : "Simpan Analisa QA"}
         </button>

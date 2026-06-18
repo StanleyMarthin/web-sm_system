@@ -216,41 +216,41 @@ function getAllNodeIds(nodes: UnitBomNode[]): string[] {
 function jobStatusMeta(status: string | null | undefined) {
   switch (status) {
     case "DONE":
-      return { label: "DONE", className: "border-emerald-500/30 bg-emerald-500/[0.07] text-emerald-300", dot: "bg-emerald-400" };
+      return { label: "DONE", className: "border-success/30 bg-success/[0.07] text-success", dot: "bg-success" };
     case "QC_READY":
-      return { label: "QC", className: "border-sky-500/30 bg-sky-500/[0.07] text-sky-300", dot: "bg-sky-400" };
+      return { label: "QC", className: "border-info/30 bg-info/[0.07] text-info", dot: "bg-info" };
     case "PROSES":
-      return { label: "PROSES", className: "border-amber-500/25 bg-amber-500/[0.07] text-amber-400", dot: "bg-amber-400" };
+      return { label: "PROSES", className: "border-primary/25 bg-primary/[0.07] text-app-accent-ink", dot: "bg-primary" };
     case "PLAN":
-      return { label: "PLAN", className: "border-white/10 bg-white/[0.03] text-white/40", dot: "bg-white/30" };
+      return { label: "PLAN", className: "border-white/10 bg-white/[0.03] text-foreground/40", dot: "bg-white/30" };
     default:
-      return { label: "BELUM ADA", className: "border-white/10 bg-white/[0.03] text-white/25", dot: "bg-white/20" };
+      return { label: "BELUM ADA", className: "border-white/10 bg-white/[0.03] text-foreground/25", dot: "bg-white/20" };
   }
 }
 
 function stockStatusMeta(status: string | null | undefined) {
   switch (status) {
     case "INSTALLED":
-      return { label: "Terpasang", icon: PackageCheck, className: "text-emerald-400" };
+      return { label: "Terpasang", icon: PackageCheck, className: "text-success" };
     case "RETRIEVED":
-      return { label: "Diambil", icon: Wrench, className: "text-amber-400" };
+      return { label: "Diambil", icon: Wrench, className: "text-app-accent-ink" };
     case "IN_STORAGE":
-      return { label: "Di Gudang", icon: Boxes, className: "text-sky-400" };
+      return { label: "Di Gudang", icon: Boxes, className: "text-info" };
     case "LOST":
-      return { label: "Hilang", icon: XCircle, className: "text-red-400" };
+      return { label: "Hilang", icon: XCircle, className: "text-destructive" };
     default:
-      return { label: "Tidak ada", icon: PackageSearch, className: "text-white/30" };
+      return { label: "Tidak ada", icon: PackageSearch, className: "text-foreground/30" };
   }
 }
 
 function conditionBadge(type: string | null | undefined) {
   switch (type) {
     case "BARU":
-      return "border-emerald-500/25 text-emerald-400";
+      return "border-success/25 text-success";
     case "RESTORE":
-      return "border-amber-500/25 text-amber-400";
+      return "border-primary/25 text-app-accent-ink";
     case "BEKAS":
-      return "border-white/15 text-white/40";
+      return "border-white/15 text-foreground/40";
     default:
       return null;
   }
@@ -615,7 +615,7 @@ function SearchableField({
         }
       }}
     >
-      <div className="flex h-9 items-center border border-white/10 bg-[#111114] transition-colors focus-within:border-amber-500/40">
+      <div className="flex h-9 items-center border border-white/10 bg-card transition-colors focus-within:border-primary/40">
         <input
           value={value}
           disabled={disabled}
@@ -625,14 +625,14 @@ function SearchableField({
             setIsOpen(true);
           }}
           placeholder={placeholder}
-          className="h-full min-w-0 flex-1 bg-transparent px-3 text-[11px] font-mono text-white/70 outline-none placeholder:text-white/20 disabled:cursor-not-allowed disabled:opacity-40"
+          className="h-full min-w-0 flex-1 bg-transparent px-3 text-[11px] font-mono text-foreground/70 outline-none placeholder:text-foreground/20 disabled:cursor-not-allowed disabled:opacity-40"
         />
         <button
           type="button"
           disabled={disabled}
           onMouseDown={(event) => event.preventDefault()}
           onClick={() => setIsOpen((open) => !open)}
-          className="flex h-full w-8 shrink-0 items-center justify-center text-white/25 transition-colors hover:text-white/60 disabled:cursor-not-allowed disabled:opacity-35"
+          className="flex h-full w-8 shrink-0 items-center justify-center text-foreground/25 transition-colors hover:text-foreground/60 disabled:cursor-not-allowed disabled:opacity-35"
           aria-label="Buka pilihan"
         >
           <ChevronDown className="h-3 w-3" />
@@ -640,7 +640,7 @@ function SearchableField({
       </div>
 
       {isOpen && !disabled ? (
-        <div className="absolute left-0 right-0 top-[calc(100%+4px)] z-50 max-h-44 overflow-auto border border-white/10 bg-[#0d0d10] py-1 shadow-xl shadow-black/40">
+        <div className="absolute left-0 right-0 top-[calc(100%+4px)] z-50 max-h-44 overflow-auto border border-white/10 bg-card py-1 shadow-xl shadow-black/40">
           {filteredOptions.length > 0 ? (
             filteredOptions.map((option) => (
               <button
@@ -650,16 +650,16 @@ function SearchableField({
                   event.preventDefault();
                   chooseOption(option);
                 }}
-                className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-[11px] font-mono text-white/65 transition-colors hover:bg-amber-500/[0.07] hover:text-amber-400"
+                className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-[11px] font-mono text-foreground/65 transition-colors hover:bg-primary/[0.07] hover:text-app-accent-ink"
               >
                 <span className="min-w-0 truncate">{option.value}</span>
                 {option.label ? (
-                  <span className="shrink-0 text-[9px] uppercase tracking-[0.12em] text-white/25">{option.label}</span>
+                  <span className="shrink-0 text-[9px] uppercase tracking-[0.12em] text-foreground/25">{option.label}</span>
                 ) : null}
               </button>
             ))
           ) : (
-            <div className="px-3 py-2 text-[10px] font-mono text-white/25">
+            <div className="px-3 py-2 text-[10px] font-mono text-foreground/25">
               Tidak ada data cocok. Tekan Simpan untuk memakai teks ini.
             </div>
           )}
@@ -874,7 +874,7 @@ function NodeCard({
         onClick={() => {
           if (suppressClickRef.current) return;
         }}
-        className={`min-h-full w-full border bg-[#111114] p-3 text-left shadow-lg shadow-black/20 transition-[border-color,background-color,transform] hover:-translate-y-0.5 hover:border-amber-500/35 hover:bg-[#151518] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-500/70 ${isSelected ? "border-amber-500/60" : isGroup ? "border-white/10" : detailKey ? "border-white/10" : "border-white/5"
+        className={`min-h-full w-full border bg-card p-3 text-left shadow-lg shadow-black/20 transition-[border-color,background-color,transform] hover:-translate-y-0.5 hover:border-primary/35 hover:bg-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-500/70 ${isSelected ? "border-primary/60" : isGroup ? "border-white/10" : detailKey ? "border-white/10" : "border-white/5"
           }`}
       >
         {isGroupNode ? (
@@ -883,31 +883,31 @@ function NodeCard({
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5">
                   {canExpand ? (
-                    <span className="flex h-4 w-4 shrink-0 items-center justify-center border border-white/10 text-white/35">
+                    <span className="flex h-4 w-4 shrink-0 items-center justify-center border border-white/10 text-foreground/35">
                       {isExpanded ? <ChevronDown className="h-2.5 w-2.5" /> : <Plus className="h-2.5 w-2.5" />}
                     </span>
                   ) : null}
-                  <p className="min-w-0 truncate text-[12px] font-mono font-medium text-white/85">{node.label}</p>
+                  <p className="min-w-0 truncate text-[12px] font-mono font-medium text-foreground/85">{node.label}</p>
                 </div>
-                <p className="mt-0.5 text-[10px] text-white/35">{hierarchyText(node)}</p>
+                <p className="mt-0.5 text-[10px] text-foreground/35">{hierarchyText(node)}</p>
               </div>
-              <span className="shrink-0 border border-white/10 px-1.5 py-0.5 text-[9px] font-mono uppercase text-white/30">
+              <span className="shrink-0 border border-white/10 px-1.5 py-0.5 text-[9px] font-mono uppercase text-foreground/30">
                 {node.nodeType}
               </span>
             </div>
             {node.progressPercent != null ? (
               <div className="mt-3">
                 <div className="mb-1 flex items-center justify-between">
-                  <span className="text-[10px] font-mono text-white/35">{node.children.length} turunan</span>
-                  <span className="text-[10px] font-mono tabular-nums text-white/50">{node.progressPercent.toFixed(0)}%</span>
+                  <span className="text-[10px] font-mono text-foreground/35">{node.children.length} turunan</span>
+                  <span className="text-[10px] font-mono tabular-nums text-foreground/50">{node.progressPercent.toFixed(0)}%</span>
                 </div>
                 <div className="h-1 overflow-hidden bg-white/[0.06]">
-                  <div className="h-full bg-amber-400/60 transition-[width]" style={{ width: `${node.progressPercent}%` }} />
+                  <div className="h-full bg-primary/60 transition-[width]" style={{ width: `${node.progressPercent}%` }} />
                 </div>
               </div>
             ) : null}
             {node.remainingHours != null && node.remainingHours > 0 ? (
-              <p className="mt-2 text-[10px] font-mono text-white/35">{node.remainingHours}j tersisa</p>
+              <p className="mt-2 text-[10px] font-mono text-foreground/35">{node.remainingHours}j tersisa</p>
             ) : null}
           </>
         ) : isPanel ? (
@@ -916,17 +916,17 @@ function NodeCard({
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5">
                   {canExpand ? (
-                    <span className="flex h-4 w-4 shrink-0 items-center justify-center border border-white/10 text-white/35">
+                    <span className="flex h-4 w-4 shrink-0 items-center justify-center border border-white/10 text-foreground/35">
                       {isExpanded ? <ChevronDown className="h-2.5 w-2.5" /> : <Plus className="h-2.5 w-2.5" />}
                     </span>
                   ) : null}
-                  {node.isLocked ? <Lock className="h-3 w-3 shrink-0 text-amber-400/70" /> : null}
-                  <p className="min-w-0 truncate text-[12px] font-mono font-medium text-white/85">{node.label}</p>
+                  {node.isLocked ? <Lock className="h-3 w-3 shrink-0 text-app-accent-ink/70" /> : null}
+                  <p className="min-w-0 truncate text-[12px] font-mono font-medium text-foreground/85">{node.label}</p>
                 </div>
-                <p className="mt-0.5 text-[10px] text-white/35">{hierarchyText(node)}</p>
+                <p className="mt-0.5 text-[10px] text-foreground/35">{hierarchyText(node)}</p>
               </div>
               <div className="flex shrink-0 flex-col items-end gap-1">
-                <span className="border border-white/10 px-1.5 py-0.5 text-[9px] font-mono uppercase text-white/30">PANEL</span>
+                <span className="border border-white/10 px-1.5 py-0.5 text-[9px] font-mono uppercase text-foreground/30">PANEL</span>
                 {node.conditionType && conditionBadge(node.conditionType) ? (
                   <span className={`border px-1.5 py-0.5 text-[9px] font-mono uppercase ${conditionBadge(node.conditionType)}`}>
                     {node.conditionType}
@@ -936,12 +936,12 @@ function NodeCard({
             </div>
             <div className="mt-3 flex items-center justify-between gap-2">
               {node.currentDivisionName ? (
-                <span className="flex min-w-0 items-center gap-1 truncate text-[10px] font-mono text-white/50">
-                  <Users className="h-3 w-3 shrink-0 text-white/30" />
+                <span className="flex min-w-0 items-center gap-1 truncate text-[10px] font-mono text-foreground/50">
+                  <Users className="h-3 w-3 shrink-0 text-foreground/30" />
                   <span className="truncate">{node.currentDivisionName}</span>
                 </span>
               ) : (
-                <span className="text-[10px] font-mono text-white/25">Belum ditugaskan</span>
+                <span className="text-[10px] font-mono text-foreground/25">Belum ditugaskan</span>
               )}
               {(() => {
                 const js = jobStatusMeta(node.jobStatus);
@@ -957,12 +957,12 @@ function NodeCard({
                   <div className="min-w-0">
                     <span className={`text-[10px] font-mono ${sm.className}`}>{sm.label}</span>
                     {node.locationName ? (
-                      <p className="truncate text-[10px] text-white/35">
+                      <p className="truncate text-[10px] text-foreground/35">
                         {node.locationName}{node.locationDetail ? ` · ${node.locationDetail}` : ""}
                       </p>
                     ) : null}
                     {node.stockStatus === "RETRIEVED" && node.takenByName ? (
-                      <p className="truncate text-[10px] text-white/35">
+                      <p className="truncate text-[10px] text-foreground/35">
                         Oleh: {node.takenByName}
                         {node.dateOut ? ` · ${new Date(node.dateOut).toLocaleDateString("id-ID", { day: "numeric", month: "short" })}` : ""}
                       </p>
@@ -974,29 +974,29 @@ function NodeCard({
             {node.progressPercent != null ? (
               <div className="mt-3">
                 <div className="mb-1 flex items-center justify-between">
-                  <span className="text-[10px] font-mono tabular-nums text-white/50">{node.progressPercent.toFixed(0)}%</span>
-                  {node.remainingHours != null && node.remainingHours > 0 ? <span className="text-[10px] font-mono text-white/35">{node.remainingHours}j sisa</span> : null}
+                  <span className="text-[10px] font-mono tabular-nums text-foreground/50">{node.progressPercent.toFixed(0)}%</span>
+                  {node.remainingHours != null && node.remainingHours > 0 ? <span className="text-[10px] font-mono text-foreground/35">{node.remainingHours}j sisa</span> : null}
                 </div>
                 <div className="h-1 overflow-hidden bg-white/[0.06]">
-                  <div className={`h-full transition-[width] ${node.jobStatus === "DONE" ? "bg-emerald-400" : "bg-amber-400/70"}`} style={{ width: `${node.progressPercent}%` }} />
+                  <div className={`h-full transition-[width] ${node.jobStatus === "DONE" ? "bg-success" : "bg-primary/70"}`} style={{ width: `${node.progressPercent}%` }} />
                 </div>
               </div>
             ) : null}
             <div className="mt-2 flex items-center justify-between gap-2">
-              {node.qcLastStatus === "TIDAK_LOLOS" ? <span className="text-[9px] font-mono text-red-400/80">QC TIDAK LOLOS{node.countRevisi ? ` · rev.${node.countRevisi}` : ""}</span> : null}
-              {node.qcLastStatus === "LOLOS" ? <span className="text-[9px] font-mono text-emerald-400/70">QC LOLOS</span> : null}
-              {node.deadlineDate ? <span className="ml-auto text-[9px] font-mono text-white/30">📅 {new Date(node.deadlineDate).toLocaleDateString("id-ID", { day: "numeric", month: "short" })}</span> : null}
+              {node.qcLastStatus === "TIDAK_LOLOS" ? <span className="text-[9px] font-mono text-destructive/80">QC TIDAK LOLOS{node.countRevisi ? ` · rev.${node.countRevisi}` : ""}</span> : null}
+              {node.qcLastStatus === "LOLOS" ? <span className="text-[9px] font-mono text-success/70">QC LOLOS</span> : null}
+              {node.deadlineDate ? <span className="ml-auto text-[9px] font-mono text-foreground/30">📅 {new Date(node.deadlineDate).toLocaleDateString("id-ID", { day: "numeric", month: "short" })}</span> : null}
             </div>
           </>
         ) : (
           <>
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0 flex-1">
-                <p className="min-w-0 truncate text-[12px] font-mono font-medium text-white/85">{node.label}</p>
-                <p className="mt-0.5 text-[10px] text-white/35">{hierarchyText(node)}</p>
+                <p className="min-w-0 truncate text-[12px] font-mono font-medium text-foreground/85">{node.label}</p>
+                <p className="mt-0.5 text-[10px] text-foreground/35">{hierarchyText(node)}</p>
               </div>
               <div className="flex shrink-0 flex-col items-end gap-1">
-                <span className="border border-white/10 px-1.5 py-0.5 text-[9px] font-mono uppercase text-white/30">PART</span>
+                <span className="border border-white/10 px-1.5 py-0.5 text-[9px] font-mono uppercase text-foreground/30">PART</span>
                 {node.conditionType && conditionBadge(node.conditionType) ? (
                   <span className={`border px-1.5 py-0.5 text-[9px] font-mono uppercase ${conditionBadge(node.conditionType)}`}>
                     {node.conditionType}
@@ -1014,10 +1014,10 @@ function NodeCard({
                   <div className="min-w-0">
                     <span className={`text-[10px] font-mono ${sm.className}`}>{sm.label}</span>
                     {node.locationName ? (
-                      <p className="truncate text-[10px] text-white/35">{node.locationName}{node.locationDetail ? ` · ${node.locationDetail}` : ""}</p>
+                      <p className="truncate text-[10px] text-foreground/35">{node.locationName}{node.locationDetail ? ` · ${node.locationDetail}` : ""}</p>
                     ) : null}
                     {node.stockStatus === "RETRIEVED" && node.takenByName ? (
-                      <p className="truncate text-[10px] text-white/35">
+                      <p className="truncate text-[10px] text-foreground/35">
                         Oleh: {node.takenByName}
                         {node.dateOut ? ` · ${new Date(node.dateOut).toLocaleDateString("id-ID", { day: "numeric", month: "short" })}` : ""}
                       </p>
@@ -1030,12 +1030,12 @@ function NodeCard({
             {node.progressPercent != null ? (
               <div className="mt-3">
                 <div className="mb-1 flex items-center justify-between">
-                  <span className="text-[10px] font-mono tabular-nums text-white/50">{node.progressPercent.toFixed(0)}%</span>
-                  {node.remainingHours != null && node.remainingHours > 0 ? <span className="text-[10px] font-mono text-white/35">{node.remainingHours}j sisa</span> : null}
-                  {node.deadlineDate ? <span className="text-[9px] font-mono text-white/30">📅 {new Date(node.deadlineDate).toLocaleDateString("id-ID", { day: "numeric", month: "short" })}</span> : null}
+                  <span className="text-[10px] font-mono tabular-nums text-foreground/50">{node.progressPercent.toFixed(0)}%</span>
+                  {node.remainingHours != null && node.remainingHours > 0 ? <span className="text-[10px] font-mono text-foreground/35">{node.remainingHours}j sisa</span> : null}
+                  {node.deadlineDate ? <span className="text-[9px] font-mono text-foreground/30">📅 {new Date(node.deadlineDate).toLocaleDateString("id-ID", { day: "numeric", month: "short" })}</span> : null}
                 </div>
                 <div className="h-1 overflow-hidden bg-white/[0.06]">
-                  <div className={`h-full transition-[width] ${node.jobStatus === "DONE" ? "bg-emerald-400" : "bg-amber-400/70"}`} style={{ width: `${node.progressPercent}%` }} />
+                  <div className={`h-full transition-[width] ${node.jobStatus === "DONE" ? "bg-success" : "bg-primary/70"}`} style={{ width: `${node.progressPercent}%` }} />
                 </div>
               </div>
             ) : null}
@@ -1053,13 +1053,13 @@ function NodeCard({
             }}
             title="Buka detail workflow"
           >
-            <ArrowUpRight className="h-3.5 w-3.5 text-white/35" />
+            <ArrowUpRight className="h-3.5 w-3.5 text-foreground/35" />
           </button>
         ) : null}
       </button>
       <span
         data-node-resize="true"
-        className={`absolute bottom-[-4px] right-[-4px] h-3 w-3 cursor-nwse-resize border border-sky-300 bg-sky-400 transition-opacity ${
+        className={`absolute bottom-[-4px] right-[-4px] h-3 w-3 cursor-nwse-resize border border-info bg-info transition-opacity ${
           isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-60'
         }`}
         onPointerDown={handleResizePointerDown}
@@ -2169,34 +2169,34 @@ export function BomTrackerTab({
 
   if (!workspace) {
     return (
-      <section className="border border-white/5 bg-[#111114] px-4 py-3">
-        <p className="text-[11px] uppercase tracking-[0.2em] text-amber-500/70">Katalog Part</p>
-        <h2 className="mt-3 text-xl font-light text-white">Data BOM belum bisa dimuat</h2>
+      <section className="border border-white/5 bg-card px-4 py-3">
+        <p className="text-[11px] uppercase tracking-[0.2em] text-app-accent-ink/70">Katalog Part</p>
+        <h2 className="mt-3 text-xl font-light text-foreground">Data BOM belum bisa dimuat</h2>
       </section>
     );
   }
 
   return (
-    <section ref={sectionRef} className={`relative overflow-hidden border border-white/5 bg-[#111114] ${isFullscreen ? "fixed inset-0 z-50" : ""}`}>
+    <section ref={sectionRef} className={`relative overflow-hidden border border-white/5 bg-card ${isFullscreen ? "fixed inset-0 z-50" : ""}`}>
 
 
 
       <div className={`grid ${isFullscreen ? "min-h-screen" : "min-h-[calc(100vh-180px)]"} ${isSidePanelOpen ? "xl:grid-cols-[minmax(0,1fr)_360px]" : "xl:grid-cols-1"} transition-[grid-template-columns] duration-300 ease-in-out`}>
-        <div className="relative min-w-0 border-r border-white/5 bg-[#0a0a0c]">
-          <div data-canvas-control="true" className="absolute left-4 top-4 z-30 flex items-center gap-1 border border-white/10 bg-[#111114]/95 p-1 shadow-lg shadow-black/20 backdrop-blur">
+        <div className="relative min-w-0 border-r border-white/5 bg-background">
+          <div data-canvas-control="true" className="absolute left-4 top-4 z-30 flex items-center gap-1 border border-white/10 bg-card/95 p-1 shadow-lg shadow-black/20 backdrop-blur">
             <button
               type="button"
               onClick={() => setZoom((value) => Math.max(0.55, Number((value - 0.05).toFixed(2))))}
-              className="flex h-8 w-8 items-center justify-center text-white/45 transition-colors hover:bg-white/[0.05] hover:text-white"
+              className="flex h-8 w-8 items-center justify-center text-foreground/45 transition-colors hover:bg-white/[0.05] hover:text-foreground"
               aria-label="Zoom out"
             >
               <ZoomOut className="h-4 w-4" />
             </button>
-            <span className="w-12 text-center text-[10px] font-mono text-white/35">{Math.round(zoom * 100)}%</span>
+            <span className="w-12 text-center text-[10px] font-mono text-foreground/35">{Math.round(zoom * 100)}%</span>
             <button
               type="button"
               onClick={() => setZoom((value) => Math.min(1.35, Number((value + 0.05).toFixed(2))))}
-              className="flex h-8 w-8 items-center justify-center text-white/45 transition-colors hover:bg-white/[0.05] hover:text-white"
+              className="flex h-8 w-8 items-center justify-center text-foreground/45 transition-colors hover:bg-white/[0.05] hover:text-foreground"
               aria-label="Zoom in"
             >
               <ZoomIn className="h-4 w-4" />
@@ -2204,7 +2204,7 @@ export function BomTrackerTab({
             <button
               type="button"
               onClick={resetCanvasLayout}
-              className="border-l border-white/10 px-2.5 text-[10px] font-mono uppercase tracking-[0.08em] text-white/35 transition-colors hover:bg-white/[0.05] hover:text-white"
+              className="border-l border-white/10 px-2.5 text-[10px] font-mono uppercase tracking-[0.08em] text-foreground/35 transition-colors hover:bg-white/[0.05] hover:text-foreground"
               aria-label="Reset layout canvas"
             >
               Reset
@@ -2214,7 +2214,7 @@ export function BomTrackerTab({
               <button
                 type="button"
                 onClick={undoCanvas}
-                className="border-l border-white/10 px-2.5 text-[10px] font-mono uppercase tracking-[0.08em] text-amber-400/70 transition-colors hover:bg-white/[0.05] hover:text-amber-400"
+                className="border-l border-white/10 px-2.5 text-[10px] font-mono uppercase tracking-[0.08em] text-app-accent-ink/70 transition-colors hover:bg-white/[0.05] hover:text-app-accent-ink"
                 aria-label="Undo perubahan canvas (Ctrl+Z)"
                 title="Undo (Ctrl+Z)"
               >
@@ -2224,7 +2224,7 @@ export function BomTrackerTab({
             <button
               type="button"
               onClick={fitToView}
-              className="border-l border-white/10 px-2.5 text-[10px] font-mono uppercase tracking-[0.08em] text-white/35 transition-colors hover:bg-white/[0.05] hover:text-white"
+              className="border-l border-white/10 px-2.5 text-[10px] font-mono uppercase tracking-[0.08em] text-foreground/35 transition-colors hover:bg-white/[0.05] hover:text-foreground"
               title="Fit to view / Center all"
               aria-label="Fit semua node ke layar"
             >
@@ -2233,7 +2233,7 @@ export function BomTrackerTab({
             <button
               type="button"
               onClick={expandAll}
-              className="border-l border-white/10 px-2.5 text-[10px] font-mono uppercase tracking-[0.08em] text-white/35 transition-colors hover:bg-white/[0.05] hover:text-white"
+              className="border-l border-white/10 px-2.5 text-[10px] font-mono uppercase tracking-[0.08em] text-foreground/35 transition-colors hover:bg-white/[0.05] hover:text-foreground"
               title="Buka semua node"
               aria-label="Expand semua node"
             >
@@ -2242,7 +2242,7 @@ export function BomTrackerTab({
             <button
               type="button"
               onClick={collapseAll}
-              className="border-l border-white/10 px-2.5 text-[10px] font-mono uppercase tracking-[0.08em] text-white/35 transition-colors hover:bg-white/[0.05] hover:text-white"
+              className="border-l border-white/10 px-2.5 text-[10px] font-mono uppercase tracking-[0.08em] text-foreground/35 transition-colors hover:bg-white/[0.05] hover:text-foreground"
               title="Tutup semua node"
               aria-label="Collapse semua node"
             >
@@ -2251,7 +2251,7 @@ export function BomTrackerTab({
             <button
               type="button"
               onClick={handleFullscreenToggle}
-              className="border-l border-white/10 px-2.5 text-[10px] font-mono uppercase tracking-[0.08em] text-white/35 transition-colors hover:bg-white/[0.05] hover:text-white"
+              className="border-l border-white/10 px-2.5 text-[10px] font-mono uppercase tracking-[0.08em] text-foreground/35 transition-colors hover:bg-white/[0.05] hover:text-foreground"
               aria-label={isFullscreen ? "Keluar fullscreen" : "Masuk fullscreen"}
             >
               {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
@@ -2263,19 +2263,19 @@ export function BomTrackerTab({
               <button
                 type="button"
                 onClick={() => setHiddenNodeIds(new Set())}
-                className="inline-flex h-9 items-center gap-1.5 border border-white/10 bg-[#111114]/95 px-3 text-[10px] font-mono uppercase tracking-[0.12em] text-white/45 backdrop-blur transition-colors hover:border-white/30 hover:text-white"
+                className="inline-flex h-9 items-center gap-1.5 border border-white/10 bg-card/95 px-3 text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/45 backdrop-blur transition-colors hover:border-white/30 hover:text-foreground"
               >
                 <Eye className="h-3.5 w-3.5" />
                 Tampilkan Hidden
               </button>
             ) : null}
-            <span className="hidden border border-white/10 bg-[#111114]/95 px-2.5 py-2 text-[10px] font-mono text-white/35 backdrop-blur md:inline-flex">
+            <span className="hidden border border-white/10 bg-card/95 px-2.5 py-2 text-[10px] font-mono text-foreground/35 backdrop-blur md:inline-flex">
               {workspace.summary.totalParts} komponen / {totalPanelRecords} panel / {totalPartRecords} part
             </span>
             <button
               type="button"
               onClick={() => void refreshWorkspace()}
-              className="inline-flex h-9 items-center gap-1.5 border border-white/10 bg-[#111114]/95 px-3 text-[10px] font-mono uppercase tracking-[0.12em] text-white/45 backdrop-blur transition-colors hover:border-white/30 hover:text-white disabled:opacity-30"
+              className="inline-flex h-9 items-center gap-1.5 border border-white/10 bg-card/95 px-3 text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/45 backdrop-blur transition-colors hover:border-white/30 hover:text-foreground disabled:opacity-30"
               disabled={isLoading}
             >
               <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? "animate-spin" : ""}`} />
@@ -2284,8 +2284,8 @@ export function BomTrackerTab({
           </div>
 
           {showHint ? (
-            <div className="absolute bottom-4 left-4 z-30 flex items-center gap-2 border border-white/10 bg-[#111114]/95 px-3 py-2 text-[10px] font-mono text-white/35 backdrop-blur transition-opacity duration-300">
-              <Grip className="h-3.5 w-3.5 text-white/30" />
+            <div className="absolute bottom-4 left-4 z-30 flex items-center gap-2 border border-white/10 bg-card/95 px-3 py-2 text-[10px] font-mono text-foreground/35 backdrop-blur transition-opacity duration-300">
+              <Grip className="h-3.5 w-3.5 text-foreground/30" />
               Klik kanan node untuk aksi. Drag node untuk pindah. Drag area kosong untuk pan.
             </div>
           ) : null}
@@ -2294,15 +2294,15 @@ export function BomTrackerTab({
 
           {panelTrackerTree.length === 0 ? (
             <div className={`flex ${isFullscreen ? "min-h-screen" : "min-h-[calc(100vh-180px)]"} items-center justify-center px-6`}>
-              <div className="max-w-sm border border-dashed border-white/10 bg-[#111114] px-6 py-8 text-center">
-                <Boxes className="mx-auto h-8 w-8 text-amber-500/70" />
-                <h3 className="mt-4 text-[15px] font-mono text-white/80">Belum ada master panel</h3>
-                <p className="mt-2 text-[11px] text-white/35">Mulai dari satu kategori dan panel utama agar BOM unit bisa divisualkan.</p>
+              <div className="max-w-sm border border-dashed border-white/10 bg-card px-6 py-8 text-center">
+                <Boxes className="mx-auto h-8 w-8 text-app-accent-ink/70" />
+                <h3 className="mt-4 text-[15px] font-mono text-foreground/80">Belum ada master panel</h3>
+                <p className="mt-2 text-[11px] text-foreground/35">Mulai dari satu kategori dan panel utama agar BOM unit bisa divisualkan.</p>
                 {canManagePanels ? (
                   <button
                     type="button"
                     onClick={openCreateRoot}
-                    className="mt-5 inline-flex items-center gap-2 border border-amber-500/30 bg-amber-500/[0.06] px-4 py-2 text-[10px] font-mono uppercase tracking-[0.12em] text-amber-500 transition-colors hover:bg-amber-500/10"
+                    className="mt-5 inline-flex items-center gap-2 border border-primary/30 bg-primary/[0.06] px-4 py-2 text-[10px] font-mono uppercase tracking-[0.12em] text-app-accent-ink transition-colors hover:bg-primary/10"
                   >
                     <Plus className="h-3.5 w-3.5" />
                     Buat Master Panel Pertama
@@ -2385,31 +2385,31 @@ export function BomTrackerTab({
                     onClick={() => {
                       if (suppressRootClickRef.current) return;
                     }}
-                    className={`h-full w-full border bg-[#15120b] p-3 text-left shadow-lg shadow-black/25 transition-[border-color,background-color,transform] hover:-translate-y-0.5 hover:border-amber-500/50 hover:bg-[#18140c] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-500/70 ${selection?.type === "unit" ? "border-amber-500/70" : "border-amber-500/25"
+                    className={`h-full w-full border bg-primary/10 p-3 text-left shadow-lg shadow-black/25 transition-[border-color,background-color,transform] hover:-translate-y-0.5 hover:border-primary/50 hover:bg-primary/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-500/70 ${selection?.type === "unit" ? "border-primary/70" : "border-primary/25"
                       }`}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className="flex h-5 w-5 shrink-0 items-center justify-center border border-amber-500/25 text-amber-400">
+                          <span className="flex h-5 w-5 shrink-0 items-center justify-center border border-primary/25 text-app-accent-ink">
                             {isRootExpanded ? <ChevronDown className="h-3 w-3" /> : <Plus className="h-3 w-3" />}
                           </span>
-                          <span className="h-2 w-2 shrink-0 bg-amber-400 shadow-[0_0_16px_rgba(245,158,11,0.45)]" />
-                          <p className="truncate text-[12px] font-mono text-white/90">{rootLabel}</p>
+                          <span className="h-2 w-2 shrink-0 bg-primary shadow-[0_0_16px_rgba(245,158,11,0.45)]" />
+                          <p className="truncate text-[12px] font-mono text-foreground/90">{rootLabel}</p>
                         </div>
-                        <p className="mt-1 truncate text-[10px] text-white/38">Root unit workspace</p>
+                        <p className="mt-1 truncate text-[10px] text-foreground/38">Root unit workspace</p>
                       </div>
-                      <span className="shrink-0 border border-amber-500/25 px-1.5 py-0.5 text-[9px] font-mono uppercase text-amber-400">
+                      <span className="shrink-0 border border-primary/25 px-1.5 py-0.5 text-[9px] font-mono uppercase text-app-accent-ink">
                         UNIT
                       </span>
                     </div>
                     <div className="mt-3 flex items-center justify-between gap-2">
-                      <span className="inline-flex items-center gap-1.5 border border-amber-500/25 bg-amber-500/[0.07] px-2 py-0.5 text-[9px] font-mono uppercase tracking-[0.1em] text-amber-400">
+                      <span className="inline-flex items-center gap-1.5 border border-primary/25 bg-primary/[0.07] px-2 py-0.5 text-[9px] font-mono uppercase tracking-[0.1em] text-app-accent-ink">
                         <GitBranch className="h-3 w-3" />
                         {panelTrackerTree.length} kategori
                       </span>
                     </div>
-                    <p className="mt-3 text-[10px] font-mono text-white/30">
+                    <p className="mt-3 text-[10px] font-mono text-foreground/30">
                       {isRootExpanded ? "Klik kategori untuk buka section" : "Klik untuk buka tree"}
                     </p>
                   </button>
@@ -2446,7 +2446,7 @@ export function BomTrackerTab({
           <div
             ref={contextMenuRef}
             data-canvas-control="true"
-            className="absolute z-40 min-w-52 border border-white/10 bg-[#0d0d10] p-1 shadow-2xl shadow-black/40"
+            className="absolute z-40 min-w-52 border border-white/10 bg-card p-1 shadow-2xl shadow-black/40"
             style={{ left: contextMenu.x, top: contextMenu.y }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -2460,8 +2460,8 @@ export function BomTrackerTab({
               return (
                 <>
                   <div className="border-b border-white/10 px-3 py-2">
-                    <p className="text-[9px] font-mono uppercase tracking-[0.12em] text-white/30">{isRootMenu ? "UNIT" : n.nodeType}</p>
-                    <p className="truncate text-[12px] font-mono font-medium text-white/80">{n.label}</p>
+                    <p className="text-[9px] font-mono uppercase tracking-[0.12em] text-foreground/30">{isRootMenu ? "UNIT" : n.nodeType}</p>
+                    <p className="truncate text-[12px] font-mono font-medium text-foreground/80">{n.label}</p>
                   </div>
 
                   {isRootMenu ? (
@@ -2476,7 +2476,7 @@ export function BomTrackerTab({
                           }
                           setContextMenu(null);
                         }}
-                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] font-mono text-white/65 transition-colors hover:bg-white/[0.05] hover:text-white"
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] font-mono text-foreground/65 transition-colors hover:bg-white/[0.05] hover:text-foreground"
                       >
                         {isRootExpanded ? <ChevronsDownUp className="h-3.5 w-3.5" /> : <ChevronsUpDown className="h-3.5 w-3.5" />}
                         {isRootExpanded ? "Tutup semua" : "Buka semua"}
@@ -2488,7 +2488,7 @@ export function BomTrackerTab({
                             openCreateCategory();
                             setContextMenu(null);
                           }}
-                          className="flex w-full items-center gap-2 border-t border-white/5 px-3 py-2 text-left text-[11px] font-mono text-amber-500/80 hover:bg-amber-500/10 hover:text-amber-400"
+                          className="flex w-full items-center gap-2 border-t border-white/5 px-3 py-2 text-left text-[11px] font-mono text-app-accent-ink/80 hover:bg-primary/10 hover:text-app-accent-ink"
                         >
                           <Plus className="h-3.5 w-3.5" />
                           Tambah kategori baru
@@ -2504,7 +2504,7 @@ export function BomTrackerTab({
                         toggleNode(n);
                         setContextMenu(null);
                       }}
-                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] font-mono text-white/65 transition-colors hover:bg-white/[0.05] hover:text-white"
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] font-mono text-foreground/65 transition-colors hover:bg-white/[0.05] hover:text-foreground"
                     >
                       {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
                       {isExpanded ? "Tutup turunan" : "Buka turunan"}
@@ -2515,15 +2515,15 @@ export function BomTrackerTab({
                     <>
                       <div className="border-t border-white/5" />
                       <button type="button" onClick={() => { openEditCategory(n.category ?? ""); setContextMenu(null); }}
-                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] font-mono text-white/65 hover:bg-white/[0.05] hover:text-white">
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] font-mono text-foreground/65 hover:bg-white/[0.05] hover:text-foreground">
                         <Pencil className="h-3.5 w-3.5" /> Edit nama kategori
                       </button>
                       <button type="button" onClick={() => { openCreateSectionFromCategory(n.category ?? ""); setContextMenu(null); }}
-                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] font-mono text-amber-500/80 hover:bg-amber-500/10 hover:text-amber-400">
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] font-mono text-app-accent-ink/80 hover:bg-primary/10 hover:text-app-accent-ink">
                         <Plus className="h-3.5 w-3.5" /> Tambah section baru
                       </button>
                       <button type="button" onClick={() => { void handleDeleteCategory(displayCategory(n.category)); setContextMenu(null); }}
-                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] font-mono text-red-400/70 hover:bg-red-500/10 hover:text-red-300">
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] font-mono text-destructive/70 hover:bg-destructive/10 hover:text-destructive">
                         <Trash2 className="h-3.5 w-3.5" /> Hapus kategori
                       </button>
                     </>
@@ -2533,11 +2533,11 @@ export function BomTrackerTab({
                     <>
                       <div className="border-t border-white/5" />
                       <button type="button" onClick={() => { openEditSection(n.category ?? "", n.section ?? ""); setContextMenu(null); }}
-                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] font-mono text-white/65 hover:bg-white/[0.05] hover:text-white">
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] font-mono text-foreground/65 hover:bg-white/[0.05] hover:text-foreground">
                         <Pencil className="h-3.5 w-3.5" /> Edit nama section
                       </button>
                       <button type="button" onClick={() => { openCreatePanelFromSection(n); setContextMenu(null); }}
-                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] font-mono text-amber-500/80 hover:bg-amber-500/10 hover:text-amber-400">
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] font-mono text-app-accent-ink/80 hover:bg-primary/10 hover:text-app-accent-ink">
                         <Plus className="h-3.5 w-3.5" /> Tambah panel di section ini
                       </button>
                     </>
@@ -2547,17 +2547,17 @@ export function BomTrackerTab({
                     <>
                       <div className="border-t border-white/5" />
                       <button type="button" onClick={() => { openEdit(ctxRecord); setContextMenu(null); }}
-                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] font-mono text-white/65 hover:bg-white/[0.05] hover:text-white">
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] font-mono text-foreground/65 hover:bg-white/[0.05] hover:text-foreground">
                         <Pencil className="h-3.5 w-3.5" /> Edit {ctxRecord.nodeType === "PANEL" ? "panel" : "part"}
                       </button>
                       {ctxRecord.nodeType === "PANEL" ? (
                         <button type="button" onClick={() => { openCreateFromNode(n); setContextMenu(null); }}
-                          className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] font-mono text-amber-500/80 hover:bg-amber-500/10 hover:text-amber-400">
+                          className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] font-mono text-app-accent-ink/80 hover:bg-primary/10 hover:text-app-accent-ink">
                           <Plus className="h-3.5 w-3.5" /> Tambah part
                         </button>
                       ) : null}
                       <button type="button" onClick={() => { void handleDelete(ctxRecord); setContextMenu(null); }}
-                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] font-mono text-red-400/70 hover:bg-red-500/10 hover:text-red-300">
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] font-mono text-destructive/70 hover:bg-destructive/10 hover:text-destructive">
                         <Trash2 className="h-3.5 w-3.5" /> Hapus {ctxRecord.nodeType === "PANEL" ? "panel" : "part"}
                       </button>
                     </>
@@ -2567,7 +2567,7 @@ export function BomTrackerTab({
                     <>
                       <div className="border-t border-white/5" />
                       <button type="button" onClick={() => { navigateToDetail(n); setContextMenu(null); }}
-                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] font-mono text-white/65 hover:bg-white/[0.05] hover:text-white">
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] font-mono text-foreground/65 hover:bg-white/[0.05] hover:text-foreground">
                         <FolderOpen className="h-3.5 w-3.5" /> Buka detail workflow
                       </button>
                     </>
@@ -2577,7 +2577,7 @@ export function BomTrackerTab({
                     <>
                       <div className="border-t border-white/5" />
                       <button type="button" onClick={() => { hideNode(n.nodeId); setContextMenu(null); }}
-                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] font-mono text-white/40 hover:bg-white/[0.05] hover:text-white/65">
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] font-mono text-foreground/40 hover:bg-white/[0.05] hover:text-foreground/65">
                         <EyeOff className="h-3.5 w-3.5" /> Sembunyikan node
                       </button>
                     </>
@@ -2586,7 +2586,7 @@ export function BomTrackerTab({
                     <button
                       type="button"
                       onClick={() => resetNodeDimension(n.nodeId)}
-                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] font-mono text-white/40 hover:bg-white/[0.05] hover:text-white/65"
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] font-mono text-foreground/40 hover:bg-white/[0.05] hover:text-foreground/65"
                     >
                       <RefreshCw className="h-3.5 w-3.5" />
                       Reset ukuran node
@@ -2599,16 +2599,16 @@ export function BomTrackerTab({
         ) : null}
 
         {isSidePanelOpen ? (
-          <aside className="bg-[#0d0d10]">
+          <aside className="bg-card">
             <div className="flex items-center justify-between border-b border-white/5 px-4 py-3">
               <div className="flex items-center gap-2">
-                <Boxes className="h-3.5 w-3.5 text-amber-500" />
-                <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/35">{sidePanelTitle}</span>
+                <Boxes className="h-3.5 w-3.5 text-app-accent-ink" />
+                <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/35">{sidePanelTitle}</span>
               </div>
               <button
                 type="button"
                 onClick={closeForm}
-                className="flex h-8 w-8 items-center justify-center text-white/35 transition-colors hover:bg-white/[0.04] hover:text-white"
+                className="flex h-8 w-8 items-center justify-center text-foreground/35 transition-colors hover:bg-white/[0.04] hover:text-foreground"
                 aria-label="Tutup panel"
               >
                 <X className="h-4 w-4" />
@@ -2619,29 +2619,29 @@ export function BomTrackerTab({
               {mode.type === "edit-category" ? (
                 <form className="space-y-3" onSubmit={(event) => void handleSubmit(event)}>
                   <label className="block space-y-1">
-                    <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">Nama Kategori</span>
+                    <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30">Nama Kategori</span>
                     <input
                       value={form.category}
                       onChange={(event) => setForm((current) => ({ ...current, category: event.target.value }))}
-                      className="h-9 w-full border border-white/10 bg-[#111114] px-3 text-[11px] font-mono text-white/70 outline-none transition-colors focus:border-amber-500/40"
+                      className="h-9 w-full border border-white/10 bg-card px-3 text-[11px] font-mono text-foreground/70 outline-none transition-colors focus:border-primary/40"
                       autoFocus
                     />
                   </label>
-                  <p className="border border-white/5 bg-[#111114] px-3 py-2 text-[10px] text-white/30">
+                  <p className="border border-white/5 bg-card px-3 py-2 text-[10px] text-foreground/30">
                     Semua panel dan part di kategori ini akan ikut memakai nama kategori baru.
                   </p>
                   <div className="flex gap-2 pt-1">
                     <button
                       type="submit"
                       disabled={isSubmitting}
-                      className="border border-amber-500/40 bg-amber-500/[0.06] px-3 py-2 text-[10px] font-mono uppercase tracking-[0.12em] text-amber-500 transition-colors hover:bg-amber-500/10 disabled:opacity-30"
+                      className="border border-primary/40 bg-primary/[0.06] px-3 py-2 text-[10px] font-mono uppercase tracking-[0.12em] text-app-accent-ink transition-colors hover:bg-primary/10 disabled:opacity-30"
                     >
                       {isSubmitting ? "Menyimpan..." : "Simpan"}
                     </button>
                     <button
                       type="button"
                       onClick={closeForm}
-                      className="border border-white/10 px-3 py-2 text-[10px] font-mono uppercase tracking-[0.12em] text-white/40 transition-colors hover:text-white"
+                      className="border border-white/10 px-3 py-2 text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/40 transition-colors hover:text-foreground"
                     >
                       Batal
                     </button>
@@ -2650,29 +2650,29 @@ export function BomTrackerTab({
               ) : mode.type === "edit-section" ? (
                 <form className="space-y-3" onSubmit={(event) => void handleSubmit(event)}>
                   <label className="block space-y-1">
-                    <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">Nama Section</span>
+                    <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30">Nama Section</span>
                     <input
                       value={form.section}
                       onChange={(event) => setForm((current) => ({ ...current, section: event.target.value }))}
-                      className="h-9 w-full border border-white/10 bg-[#111114] px-3 text-[11px] font-mono text-white/70 outline-none transition-colors focus:border-amber-500/40"
+                      className="h-9 w-full border border-white/10 bg-card px-3 text-[11px] font-mono text-foreground/70 outline-none transition-colors focus:border-primary/40"
                       autoFocus
                     />
                   </label>
-                  <p className="border border-white/5 bg-[#111114] px-3 py-2 text-[10px] text-white/30">
+                  <p className="border border-white/5 bg-card px-3 py-2 text-[10px] text-foreground/30">
                     Semua panel dan part di section ini akan ikut memakai nama section baru.
                   </p>
                   <div className="flex gap-2 pt-1">
                     <button
                       type="submit"
                       disabled={isSubmitting}
-                      className="border border-amber-500/40 bg-amber-500/[0.06] px-3 py-2 text-[10px] font-mono uppercase tracking-[0.12em] text-amber-500 transition-colors hover:bg-amber-500/10 disabled:opacity-30"
+                      className="border border-primary/40 bg-primary/[0.06] px-3 py-2 text-[10px] font-mono uppercase tracking-[0.12em] text-app-accent-ink transition-colors hover:bg-primary/10 disabled:opacity-30"
                     >
                       {isSubmitting ? "Menyimpan..." : "Simpan"}
                     </button>
                     <button
                       type="button"
                       onClick={closeForm}
-                      className="border border-white/10 px-3 py-2 text-[10px] font-mono uppercase tracking-[0.12em] text-white/40 transition-colors hover:text-white"
+                      className="border border-white/10 px-3 py-2 text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/40 transition-colors hover:text-foreground"
                     >
                       Batal
                     </button>
@@ -2682,14 +2682,14 @@ export function BomTrackerTab({
                 <form className="space-y-3" onSubmit={(event) => void handleSubmit(event)}>
                   {mode.type === "create" && mode.sectionMode === "existing" ? (
                     <div className="space-y-1">
-                      <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">Buat</span>
-                      <div className="grid grid-cols-2 gap-1 border border-white/10 bg-[#111114] p-1">
+                      <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30">Buat</span>
+                      <div className="grid grid-cols-2 gap-1 border border-white/10 bg-card p-1">
                         <button
                           type="button"
                           onClick={() => selectNodeType("Panel")}
                           className={`px-2 py-1.5 text-[10px] font-mono uppercase tracking-[0.12em] transition-colors ${form.nodeType === "PANEL"
-                            ? "bg-amber-500/[0.08] text-amber-500"
-                            : "text-white/35 hover:text-white"
+                            ? "bg-primary/[0.08] text-app-accent-ink"
+                            : "text-foreground/35 hover:text-foreground"
                             }`}
                         >
                           Panel
@@ -2698,8 +2698,8 @@ export function BomTrackerTab({
                           type="button"
                           onClick={() => selectNodeType("Part")}
                           className={`px-2 py-1.5 text-[10px] font-mono uppercase tracking-[0.12em] transition-colors ${form.nodeType === "PART"
-                            ? "bg-amber-500/[0.08] text-amber-500"
-                            : "text-white/35 hover:text-white"
+                            ? "bg-primary/[0.08] text-app-accent-ink"
+                            : "text-foreground/35 hover:text-foreground"
                             }`}
                         >
                           Part
@@ -2709,7 +2709,7 @@ export function BomTrackerTab({
                   ) : null}
 
                   <label className="block space-y-1">
-                    <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">Kategori</span>
+                    <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30">Kategori</span>
                     <SearchableField
                       value={form.category}
                       options={categoryOptions}
@@ -2721,13 +2721,13 @@ export function BomTrackerTab({
                   </label>
 
                   <label className="block space-y-1">
-                    <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">Section</span>
+                    <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30">Section</span>
                     {mode.type === "create" && mode.sectionMode === "new" ? (
                       <input
                         value={form.section}
                         onChange={(event) => setForm((current) => ({ ...current, section: event.target.value }))}
                         placeholder="Nama section baru"
-                        className="h-9 w-full border border-white/10 bg-[#111114] px-3 text-[11px] font-mono text-white/70 outline-none transition-colors placeholder:text-white/20 focus:border-amber-500/40"
+                        className="h-9 w-full border border-white/10 bg-card px-3 text-[11px] font-mono text-foreground/70 outline-none transition-colors placeholder:text-foreground/20 focus:border-primary/40"
                       />
                     ) : (
                       <SearchableField
@@ -2742,7 +2742,7 @@ export function BomTrackerTab({
 
                   {mode.type === "create" && form.nodeType === "PART" ? (
                     <label className="block space-y-1">
-                      <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">Panel Parent</span>
+                      <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30">Panel Parent</span>
                       <SearchableField
                         value={parentPanelValue}
                         options={parentPanelOptions}
@@ -2754,13 +2754,13 @@ export function BomTrackerTab({
                   ) : null}
 
                     {mode.type === "edit" && mode.record.nodeType === "PART" && selectedParentPanel ? (
-                      <div className="border border-amber-500/20 bg-amber-500/[0.04] px-3 py-2 text-[10px] font-mono text-amber-400">
+                      <div className="border border-primary/20 bg-primary/[0.04] px-3 py-2 text-[10px] font-mono text-app-accent-ink">
                         Parent: {selectedParentPanel.name}
                       </div>
                     ) : null}
 
                     <label className="block space-y-1">
-                      <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">
+                      <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30">
                         {mode.type === "create" && mode.sectionMode === "new"
                           ? "Nama Panel Pertama"
                           : form.nodeType === "PART"
@@ -2771,34 +2771,34 @@ export function BomTrackerTab({
                         value={form.name}
                         onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
                         placeholder={mode.type === "create" && mode.sectionMode === "new" ? "Contoh: Body Depan" : undefined}
-                        className="h-9 w-full border border-white/10 bg-[#111114] px-3 text-[11px] font-mono text-white/70 outline-none transition-colors placeholder:text-white/20 focus:border-amber-500/40"
+                        className="h-9 w-full border border-white/10 bg-card px-3 text-[11px] font-mono text-foreground/70 outline-none transition-colors placeholder:text-foreground/20 focus:border-primary/40"
                       />
                     </label>
 
-                  <label className="flex items-center gap-3 border border-white/5 bg-[#111114] px-3 py-2">
+                  <label className="flex items-center gap-3 border border-white/5 bg-card px-3 py-2">
                     <input
                       type="checkbox"
                       checked={form.isActive}
                       onChange={(event) => setForm((current) => ({ ...current, isActive: event.target.checked }))}
                       className="h-4 w-4 border-white/20 bg-transparent"
                     />
-                    <span className="text-[10px] font-mono text-white/50">Aktifkan {form.nodeType === "PART" ? "part" : "panel"} ini</span>
+                    <span className="text-[10px] font-mono text-foreground/50">Aktifkan {form.nodeType === "PART" ? "part" : "panel"} ini</span>
                   </label>
 
                   <div className="grid grid-cols-2 gap-2">
                     <label className="block space-y-1">
-                      <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">Qty</span>
+                      <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30">Qty</span>
                       <input
                         type="number"
                         min="0.01"
                         step="0.01"
                         value={form.qty}
                         onChange={(event) => setForm((current) => ({ ...current, qty: event.target.value }))}
-                        className="h-9 w-full border border-white/10 bg-[#111114] px-3 text-[11px] font-mono text-white/70 outline-none transition-colors focus:border-amber-500/40"
+                        className="h-9 w-full border border-white/10 bg-card px-3 text-[11px] font-mono text-foreground/70 outline-none transition-colors focus:border-primary/40"
                       />
                     </label>
                     <label className="block space-y-1">
-                      <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">Lokasi</span>
+                      <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30">Lokasi</span>
                       <select
                         value={form.defaultLocationType}
                         onChange={(event) => {
@@ -2809,7 +2809,7 @@ export function BomTrackerTab({
                             defaultStockStatus: stockStatusForLocation(defaultLocationType),
                           }));
                         }}
-                        className="h-9 w-full border border-white/10 bg-[#111114] px-2 text-[10px] font-mono text-white/70 outline-none transition-colors focus:border-amber-500/40 [color-scheme:dark]"
+                        className="h-9 w-full border border-white/10 bg-card px-2 text-[10px] font-mono text-foreground/70 outline-none transition-colors focus:border-primary/40 [color-scheme:dark]"
                       >
                         <option value="UNIT">{LOCATION_LABEL.UNIT}</option>
                         <option value="WORKSHOP">{LOCATION_LABEL.WORKSHOP}</option>
@@ -2817,7 +2817,7 @@ export function BomTrackerTab({
                       </select>
                     </label>
                     <label className="block space-y-1">
-                      <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">Posisi</span>
+                      <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30">Posisi</span>
                       <select
                         value={form.defaultStockStatus}
                         onChange={(event) =>
@@ -2827,7 +2827,7 @@ export function BomTrackerTab({
                           }))
                         }
                         disabled={form.defaultLocationType === "UNIT"}
-                        className="h-9 w-full border border-white/10 bg-[#111114] px-2 text-[10px] font-mono text-white/70 outline-none transition-colors focus:border-amber-500/40 disabled:cursor-not-allowed disabled:text-white/40 [color-scheme:dark]"
+                        className="h-9 w-full border border-white/10 bg-card px-2 text-[10px] font-mono text-foreground/70 outline-none transition-colors focus:border-primary/40 disabled:cursor-not-allowed disabled:text-foreground/40 [color-scheme:dark]"
                       >
                         <option value="INSTALLED">{STOCK_STATUS_LABEL.INSTALLED}</option>
                         <option value="IN_STORAGE">{STOCK_STATUS_LABEL.IN_STORAGE}</option>
@@ -2836,7 +2836,7 @@ export function BomTrackerTab({
                       </select>
                     </label>
                     <label className="block space-y-1">
-                      <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">Kondisi Barang</span>
+                      <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30">Kondisi Barang</span>
                       <select
                         value={form.defaultConditionType}
                         onChange={(event) =>
@@ -2845,7 +2845,7 @@ export function BomTrackerTab({
                             defaultConditionType: event.target.value as PanelFormState["defaultConditionType"],
                           }))
                         }
-                        className="h-9 w-full border border-white/10 bg-[#111114] px-2 text-[10px] font-mono text-white/70 outline-none transition-colors focus:border-amber-500/40 [color-scheme:dark]"
+                        className="h-9 w-full border border-white/10 bg-card px-2 text-[10px] font-mono text-foreground/70 outline-none transition-colors focus:border-primary/40 [color-scheme:dark]"
                       >
                         <option value="BEKAS">{CONDITION_LABEL.BEKAS}</option>
                         <option value="RESTORE">{CONDITION_LABEL.RESTORE}</option>
@@ -2858,14 +2858,14 @@ export function BomTrackerTab({
                     <button
                       type="submit"
                       disabled={isSubmitting}
-                      className="border border-amber-500/40 bg-amber-500/[0.06] px-3 py-2 text-[10px] font-mono uppercase tracking-[0.12em] text-amber-500 transition-colors hover:bg-amber-500/10 disabled:opacity-30"
+                      className="border border-primary/40 bg-primary/[0.06] px-3 py-2 text-[10px] font-mono uppercase tracking-[0.12em] text-app-accent-ink transition-colors hover:bg-primary/10 disabled:opacity-30"
                     >
                       {isSubmitting ? "Menyimpan..." : "Simpan"}
                     </button>
                     <button
                       type="button"
                       onClick={closeForm}
-                      className="border border-white/10 px-3 py-2 text-[10px] font-mono uppercase tracking-[0.12em] text-white/40 transition-colors hover:text-white"
+                      className="border border-white/10 px-3 py-2 text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/40 transition-colors hover:text-foreground"
                     >
                       Batal
                     </button>
@@ -2874,7 +2874,7 @@ export function BomTrackerTab({
               )}
             </div>
 
-            <div className="border-t border-white/5 px-4 py-3 text-[10px] font-mono text-white/25">
+            <div className="border-t border-white/5 px-4 py-3 text-[10px] font-mono text-foreground/25">
               Foto: {canManagePhotos ? "manage" : "read"} / download {canDownloadPhotos ? "aktif" : "nonaktif"}
             </div>
           </aside>

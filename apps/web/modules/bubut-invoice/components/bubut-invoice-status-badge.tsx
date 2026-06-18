@@ -11,11 +11,11 @@ const STATUS_LABEL: Record<BubutInvoiceCombinedStatus, string> = {
 };
 
 const STATUS_CLASS: Record<BubutInvoiceCombinedStatus, string> = {
-  BELUM_RILIS: "border border-white/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-white/40",
-  RILIS_DIREKSI: "border border-blue-500/30 px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-blue-400",
-  RILIS_CUSTOMER: "border border-emerald-500/30 px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-emerald-400",
-  RILIS_KEDUANYA: "border border-amber-500/30 px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-amber-500",
-  DIBATALKAN: "border border-red-500/20 px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-red-400",
+  BELUM_RILIS: "border border-white/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-foreground/40",
+  RILIS_DIREKSI: "border border-info/30 px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-info",
+  RILIS_CUSTOMER: "border border-success/30 px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-success",
+  RILIS_KEDUANYA: "border border-primary/30 px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-app-accent-ink",
+  DIBATALKAN: "border border-destructive/20 px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-destructive",
 };
 
 export function BubutInvoiceStatusBadge({

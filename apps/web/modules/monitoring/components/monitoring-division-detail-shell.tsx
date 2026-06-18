@@ -122,14 +122,14 @@ export function MonitoringDivisionDetailShell({
   return (
     <div className="space-y-3">
       <div className="grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
-        <div className="rounded-[14px] border border-white/[0.06] bg-[#0a0a0a] px-3 py-3">
+        <div className="rounded-[14px] border border-white/[0.06] bg-background px-3 py-3">
           <div className="space-y-3">
             <div className="flex flex-wrap items-center gap-2">
               <ActionButton onClick={goBack}>
                 <ArrowLeft className="h-3 w-3" />
                 Kembali
               </ActionButton>
-              <h1 className="text-[13px] font-medium text-white">
+              <h1 className="text-[13px] font-medium text-foreground">
                 {divisionName ? `Divisi ${divisionName}` : `Divisi #${divisionId}`}
               </h1>
 
@@ -140,8 +140,8 @@ export function MonitoringDivisionDetailShell({
                   className={[
                     "rounded-md px-2.5 py-1 text-[10px] uppercase tracking-wider transition-colors",
                     activeSpan === "daily"
-                      ? "bg-amber-500/10 text-amber-500"
-                      : "text-white/40 hover:text-white/70",
+                      ? "bg-primary/10 text-app-accent-ink"
+                      : "text-foreground/40 hover:text-foreground/70",
                   ].join(" ")}
                 >
                   Harian
@@ -152,8 +152,8 @@ export function MonitoringDivisionDetailShell({
                   className={[
                     "rounded-md px-2.5 py-1 text-[10px] uppercase tracking-wider transition-colors",
                     activeSpan === "weekly"
-                      ? "bg-amber-500/10 text-amber-500"
-                      : "text-white/40 hover:text-white/70",
+                      ? "bg-primary/10 text-app-accent-ink"
+                      : "text-foreground/40 hover:text-foreground/70",
                   ].join(" ")}
                 >
                   Mingguan
@@ -167,8 +167,8 @@ export function MonitoringDivisionDetailShell({
                   className={[
                     "rounded-md px-2.5 py-1 text-[10px] uppercase tracking-wider transition-colors",
                     activeMode === "all"
-                      ? "bg-amber-500/10 text-amber-500"
-                      : "text-white/40 hover:text-white/70",
+                      ? "bg-primary/10 text-app-accent-ink"
+                      : "text-foreground/40 hover:text-foreground/70",
                   ].join(" ")}
                 >
                   Semua
@@ -179,8 +179,8 @@ export function MonitoringDivisionDetailShell({
                   className={[
                     "rounded-md px-2.5 py-1 text-[10px] uppercase tracking-wider transition-colors",
                     activeMode === "normal"
-                      ? "bg-amber-500/10 text-amber-500"
-                      : "text-white/40 hover:text-white/70",
+                      ? "bg-primary/10 text-app-accent-ink"
+                      : "text-foreground/40 hover:text-foreground/70",
                   ].join(" ")}
                 >
                   Normal
@@ -191,8 +191,8 @@ export function MonitoringDivisionDetailShell({
                   className={[
                     "rounded-md px-2.5 py-1 text-[10px] uppercase tracking-wider transition-colors",
                     activeMode === "overtime"
-                      ? "bg-amber-500/10 text-amber-500"
-                      : "text-white/40 hover:text-white/70",
+                      ? "bg-primary/10 text-app-accent-ink"
+                      : "text-foreground/40 hover:text-foreground/70",
                   ].join(" ")}
                 >
                   Lembur
@@ -218,26 +218,26 @@ export function MonitoringDivisionDetailShell({
           </div>
         </div>
 
-        <div className="rounded-[14px] border border-white/[0.06] bg-[#0a0a0a] px-3 py-3">
+        <div className="rounded-[14px] border border-white/[0.06] bg-background px-3 py-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap items-center gap-2.5">
               <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2">
-                <p className="text-[9px] uppercase tracking-[0.13em] text-white/30">Unit Aktif</p>
-                <p className="mt-1 text-[16px] font-medium leading-none text-white tabular-nums">{summary.totalUnits}</p>
+                <p className="text-[9px] uppercase tracking-[0.13em] text-foreground/30">Unit Aktif</p>
+                <p className="mt-1 text-[16px] font-medium leading-none text-foreground tabular-nums">{summary.totalUnits}</p>
               </div>
               <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2">
-                <p className="text-[9px] uppercase tracking-[0.13em] text-white/30">Anggota</p>
-                <p className="mt-1 text-[16px] font-medium leading-none text-white tabular-nums">{summary.totalMembers}</p>
+                <p className="text-[9px] uppercase tracking-[0.13em] text-foreground/30">Anggota</p>
+                <p className="mt-1 text-[16px] font-medium leading-none text-foreground tabular-nums">{summary.totalMembers}</p>
               </div>
               <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2">
-                <p className="text-[9px] uppercase tracking-[0.13em] text-emerald-500/70">Jam Aktual</p>
-                <p className="mt-1 text-[16px] font-medium leading-none text-emerald-500 tabular-nums">
+                <p className="text-[9px] uppercase tracking-[0.13em] text-success/70">Jam Aktual</p>
+                <p className="mt-1 text-[16px] font-medium leading-none text-success tabular-nums">
                   {summary.totalActualHours.toFixed(2)}j
                 </p>
               </div>
               <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2">
-                <p className="text-[9px] uppercase tracking-[0.13em] text-amber-500/70">Sisa Jam</p>
-                <p className="mt-1 text-[16px] font-medium leading-none text-amber-500 tabular-nums">
+                <p className="text-[9px] uppercase tracking-[0.13em] text-app-accent-ink/70">Sisa Jam</p>
+                <p className="mt-1 text-[16px] font-medium leading-none text-app-accent-ink tabular-nums">
                   {summary.totalRemainingHours.toFixed(2)}j
                 </p>
               </div>
@@ -251,18 +251,18 @@ export function MonitoringDivisionDetailShell({
         </div>
       </div>
 
-      <section className="rounded-[14px] border border-white/[0.06] bg-[#0a0a0a]">
+      <section className="rounded-[14px] border border-white/[0.06] bg-background">
         <div className="flex items-center justify-between gap-2 border-b border-white/[0.06] px-3 py-3">
           <div className="flex items-center gap-2">
-            <h2 className="text-[12px] font-medium text-white">Jam kerja per unit</h2>
-            <span className="text-[11px] text-white/35">{units.length} unit</span>
+            <h2 className="text-[12px] font-medium text-foreground">Jam kerja per unit</h2>
+            <span className="text-[11px] text-foreground/35">{units.length} unit</span>
           </div>
         </div>
 
         <div className="overflow-x-auto">
-          <table className="min-w-full text-sm text-white/70">
+          <table className="min-w-full text-sm text-foreground/70">
             <thead>
-              <tr className="border-b border-white/[0.06] text-left text-[11px] uppercase tracking-[0.16em] text-white/35">
+              <tr className="border-b border-white/[0.06] text-left text-[11px] uppercase tracking-[0.16em] text-foreground/35">
                 <th className="px-3 py-3">Unit</th>
                 <th className="px-3 py-3">Customer</th>
                 <th className="px-3 py-3 text-right">Tugas</th>
@@ -275,8 +275,8 @@ export function MonitoringDivisionDetailShell({
             <tbody>
               {units.length > 0 ? units.map((row) => (
                 <tr key={row.carId} className="border-b border-white/[0.04]">
-                  <td className="px-3 py-3 text-white">{row.unitName}</td>
-                  <td className="px-3 py-3 text-white/55">{row.customerName ?? "-"}</td>
+                  <td className="px-3 py-3 text-foreground">{row.unitName}</td>
+                  <td className="px-3 py-3 text-foreground/55">{row.customerName ?? "-"}</td>
                   <td className="px-3 py-3 text-right tabular-nums">{row.totalTasks}</td>
                   <td className="px-3 py-3 text-right tabular-nums">{row.totalPlannedHours.toFixed(2)}</td>
                   <td className="px-3 py-3 text-right tabular-nums">{row.totalActualHours.toFixed(2)}</td>
@@ -285,7 +285,7 @@ export function MonitoringDivisionDetailShell({
                 </tr>
               )) : (
                 <tr>
-                  <td colSpan={7} className="px-3 py-10 text-center text-sm text-white/35">
+                  <td colSpan={7} className="px-3 py-10 text-center text-sm text-foreground/35">
                     Belum ada data unit untuk filter yang dipilih.
                   </td>
                 </tr>
@@ -295,18 +295,18 @@ export function MonitoringDivisionDetailShell({
         </div>
       </section>
 
-      <section className="rounded-[14px] border border-white/[0.06] bg-[#0a0a0a]">
+      <section className="rounded-[14px] border border-white/[0.06] bg-background">
         <div className="flex items-center justify-between gap-2 border-b border-white/[0.06] px-3 py-3">
           <div className="flex items-center gap-2">
-            <h2 className="text-[12px] font-medium text-white">Jam kerja per anggota</h2>
-            <span className="text-[11px] text-white/35">{members.length} anggota</span>
+            <h2 className="text-[12px] font-medium text-foreground">Jam kerja per anggota</h2>
+            <span className="text-[11px] text-foreground/35">{members.length} anggota</span>
           </div>
         </div>
 
         <div className="overflow-x-auto">
-          <table className="min-w-full text-sm text-white/70">
+          <table className="min-w-full text-sm text-foreground/70">
             <thead>
-              <tr className="border-b border-white/[0.06] text-left text-[11px] uppercase tracking-[0.16em] text-white/35">
+              <tr className="border-b border-white/[0.06] text-left text-[11px] uppercase tracking-[0.16em] text-foreground/35">
                 <th className="px-3 py-3">Anggota</th>
                 <th className="px-3 py-3 text-right">Tugas</th>
                 <th className="px-3 py-3 text-right">Jam Plan</th>
@@ -318,7 +318,7 @@ export function MonitoringDivisionDetailShell({
             <tbody>
               {members.length > 0 ? members.map((row, index) => (
                 <tr key={`${row.employeeId ?? "unassigned"}:${index}`} className="border-b border-white/[0.04]">
-                  <td className="px-3 py-3 text-white">{row.employeeName ?? row.employeeId ?? "Belum dipilih"}</td>
+                  <td className="px-3 py-3 text-foreground">{row.employeeName ?? row.employeeId ?? "Belum dipilih"}</td>
                   <td className="px-3 py-3 text-right tabular-nums">{row.totalTasks}</td>
                   <td className="px-3 py-3 text-right tabular-nums">{row.totalPlannedHours.toFixed(2)}</td>
                   <td className="px-3 py-3 text-right tabular-nums">{row.totalActualHours.toFixed(2)}</td>
@@ -327,7 +327,7 @@ export function MonitoringDivisionDetailShell({
                 </tr>
               )) : (
                 <tr>
-                  <td colSpan={6} className="px-3 py-10 text-center text-sm text-white/35">
+                  <td colSpan={6} className="px-3 py-10 text-center text-sm text-foreground/35">
                     Belum ada data anggota untuk filter yang dipilih.
                   </td>
                 </tr>

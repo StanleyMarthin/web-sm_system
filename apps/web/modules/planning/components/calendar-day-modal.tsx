@@ -32,25 +32,25 @@ type OverrideMode = CalendarDayOverrideRequest["mode"];
 
 function riskBadge(level: string) {
   const map: Record<string, string> = {
-    RED: "bg-red-500/20 text-red-700 dark:text-red-300",
-    ORANGE: "bg-orange-500/20 text-orange-700 dark:text-orange-300",
-    YELLOW: "bg-yellow-500/20 text-yellow-700 dark:text-yellow-300",
-    GREEN: "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300",
-    BLACK: "bg-gray-500/20 text-gray-700 dark:text-gray-300",
+    RED: "bg-destructive/20 text-destructive dark:text-destructive",
+    ORANGE: "bg-primary/20 text-app-accent-ink dark:text-app-accent-ink",
+    YELLOW: "bg-warning/20 text-warning dark:text-warning",
+    GREEN: "bg-success/20 text-success dark:text-success",
+    BLACK: "bg-muted0/20 text-foreground dark:text-muted-foreground",
   };
-  return map[level] ?? "bg-blue-500/20 text-blue-700 dark:text-blue-300";
+  return map[level] ?? "bg-info/20 text-info dark:text-info";
 }
 
 function spkStatusBadge(status: string) {
   const map: Record<string, string> = {
-    DRAFT: "bg-gray-500/15 text-gray-600 dark:text-gray-300",
-    SUBMITTED: "bg-blue-500/15 text-blue-700 dark:text-blue-300",
-    APPROVED: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
-    ACTIVE: "bg-amber-500/15 text-amber-700 dark:text-amber-300",
-    DONE: "bg-gray-400/15 text-gray-500 dark:text-gray-400",
-    REJECTED: "bg-red-500/15 text-red-700 dark:text-red-300",
+    DRAFT: "bg-muted0/15 text-muted-foreground dark:text-muted-foreground",
+    SUBMITTED: "bg-info/15 text-info dark:text-info",
+    APPROVED: "bg-success/15 text-success dark:text-success",
+    ACTIVE: "bg-primary/15 text-app-accent-ink dark:text-app-accent-ink",
+    DONE: "bg-muted text-muted-foreground dark:text-muted-foreground",
+    REJECTED: "bg-destructive/15 text-destructive dark:text-destructive",
   };
-  return map[status] ?? "bg-gray-500/15 text-gray-600";
+  return map[status] ?? "bg-muted0/15 text-muted-foreground";
 }
 
 export function CalendarDayModal({
@@ -190,50 +190,50 @@ export function CalendarDayModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="flex w-full max-w-2xl flex-col overflow-hidden rounded-md border border-white/5 bg-[#111114]" style={{ maxHeight: "90vh" }}>
+      <div className="flex w-full max-w-2xl flex-col overflow-hidden rounded-md border border-border bg-card" style={{ maxHeight: "90vh" }}>
 
         {/* Header */}
-        <div className="flex flex-shrink-0 items-start justify-between border-b border-white/[0.05] px-6 py-4">
+        <div className="flex flex-shrink-0 items-start justify-between border-b border-border px-6 py-4">
           <div>
-            <h3 className="text-[16px] font-semibold text-white">{dateLabel}</h3>
-            <p className="mt-0.5 font-mono text-[11px] text-white/35">
+            <h3 className="text-[16px] font-semibold text-foreground">{dateLabel}</h3>
+            <p className="mt-0.5 font-mono text-[15px] text-muted-foreground">
               {day ? (day.isWorkingDay ? `Hari Kerja · ${day.workingHours}j reguler${day.overtimeHours > 0 ? ` · +${day.overtimeHours}j lembur` : ""}` : "Hari Libur") : "Tanpa data kalender"}
             </p>
           </div>
-          <button type="button" onClick={onClose} className="ml-4 rounded p-1.5 text-white/30 hover:bg-white/[0.06] hover:text-white/80">
+          <button type="button" onClick={onClose} className="ml-4 rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground">
             <X className="h-5 w-5" />
           </button>
         </div>
 
         {/* Jam summary */}
         {day && (
-          <div className="flex-shrink-0 border-b border-white/[0.04] px-6 py-3">
+          <div className="flex-shrink-0 border-b border-border px-6 py-3">
             <div className="flex gap-3">
               {[
                 { label: "Jam Reguler", value: `${day.workingHours}j`, tone: "normal" },
                 { label: "Jam Lembur", value: `${day.overtimeHours}j`, tone: day.overtimeHours > 0 ? "amber" : "normal" },
                 { label: "Total Kapasitas", value: `${day.totalCapacityHours}j`, tone: "green" },
               ].map((m) => (
-                <div key={m.label} className={`flex-1 rounded border px-3 py-2 ${m.tone === "green" ? "border-emerald-500/20 bg-emerald-500/[0.04]" : m.tone === "amber" ? "border-amber-500/20 bg-amber-500/[0.03]" : "border-white/[0.04] bg-white/[0.02]"}`}>
-                  <p className="font-mono text-[9px] uppercase tracking-[0.1em] text-white/30">{m.label}</p>
-                  <p className={`mt-0.5 font-mono text-[15px] font-semibold ${m.tone === "green" ? "text-emerald-400" : m.tone === "amber" && day.overtimeHours > 0 ? "text-amber-400" : "text-white/80"}`}>{m.value}</p>
+                <div key={m.label} className={`flex-1 rounded border px-3 py-2 ${m.tone === "green" ? "border-success/20 bg-success/[0.04]" : m.tone === "amber" ? "border-primary/20 bg-primary/[0.03]" : "border-border bg-muted"}`}>
+                  <p className="font-mono text-[15px] uppercase tracking-[0.1em] text-muted-foreground">{m.label}</p>
+                  <p className={`mt-0.5 font-mono text-[15px] font-semibold ${m.tone === "green" ? "text-success" : m.tone === "amber" && day.overtimeHours > 0 ? "text-app-accent-ink" : "text-foreground"}`}>{m.value}</p>
                 </div>
               ))}
             </div>
 
             {canManage && (
-              <div className="mt-3 rounded border border-amber-500/15 bg-amber-500/[0.025] p-3">
+              <div className="mt-3 rounded border border-primary/15 bg-primary/[0.025] p-3">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                   <div>
-                    <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-400">
+                    <p className="font-mono text-[14px] font-semibold uppercase tracking-[0.12em] text-app-accent-ink">
                       Atur tanggal ini
                     </p>
                   </div>
                   {day.override && (
-                    <span className="border border-amber-500/25 bg-amber-500/[0.08] px-2 py-1 font-mono text-[9px] uppercase tracking-[0.1em] text-amber-300">
+                    <span className="border border-primary/25 bg-primary/[0.08] px-2 py-1 font-mono text-[15px] uppercase tracking-[0.1em] text-app-accent-ink">
                       Override aktif
                     </span>
                   )}
@@ -252,14 +252,14 @@ export function CalendarDayModal({
                       className={[
                         "border px-3 py-2 text-left transition-colors",
                         overrideMode === option.mode
-                          ? "border-amber-500/45 bg-amber-500/[0.1] text-amber-200"
-                          : "border-white/[0.06] bg-[#0a0a0c] text-white/55 hover:border-amber-500/25",
+                          ? "border-primary/45 bg-primary/[0.1] text-app-accent-ink"
+                          : "border-border bg-background text-muted-foreground hover:border-primary/25",
                       ].join(" ")}
                     >
-                      <span className="block font-mono text-[10px] font-semibold uppercase tracking-[0.1em]">
+                      <span className="block font-mono text-[14px] font-semibold uppercase tracking-[0.1em]">
                         {option.label}
                       </span>
-                      <span className="mt-1 block text-[10px] text-white/30">{option.hint}</span>
+                      <span className="mt-1 block text-[14px] text-muted-foreground">{option.hint}</span>
                     </button>
                   ))}
                 </div>
@@ -268,54 +268,54 @@ export function CalendarDayModal({
                   {overrideMode !== "LIBUR" && (
                     <div className="grid gap-2 sm:grid-cols-2">
                       <label>
-                        <span className="mb-1 block text-[11px] text-white/55">Jam kerja</span>
+                        <span className="mb-1 block text-[15px] text-muted-foreground">Jam kerja</span>
                         <input
                           type="number"
                           min="0"
                           step="0.5"
                           value={overrideWorkingHours}
                           onChange={(event) => setOverrideWorkingHours(event.target.value)}
-                          className="h-9 w-full border border-white/[0.08] bg-[#111114] px-3 font-mono text-[12px] text-white outline-none focus:border-amber-500/50"
+                          className="h-9 w-full border border-border bg-card px-3 font-mono text-[14px] text-foreground outline-none focus:border-primary/50"
                           aria-label="Jam kerja"
                         />
                       </label>
                       <label>
-                        <span className="mb-1 block text-[11px] text-white/55">Jam lembur</span>
+                        <span className="mb-1 block text-[15px] text-muted-foreground">Jam lembur</span>
                         <input
                           type="number"
                           min="0"
                           step="0.5"
                           value={overrideOvertimeHours}
                           onChange={(event) => setOverrideOvertimeHours(event.target.value)}
-                          className="h-9 w-full border border-white/[0.08] bg-[#111114] px-3 font-mono text-[12px] text-white outline-none focus:border-amber-500/50"
+                          className="h-9 w-full border border-border bg-card px-3 font-mono text-[14px] text-foreground outline-none focus:border-primary/50"
                           aria-label="Jam lembur"
                         />
                       </label>
                     </div>
                   )}
                   <label>
-                    <span className="mb-1 block text-[11px] text-white/55">Catatan</span>
+                    <span className="mb-1 block text-[15px] text-muted-foreground">Catatan</span>
                     <input
                       type="text"
                       maxLength={200}
                       value={overrideNote}
                       onChange={(event) => setOverrideNote(event.target.value)}
                       placeholder="Contoh: Cuti bersama"
-                      className="h-9 w-full border border-white/[0.08] bg-[#111114] px-3 text-[12px] text-white outline-none placeholder:text-white/20 focus:border-amber-500/50"
+                      className="h-9 w-full border border-border bg-card px-3 text-[14px] text-foreground outline-none placeholder:text-muted-foreground focus:border-primary/50"
                     />
                   </label>
                   <button
                     type="button"
                     onClick={() => void handleSaveOverride()}
                     disabled={isSavingOverride}
-                    className="inline-flex h-9 items-center justify-center gap-2 border border-amber-500/35 bg-amber-500/[0.12] px-4 font-mono text-[10px] font-semibold uppercase tracking-[0.1em] text-amber-300 disabled:opacity-50"
+                    className="inline-flex h-9 items-center justify-center gap-2 border border-primary/35 bg-primary/[0.12] px-4 font-mono text-[14px] font-semibold uppercase tracking-[0.1em] text-app-accent-ink disabled:opacity-50"
                   >
                     <Save className="h-3.5 w-3.5" />
                     {isSavingOverride ? "Menyimpan..." : "Simpan tanggal"}
                   </button>
                 </div>
                 {overrideError && (
-                  <p className="mt-2 text-[11px] text-red-300">{overrideError}</p>
+                  <p className="mt-2 text-[15px] text-destructive">{overrideError}</p>
                 )}
               </div>
             )}
@@ -323,17 +323,17 @@ export function CalendarDayModal({
         )}
 
         {/* Tabs */}
-        <div className="mr-4 flex flex-shrink-0 gap-0 border-b border-white/[0.05] px-6">
+        <div className="mr-4 flex flex-shrink-0 gap-0 border-b border-border px-6">
           {tabs.map((tab) => (
             <button
               key={tab.id}
               type="button"
               onClick={() => setActiveTab(tab.id)}
-              className={`mr-4 flex items-center gap-1.5 border-b-2 pb-2.5 pt-3 font-mono text-[10px] uppercase tracking-[0.1em] transition-colors ${activeTab === tab.id ? "border-amber-500 text-amber-500" : "border-transparent text-white/30 hover:text-white/60"}`}
+              className={`mr-4 flex items-center gap-1.5 border-b-2 pb-2.5 pt-3 font-mono text-[14px] uppercase tracking-[0.1em] transition-colors ${activeTab === tab.id ? "border-primary text-app-accent-ink" : "border-transparent text-muted-foreground hover:text-foreground"}`}
             >
               {tab.label}
               {tab.count !== undefined && (
-                <span className={`rounded px-1 py-0.5 text-[9px] font-bold ${activeTab === tab.id ? "bg-amber-500/20 text-amber-500" : "bg-white/[0.06] text-white/40"}`}>
+                <span className={`rounded px-1 py-0.5 text-[15px] font-bold ${activeTab === tab.id ? "bg-primary/20 text-app-accent-ink" : "bg-muted text-muted-foreground"}`}>
                   {tab.count}
                 </span>
               )}
@@ -348,34 +348,34 @@ export function CalendarDayModal({
           {activeTab === "delivery" && (
             <div className="space-y-2">
               {deliveries.length === 0 ? (
-                <div className="rounded border border-dashed border-white/[0.08] py-10 text-center">
-                  <Car className="mx-auto mb-2 h-8 w-8 text-white/20" />
-                  <p className="text-[12px] text-white/30">Tidak ada target delivery di tanggal ini.</p>
+                <div className="rounded border border-dashed border-border py-10 text-center">
+                  <Car className="mx-auto mb-2 h-8 w-8 text-muted-foreground" />
+                  <p className="text-[14px] text-muted-foreground">Tidak ada target delivery di tanggal ini.</p>
                 </div>
               ) : (
                 deliveries.map((unit) => (
-                  <div key={unit.carId} className="rounded border border-blue-500/15 bg-blue-500/[0.02] p-4">
+                  <div key={unit.carId} className="rounded border border-info/15 bg-info/[0.02] p-4">
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <p className="text-[14px] font-semibold text-white">{unit.unitName}</p>
-                        <p className="mt-0.5 text-[11px] text-white/40">{unit.customerName ?? "Customer belum diisi"}</p>
+                        <p className="text-[14px] font-semibold text-foreground">{unit.unitName}</p>
+                        <p className="mt-0.5 text-[15px] text-muted-foreground">{unit.customerName ?? "Customer belum diisi"}</p>
                       </div>
-                      <span className={`rounded px-2 py-1 font-mono text-[9px] font-bold uppercase tracking-[0.1em] ${riskBadge(unit.riskLevel)}`}>
+                      <span className={`rounded px-2 py-1 font-mono text-[15px] font-bold uppercase tracking-[0.1em] ${riskBadge(unit.riskLevel)}`}>
                         {unit.riskLevel}
                       </span>
                     </div>
-                    <div className="mt-3 grid grid-cols-3 gap-2 text-[11px]">
+                    <div className="mt-3 grid grid-cols-3 gap-2 text-[15px]">
                       <div>
-                        <p className="font-mono text-[9px] uppercase text-white/30">Sisa Jam</p>
-                        <p className="mt-0.5 font-semibold text-white/80">{unit.remainingHours.toFixed(1)}j</p>
+                        <p className="font-mono text-[15px] uppercase text-muted-foreground">Sisa Jam</p>
+                        <p className="mt-0.5 font-semibold text-foreground">{unit.remainingHours.toFixed(1)}j</p>
                       </div>
                       <div>
-                        <p className="font-mono text-[9px] uppercase text-white/30">ETA</p>
-                        <p className="mt-0.5 font-semibold text-white/80">{unit.etaDays} hari</p>
+                        <p className="font-mono text-[15px] uppercase text-muted-foreground">ETA</p>
+                        <p className="mt-0.5 font-semibold text-foreground">{unit.etaDays} hari</p>
                       </div>
                       <div>
-                        <p className="font-mono text-[9px] uppercase text-white/30">Prediksi</p>
-                        <p className="mt-0.5 font-semibold text-white/80">{unit.predictedDeliveryDate ?? "–"}</p>
+                        <p className="font-mono text-[15px] uppercase text-muted-foreground">Prediksi</p>
+                        <p className="mt-0.5 font-semibold text-foreground">{unit.predictedDeliveryDate ?? "–"}</p>
                       </div>
                     </div>
                   </div>
@@ -389,52 +389,52 @@ export function CalendarDayModal({
             <div>
               {isLoadingSpk ? (
                 <div className="flex items-center justify-center py-12">
-                  <Loader2 className="h-6 w-6 animate-spin text-amber-500" />
-                  <span className="ml-2 text-[12px] text-white/40">Memuat data SPK...</span>
+                  <Loader2 className="h-6 w-6 animate-spin text-app-accent-ink" />
+                  <span className="ml-2 text-[14px] text-muted-foreground">Memuat data SPK...</span>
                 </div>
               ) : spkError ? (
-                <div className="rounded border border-red-500/20 bg-red-500/[0.04] p-4 text-[12px] text-red-400">{spkError}</div>
+                <div className="rounded border border-destructive/20 bg-destructive/[0.04] p-4 text-[14px] text-destructive">{spkError}</div>
               ) : spkList.length === 0 ? (
-                <div className="rounded border border-dashed border-white/[0.08] py-10 text-center">
-                  <FileText className="mx-auto mb-2 h-8 w-8 text-white/20" />
-                  <p className="text-[12px] text-white/30">Belum ada SPK di tanggal ini.</p>
+                <div className="rounded border border-dashed border-border py-10 text-center">
+                  <FileText className="mx-auto mb-2 h-8 w-8 text-muted-foreground" />
+                  <p className="text-[14px] text-muted-foreground">Belum ada SPK di tanggal ini.</p>
                 </div>
               ) : (
                 <div className="space-y-4">
                   {spkList.map((spk) => {
                     const units = groupAllocByUnit(spk);
                     return (
-                      <div key={spk.spkId} className="overflow-hidden rounded border border-white/[0.06]">
+                      <div key={spk.spkId} className="overflow-hidden rounded border border-border">
                         {/* SPK header */}
-                        <div className="flex items-center justify-between bg-white/[0.02] px-4 py-3">
+                        <div className="flex items-center justify-between bg-muted px-4 py-3">
                           <div>
-                            <p className="font-mono text-[11px] font-bold text-white">{spk.spkNumber}</p>
-                            <p className="mt-0.5 font-mono text-[9px] text-white/30">
+                            <p className="font-mono text-[15px] font-bold text-foreground">{spk.spkNumber}</p>
+                            <p className="mt-0.5 font-mono text-[15px] text-muted-foreground">
                               {spk.totalUnits} unit · {spk.totalHours.toFixed(0)}j total
                             </p>
                           </div>
-                          <span className={`rounded px-2 py-1 font-mono text-[9px] font-bold uppercase tracking-[0.1em] ${spkStatusBadge(spk.status)}`}>
+                          <span className={`rounded px-2 py-1 font-mono text-[15px] font-bold uppercase tracking-[0.1em] ${spkStatusBadge(spk.status)}`}>
                             {spk.status}
                           </span>
                         </div>
 
                         {/* Per-unit breakdown */}
                         {units.length > 0 ? (
-                          <div className="divide-y divide-white/[0.04]">
+                          <div className="divide-y divide-border">
                             {units.map((u, i) => (
                               <div key={i} className="px-4 py-3">
                                 <div className="flex items-center justify-between">
-                                  <p className="text-[13px] font-semibold text-white">{u.unitName}</p>
-                                  <span className="font-mono text-[11px] font-semibold text-white/70">
+                                  <p className="text-[15px] font-semibold text-foreground">{u.unitName}</p>
+                                  <span className="font-mono text-[15px] font-semibold text-foreground">
                                     Total: {u.totalHours.toFixed(0)}j
                                   </span>
                                 </div>
                                 {/* Per-division rows */}
                                 <div className="mt-2 space-y-1">
                                   {u.divisions.map((d, di) => (
-                                    <div key={di} className="flex items-center justify-between rounded bg-white/[0.02] px-2 py-1">
-                                      <span className="font-mono text-[10px] text-white/50">{d.name}</span>
-                                      <span className="font-mono text-[10px] font-medium text-white/70">{d.hours.toFixed(0)}j</span>
+                                    <div key={di} className="flex items-center justify-between rounded bg-muted px-2 py-1">
+                                      <span className="font-mono text-[14px] text-muted-foreground">{d.name}</span>
+                                      <span className="font-mono text-[14px] font-medium text-foreground">{d.hours.toFixed(0)}j</span>
                                     </div>
                                   ))}
                                 </div>
@@ -442,7 +442,7 @@ export function CalendarDayModal({
                             ))}
                           </div>
                         ) : (
-                          <p className="px-4 py-3 text-[11px] text-white/30">Detail alokasi tidak tersedia (SPK lama).</p>
+                          <p className="px-4 py-3 text-[15px] text-muted-foreground">Detail alokasi tidak tersedia (SPK lama).</p>
                         )}
                       </div>
                     );
@@ -457,15 +457,15 @@ export function CalendarDayModal({
             <div>
               {isLoadingSpk ? (
                 <div className="flex items-center justify-center py-12">
-                  <Loader2 className="h-6 w-6 animate-spin text-amber-500" />
-                  <span className="ml-2 text-[12px] text-white/40">Memuat data SPL...</span>
+                  <Loader2 className="h-6 w-6 animate-spin text-app-accent-ink" />
+                  <span className="ml-2 text-[14px] text-muted-foreground">Memuat data SPL...</span>
                 </div>
               ) : spkError ? (
-                <div className="rounded border border-red-500/20 bg-red-500/[0.04] p-4 text-[12px] text-red-400">{spkError}</div>
+                <div className="rounded border border-destructive/20 bg-destructive/[0.04] p-4 text-[14px] text-destructive">{spkError}</div>
               ) : splSpkList.length === 0 ? (
-                <div className="rounded border border-dashed border-white/[0.08] py-10 text-center">
-                  <AlertTriangle className="mx-auto mb-2 h-8 w-8 text-white/20" />
-                  <p className="text-[12px] text-white/30">Tidak ada SPL (lembur) di tanggal ini.</p>
+                <div className="rounded border border-dashed border-border py-10 text-center">
+                  <AlertTriangle className="mx-auto mb-2 h-8 w-8 text-muted-foreground" />
+                  <p className="text-[14px] text-muted-foreground">Tidak ada SPL (lembur) di tanggal ini.</p>
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -473,16 +473,16 @@ export function CalendarDayModal({
                     const units = groupAllocByUnit(spk);
                     const overtimeRows = spk.plannerMeta?.generatedOvertimeRows ?? 0;
                     return (
-                      <div key={spk.spkId} className="overflow-hidden rounded border border-amber-500/20">
+                      <div key={spk.spkId} className="overflow-hidden rounded border border-primary/20">
                         {/* SPL header */}
-                        <div className="flex items-center justify-between bg-amber-500/[0.04] px-4 py-3">
+                        <div className="flex items-center justify-between bg-primary/[0.04] px-4 py-3">
                           <div>
-                            <p className="font-mono text-[11px] font-bold text-amber-500">{spk.spkNumber}</p>
-                            <p className="mt-0.5 font-mono text-[9px] text-amber-500/50">
+                            <p className="font-mono text-[15px] font-bold text-app-accent-ink">{spk.spkNumber}</p>
+                            <p className="mt-0.5 font-mono text-[15px] text-app-accent-ink/50">
                               {overtimeRows} sesi lembur · {spk.totalHours.toFixed(0)}j total
                             </p>
                           </div>
-                          <span className={`rounded px-2 py-1 font-mono text-[9px] font-bold uppercase tracking-[0.1em] ${spkStatusBadge(spk.status)}`}>
+                          <span className={`rounded px-2 py-1 font-mono text-[15px] font-bold uppercase tracking-[0.1em] ${spkStatusBadge(spk.status)}`}>
                             {spk.status}
                           </span>
                         </div>
@@ -492,16 +492,16 @@ export function CalendarDayModal({
                             {units.map((u, i) => (
                               <div key={i} className="px-4 py-3">
                                 <div className="flex items-center justify-between">
-                                  <p className="text-[13px] font-semibold text-white">{u.unitName}</p>
-                                  <span className="font-mono text-[11px] font-semibold text-amber-500">
+                                  <p className="text-[15px] font-semibold text-foreground">{u.unitName}</p>
+                                  <span className="font-mono text-[15px] font-semibold text-app-accent-ink">
                                     Total: {u.totalHours.toFixed(0)}j
                                   </span>
                                 </div>
                                 <div className="mt-2 space-y-1">
                                   {u.divisions.map((d, di) => (
-                                    <div key={di} className="flex items-center justify-between rounded bg-amber-500/[0.04] px-2 py-1">
-                                      <span className="font-mono text-[10px] text-amber-500/60">{d.name}</span>
-                                      <span className="font-mono text-[10px] font-medium text-amber-500">{d.hours.toFixed(0)}j</span>
+                                    <div key={di} className="flex items-center justify-between rounded bg-primary/[0.04] px-2 py-1">
+                                      <span className="font-mono text-[14px] text-app-accent-ink/60">{d.name}</span>
+                                      <span className="font-mono text-[14px] font-medium text-app-accent-ink">{d.hours.toFixed(0)}j</span>
                                     </div>
                                   ))}
                                 </div>
@@ -509,7 +509,7 @@ export function CalendarDayModal({
                             ))}
                           </div>
                         ) : (
-                          <p className="px-4 py-3 text-[11px] text-amber-500/40">Detail alokasi tidak tersedia.</p>
+                          <p className="px-4 py-3 text-[15px] text-app-accent-ink/40">Detail alokasi tidak tersedia.</p>
                         )}
                       </div>
                     );

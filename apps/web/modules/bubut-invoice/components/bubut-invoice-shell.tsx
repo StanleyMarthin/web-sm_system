@@ -131,7 +131,7 @@ export function BubutInvoiceShell({
         <button
           type="button"
           onClick={() => setDetailSourceKey(String(row.sourceKey ?? row.sourceWoId))}
-          className="font-mono text-[11px] text-amber-500/90 underline-offset-2 hover:underline"
+          className="font-mono text-[11px] text-app-accent-ink/90 underline-offset-2 hover:underline"
         >
           {String(value)}
         </button>
@@ -182,7 +182,7 @@ export function BubutInvoiceShell({
           <button
             type="button"
             onClick={() => setDetailSourceKey(String(row.sourceKey ?? row.sourceWoId))}
-            className="inline-flex items-center gap-1 border border-white/10 px-2 py-1 text-[10px] font-mono uppercase tracking-[0.08em] text-white/50 hover:border-white/30 hover:text-white transition-colors"
+            className="inline-flex items-center gap-1 border border-white/10 px-2 py-1 text-[10px] font-mono uppercase tracking-[0.08em] text-foreground/50 hover:border-white/30 hover:text-foreground transition-colors"
           >
             <Eye className="h-3 w-3" /> Detail
           </button>
@@ -190,7 +190,7 @@ export function BubutInvoiceShell({
             <button
               type="button"
               onClick={() => setReleaseTarget({ sourceWoId: String(row.sourceWoId), invoiceType: "DIREKSI" })}
-              className="border border-amber-500/30 px-2 py-1 text-[10px] font-mono uppercase tracking-[0.08em] text-amber-500/70 hover:text-amber-500 transition-colors"
+              className="border border-primary/30 px-2 py-1 text-[10px] font-mono uppercase tracking-[0.08em] text-app-accent-ink/70 hover:text-app-accent-ink transition-colors"
             >
               Rilis Direksi
             </button>
@@ -199,7 +199,7 @@ export function BubutInvoiceShell({
             <button
               type="button"
               onClick={() => setReleaseTarget({ sourceWoId: String(row.sourceWoId), invoiceType: "CUSTOMER" })}
-              className="border border-sky-500/30 px-2 py-1 text-[10px] font-mono uppercase tracking-[0.08em] text-sky-400/70 hover:text-sky-400 transition-colors"
+              className="border border-info/30 px-2 py-1 text-[10px] font-mono uppercase tracking-[0.08em] text-info/70 hover:text-info transition-colors"
             >
               Rilis Customer
             </button>
@@ -207,7 +207,7 @@ export function BubutInvoiceShell({
           {canPrint && row.direksiInvoiceId ? (
             <Link
               href={`/invoice/wo-bubut/${row.direksiInvoiceId}/print`}
-              className="inline-flex items-center gap-1 border border-white/10 px-2 py-1 text-[10px] font-mono uppercase tracking-[0.08em] text-white/50 hover:border-white/30 hover:text-white transition-colors"
+              className="inline-flex items-center gap-1 border border-white/10 px-2 py-1 text-[10px] font-mono uppercase tracking-[0.08em] text-foreground/50 hover:border-white/30 hover:text-foreground transition-colors"
             >
               <Printer className="h-3 w-3" /> Direksi
             </Link>
@@ -215,7 +215,7 @@ export function BubutInvoiceShell({
           {canPrint && row.customerInvoiceId ? (
             <Link
               href={`/invoice/wo-bubut/${row.customerInvoiceId}/print`}
-              className="inline-flex items-center gap-1 border border-white/10 px-2 py-1 text-[10px] font-mono uppercase tracking-[0.08em] text-white/50 hover:border-white/30 hover:text-white transition-colors"
+              className="inline-flex items-center gap-1 border border-white/10 px-2 py-1 text-[10px] font-mono uppercase tracking-[0.08em] text-foreground/50 hover:border-white/30 hover:text-foreground transition-colors"
             >
               <Printer className="h-3 w-3" /> Customer
             </Link>
@@ -227,17 +227,17 @@ export function BubutInvoiceShell({
 
   return (
     <div className="space-y-3">
-      <section className="border border-white/5 bg-[#111114] px-4 py-3">
+      <section className="border border-white/5 bg-card px-4 py-3">
         <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
           <div className="flex items-center gap-3">
             <div className="flex h-8 w-8 items-center justify-center border border-white/[0.08]">
-              <FileText className="h-5 w-5 text-amber-500" />
+              <FileText className="h-5 w-5 text-app-accent-ink" />
             </div>
             <div>
-              <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-white/30">
+              <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-foreground/30">
                 Invoice
               </p>
-              <h1 className="text-[13px] font-mono text-white/80">
+              <h1 className="text-[13px] font-mono text-foreground/80">
                 Invoice WO Bubut
               </h1>
             </div>
@@ -245,7 +245,7 @@ export function BubutInvoiceShell({
           <button
             type="button"
             onClick={() => startRefresh(() => router.refresh())}
-            className="inline-flex h-8 items-center gap-2 border border-white/[0.08] px-3 font-mono text-[10px] uppercase tracking-[0.12em] text-white/55 hover:text-white dark:border-white/[0.08] dark:text-white/55 dark:hover:text-white"
+            className="inline-flex h-8 items-center gap-2 border border-white/[0.08] px-3 font-mono text-[10px] uppercase tracking-[0.12em] text-foreground/55 hover:text-foreground dark:border-white/[0.08] dark:text-foreground/55 dark:hover:text-foreground"
           >
             <RefreshCcw className="h-3.5 w-3.5" />
             {isRefreshing ? "Memuat..." : "Refresh"}
@@ -254,7 +254,7 @@ export function BubutInvoiceShell({
 
         <div className="mt-3 flex flex-wrap items-end gap-2">
           <label className="space-y-1">
-            <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-white/30">
+            <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-foreground/30">
               Bulan WO
             </span>
             <input
@@ -264,7 +264,7 @@ export function BubutInvoiceShell({
                 setMonth(event.target.value);
                 applyMonthFilter(event.target.value);
               }}
-              className="h-9 border border-white/10 bg-[#0a0a0c] px-3 text-[11px] font-mono text-white/60 outline-none focus:border-amber-500/40 [color-scheme:dark]"
+              className="h-9 border border-white/10 bg-background px-3 text-[11px] font-mono text-foreground/60 outline-none focus:border-primary/40 [color-scheme:dark]"
             />
           </label>
           <button
@@ -273,7 +273,7 @@ export function BubutInvoiceShell({
               setMonth("");
               applyMonthFilter("");
             }}
-            className="border border-white/10 h-9 px-3 text-[10px] font-mono uppercase tracking-[0.12em] text-white/40 hover:text-white transition-colors"
+            className="border border-white/10 h-9 px-3 text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/40 hover:text-foreground transition-colors"
           >
             Reset Bulan
           </button>

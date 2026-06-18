@@ -20,10 +20,10 @@ export function ThemeToggle() {
   return (
     <button
       onClick={() => setTheme(isDark ? "light" : "dark")}
-      className="flex w-full items-center gap-2 px-3 py-1.5 text-left font-mono text-[10px] uppercase tracking-[0.1em] text-gray-600 transition-colors hover:text-gray-950 dark:text-white/60 dark:hover:text-white"
+      className="flex w-full items-center gap-2 px-3 py-1.5 text-left font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground transition-colors hover:text-foreground dark:text-foreground/60 dark:hover:text-foreground"
     >
       {isDark ? (
-        <Sun className="h-3 w-3 text-amber-500" />
+        <Sun className="h-3 w-3 text-app-accent-ink" />
       ) : (
         <Moon className="h-3 w-3" />
       )}

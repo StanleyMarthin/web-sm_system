@@ -37,10 +37,10 @@ export function DataGridStatusBadge({ value }: StatusBadgeProps) {
   ].includes(normalizedValue);
   const className =
     isSuccess
-      ? "border-emerald-700/25 bg-emerald-50 text-emerald-800 dark:border-emerald-500/30 dark:bg-transparent dark:text-emerald-300"
+      ? "border-success/25 bg-success/15 text-success dark:border-success/30 dark:bg-success/18 dark:text-success"
       : isDanger
-        ? "border-red-600/25 bg-red-50 text-red-800 dark:border-red-500/30 dark:bg-transparent dark:text-red-300"
-        : "border-amber-600/25 bg-amber-50 text-amber-800 dark:border-amber-500/30 dark:bg-transparent dark:text-amber-300";
+        ? "border-destructive/25 bg-destructive/15 text-destructive dark:border-destructive/30 dark:bg-destructive/18 dark:text-destructive"
+        : "border-warning/25 bg-warning/15 text-warning dark:border-warning/30 dark:bg-warning/18 dark:text-warning";
 
   return (
     <span

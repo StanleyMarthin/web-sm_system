@@ -43,11 +43,11 @@ function Toast({ type, message }: { type: "success" | "error"; message: string }
 function InfoField({ label, value }: { label: string; value: string | null | undefined }) {
   return (
     <div>
-      <label className="block text-xs font-medium text-white/40 mb-1.5 uppercase tracking-wider">
+      <label className="block text-xs font-medium text-foreground/40 mb-1.5 uppercase tracking-wider">
         {label}
       </label>
-      <div className="px-4 py-2.5 bg-black/40 border border-white/[0.06] rounded-lg text-white/80 text-sm">
-        {value || <span className="text-white/25 italic">—</span>}
+      <div className="px-4 py-2.5 bg-black/40 border border-white/[0.06] rounded-lg text-foreground/80 text-sm">
+        {value || <span className="text-foreground/25 italic">—</span>}
       </div>
     </div>
   );
@@ -135,8 +135,8 @@ export function ProfileShell({ user }: { user: AuthUser }) {
 
         {/* Header */}
         <div>
-          <h1 className="text-2xl font-light text-white tracking-wide">My Profile</h1>
-          <p className="text-sm text-white/40 mt-1">Kelola informasi profil dan akun Anda</p>
+          <h1 className="text-2xl font-light text-foreground tracking-wide">My Profile</h1>
+          <p className="text-sm text-foreground/40 mt-1">Kelola informasi profil dan akun Anda</p>
         </div>
 
         {/* Toast */}
@@ -146,7 +146,7 @@ export function ProfileShell({ user }: { user: AuthUser }) {
 
           {/* ── Left: Avatar Card ── */}
           <div className="md:col-span-1 space-y-4">
-            <div className="bg-[#0f0f0f] border border-white/[0.06] rounded-xl p-6 flex flex-col items-center text-center">
+            <div className="bg-card border border-white/[0.06] rounded-xl p-6 flex flex-col items-center text-center">
 
               {/* Avatar */}
               <div
@@ -154,7 +154,7 @@ export function ProfileShell({ user }: { user: AuthUser }) {
                 onClick={() => !isUploading && fileInputRef.current?.click()}
                 title="Klik untuk ganti foto"
               >
-                <div className="w-28 h-28 rounded-full overflow-hidden bg-white/5 border-2 border-white/10 flex items-center justify-center transition-all group-hover:border-amber-500/50 relative">
+                <div className="w-28 h-28 rounded-full overflow-hidden bg-white/5 border-2 border-white/10 flex items-center justify-center transition-all group-hover:border-primary/50 relative">
                   {photoUrl ? (
                     <NextImage
                       key={photoUrl}
@@ -165,21 +165,21 @@ export function ProfileShell({ user }: { user: AuthUser }) {
                       className="object-cover"
                     />
                   ) : (
-                    <User className="w-10 h-10 text-white/20" />
+                    <User className="w-10 h-10 text-foreground/20" />
                   )}
                   {isUploading ? (
                     <div className="absolute inset-0 bg-black/70 rounded-full flex flex-col items-center justify-center gap-1">
-                      <Loader2 className="w-5 h-5 text-amber-500 animate-spin" />
-                      <span className="text-[9px] text-white/60">Uploading…</span>
+                      <Loader2 className="w-5 h-5 text-app-accent-ink animate-spin" />
+                      <span className="text-[9px] text-foreground/60">Uploading…</span>
                     </div>
                   ) : (
                     <div className="absolute inset-0 bg-black/50 rounded-full flex flex-col items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Camera className="w-4 h-4 text-white" />
-                      <span className="text-[9px] text-white/80">Ganti foto</span>
+                      <Camera className="w-4 h-4 text-foreground" />
+                      <span className="text-[9px] text-foreground/80">Ganti foto</span>
                     </div>
                   )}
                 </div>
-                <div className="absolute bottom-0.5 right-0.5 w-6 h-6 rounded-full bg-amber-500 text-black flex items-center justify-center shadow-lg ring-2 ring-black">
+                <div className="absolute bottom-0.5 right-0.5 w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-lg ring-2 ring-black">
                   <Camera className="w-3 h-3" />
                 </div>
                 <input
@@ -191,26 +191,26 @@ export function ProfileShell({ user }: { user: AuthUser }) {
                 />
               </div>
 
-              <h2 className="text-lg font-semibold text-white mb-0.5">{user.fullName}</h2>
-              <p className="text-xs text-amber-500/80 font-medium mb-0.5">{user.divisionName}</p>
-              <p className="text-[10px] text-white/30 mb-4">Klik foto untuk mengganti</p>
+              <h2 className="text-lg font-semibold text-foreground mb-0.5">{user.fullName}</h2>
+              <p className="text-xs text-app-accent-ink/80 font-medium mb-0.5">{user.divisionName}</p>
+              <p className="text-[10px] text-foreground/30 mb-4">Klik foto untuk mengganti</p>
 
               <div className="w-full h-px bg-white/[0.06] mb-4" />
 
               {/* Quick info */}
               <div className="w-full space-y-2.5 text-left">
-                <div className="flex items-center gap-2.5 text-xs text-white/50">
-                  <BadgeCheck className="w-3.5 h-3.5 shrink-0 text-amber-500/70" />
+                <div className="flex items-center gap-2.5 text-xs text-foreground/50">
+                  <BadgeCheck className="w-3.5 h-3.5 shrink-0 text-app-accent-ink/70" />
                   <span className="font-mono">{user.employeeId}</span>
                 </div>
                 {user.email && (
-                  <div className="flex items-center gap-2.5 text-xs text-white/50">
+                  <div className="flex items-center gap-2.5 text-xs text-foreground/50">
                     <Mail className="w-3.5 h-3.5 shrink-0" />
                     <span className="truncate">{user.email}</span>
                   </div>
                 )}
                 {user.grade && (
-                  <div className="flex items-center gap-2.5 text-xs text-white/50">
+                  <div className="flex items-center gap-2.5 text-xs text-foreground/50">
                     <Building2 className="w-3.5 h-3.5 shrink-0" />
                     <span>{user.grade}</span>
                   </div>
@@ -223,8 +223,8 @@ export function ProfileShell({ user }: { user: AuthUser }) {
           <div className="md:col-span-2 space-y-4">
 
             {/* Info karyawan */}
-            <div className="bg-[#0f0f0f] border border-white/[0.06] rounded-xl p-6">
-              <h3 className="text-base font-medium text-white mb-5">Informasi Karyawan</h3>
+            <div className="bg-card border border-white/[0.06] rounded-xl p-6">
+              <h3 className="text-base font-medium text-foreground mb-5">Informasi Karyawan</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <InfoField label="Nama Lengkap" value={user.fullName} />
                 <InfoField label="ID Karyawan" value={user.employeeId} />

@@ -217,8 +217,8 @@ interface LocationModalState {
 }
 
 const darkSelectStyle = {
-  backgroundColor: "#111111",
-  color: "#ffffff",
+  backgroundColor: "var(--card)",
+  color: "var(--card-foreground)",
 } as const;
 
 
@@ -278,9 +278,9 @@ function SummaryBlock({
   value: number | string;
 }) {
   return (
-    <div className="border border-gray-300 dark:border-white/[0.05] bg-white dark:bg-[#111114] px-3 py-2">
-      <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/30">{label}</p>
-      <p className="mt-1 font-mono text-[13px] font-semibold text-gray-950 dark:text-white">{value}</p>
+    <div className="border border-border dark:border-white/[0.05] bg-white dark:bg-card px-3 py-2">
+      <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30">{label}</p>
+      <p className="mt-1 font-mono text-[13px] font-semibold text-foreground dark:text-foreground">{value}</p>
     </div>
   );
 }
@@ -295,9 +295,9 @@ function Sheet({
   action?: React.ReactNode;
 }) {
   return (
-    <section className="border border-gray-300 dark:border-white/[0.05] bg-white dark:bg-[#111114]">
-      <div className="flex items-start justify-between gap-3 border-b border-gray-300 dark:border-white/[0.05] px-3 py-2">
-        <h3 className="font-mono text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/30">{title}</h3>
+    <section className="border border-border dark:border-white/[0.05] bg-white dark:bg-card">
+      <div className="flex items-start justify-between gap-3 border-b border-border dark:border-white/[0.05] px-3 py-2">
+        <h3 className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30">{title}</h3>
         {action}
       </div>
       <div className="px-3 py-3">{children}</div>
@@ -315,14 +315,14 @@ function TableList({
   emptyMessage: string;
 }) {
   if (rows.length === 0) {
-    return <p className="text-sm text-gray-500 dark:text-white/35">{emptyMessage}</p>;
+    return <p className="text-sm text-muted-foreground dark:text-foreground/35">{emptyMessage}</p>;
   }
 
   return (
-    <div className="overflow-x-auto border border-gray-300 dark:border-white/[0.05] bg-slate-50 dark:bg-[#0a0a0c]">
+    <div className="overflow-x-auto border border-border dark:border-white/[0.05] bg-muted dark:bg-background">
       <table className="min-w-full text-left text-[12px]">
-        <thead className="sticky top-0 z-10 bg-white dark:bg-[#111114]">
-          <tr className="border-b border-gray-300 dark:border-white/[0.06] bg-white dark:bg-[#111114] font-mono text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/30">
+        <thead className="sticky top-0 z-10 bg-white dark:bg-card">
+          <tr className="border-b border-border dark:border-white/[0.06] bg-white dark:bg-card font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30">
             {columns.map((column) => (
               <th key={column} className="px-3 py-2 font-medium">
                 {column}
@@ -334,10 +334,10 @@ function TableList({
           {rows.map((row, index) => (
             <tr
               key={`row-${index}`}
-              className="border-b border-white/[0.04] transition-colors last:border-b-0 hover:bg-gray-100 dark:hover:bg-white/[0.02]"
+              className="border-b border-white/[0.04] transition-colors last:border-b-0 hover:bg-muted dark:hover:bg-white/[0.02]"
             >
               {row.map((cell, cellIndex) => (
-                <td key={`cell-${index}-${cellIndex}`} className="px-3 py-2 align-top text-[12px] text-white/82">
+                <td key={`cell-${index}-${cellIndex}`} className="px-3 py-2 align-top text-[12px] text-foreground/82">
                   {cell}
                 </td>
               ))}
@@ -360,13 +360,13 @@ function ModalFrame({
 }) {
   return (
     <div className="fixed inset-0 z-[85] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-3xl border border-gray-300 dark:border-white/[0.08] bg-[#090909]">
-        <div className="flex items-center justify-between gap-3 border-b border-gray-300 dark:border-white/[0.06] px-4 py-3">
-          <h3 className="text-[13px] font-medium text-gray-950 dark:text-white">{title}</h3>
+      <div className="w-full max-w-3xl border border-border dark:border-white/[0.08] bg-popover">
+        <div className="flex items-center justify-between gap-3 border-b border-border dark:border-white/[0.06] px-4 py-3">
+          <h3 className="text-[13px] font-medium text-foreground dark:text-foreground">{title}</h3>
           <button
             type="button"
             onClick={onClose}
-            className="border border-gray-300 dark:border-white/[0.08] p-2 text-gray-500 dark:text-white/55 transition-colors hover:text-gray-950 dark:text-white"
+            className="border border-border dark:border-white/[0.08] p-2 text-muted-foreground dark:text-foreground/55 transition-colors hover:text-foreground dark:text-foreground"
           >
             <X className="h-4 w-4" />
           </button>
@@ -389,7 +389,7 @@ const stockCardColumns: SmartDataGridColumn[] = [
       const firstPhoto = photoUrls[0];
       if (!firstPhoto) {
         return (
-          <div className="flex h-12 w-12 items-center justify-center rounded-lg border border-dashed border-gray-300 dark:border-white/[0.08] bg-white/[0.02] text-gray-500 dark:text-white/25">
+          <div className="flex h-12 w-12 items-center justify-center rounded-lg border border-dashed border-border dark:border-white/[0.08] bg-white/[0.02] text-muted-foreground dark:text-foreground/25">
             <ImageIcon className="h-4 w-4" />
           </div>
         );
@@ -399,7 +399,7 @@ const stockCardColumns: SmartDataGridColumn[] = [
         <img
           src={firstPhoto}
           alt={String(row.partName ?? "Foto barang")}
-          className="h-12 w-12 rounded-lg border border-gray-300 dark:border-white/[0.06] object-cover"
+          className="h-12 w-12 rounded-lg border border-border dark:border-white/[0.06] object-cover"
         />
       );
     },
@@ -1078,14 +1078,14 @@ export function WarehouseShell({
                 <button
                   type="button"
                   onClick={() => void handleApprove(transactionId)}
-                  className="border border-amber-500/40 px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-300"
+                  className="border border-primary/40 px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-app-accent-ink"
                 >
                   Setujui
                 </button>
                 <button
                   type="button"
                   onClick={() => void handleReject(transactionId)}
-                  className="border border-red-500/35 px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-red-300"
+                  className="border border-destructive/35 px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-destructive"
                 >
                   Tolak
                 </button>
@@ -1095,7 +1095,7 @@ export function WarehouseShell({
               <button
                 type="button"
                 onClick={() => void handleReady(transactionId)}
-                className="border border-emerald-500/35 px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-emerald-300"
+                className="border border-success/35 px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-success"
               >
                 Siap diambil
               </button>
@@ -1104,7 +1104,7 @@ export function WarehouseShell({
               <button
                 type="button"
                 onClick={() => void handleIssue(transactionId)}
-                className="border border-gray-300 dark:border-white/[0.08] px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-gray-800 dark:text-white/70"
+                className="border border-border dark:border-white/[0.08] px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground dark:text-foreground/70"
               >
                 Sudah diambil
               </button>
@@ -1119,7 +1119,7 @@ export function WarehouseShell({
                   qtyReturned: String(row.qty),
                 })
                 }
-                className="border border-gray-300 dark:border-white/[0.08] px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-gray-800 dark:text-white/70"
+                className="border border-border dark:border-white/[0.08] px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground dark:text-foreground/70"
               >
                 Dikembalikan
               </button>
@@ -1128,7 +1128,7 @@ export function WarehouseShell({
               <button
                 type="button"
                 onClick={() => void openStoreModal({ transactionId, itemName })}
-                className="border border-amber-500/40 px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-300"
+                className="border border-primary/40 px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-app-accent-ink"
               >
                 Tersimpan kembali
               </button>
@@ -1167,14 +1167,14 @@ export function WarehouseShell({
             <button
               type="button"
               onClick={() => openEditLocationDialog(actualRow)}
-              className="border border-gray-300 dark:border-white/[0.08] px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-gray-800 dark:text-white/70"
+              className="border border-border dark:border-white/[0.08] px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground dark:text-foreground/70"
             >
               Edit
             </button>
             <button
               type="button"
               onClick={() => void handleDeleteLocation(actualRow)}
-              className="border border-red-500/35 px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-red-300"
+              className="border border-destructive/35 px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-destructive"
             >
               Nonaktifkan
             </button>
@@ -1190,18 +1190,18 @@ export function WarehouseShell({
 
       {isOverview && dashboard ? (
         <>
-          <section className="border border-gray-300 dark:border-white/[0.05] bg-white dark:bg-[#111114] px-3 py-3">
+          <section className="border border-border dark:border-white/[0.05] bg-white dark:bg-card px-3 py-3">
             <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
               <div className="space-y-1.5">
-                <p className="text-[10px] uppercase tracking-[0.16em] text-amber-400/80">
+                <p className="text-[10px] uppercase tracking-[0.16em] text-app-accent-ink/80">
                   Dashboard gudang
                 </p>
-                <h2 className="text-lg font-semibold text-gray-950 dark:text-white">Ringkasan pergerakan material</h2>
+                <h2 className="text-lg font-semibold text-foreground dark:text-foreground">Ringkasan pergerakan material</h2>
               </div>
               <button
                 type="button"
                 onClick={() => startRefresh(() => router.refresh())}
-                className="inline-flex h-8 items-center gap-2 border border-gray-300 dark:border-white/[0.08] bg-transparent px-3 font-mono text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/55"
+                className="inline-flex h-8 items-center gap-2 border border-border dark:border-white/[0.08] bg-transparent px-3 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/55"
               >
                 <RefreshCcw className="h-3.5 w-3.5" />
                 {isRefreshing ? "Memuat" : "Refresh"}
@@ -1220,18 +1220,18 @@ export function WarehouseShell({
           <section className="grid gap-4 xl:grid-cols-2">
             <Sheet
               title="Keterlambatan pengembalian"
-              action={<span className="text-[11px] text-gray-500 dark:text-white/35">{dashboard.lateUsers.length} user</span>}
+              action={<span className="text-[11px] text-muted-foreground dark:text-foreground/35">{dashboard.lateUsers.length} user</span>}
             >
               <TableList
                 columns={["User", "Divisi", "Barang", "Terlambat"]}
                 rows={dashboard.lateUsers.map((row) => [
                   <div key={`${row.transactionId}-user`}>
-                    <p className="text-gray-950 dark:text-white">{row.requesterName}</p>
-                    <p className="text-xs text-gray-500 dark:text-white/35">{row.unitName}</p>
+                    <p className="text-foreground dark:text-foreground">{row.requesterName}</p>
+                    <p className="text-xs text-muted-foreground dark:text-foreground/35">{row.unitName}</p>
                   </div>,
                   row.divisionName,
                   row.itemName,
-                  <span key={`${row.transactionId}-days`} className="text-amber-300">
+                  <span key={`${row.transactionId}-days`} className="text-app-accent-ink">
                     {row.daysOverdue} hari
                   </span>,
                 ])}
@@ -1241,7 +1241,7 @@ export function WarehouseShell({
 
             <Sheet
               title="Pemakaian aktif per divisi"
-              action={<span className="text-[11px] text-gray-500 dark:text-white/35">{dashboard.divisionsUsing.length} divisi</span>}
+              action={<span className="text-[11px] text-muted-foreground dark:text-foreground/35">{dashboard.divisionsUsing.length} divisi</span>}
             >
               <TableList
                 columns={["Divisi", "Barang aktif", "Total qty"]}
@@ -1256,7 +1256,7 @@ export function WarehouseShell({
 
             <Sheet
               title="Bahan keluar terbaru"
-              action={<span className="text-[11px] text-gray-500 dark:text-white/35">{dashboard.materialsOut.length} transaksi</span>}
+              action={<span className="text-[11px] text-muted-foreground dark:text-foreground/35">{dashboard.materialsOut.length} transaksi</span>}
             >
               <TableList
                 columns={["Tanggal", "Divisi", "Bahan", "Qty"]}
@@ -1272,7 +1272,7 @@ export function WarehouseShell({
 
             <Sheet
               title="Alert stok menipis"
-              action={<span className="text-[11px] text-gray-500 dark:text-white/35">{dashboard.lowStockAlerts.length} alert</span>}
+              action={<span className="text-[11px] text-muted-foreground dark:text-foreground/35">{dashboard.lowStockAlerts.length} alert</span>}
             >
               <TableList
                 columns={["Barang", "Kategori", "Sisa", "Alert"]}
@@ -1282,7 +1282,7 @@ export function WarehouseShell({
                   `${row.qtyAvailable} ${row.uom}`,
                   <span
                     key={`${row.itemName}-alert`}
-                    className={row.alertLevel === "CRITICAL" ? "text-red-300" : "text-amber-300"}
+                    className={row.alertLevel === "CRITICAL" ? "text-destructive" : "text-app-accent-ink"}
                   >
                     {row.alertLevel === "CRITICAL" ? "Hampir habis" : "Menipis"}
                   </span>,
@@ -1296,19 +1296,19 @@ export function WarehouseShell({
 
       {isTransactions && transactions ? (
         <>
-          <section className="border border-gray-300 dark:border-white/[0.05] bg-white dark:bg-[#111114] px-3 py-3">
+          <section className="border border-border dark:border-white/[0.05] bg-white dark:bg-card px-3 py-3">
             <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
               <div className="space-y-4">
                 <div className="space-y-1">
-                  <p className="text-[10px] uppercase tracking-[0.16em] text-amber-400/80">
+                  <p className="text-[10px] uppercase tracking-[0.16em] text-app-accent-ink/80">
                     Gudang
                   </p>
-                  <h2 className="mt-1 text-lg font-semibold text-gray-950 dark:text-white">Transaksi material</h2>
+                  <h2 className="mt-1 text-lg font-semibold text-foreground dark:text-foreground">Transaksi material</h2>
                 </div>
 
-                <div className="flex flex-wrap items-end gap-3 border border-gray-300 dark:border-white/[0.05] bg-slate-50 dark:bg-[#0a0a0c] px-3 py-3">
+                <div className="flex flex-wrap items-end gap-3 border border-border dark:border-white/[0.05] bg-muted dark:bg-background px-3 py-3">
                   <div className="space-y-1">
-                    <p className="text-[10px] uppercase tracking-[0.16em] text-gray-500 dark:text-white/35">Rentang tanggal</p>
+                    <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground dark:text-foreground/35">Rentang tanggal</p>
                     <CompactDateRangeInput
                       from={transactionDate}
                       to={transactionDateEnd}
@@ -1316,9 +1316,9 @@ export function WarehouseShell({
                       className="w-64"
                     />
                   </div>
-                  <div className="min-w-[120px] border border-gray-300 dark:border-white/[0.05] bg-white dark:bg-[#111114] px-3 py-2">
-                    <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/30">Total antrean</p>
-                    <p className="mt-1 font-mono text-[12px] font-semibold text-gray-950 dark:text-white">{transactions.meta.total} transaksi</p>
+                  <div className="min-w-[120px] border border-border dark:border-white/[0.05] bg-white dark:bg-card px-3 py-2">
+                    <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30">Total antrean</p>
+                    <p className="mt-1 font-mono text-[12px] font-semibold text-foreground dark:text-foreground">{transactions.meta.total} transaksi</p>
                   </div>
                 </div>
               </div>
@@ -1327,7 +1327,7 @@ export function WarehouseShell({
                 <button
                   type="button"
                   onClick={() => startRefresh(() => router.refresh())}
-                  className="inline-flex h-8 items-center gap-2 border border-gray-300 dark:border-white/[0.08] bg-transparent px-3 font-mono text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/55"
+                  className="inline-flex h-8 items-center gap-2 border border-border dark:border-white/[0.08] bg-transparent px-3 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/55"
                 >
                   <RefreshCcw className="h-3.5 w-3.5" />
                   {isRefreshing ? "Memuat" : "Refresh"}
@@ -1336,7 +1336,7 @@ export function WarehouseShell({
                   <button
                     type="button"
                     onClick={() => void handleOpenRequestDialog()}
-                    className="inline-flex h-8 items-center gap-2 border border-amber-500/40 px-3 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-300 transition-colors hover:bg-amber-500/10"
+                    className="inline-flex h-8 items-center gap-2 border border-primary/40 px-3 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-app-accent-ink transition-colors hover:bg-primary/10"
                   >
                     <PackagePlus className="h-3.5 w-3.5" />
                     Ajukan permintaan
@@ -1349,7 +1349,7 @@ export function WarehouseShell({
           <section className="grid gap-4 xl:grid-cols-2">
             <Sheet
               title="Perlu disiapkan"
-              action={<span className="text-[11px] text-gray-500 dark:text-white/35">{prepareRows.length} item</span>}
+              action={<span className="text-[11px] text-muted-foreground dark:text-foreground/35">{prepareRows.length} item</span>}
             >
               <TableList
                 columns={["Barang", "Divisi", "Unit", "Aksi"]}
@@ -1362,7 +1362,7 @@ export function WarehouseShell({
                       key={`${row.transactionId}-ready`}
                       type="button"
                       onClick={() => void handleReady(row.transactionId)}
-                      className="border border-emerald-500/30 px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-emerald-300"
+                      className="border border-success/30 px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-success"
                     >
                       Siap diambil
                     </button>
@@ -1376,7 +1376,7 @@ export function WarehouseShell({
 
             <Sheet
               title="Sudah dikembalikan"
-              action={<span className="text-[11px] text-gray-500 dark:text-white/35">{returnedRows.length} item</span>}
+              action={<span className="text-[11px] text-muted-foreground dark:text-foreground/35">{returnedRows.length} item</span>}
             >
               <TableList
                 columns={["Barang", "Divisi", "Unit", "Aksi"]}
@@ -1389,7 +1389,7 @@ export function WarehouseShell({
                       key={`${row.transactionId}-store`}
                       type="button"
                       onClick={() => void openStoreModal(row)}
-                      className="border border-amber-500/30 px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-300"
+                      className="border border-primary/30 px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-app-accent-ink"
                     >
                       Simpan kembali
                     </button>
@@ -1426,16 +1426,16 @@ export function WarehouseShell({
 
       {activeTab === "stock-card" && stockCard ? (
         <>
-          <section className="border border-gray-300 dark:border-white/[0.05] bg-white dark:bg-[#111114] px-3 py-3">
+          <section className="border border-border dark:border-white/[0.05] bg-white dark:bg-card px-3 py-3">
             <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
               <div className="space-y-4">
                 <div className="space-y-1">
-                  <p className="text-[10px] uppercase tracking-[0.16em] text-amber-400/80">
+                  <p className="text-[10px] uppercase tracking-[0.16em] text-app-accent-ink/80">
                     Gudang
                   </p>
-                  <h2 className="mt-1 text-lg font-semibold text-gray-950 dark:text-white">Stock card</h2>
+                  <h2 className="mt-1 text-lg font-semibold text-foreground dark:text-foreground">Stock card</h2>
                 </div>
-                <div className="flex flex-wrap items-center gap-2 border border-gray-300 dark:border-white/[0.05] bg-slate-50 dark:bg-[#0a0a0c] px-3 py-2">
+                <div className="flex flex-wrap items-center gap-2 border border-border dark:border-white/[0.05] bg-muted dark:bg-background px-3 py-2">
                   {[
                     { value: "", label: "Semua" },
                     { value: "TOOLS", label: "Tool" },
@@ -1448,8 +1448,8 @@ export function WarehouseShell({
                       onClick={() => setStockCategory(option.value)}
                       className={`border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.12em] ${
                         stockCategoryFilter === option.value
-                          ? "border-amber-500 bg-amber-500 text-black"
-                          : "border-gray-300 dark:border-white/[0.08] bg-transparent text-gray-500 dark:text-white/55"
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "border-border dark:border-white/[0.08] bg-transparent text-muted-foreground dark:text-foreground/55"
                       }`}
                     >
                       {option.label}
@@ -1461,7 +1461,7 @@ export function WarehouseShell({
               <button
                 type="button"
                 onClick={() => startRefresh(() => router.refresh())}
-                className="inline-flex h-8 items-center gap-2 border border-gray-300 dark:border-white/[0.08] bg-transparent px-3 font-mono text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/55"
+                className="inline-flex h-8 items-center gap-2 border border-border dark:border-white/[0.08] bg-transparent px-3 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/55"
               >
                 <RefreshCcw className="h-3.5 w-3.5" />
                 {isRefreshing ? "Memuat" : "Refresh"}
@@ -1508,20 +1508,20 @@ export function WarehouseShell({
 
       {activeTab === "locations" && locations ? (
         <>
-          <section className="border border-gray-300 dark:border-white/[0.05] bg-white dark:bg-[#111114] px-3 py-3">
+          <section className="border border-border dark:border-white/[0.05] bg-white dark:bg-card px-3 py-3">
             <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
               <div className="space-y-1">
-                <p className="text-[10px] uppercase tracking-[0.16em] text-amber-400/80">
+                <p className="text-[10px] uppercase tracking-[0.16em] text-app-accent-ink/80">
                   Gudang
                 </p>
-                <h2 className="mt-1 text-lg font-semibold text-gray-950 dark:text-white">Lokasi penyimpanan</h2>
+                <h2 className="mt-1 text-lg font-semibold text-foreground dark:text-foreground">Lokasi penyimpanan</h2>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 {canManageLocation ? (
                   <button
                     type="button"
                     onClick={openCreateLocationDialog}
-                    className="inline-flex h-8 items-center gap-2 border border-amber-500/40 px-3 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-300 transition-colors hover:bg-amber-500/10"
+                    className="inline-flex h-8 items-center gap-2 border border-primary/40 px-3 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-app-accent-ink transition-colors hover:bg-primary/10"
                   >
                     <MapPinned className="h-3.5 w-3.5" />
                     Tambah lokasi
@@ -1530,7 +1530,7 @@ export function WarehouseShell({
                 <button
                   type="button"
                   onClick={() => startRefresh(() => router.refresh())}
-                  className="inline-flex h-8 items-center gap-2 border border-gray-300 dark:border-white/[0.08] bg-transparent px-3 font-mono text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/55"
+                  className="inline-flex h-8 items-center gap-2 border border-border dark:border-white/[0.08] bg-transparent px-3 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/55"
                 >
                   <RefreshCcw className="h-3.5 w-3.5" />
                   {isRefreshing ? "Memuat" : "Refresh"}
@@ -1572,16 +1572,16 @@ export function WarehouseShell({
 
       {activeTab === "items" && items ? (
         <>
-          <section className="border border-gray-300 dark:border-white/[0.05] bg-white dark:bg-[#111114] px-3 py-3">
+          <section className="border border-border dark:border-white/[0.05] bg-white dark:bg-card px-3 py-3">
             <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
               <div className="space-y-1">
-                <p className="text-[10px] uppercase tracking-[0.16em] text-amber-400/80">Gudang</p>
-                <h2 className="mt-1 text-lg font-semibold text-gray-950 dark:text-white">Master barang</h2>
+                <p className="text-[10px] uppercase tracking-[0.16em] text-app-accent-ink/80">Gudang</p>
+                <h2 className="mt-1 text-lg font-semibold text-foreground dark:text-foreground">Master barang</h2>
               </div>
               <button
                 type="button"
                 onClick={() => startRefresh(() => router.refresh())}
-                  className="inline-flex h-8 items-center gap-2 border border-gray-300 dark:border-white/[0.08] bg-transparent px-3 font-mono text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/55"
+                  className="inline-flex h-8 items-center gap-2 border border-border dark:border-white/[0.08] bg-transparent px-3 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/55"
               >
                 <RefreshCcw className="h-3.5 w-3.5" />
                 {isRefreshing ? "Memuat" : "Refresh"}
@@ -1604,16 +1604,16 @@ export function WarehouseShell({
 
       {activeTab === "usage" && usage ? (
         <>
-          <section className="border border-gray-300 dark:border-white/[0.05] bg-white dark:bg-[#111114] px-3 py-3">
+          <section className="border border-border dark:border-white/[0.05] bg-white dark:bg-card px-3 py-3">
             <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
               <div className="space-y-1">
-                <p className="text-[10px] uppercase tracking-[0.16em] text-amber-400/80">Gudang</p>
-                <h2 className="mt-1 text-lg font-semibold text-gray-950 dark:text-white">Bahan keluar</h2>
+                <p className="text-[10px] uppercase tracking-[0.16em] text-app-accent-ink/80">Gudang</p>
+                <h2 className="mt-1 text-lg font-semibold text-foreground dark:text-foreground">Bahan keluar</h2>
               </div>
               <button
                 type="button"
                 onClick={() => startRefresh(() => router.refresh())}
-                  className="inline-flex h-8 items-center gap-2 border border-gray-300 dark:border-white/[0.08] bg-transparent px-3 font-mono text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/55"
+                  className="inline-flex h-8 items-center gap-2 border border-border dark:border-white/[0.08] bg-transparent px-3 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/55"
               >
                 <RefreshCcw className="h-3.5 w-3.5" />
                 {isRefreshing ? "Memuat" : "Refresh"}
@@ -1636,16 +1636,16 @@ export function WarehouseShell({
 
       {activeTab === "opname" && stockOpnames ? (
         <>
-          <section className="border border-gray-300 dark:border-white/[0.05] bg-white dark:bg-[#111114] px-3 py-3">
+          <section className="border border-border dark:border-white/[0.05] bg-white dark:bg-card px-3 py-3">
             <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
               <div className="space-y-1">
-                <p className="text-[10px] uppercase tracking-[0.16em] text-amber-400/80">Gudang</p>
-                <h2 className="mt-1 text-lg font-semibold text-gray-950 dark:text-white">Stock opname</h2>
+                <p className="text-[10px] uppercase tracking-[0.16em] text-app-accent-ink/80">Gudang</p>
+                <h2 className="mt-1 text-lg font-semibold text-foreground dark:text-foreground">Stock opname</h2>
               </div>
               <button
                 type="button"
                 onClick={() => startRefresh(() => router.refresh())}
-                  className="inline-flex h-8 items-center gap-2 border border-gray-300 dark:border-white/[0.08] bg-transparent px-3 font-mono text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/55"
+                  className="inline-flex h-8 items-center gap-2 border border-border dark:border-white/[0.08] bg-transparent px-3 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/55"
               >
                 <RefreshCcw className="h-3.5 w-3.5" />
                 {isRefreshing ? "Memuat" : "Refresh"}
@@ -1668,16 +1668,16 @@ export function WarehouseShell({
 
       {activeTab === "adjustments" && stockAdjustments ? (
         <>
-          <section className="border border-gray-300 dark:border-white/[0.05] bg-white dark:bg-[#111114] px-3 py-3">
+          <section className="border border-border dark:border-white/[0.05] bg-white dark:bg-card px-3 py-3">
             <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
               <div className="space-y-1">
-                <p className="text-[10px] uppercase tracking-[0.16em] text-amber-400/80">Gudang</p>
-                <h2 className="mt-1 text-lg font-semibold text-gray-950 dark:text-white">Penyesuaian stok</h2>
+                <p className="text-[10px] uppercase tracking-[0.16em] text-app-accent-ink/80">Gudang</p>
+                <h2 className="mt-1 text-lg font-semibold text-foreground dark:text-foreground">Penyesuaian stok</h2>
               </div>
               <button
                 type="button"
                 onClick={() => startRefresh(() => router.refresh())}
-                  className="inline-flex h-8 items-center gap-2 border border-gray-300 dark:border-white/[0.08] bg-transparent px-3 font-mono text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/55"
+                  className="inline-flex h-8 items-center gap-2 border border-border dark:border-white/[0.08] bg-transparent px-3 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/55"
               >
                 <RefreshCcw className="h-3.5 w-3.5" />
                 {isRefreshing ? "Memuat" : "Refresh"}
@@ -1744,12 +1744,12 @@ export function WarehouseShell({
       {photoTarget ? (
         <ModalFrame title={`Foto stock card • ${photoTarget.partName}`} onClose={() => setPhotoTarget(null)}>
           <div className="grid gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
-            <div className="border border-gray-300 dark:border-white/[0.05] bg-white dark:bg-[#111114] p-3">
-              <div className="relative flex aspect-[4/3] items-center justify-center overflow-hidden border border-gray-300 dark:border-white/[0.05] bg-black">
+            <div className="border border-border dark:border-white/[0.05] bg-white dark:bg-card p-3">
+              <div className="relative flex aspect-[4/3] items-center justify-center overflow-hidden border border-border dark:border-white/[0.05] bg-black">
                 {selectedPhotoUrl ? (
                   <Image src={selectedPhotoUrl} alt={photoTarget.partName} fill sizes="(max-width: 768px) 100vw, 50vw" className="object-contain" />
                 ) : (
-                  <div className="text-center text-gray-500 dark:text-white/35">
+                  <div className="text-center text-muted-foreground dark:text-foreground/35">
                     <ImageIcon className="mx-auto h-8 w-8" />
                     <p className="mt-2 text-sm">Belum ada foto</p>
                   </div>
@@ -1764,8 +1764,8 @@ export function WarehouseShell({
                       onClick={() => setSelectedPhotoUrl(photoUrl)}
                       className={`relative overflow-hidden rounded-lg border ${
                         selectedPhotoUrl === photoUrl
-                          ? "border-amber-500/50"
-                          : "border-gray-300 dark:border-white/[0.06]"
+                          ? "border-primary/50"
+                          : "border-border dark:border-white/[0.06]"
                       }`}
                     >
                       <Image src={photoUrl} alt={photoTarget.partName} fill sizes="64px" className="object-cover" />
@@ -1776,18 +1776,18 @@ export function WarehouseShell({
             </div>
 
             <div className="space-y-4">
-              <div className="border border-gray-300 dark:border-white/[0.05] bg-white dark:bg-[#111114] px-3 py-3">
-                <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/30">Info</p>
-                <div className="mt-3 space-y-2 text-sm text-white/82">
+              <div className="border border-border dark:border-white/[0.05] bg-white dark:bg-card px-3 py-3">
+                <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30">Info</p>
+                <div className="mt-3 space-y-2 text-sm text-foreground/82">
                   <p>{photoTarget.partName}</p>
-                  <p className="text-gray-600 dark:text-white/45">{photoTarget.unitName}</p>
-                  <p className="text-gray-600 dark:text-white/45">{photoTarget.locationLabel ?? "Belum ada lokasi"}</p>
+                  <p className="text-muted-foreground dark:text-foreground/45">{photoTarget.unitName}</p>
+                  <p className="text-muted-foreground dark:text-foreground/45">{photoTarget.locationLabel ?? "Belum ada lokasi"}</p>
                 </div>
               </div>
 
-              <div className="border border-gray-300 dark:border-white/[0.05] bg-white dark:bg-[#111114] px-3 py-3">
+              <div className="border border-border dark:border-white/[0.05] bg-white dark:bg-card px-3 py-3">
                 <div className="flex items-center justify-between gap-3">
-                  <p className="text-sm font-medium text-gray-950 dark:text-white">Foto</p>
+                  <p className="text-sm font-medium text-foreground dark:text-foreground">Foto</p>
                   {canManageStockCard ? (
                     <div className="flex items-center gap-2">
                       <input
@@ -1807,7 +1807,7 @@ export function WarehouseShell({
                         type="button"
                         onClick={() => photoInputRef.current?.click()}
                         disabled={isUploadingPhoto}
-                        className="inline-flex h-8 items-center gap-2 border border-amber-500/40 px-3 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-300 transition-colors hover:bg-amber-500/10 disabled:opacity-50"
+                        className="inline-flex h-8 items-center gap-2 border border-primary/40 px-3 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-app-accent-ink transition-colors hover:bg-primary/10 disabled:opacity-50"
                       >
                         {isUploadingPhoto ? (
                           <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
@@ -1822,17 +1822,17 @@ export function WarehouseShell({
 
                 <div className="mt-3 space-y-2">
                   {photoUrlsDraft.length === 0 ? (
-                    <p className="text-sm text-gray-500 dark:text-white/35">Belum ada foto di stock card ini.</p>
+                    <p className="text-sm text-muted-foreground dark:text-foreground/35">Belum ada foto di stock card ini.</p>
                   ) : (
 	                    photoUrlsDraft.map((photoUrl, index) => (
 	                      <div
 	                        key={photoUrl}
-	                        className="flex items-center justify-between gap-3 border border-gray-300 dark:border-white/[0.05] bg-white dark:bg-[#111114] px-3 py-2"
+	                        className="flex items-center justify-between gap-3 border border-border dark:border-white/[0.05] bg-white dark:bg-card px-3 py-2"
 	                      >
                         <button
                           type="button"
                           onClick={() => setSelectedPhotoUrl(photoUrl)}
-                          className="min-w-0 flex-1 truncate text-left text-sm text-white/82"
+                          className="min-w-0 flex-1 truncate text-left text-sm text-foreground/82"
                         >
                           Foto {index + 1}
                         </button>
@@ -1841,7 +1841,7 @@ export function WarehouseShell({
                             href={photoUrl}
                             target="_blank"
                             rel="noreferrer"
-                            className="border border-gray-300 dark:border-white/[0.08] p-2 text-gray-500 dark:text-white/55 transition-colors hover:text-gray-950 dark:text-white"
+                            className="border border-border dark:border-white/[0.08] p-2 text-muted-foreground dark:text-foreground/55 transition-colors hover:text-foreground dark:text-foreground"
                           >
                             <Download className="h-3.5 w-3.5" />
                           </a>
@@ -1849,7 +1849,7 @@ export function WarehouseShell({
                             <button
                               type="button"
                               onClick={() => void deletePhoto(photoUrl)}
-                              className="border border-red-500/20 p-2 text-red-200 transition-colors hover:bg-red-500/10"
+                              className="border border-destructive/20 p-2 text-destructive transition-colors hover:bg-destructive/10"
                             >
                               <Trash2 className="h-3.5 w-3.5" />
                             </button>

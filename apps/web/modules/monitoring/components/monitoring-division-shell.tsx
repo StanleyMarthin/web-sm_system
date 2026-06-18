@@ -172,14 +172,14 @@ export function MonitoringDivisionShell({
 
     return (
         <div className="space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-4 rounded-[14px] border border-white/[0.06] bg-[#0a0a0c] px-4 py-3">
+            <div className="flex flex-wrap items-center justify-between gap-4 rounded-[14px] border border-white/[0.06] bg-background px-4 py-3">
                 <div className="flex items-center gap-3">
-                    <h1 className="text-[14px] font-medium text-white">Monitoring Divisi</h1>
+                    <h1 className="text-[14px] font-medium text-foreground">Monitoring Divisi</h1>
                     <div className="h-4 w-px bg-white/[0.06]" />
                     <select
                         value={selectedDivision}
                         onChange={(e) => changeDivision(e.target.value)}
-                        className="w-48 appearance-none bg-transparent text-[13px] text-white outline-none ring-0 [&>option]:bg-[#111114] [&>option]:text-white"
+                        className="w-48 appearance-none bg-transparent text-[13px] text-foreground outline-none ring-0 [&>option]:bg-card [&>option]:text-foreground"
                         disabled={divisions.length === 0}
                     >
                         <option value="">Semua Divisi (Cross-Tab)</option>
@@ -201,8 +201,8 @@ export function MonitoringDivisionShell({
                                 className={[
                                     "rounded-md px-3 py-1.5 text-[10px] uppercase tracking-wider transition-colors",
                                     activeSpan === span
-                                        ? "bg-amber-500/10 text-amber-500"
-                                        : "text-white/40 hover:text-white/70",
+                                        ? "bg-primary/10 text-app-accent-ink"
+                                        : "text-foreground/40 hover:text-foreground/70",
                                 ].join(" ")}
                             >
                                 {span === "daily" ? "Harian" : "Mingguan"}
@@ -231,9 +231,9 @@ export function MonitoringDivisionShell({
             </div>
 
             {selectedDivision ? (
-                <section className="overflow-hidden rounded-[14px] border border-white/[0.06] bg-[#0a0a0c]">
-                    <div className="border-b border-white/[0.06] bg-[#111114] py-3 text-center">
-                        <h2 className="text-[13px] font-bold uppercase tracking-[0.05em] text-white">
+                <section className="overflow-hidden rounded-[14px] border border-white/[0.06] bg-background">
+                    <div className="border-b border-white/[0.06] bg-card py-3 text-center">
+                        <h2 className="text-[13px] font-bold uppercase tracking-[0.05em] text-foreground">
                             DIVISI {selectedDivision.toUpperCase()}
                         </h2>
                     </div>
@@ -244,7 +244,7 @@ export function MonitoringDivisionShell({
                                 <tr>
                                     <th
                                         rowSpan={2}
-                                        className="border-b border-r border-white/[0.06] bg-white/[0.01] px-4 py-3 text-center text-[11px] font-medium uppercase tracking-[0.1em] text-white/40 align-middle"
+                                        className="border-b border-r border-white/[0.06] bg-white/[0.01] px-4 py-3 text-center text-[11px] font-medium uppercase tracking-[0.1em] text-foreground/40 align-middle"
                                     >
                                         Unit
                                     </th>
@@ -252,7 +252,7 @@ export function MonitoringDivisionShell({
                                         <th
                                             key={d}
                                             colSpan={2}
-                                            className="border-b border-r border-white/[0.06] bg-amber-500/10 px-2 py-2.5 text-center text-[11px] font-semibold text-amber-500"
+                                            className="border-b border-r border-white/[0.06] bg-primary/10 px-2 py-2.5 text-center text-[11px] font-semibold text-app-accent-ink"
                                         >
                                             {formatMatrixDate(d)}
                                         </th>
@@ -261,10 +261,10 @@ export function MonitoringDivisionShell({
                                 <tr>
                                     {matrixDates.map((d) => (
                                         <React.Fragment key={`sub-${d}`}>
-                                            <th className="border-b border-r border-white/[0.06] bg-white/[0.01] px-2 py-2 text-center text-[10px] uppercase tracking-wider text-white/50">
+                                            <th className="border-b border-r border-white/[0.06] bg-white/[0.01] px-2 py-2 text-center text-[10px] uppercase tracking-wider text-foreground/50">
                                                 Jam Normal
                                             </th>
-                                            <th className="border-b border-r border-white/[0.06] bg-white/[0.01] px-2 py-2 text-center text-[10px] uppercase tracking-wider text-white/50">
+                                            <th className="border-b border-r border-white/[0.06] bg-white/[0.01] px-2 py-2 text-center text-[10px] uppercase tracking-wider text-foreground/50">
                                                 Jam Lembur
                                             </th>
                                         </React.Fragment>
@@ -276,7 +276,7 @@ export function MonitoringDivisionShell({
                                     <tr>
                                         <td
                                             colSpan={matrixDates.length * 2 + 1}
-                                            className="px-4 py-12 text-center text-[12px] italic text-white/30"
+                                            className="px-4 py-12 text-center text-[12px] italic text-foreground/30"
                                         >
                                             Tidak ada data untuk divisi ini pada periode yang dipilih.
                                         </td>
@@ -284,17 +284,17 @@ export function MonitoringDivisionShell({
                                 ) : (
                                     matrixData.map((unit) => (
                                         <tr key={unit.carId} className="border-b border-white/[0.04] transition-colors hover:bg-white/[0.02]">
-                                            <td className="border-r border-white/[0.06] px-4 py-2.5 text-[11px] font-bold text-white uppercase tracking-wider">
+                                            <td className="border-r border-white/[0.06] px-4 py-2.5 text-[11px] font-bold text-foreground uppercase tracking-wider">
                                                 {unit.unitName}
                                             </td>
                                             {matrixDates.map((d) => {
                                                 const cell = unit.days[d];
                                                 return (
                                                     <React.Fragment key={`cell-${unit.carId}-${d}`}>
-                                                        <td className="border-r border-white/[0.06] px-2 py-2.5 text-center tabular-nums text-white/70">
+                                                        <td className="border-r border-white/[0.06] px-2 py-2.5 text-center tabular-nums text-foreground/70">
                                                             {cell?.normal ? fmt(cell.normal) : ""}
                                                         </td>
-                                                        <td className="border-r border-white/[0.06] px-2 py-2.5 text-center tabular-nums text-amber-500/80">
+                                                        <td className="border-r border-white/[0.06] px-2 py-2.5 text-center tabular-nums text-app-accent-ink/80">
                                                             {cell?.overtime ? fmt(cell.overtime) : ""}
                                                         </td>
                                                     </React.Fragment>
@@ -308,9 +308,9 @@ export function MonitoringDivisionShell({
                     </div>
                 </section>
             ) : (
-                <section className="overflow-hidden rounded-[14px] border border-white/[0.06] bg-[#0a0a0c]">
-                    <div className="border-b border-white/[0.06] bg-[#111114] py-3 text-center flex flex-col items-center justify-center gap-1">
-                        <h2 className="text-[13px] font-bold uppercase tracking-[0.05em] text-white">
+                <section className="overflow-hidden rounded-[14px] border border-white/[0.06] bg-background">
+                    <div className="border-b border-white/[0.06] bg-card py-3 text-center flex flex-col items-center justify-center gap-1">
+                        <h2 className="text-[13px] font-bold uppercase tracking-[0.05em] text-foreground">
                             REPORT PROJECT {activeSpan === "weekly" ? "MINGGUAN" : "HARIAN"}
                         </h2>
                     </div>
@@ -319,21 +319,21 @@ export function MonitoringDivisionShell({
                         <table className="min-w-full border-collapse text-sm">
                             <thead>
                                 <tr>
-                                    <th className="border-b border-r border-white/[0.06] bg-white/[0.01] px-4 py-3 text-center text-[11px] font-medium uppercase tracking-[0.1em] text-white/40">
+                                    <th className="border-b border-r border-white/[0.06] bg-white/[0.01] px-4 py-3 text-center text-[11px] font-medium uppercase tracking-[0.1em] text-foreground/40">
                                         No.
                                     </th>
-                                    <th className="border-b border-r border-white/[0.06] bg-white/[0.01] px-4 py-3 text-center text-[11px] font-medium uppercase tracking-[0.1em] text-amber-500/80">
+                                    <th className="border-b border-r border-white/[0.06] bg-white/[0.01] px-4 py-3 text-center text-[11px] font-medium uppercase tracking-[0.1em] text-app-accent-ink/80">
                                         Jenis Kendaraan
                                     </th>
                                     {divisions.map((div) => (
                                         <th
                                             key={div}
-                                            className="border-b border-r border-white/[0.06] bg-white/[0.01] px-2 py-3 text-center text-[10px] font-semibold uppercase tracking-wider text-amber-500"
+                                            className="border-b border-r border-white/[0.06] bg-white/[0.01] px-2 py-3 text-center text-[10px] font-semibold uppercase tracking-wider text-app-accent-ink"
                                         >
                                             {div}
                                         </th>
                                     ))}
-                                    <th className="border-b border-white/[0.06] bg-white/[0.01] px-4 py-3 text-center text-[11px] font-bold uppercase tracking-[0.1em] text-amber-500">
+                                    <th className="border-b border-white/[0.06] bg-white/[0.01] px-4 py-3 text-center text-[11px] font-bold uppercase tracking-[0.1em] text-app-accent-ink">
                                         Total
                                     </th>
                                 </tr>
@@ -343,7 +343,7 @@ export function MonitoringDivisionShell({
                                     <tr>
                                         <td
                                             colSpan={divisions.length + 3}
-                                            className="px-4 py-12 text-center text-[12px] italic text-white/30"
+                                            className="px-4 py-12 text-center text-[12px] italic text-foreground/30"
                                         >
                                             Tidak ada data untuk periode yang dipilih.
                                         </td>
@@ -351,27 +351,27 @@ export function MonitoringDivisionShell({
                                 ) : (
                                     allMatrixData.map((unit, idx) => (
                                         <tr key={unit.carId} className="border-b border-white/[0.04] transition-colors hover:bg-white/[0.02] even:bg-white/[0.01]">
-                                            <td className="border-r border-white/[0.06] px-4 py-2.5 text-[11px] text-center text-white/50">
+                                            <td className="border-r border-white/[0.06] px-4 py-2.5 text-[11px] text-center text-foreground/50">
                                                 {idx + 1}
                                             </td>
-                                            <td className="border-r border-white/[0.06] px-4 py-2.5 text-[11px] font-medium text-white/80 uppercase tracking-wider">
+                                            <td className="border-r border-white/[0.06] px-4 py-2.5 text-[11px] font-medium text-foreground/80 uppercase tracking-wider">
                                                 {unit.unitName}
                                             </td>
                                             {divisions.map((div) => {
                                                 const hours = unit.divHours[div] || 0;
                                                 return (
-                                                    <td key={`cell-${unit.carId}-${div}`} className="border-r border-white/[0.06] px-2 py-2.5 text-center tabular-nums text-[11px] text-white/70">
+                                                    <td key={`cell-${unit.carId}-${div}`} className="border-r border-white/[0.06] px-2 py-2.5 text-center tabular-nums text-[11px] text-foreground/70">
                                                         {hours > 0 ? (
-                                                            <span className={hours > 5 ? "font-bold text-white" : ""}>
+                                                            <span className={hours > 5 ? "font-bold text-foreground" : ""}>
                                                                 {fmt(hours)}
                                                             </span>
                                                         ) : (
-                                                            <span className="text-white/20">0.00</span>
+                                                            <span className="text-foreground/20">0.00</span>
                                                         )}
                                                     </td>
                                                 );
                                             })}
-                                            <td className="px-4 py-2.5 text-center tabular-nums text-[11px] font-bold text-amber-500/90">
+                                            <td className="px-4 py-2.5 text-center tabular-nums text-[11px] font-bold text-app-accent-ink/90">
                                                 {fmt(unit.totalHours)}
                                             </td>
                                         </tr>

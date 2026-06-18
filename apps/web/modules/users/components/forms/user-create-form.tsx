@@ -100,42 +100,42 @@ export function UserCreateForm({ references, onSuccess, onError, onClose }: User
   return (
     <form className="mt-5 grid gap-4 md:grid-cols-2" onSubmit={handleSubmit(onSubmit)}>
       <label className="space-y-1">
-        <span className="text-xs uppercase tracking-[0.14em] text-white/45">ID Pegawai</span>
+        <span className="text-xs uppercase tracking-[0.14em] text-foreground/45">ID Pegawai</span>
         <input
           {...register("employeeId")}
-          className="h-11 w-full rounded-2xl border border-white/[0.08] bg-white/[0.03] px-3 text-sm text-white outline-none focus:border-amber-500/40"
+          className="h-11 w-full rounded-2xl border border-white/[0.08] bg-white/[0.03] px-3 text-sm text-foreground outline-none focus:border-primary/40"
         />
-        {errors.employeeId && <p className="text-xs text-red-400">{errors.employeeId.message}</p>}
+        {errors.employeeId && <p className="text-xs text-destructive">{errors.employeeId.message}</p>}
       </label>
 
       <label className="space-y-1">
-        <span className="text-xs uppercase tracking-[0.14em] text-white/45">Nama Lengkap</span>
+        <span className="text-xs uppercase tracking-[0.14em] text-foreground/45">Nama Lengkap</span>
         <input
           {...register("fullName")}
-          className="h-11 w-full rounded-2xl border border-white/[0.08] bg-white/[0.03] px-3 text-sm text-white outline-none focus:border-amber-500/40"
+          className="h-11 w-full rounded-2xl border border-white/[0.08] bg-white/[0.03] px-3 text-sm text-foreground outline-none focus:border-primary/40"
         />
-        {errors.fullName && <p className="text-xs text-red-400">{errors.fullName.message}</p>}
+        {errors.fullName && <p className="text-xs text-destructive">{errors.fullName.message}</p>}
       </label>
 
       <label className="space-y-1">
-        <span className="text-xs uppercase tracking-[0.14em] text-white/45">Email</span>
+        <span className="text-xs uppercase tracking-[0.14em] text-foreground/45">Email</span>
         <input
           {...register("email")}
-          className="h-11 w-full rounded-2xl border border-white/[0.08] bg-white/[0.03] px-3 text-sm text-white outline-none focus:border-amber-500/40"
+          className="h-11 w-full rounded-2xl border border-white/[0.08] bg-white/[0.03] px-3 text-sm text-foreground outline-none focus:border-primary/40"
         />
-        {errors.email && <p className="text-xs text-red-400">{errors.email.message}</p>}
+        {errors.email && <p className="text-xs text-destructive">{errors.email.message}</p>}
       </label>
 
       <label className="space-y-1">
-        <span className="text-xs uppercase tracking-[0.14em] text-white/45">Jabatan / Grade</span>
+        <span className="text-xs uppercase tracking-[0.14em] text-foreground/45">Jabatan / Grade</span>
         <input
           {...register("grade")}
-          className="h-11 w-full rounded-2xl border border-white/[0.08] bg-white/[0.03] px-3 text-sm text-white outline-none focus:border-amber-500/40"
+          className="h-11 w-full rounded-2xl border border-white/[0.08] bg-white/[0.03] px-3 text-sm text-foreground outline-none focus:border-primary/40"
         />
       </label>
 
       <label className="space-y-1">
-        <span className="text-xs uppercase tracking-[0.14em] text-white/45">Role Akses</span>
+        <span className="text-xs uppercase tracking-[0.14em] text-foreground/45">Role Akses</span>
         <select
           {...register("roleId")}
           onChange={(e) => {
@@ -145,7 +145,7 @@ export function UserCreateForm({ references, onSuccess, onError, onClose }: User
               setValue("managedDivisionIds", []);
             }
           }}
-          className="h-11 w-full rounded-2xl border border-white/[0.08] bg-white/[0.03] px-3 text-sm text-white outline-none focus:border-amber-500/40"
+          className="h-11 w-full rounded-2xl border border-white/[0.08] bg-white/[0.03] px-3 text-sm text-foreground outline-none focus:border-primary/40"
         >
           <option value="">Pilih role</option>
           {references.roles.map((role) => (
@@ -154,14 +154,14 @@ export function UserCreateForm({ references, onSuccess, onError, onClose }: User
             </option>
           ))}
         </select>
-        {errors.roleId && <p className="text-xs text-red-400">{errors.roleId.message}</p>}
+        {errors.roleId && <p className="text-xs text-destructive">{errors.roleId.message}</p>}
       </label>
 
       <label className="space-y-1">
-        <span className="text-xs uppercase tracking-[0.14em] text-white/45">Divisi Utama</span>
+        <span className="text-xs uppercase tracking-[0.14em] text-foreground/45">Divisi Utama</span>
         <select
           {...register("divisionId")}
-          className="h-11 w-full rounded-2xl border border-white/[0.08] bg-white/[0.03] px-3 text-sm text-white outline-none focus:border-amber-500/40"
+          className="h-11 w-full rounded-2xl border border-white/[0.08] bg-white/[0.03] px-3 text-sm text-foreground outline-none focus:border-primary/40"
         >
           <option value="">Pilih divisi</option>
           {references.divisions.map((division) => (
@@ -170,18 +170,18 @@ export function UserCreateForm({ references, onSuccess, onError, onClose }: User
             </option>
           ))}
         </select>
-        {errors.divisionId && <p className="text-xs text-red-400">{errors.divisionId.message}</p>}
+        {errors.divisionId && <p className="text-xs text-destructive">{errors.divisionId.message}</p>}
       </label>
 
       <div className="md:col-span-2 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4">
-        <p className="text-xs uppercase tracking-[0.14em] text-white/45">Ringkasan Lingkup</p>
+        <p className="text-xs uppercase tracking-[0.14em] text-foreground/45">Ringkasan Lingkup</p>
         {buildScopeHint(selectedRoleDefinition) ? null : null}
       </div>
 
       {selectedRoleDefinition?.scopeBasis === "ASSIGNED_DIVISIONS" && (
         <div className="space-y-3 md:col-span-2">
           <div>
-            <p className="text-xs uppercase tracking-[0.14em] text-white/45">Divisi Pegangan</p>
+            <p className="text-xs uppercase tracking-[0.14em] text-foreground/45">Divisi Pegangan</p>
           </div>
           <div className="grid gap-2 md:grid-cols-2">
             {references.divisions.map((division) => {
@@ -192,7 +192,7 @@ export function UserCreateForm({ references, onSuccess, onError, onClose }: User
                   className={[
                     "flex items-start gap-3 rounded-2xl border px-4 py-3 transition-colors cursor-pointer",
                     checked
-                      ? "border-amber-500/30 bg-amber-500/10"
+                      ? "border-primary/30 bg-primary/10"
                       : "border-white/[0.06] bg-black/20",
                   ].join(" ")}
                 >
@@ -200,9 +200,9 @@ export function UserCreateForm({ references, onSuccess, onError, onClose }: User
                     type="checkbox"
                     value={division.value}
                     {...register("managedDivisionIds")}
-                    className="mt-1 h-4 w-4 rounded border-white/20 bg-transparent text-amber-500"
+                    className="mt-1 h-4 w-4 rounded border-white/20 bg-transparent text-app-accent-ink"
                   />
-                  <span className="text-sm text-white">{division.label}</span>
+                  <span className="text-sm text-foreground">{division.label}</span>
                 </label>
               );
             })}
@@ -211,14 +211,14 @@ export function UserCreateForm({ references, onSuccess, onError, onClose }: User
       )}
 
       <label className="space-y-1 md:col-span-2">
-        <span className="text-xs uppercase tracking-[0.14em] text-white/45">Kata Sandi</span>
+        <span className="text-xs uppercase tracking-[0.14em] text-foreground/45">Kata Sandi</span>
         <input
           type="password"
           {...register("password")}
           placeholder="Minimal 8 karakter"
-          className="h-11 w-full rounded-2xl border border-white/[0.08] bg-white/[0.03] px-3 text-sm text-white outline-none focus:border-amber-500/40"
+          className="h-11 w-full rounded-2xl border border-white/[0.08] bg-white/[0.03] px-3 text-sm text-foreground outline-none focus:border-primary/40"
         />
-        {errors.password && <p className="text-xs text-red-400">{errors.password.message}</p>}
+        {errors.password && <p className="text-xs text-destructive">{errors.password.message}</p>}
       </label>
 
       <div className="flex justify-end gap-2 pt-2 md:col-span-2">
@@ -226,14 +226,14 @@ export function UserCreateForm({ references, onSuccess, onError, onClose }: User
           type="button"
           onClick={onClose}
           disabled={isPending}
-          className="rounded-full border border-white/[0.08] px-4 py-2 text-sm text-white/60 hover:text-white"
+          className="rounded-full border border-white/[0.08] px-4 py-2 text-sm text-foreground/60 hover:text-foreground"
         >
           Batal
         </button>
         <button
           type="submit"
           disabled={isPending || !isValid}
-          className="inline-flex items-center gap-2 rounded-full bg-amber-500 px-4 py-2 text-sm font-semibold text-black hover:bg-amber-400 disabled:opacity-40"
+          className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary disabled:opacity-40"
         >
           <UserCog className="h-4 w-4" />
           Simpan Pengguna

@@ -52,7 +52,7 @@ export function IssueCreateForm({ references, isSubmitting, message, error, onSu
       <div>
         <select
           {...register("carId")}
-          className="h-11 w-full rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 text-sm text-white outline-none focus:border-amber-500/30"
+          className="h-11 w-full rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 text-sm text-foreground outline-none focus:border-primary/30"
         >
           <option value="">Pilih unit</option>
           {references.units.map((unit) => (
@@ -61,13 +61,13 @@ export function IssueCreateForm({ references, isSubmitting, message, error, onSu
             </option>
           ))}
         </select>
-        {errors.carId && <p className="mt-1 text-xs text-red-400">{errors.carId.message}</p>}
+        {errors.carId && <p className="mt-1 text-xs text-destructive">{errors.carId.message}</p>}
       </div>
 
       <div>
         <select
           {...register("divisionId")}
-          className="h-11 w-full rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 text-sm text-white outline-none focus:border-amber-500/30"
+          className="h-11 w-full rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 text-sm text-foreground outline-none focus:border-primary/30"
         >
           <option value="">Auto dari scope/divisi</option>
           {references.divisions.map((division) => (
@@ -76,7 +76,7 @@ export function IssueCreateForm({ references, isSubmitting, message, error, onSu
             </option>
           ))}
         </select>
-        {errors.divisionId && <p className="mt-1 text-xs text-red-400">{errors.divisionId.message}</p>}
+        {errors.divisionId && <p className="mt-1 text-xs text-destructive">{errors.divisionId.message}</p>}
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
@@ -84,20 +84,20 @@ export function IssueCreateForm({ references, isSubmitting, message, error, onSu
           <input
             {...register("issueType")}
             placeholder="Jenis issue"
-            className="h-11 w-full rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 text-sm text-white outline-none placeholder:text-white/20 focus:border-amber-500/30"
+            className="h-11 w-full rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 text-sm text-foreground outline-none placeholder:text-foreground/20 focus:border-primary/30"
           />
-          {errors.issueType && <p className="mt-1 text-xs text-red-400">{errors.issueType.message}</p>}
+          {errors.issueType && <p className="mt-1 text-xs text-destructive">{errors.issueType.message}</p>}
         </div>
         <div>
           <select
             {...register("severity")}
-            className="h-11 w-full rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 text-sm text-white outline-none focus:border-amber-500/30"
+            className="h-11 w-full rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 text-sm text-foreground outline-none focus:border-primary/30"
           >
             <option value="LOW">LOW</option>
             <option value="MEDIUM">MEDIUM</option>
             <option value="HIGH">HIGH</option>
           </select>
-          {errors.severity && <p className="mt-1 text-xs text-red-400">{errors.severity.message}</p>}
+          {errors.severity && <p className="mt-1 text-xs text-destructive">{errors.severity.message}</p>}
         </div>
       </div>
 
@@ -105,9 +105,9 @@ export function IssueCreateForm({ references, isSubmitting, message, error, onSu
         <input
           {...register("title")}
           placeholder="Judul issue"
-          className="h-11 w-full rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 text-sm text-white outline-none placeholder:text-white/20 focus:border-amber-500/30"
+          className="h-11 w-full rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 text-sm text-foreground outline-none placeholder:text-foreground/20 focus:border-primary/30"
         />
-        {errors.title && <p className="mt-1 text-xs text-red-400">{errors.title.message}</p>}
+        {errors.title && <p className="mt-1 text-xs text-destructive">{errors.title.message}</p>}
       </div>
 
       <div>
@@ -115,18 +115,18 @@ export function IssueCreateForm({ references, isSubmitting, message, error, onSu
           {...register("description")}
           placeholder="Deskripsi issue"
           rows={4}
-          className="w-full rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 py-3 text-sm text-white outline-none placeholder:text-white/20 focus:border-amber-500/30"
+          className="w-full rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 py-3 text-sm text-foreground outline-none placeholder:text-foreground/20 focus:border-primary/30"
         />
-        {errors.description && <p className="mt-1 text-xs text-red-400">{errors.description.message}</p>}
+        {errors.description && <p className="mt-1 text-xs text-destructive">{errors.description.message}</p>}
       </div>
 
-      {message ? <p className="text-sm text-emerald-300">{message}</p> : null}
-      {error ? <p className="text-sm text-red-300">{error}</p> : null}
+      {message ? <p className="text-sm text-success">{message}</p> : null}
+      {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
       <button
         type="submit"
         disabled={isSubmitting}
-        className="inline-flex h-11 items-center gap-2 rounded-2xl bg-amber-500 px-4 text-sm font-semibold text-black transition-colors hover:bg-amber-400 disabled:opacity-60"
+        className="inline-flex h-11 items-center gap-2 rounded-2xl bg-primary px-4 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary disabled:opacity-60"
       >
         <Plus className="h-4 w-4" />
         {isSubmitting ? "Menyimpan..." : "Buat Issue"}

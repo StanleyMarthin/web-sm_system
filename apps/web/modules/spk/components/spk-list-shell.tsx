@@ -61,15 +61,15 @@ function formatStatusLabel(value: string): string {
 
 function statusClassName(status: string): string {
   if (status === "ACTIVE") {
-    return "border-emerald-500/25 bg-emerald-500/[0.06] text-emerald-400";
+    return "border-success/25 bg-success/[0.06] text-success";
   }
   if (status === "DONE") {
-    return "border-white/10 bg-white/[0.03] text-white/50";
+    return "border-white/10 bg-white/[0.03] text-foreground/50";
   }
   if (status === "REJECTED") {
-    return "border-red-500/25 bg-red-500/[0.06] text-red-400";
+    return "border-destructive/25 bg-destructive/[0.06] text-destructive";
   }
-  return "border-amber-500/25 bg-amber-500/[0.06] text-amber-400";
+  return "border-primary/25 bg-primary/[0.06] text-app-accent-ink";
 }
 
 function SummaryCard({
@@ -83,14 +83,14 @@ function SummaryCard({
 }) {
   const toneClassName =
     tone === "warn"
-      ? "text-amber-500"
+      ? "text-app-accent-ink"
       : tone === "ok"
-        ? "text-emerald-400"
-        : "text-white/80";
+        ? "text-success"
+        : "text-foreground/80";
 
   return (
-    <div className="border border-white/5 bg-[#111114] px-4 py-3">
-      <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-white/25">{label}</p>
+    <div className="border border-white/5 bg-card px-4 py-3">
+      <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-foreground/25">{label}</p>
       <p className={`mt-1 font-mono text-[20px] font-semibold ${toneClassName}`}>{value}</p>
     </div>
   );
@@ -171,7 +171,7 @@ const columns: SmartDataGridColumn[] = [
     renderCell: (value, row) => (
       <Link
         href={`/spk/${String(row.spkId)}`}
-        className="font-semibold text-amber-500 hover:text-amber-400"
+        className="font-semibold text-app-accent-ink hover:text-app-accent-ink"
       >
         {String(value)}
       </Link>
@@ -242,24 +242,24 @@ export function SpkListShell({
 
   return (
     <div className="space-y-4">
-      <section className="border border-white/5 bg-[#111114] px-4 py-3">
+      <section className="border border-white/5 bg-card px-4 py-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="flex h-8 w-8 items-center justify-center border border-white/[0.08]">
-              <FileCheck2 className="h-4 w-4 text-amber-500" />
+              <FileCheck2 className="h-4 w-4 text-app-accent-ink" />
             </div>
             <div>
-              <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-white/30">
+              <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-foreground/30">
                 SPK Planner
               </p>
-              <h1 className="text-[13px] font-mono text-white/80">
+              <h1 className="text-[13px] font-mono text-foreground/80">
                 Papan Kerja SPK Mingguan
               </h1>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <label className="flex items-center gap-2 border border-white/10 bg-[#0a0a0c] px-3 h-8">
-              <CalendarDays className="h-3.5 w-3.5 text-white/30" />
+            <label className="flex items-center gap-2 border border-white/10 bg-background px-3 h-8">
+              <CalendarDays className="h-3.5 w-3.5 text-foreground/30" />
               <input
                 type="date"
                 value={state.date || ""}
@@ -273,18 +273,18 @@ export function SpkListShell({
                     router.push(`${pathname}?${nextParams.toString()}`);
                   });
                 }}
-                className="bg-transparent font-mono text-[11px] text-white/60 outline-none dark:[color-scheme:dark]"
+                className="bg-transparent font-mono text-[11px] text-foreground/60 outline-none dark:[color-scheme:dark]"
               />
             </label>
             <button
               type="button"
               onClick={() => router.refresh()}
-              className="inline-flex h-8 items-center gap-2 border border-white/10 px-3 font-mono text-[10px] uppercase tracking-[0.12em] text-white/40 hover:text-white transition-colors"
+              className="inline-flex h-8 items-center gap-2 border border-white/10 px-3 font-mono text-[10px] uppercase tracking-[0.12em] text-foreground/40 hover:text-foreground transition-colors"
             >
               <RefreshCcw className={`h-3.5 w-3.5 ${isPending ? "animate-spin" : ""}`} />
               {isPending ? "Memuat..." : "Refresh"}
             </button>
-            <span className="border border-white/5 bg-[#0a0a0c] px-3 h-8 flex items-center font-mono text-[10px] text-white/30">
+            <span className="border border-white/5 bg-background px-3 h-8 flex items-center font-mono text-[10px] text-foreground/30">
               {meta.total} SPK
             </span>
           </div>
@@ -313,11 +313,11 @@ export function SpkListShell({
         />
       </section>
 
-      <section className="overflow-hidden border border-white/5 bg-[#111114]">
+      <section className="overflow-hidden border border-white/5 bg-card">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/5 px-4 py-3">
           <div>
-            <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-white/30">Tabel Kerja</p>
-            <h2 className="text-[13px] font-mono text-white/80 mt-0.5">Daftar SPK</h2>
+            <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-foreground/30">Tabel Kerja</p>
+            <h2 className="text-[13px] font-mono text-foreground/80 mt-0.5">Daftar SPK</h2>
           </div>
         </div>
 

@@ -74,7 +74,7 @@ function FormField({
 }) {
   return (
     <label className="space-y-2">
-      <span className="text-sm text-white/60">{label}</span>
+      <span className="text-sm text-foreground/60">{label}</span>
       {children}
     </label>
   );
@@ -114,18 +114,18 @@ function riskLabel(level: string): string {
 
 function riskTone(level: string): string {
   if (level === "BLACK") {
-    return "border-white/[0.12] bg-white/[0.06] text-white";
+    return "border-white/[0.12] bg-white/[0.06] text-foreground";
   }
   if (level === "RED") {
     return "border-rose-500/30 bg-rose-500/10 text-rose-100";
   }
   if (level === "ORANGE") {
-    return "border-amber-500/30 bg-amber-500/10 text-amber-100";
+    return "border-primary/30 bg-primary/10 text-app-accent-ink";
   }
   if (level === "YELLOW") {
-    return "border-yellow-500/30 bg-yellow-500/10 text-yellow-100";
+    return "border-warning/30 bg-warning/10 text-warning";
   }
-  return "border-emerald-500/30 bg-emerald-500/10 text-emerald-100";
+  return "border-success/30 bg-success/10 text-success";
 }
 
 export function CalendarSettingsShell({
@@ -251,23 +251,23 @@ export function CalendarSettingsShell({
   return (
     <div className="space-y-6">
       {showHero ? (
-        <section className="rounded-[28px] border border-white/[0.06] bg-[#050505] p-6 shadow-[0_0_0_1px_rgba(255,255,255,0.02)]">
+        <section className="rounded-[28px] border border-white/[0.06] bg-card p-6 shadow-[0_0_0_1px_rgba(255,255,255,0.02)]">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
             <div>
               <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-amber-500/10 ring-1 ring-amber-500/20">
-                  <CalendarDays className="h-5 w-5 text-amber-400" />
+                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 ring-1 ring-primary/20">
+                  <CalendarDays className="h-5 w-5 text-app-accent-ink" />
                 </div>
                 <div>
-                  <p className="text-[11px] uppercase tracking-[0.18em] text-amber-500/70">
+                  <p className="text-[11px] uppercase tracking-[0.18em] text-app-accent-ink/70">
                     Planning & ETA
                   </p>
-                  <h2 className="mt-1 text-xl font-medium text-white">
+                  <h2 className="mt-1 text-xl font-medium text-foreground">
                     Peta risiko serah unit minggu ini
                   </h2>
                 </div>
               </div>
-              <p className="mt-3 max-w-3xl text-sm leading-6 text-white/45">
+              <p className="mt-3 max-w-3xl text-sm leading-6 text-foreground/45">
                 Sistem membaca tanggal target, kapasitas kerja, dan beban yang tersisa agar PM
                 bisa cepat tahu unit mana yang aman dan mana yang perlu didorong.
               </p>
@@ -278,12 +278,12 @@ export function CalendarSettingsShell({
                 type="date"
                 value={riskState.asOfDate}
                 onChange={(event) => pushSearch({ asOfDate: event.target.value, page: "1" })}
-                className="h-11 rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 text-sm text-white outline-none focus:border-amber-500/30"
+                className="h-11 rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 text-sm text-foreground outline-none focus:border-primary/30"
               />
               <button
                 type="button"
                 onClick={() => router.refresh()}
-                className="inline-flex h-11 items-center gap-2 rounded-2xl border border-white/[0.06] bg-white/[0.03] px-4 text-sm text-white/65 transition-colors hover:text-white"
+                className="inline-flex h-11 items-center gap-2 rounded-2xl border border-white/[0.06] bg-white/[0.03] px-4 text-sm text-foreground/65 transition-colors hover:text-foreground"
               >
                 <RefreshCcw className="h-4 w-4" />
                 Muat ulang
@@ -294,8 +294,8 @@ export function CalendarSettingsShell({
       ) : (
         <section className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.03] p-4">
           <div>
-            <p className="text-sm text-white">Posisi risiko per {riskState.asOfDate}</p>
-            <p className="mt-1 text-sm text-white/45">
+            <p className="text-sm text-foreground">Posisi risiko per {riskState.asOfDate}</p>
+            <p className="mt-1 text-sm text-foreground/45">
               Buka halaman Units untuk daftar lengkap. Di sini hanya ditampilkan hal yang perlu
               perhatian cepat.
             </p>
@@ -305,12 +305,12 @@ export function CalendarSettingsShell({
               type="date"
               value={riskState.asOfDate}
               onChange={(event) => pushSearch({ asOfDate: event.target.value, page: "1" })}
-              className="h-11 rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 text-sm text-white outline-none focus:border-amber-500/30"
+              className="h-11 rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 text-sm text-foreground outline-none focus:border-primary/30"
             />
             <button
               type="button"
               onClick={() => router.refresh()}
-              className="inline-flex h-11 items-center gap-2 rounded-2xl border border-white/[0.06] bg-white/[0.03] px-4 text-sm text-white/65 transition-colors hover:text-white"
+              className="inline-flex h-11 items-center gap-2 rounded-2xl border border-white/[0.06] bg-white/[0.03] px-4 text-sm text-foreground/65 transition-colors hover:text-foreground"
             >
               <RefreshCcw className="h-4 w-4" />
               Muat ulang
@@ -320,8 +320,8 @@ export function CalendarSettingsShell({
       )}
 
       <section className="overflow-x-auto rounded-2xl border border-white/[0.06] bg-white/[0.03]">
-        <table className="min-w-full text-sm text-white/80">
-          <thead className="text-left text-[11px] uppercase tracking-[0.12em] text-white/40">
+        <table className="min-w-full text-sm text-foreground/80">
+          <thead className="text-left text-[11px] uppercase tracking-[0.12em] text-foreground/40">
             <tr>
               <th className="px-3 py-3">Posisi</th>
               <th className="px-3 py-3 text-right">Jumlah</th>
@@ -332,22 +332,22 @@ export function CalendarSettingsShell({
             <tr className="border-t border-white/[0.06]">
               <td className="px-3 py-3">Masih aman</td>
               <td className="px-3 py-3 text-right">{safeUnitCount}</td>
-              <td className="px-3 py-3 text-white/45">Unit yang masih sesuai atau melekat dengan target</td>
+              <td className="px-3 py-3 text-foreground/45">Unit yang masih sesuai atau melekat dengan target</td>
             </tr>
             <tr className="border-t border-white/[0.06]">
               <td className="px-3 py-3">Perlu dikejar</td>
               <td className="px-3 py-3 text-right">{riskSummary.orange + riskSummary.red}</td>
-              <td className="px-3 py-3 text-white/45">Unit yang mulai ketat atau berisiko telat</td>
+              <td className="px-3 py-3 text-foreground/45">Unit yang mulai ketat atau berisiko telat</td>
             </tr>
             <tr className="border-t border-white/[0.06]">
               <td className="px-3 py-3">Data belum lengkap</td>
               <td className="px-3 py-3 text-right">{riskSummary.black}</td>
-              <td className="px-3 py-3 text-white/45">Target atau kapasitas belum cukup untuk dihitung rapi</td>
+              <td className="px-3 py-3 text-foreground/45">Target atau kapasitas belum cukup untuk dihitung rapi</td>
             </tr>
             <tr className="border-t border-white/[0.06]">
               <td className="px-3 py-3">Perlu perhatian hari ini</td>
               <td className="px-3 py-3 text-right">{riskyUnitCount}</td>
-              <td className="px-3 py-3 text-white/45">Prioritas yang perlu dicek PM lebih dulu</td>
+              <td className="px-3 py-3 text-foreground/45">Prioritas yang perlu dicek PM lebih dulu</td>
             </tr>
           </tbody>
         </table>
@@ -356,23 +356,23 @@ export function CalendarSettingsShell({
       <section className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 className="text-lg font-light text-white">Unit yang perlu dijaga</h2>
-            <p className="mt-1 text-sm text-white/45">
+            <h2 className="text-lg font-light text-foreground">Unit yang perlu dijaga</h2>
+            <p className="mt-1 text-sm text-foreground/45">
               Ringkasan cepat untuk membantu PM menentukan prioritas. Daftar unit lengkap tetap
               ada di halaman Units.
             </p>
           </div>
           <Link
             href="/units"
-            className="inline-flex items-center rounded-full border border-white/[0.12] px-4 py-2 text-sm text-white/70 transition-colors hover:text-white"
+            className="inline-flex items-center rounded-full border border-white/[0.12] px-4 py-2 text-sm text-foreground/70 transition-colors hover:text-foreground"
           >
             Buka halaman Units
           </Link>
         </div>
 
         <div className="mt-4 overflow-x-auto rounded-2xl border border-white/[0.06] bg-black/20">
-          <table className="min-w-full text-sm text-white/80">
-            <thead className="text-left text-[11px] uppercase tracking-[0.12em] text-white/40">
+          <table className="min-w-full text-sm text-foreground/80">
+            <thead className="text-left text-[11px] uppercase tracking-[0.12em] text-foreground/40">
               <tr>
                 <th className="px-3 py-3">Unit</th>
                 <th className="px-3 py-3">Posisi</th>
@@ -388,11 +388,11 @@ export function CalendarSettingsShell({
                     <td className="px-3 py-3">
                       <Link
                         href={`/units/${String(row.carId)}`}
-                        className="text-white transition-colors hover:text-amber-300"
+                        className="text-foreground transition-colors hover:text-app-accent-ink"
                       >
                         {row.unitName}
                       </Link>
-                      <p className="mt-1 text-xs text-white/35">{row.customerName ?? "Customer belum diisi"}</p>
+                      <p className="mt-1 text-xs text-foreground/35">{row.customerName ?? "Customer belum diisi"}</p>
                     </td>
                     <td className="px-3 py-3">
                       <span
@@ -410,7 +410,7 @@ export function CalendarSettingsShell({
                 ))
               ) : (
                 <tr className="border-t border-white/[0.06]">
-                  <td colSpan={5} className="px-3 py-4 text-sm text-white/50">
+                  <td colSpan={5} className="px-3 py-4 text-sm text-foreground/50">
                     Belum ada unit yang perlu ditonjolkan di tanggal ini.
                   </td>
                 </tr>
@@ -423,20 +423,20 @@ export function CalendarSettingsShell({
       <details className="group rounded-2xl border border-white/[0.06] bg-white/[0.03]">
         <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4">
           <div>
-            <h2 className="text-lg font-light text-white">Pengaturan mesin hitung</h2>
-            <p className="mt-1 text-sm text-white/45">
+            <h2 className="text-lg font-light text-foreground">Pengaturan mesin hitung</h2>
+            <p className="mt-1 text-sm text-foreground/45">
               Dipakai bila PM perlu menyesuaikan jam kerja mingguan, melihat kapasitas divisi,
               atau mengecek kalender kerja aktif.
             </p>
           </div>
-          <span className="text-sm text-amber-300 transition-transform group-open:rotate-180">
+          <span className="text-sm text-app-accent-ink transition-transform group-open:rotate-180">
             ˅
           </span>
         </summary>
 
         <div className="space-y-6 border-t border-white/[0.06] px-5 py-5">
           {message ? (
-            <p className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-200">
+            <p className="rounded-lg border border-success/30 bg-success/10 px-3 py-2 text-sm text-success">
               {message}
             </p>
           ) : null}
@@ -448,14 +448,14 @@ export function CalendarSettingsShell({
 
           <section className="rounded-2xl border border-white/[0.06] bg-black/20 p-5">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-amber-500/10 ring-1 ring-amber-500/20">
-                <Save className="h-5 w-5 text-amber-400" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 ring-1 ring-primary/20">
+                <Save className="h-5 w-5 text-app-accent-ink" />
               </div>
               <div>
-                <p className="text-[11px] uppercase tracking-[0.18em] text-amber-500/70">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-app-accent-ink/70">
                   Aturan Minggu Kerja
                 </p>
-                <h3 className="mt-1 text-lg font-medium text-white">Dasar hitung kapasitas</h3>
+                <h3 className="mt-1 text-lg font-medium text-foreground">Dasar hitung kapasitas</h3>
               </div>
             </div>
 
@@ -467,7 +467,7 @@ export function CalendarSettingsShell({
                   onChange={(event) =>
                     setConfigForm((current) => ({ ...current, weekStartDate: event.target.value }))
                   }
-                  className="h-11 w-full rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 text-sm text-white outline-none focus:border-amber-500/30"
+                  className="h-11 w-full rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 text-sm text-foreground outline-none focus:border-primary/30"
                 />
               </FormField>
               <FormField label="Faktor efisiensi">
@@ -476,7 +476,7 @@ export function CalendarSettingsShell({
                   onChange={(event) =>
                     setConfigForm((current) => ({ ...current, efficiencyFactor: event.target.value }))
                   }
-                  className="h-11 w-full rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 text-sm text-white outline-none focus:border-amber-500/30"
+                  className="h-11 w-full rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 text-sm text-foreground outline-none focus:border-primary/30"
                 />
               </FormField>
               <FormField label="Buffer QC (hari)">
@@ -485,7 +485,7 @@ export function CalendarSettingsShell({
                   onChange={(event) =>
                     setConfigForm((current) => ({ ...current, qcBufferDays: event.target.value }))
                   }
-                  className="h-11 w-full rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 text-sm text-white outline-none focus:border-amber-500/30"
+                  className="h-11 w-full rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 text-sm text-foreground outline-none focus:border-primary/30"
                 />
               </FormField>
               <FormField label="Jam kerja Senin-Jumat">
@@ -494,7 +494,7 @@ export function CalendarSettingsShell({
                   onChange={(event) =>
                     setConfigForm((current) => ({ ...current, weekdayHours: event.target.value }))
                   }
-                  className="h-11 w-full rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 text-sm text-white outline-none focus:border-amber-500/30"
+                  className="h-11 w-full rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 text-sm text-foreground outline-none focus:border-primary/30"
                 />
               </FormField>
               <FormField label="Jam kerja Sabtu">
@@ -503,7 +503,7 @@ export function CalendarSettingsShell({
                   onChange={(event) =>
                     setConfigForm((current) => ({ ...current, saturdayHours: event.target.value }))
                   }
-                  className="h-11 w-full rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 text-sm text-white outline-none focus:border-amber-500/30"
+                  className="h-11 w-full rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 text-sm text-foreground outline-none focus:border-primary/30"
                 />
               </FormField>
               <FormField label="Jam kerja Minggu">
@@ -512,7 +512,7 @@ export function CalendarSettingsShell({
                   onChange={(event) =>
                     setConfigForm((current) => ({ ...current, sundayHours: event.target.value }))
                   }
-                  className="h-11 w-full rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 text-sm text-white outline-none focus:border-amber-500/30"
+                  className="h-11 w-full rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 text-sm text-foreground outline-none focus:border-primary/30"
                 />
               </FormField>
               <FormField label="Batas lembur Senin-Jumat">
@@ -524,7 +524,7 @@ export function CalendarSettingsShell({
                       weekdayOvertimeHours: event.target.value,
                     }))
                   }
-                  className="h-11 w-full rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 text-sm text-white outline-none focus:border-amber-500/30"
+                  className="h-11 w-full rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 text-sm text-foreground outline-none focus:border-primary/30"
                 />
               </FormField>
               <FormField label="Batas lembur Sabtu">
@@ -536,7 +536,7 @@ export function CalendarSettingsShell({
                       saturdayOvertimeHours: event.target.value,
                     }))
                   }
-                  className="h-11 w-full rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 text-sm text-white outline-none focus:border-amber-500/30"
+                  className="h-11 w-full rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 text-sm text-foreground outline-none focus:border-primary/30"
                 />
               </FormField>
               <FormField label="Batas lembur Minggu">
@@ -548,7 +548,7 @@ export function CalendarSettingsShell({
                       sundayOvertimeHours: event.target.value,
                     }))
                   }
-                  className="h-11 w-full rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 text-sm text-white outline-none focus:border-amber-500/30"
+                  className="h-11 w-full rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 text-sm text-foreground outline-none focus:border-primary/30"
                 />
               </FormField>
             </div>
@@ -558,12 +558,12 @@ export function CalendarSettingsShell({
                 type="button"
                 disabled={isSaving || !canManage}
                 onClick={() => void handleSaveConfig()}
-                className="inline-flex h-11 items-center gap-2 rounded-2xl bg-amber-500 px-4 text-sm font-semibold text-black transition-colors hover:bg-amber-400 disabled:opacity-60"
+                className="inline-flex h-11 items-center gap-2 rounded-2xl bg-primary px-4 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary disabled:opacity-60"
               >
                 <Save className="h-4 w-4" />
                 {isSaving ? "Menyimpan..." : "Simpan aturan minggu kerja"}
               </button>
-              <p className="text-sm text-white/45">
+              <p className="text-sm text-foreground/45">
                 Pilih salah satu aturan yang pernah dipakai untuk mengisi form lebih cepat.
               </p>
             </div>
@@ -576,8 +576,8 @@ export function CalendarSettingsShell({
                   onClick={() => setConfigForm(toFormState(config))}
                   className="block w-full rounded-2xl border border-white/[0.06] bg-white/[0.03] px-4 py-4 text-left transition-colors hover:bg-white/[0.04]"
                 >
-                  <p className="text-sm text-white">{config.weekStartDate}</p>
-                  <p className="mt-1 text-sm text-white/45">
+                  <p className="text-sm text-foreground">{config.weekStartDate}</p>
+                  <p className="mt-1 text-sm text-foreground/45">
                     Senin-Jumat {config.weekdayHours} jam • Sabtu {config.saturdayHours} jam •
                     efisiensi {config.efficiencyFactor}
                   </p>
@@ -589,14 +589,14 @@ export function CalendarSettingsShell({
           <section className="space-y-6">
             <div className="rounded-2xl border border-white/[0.06] bg-black/20 p-5">
               <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-amber-500/10 ring-1 ring-amber-500/20">
-                  <Gauge className="h-5 w-5 text-amber-400" />
+                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 ring-1 ring-primary/20">
+                  <Gauge className="h-5 w-5 text-app-accent-ink" />
                 </div>
                 <div>
-                  <p className="text-[11px] uppercase tracking-[0.18em] text-amber-500/70">
+                  <p className="text-[11px] uppercase tracking-[0.18em] text-app-accent-ink/70">
                     Cek Divisi
                   </p>
-                  <h3 className="mt-1 text-lg font-medium text-white">
+                  <h3 className="mt-1 text-lg font-medium text-foreground">
                     Lihat kemampuan kerja harian
                   </h3>
                 </div>
@@ -607,7 +607,7 @@ export function CalendarSettingsShell({
                   <select
                     value={capacityDivisionId}
                     onChange={(event) => setCapacityDivisionId(event.target.value)}
-                    className="h-11 w-full rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 text-sm text-white outline-none focus:border-amber-500/30"
+                    className="h-11 w-full rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 text-sm text-foreground outline-none focus:border-primary/30"
                   >
                     <option value="">Pilih divisi</option>
                     {divisionOptions.map((division) => (
@@ -621,10 +621,10 @@ export function CalendarSettingsShell({
                   <input
                     value={capacityActivePic}
                     onChange={(event) => setCapacityActivePic(event.target.value)}
-                    className="h-11 w-full rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 text-sm text-white outline-none focus:border-amber-500/30"
+                    className="h-11 w-full rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 text-sm text-foreground outline-none focus:border-primary/30"
                   />
                 </FormField>
-                <label className="flex items-center gap-2 rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 py-3 text-sm text-white/60">
+                <label className="flex items-center gap-2 rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 py-3 text-sm text-foreground/60">
                   <input
                     type="checkbox"
                     checked={capacityIncludeOvertime}
@@ -637,14 +637,14 @@ export function CalendarSettingsShell({
               <button
                 type="button"
                 onClick={() => void handleSimulateCapacity()}
-                className="mt-5 inline-flex h-11 items-center rounded-2xl border border-white/[0.06] bg-white/[0.04] px-4 text-sm text-white/80 transition-colors hover:text-white"
+                className="mt-5 inline-flex h-11 items-center rounded-2xl border border-white/[0.06] bg-white/[0.04] px-4 text-sm text-foreground/80 transition-colors hover:text-foreground"
               >
                 Lihat kapasitas divisi
               </button>
 
               {capacityResult ? (
-                <div className="mt-5 rounded-2xl border border-white/[0.06] bg-white/[0.03] p-4 text-sm text-white/65">
-                  <p className="text-white">{capacityResult.divisionName}</p>
+                <div className="mt-5 rounded-2xl border border-white/[0.06] bg-white/[0.03] p-4 text-sm text-foreground/65">
+                  <p className="text-foreground">{capacityResult.divisionName}</p>
                   <p className="mt-2">Anggota aktif: {capacityResult.activePicCount}</p>
                   <p>Jam kerja dasar: {capacityResult.workingHours}</p>
                   <p>Efisiensi kerja: {capacityResult.efficiencyFactor}</p>
@@ -657,10 +657,10 @@ export function CalendarSettingsShell({
             </div>
 
             <div className="rounded-2xl border border-white/[0.06] bg-black/20 p-5">
-              <p className="text-[11px] uppercase tracking-[0.18em] text-amber-500/70">
+              <p className="text-[11px] uppercase tracking-[0.18em] text-app-accent-ink/70">
                 Kalender Kerja
               </p>
-              <h3 className="mt-1 text-lg font-medium text-white">Hari kerja yang sedang dihitung</h3>
+              <h3 className="mt-1 text-lg font-medium text-foreground">Hari kerja yang sedang dihitung</h3>
 
               <div className="mt-4 grid gap-4 md:grid-cols-[repeat(3,minmax(0,1fr))]">
                 <FormField label="Mulai">
@@ -668,7 +668,7 @@ export function CalendarSettingsShell({
                     type="date"
                     value={workingDays.startDate}
                     onChange={(event) => pushSearch({ startDate: event.target.value })}
-                    className="h-11 w-full rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 text-sm text-white outline-none focus:border-amber-500/30"
+                    className="h-11 w-full rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 text-sm text-foreground outline-none focus:border-primary/30"
                   />
                 </FormField>
                 <FormField label="Selesai">
@@ -676,11 +676,11 @@ export function CalendarSettingsShell({
                     type="date"
                     value={workingDays.endDate}
                     onChange={(event) => pushSearch({ endDate: event.target.value })}
-                    className="h-11 w-full rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 text-sm text-white outline-none focus:border-amber-500/30"
+                    className="h-11 w-full rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 text-sm text-foreground outline-none focus:border-primary/30"
                   />
                 </FormField>
                 <FormField label="Tambahkan jam ekstra">
-                  <label className="flex h-11 items-center gap-2 rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 text-sm text-white/60">
+                  <label className="flex h-11 items-center gap-2 rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 text-sm text-foreground/60">
                     <input
                       type="checkbox"
                       checked={workingDays.includeOvertime}
@@ -698,7 +698,7 @@ export function CalendarSettingsShell({
                 <div className="grid grid-cols-7 gap-1">
                   {/* Header Hari */}
                   {["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"].map((hari) => (
-                    <div key={hari} className="pb-2 text-center font-mono text-[10px] uppercase tracking-[0.1em] text-white/40">
+                    <div key={hari} className="pb-2 text-center font-mono text-[10px] uppercase tracking-[0.1em] text-foreground/40">
                       {hari.substring(0, 3)}
                     </div>
                   ))}
@@ -730,9 +730,9 @@ export function CalendarSettingsShell({
                         key={day.date}
                         className={`group relative flex min-h-[80px] flex-col rounded-xl border p-2 transition-colors hover:border-white/20 ${
                           isLibur
-                            ? "border-red-500/20 bg-red-500/[0.03]"
+                            ? "border-destructive/20 bg-destructive/[0.03]"
                             : isWeekend
-                              ? "border-amber-500/10 bg-amber-500/[0.02]"
+                              ? "border-primary/10 bg-primary/[0.02]"
                               : "border-white/[0.06] bg-white/[0.03]"
                         }`}
                       >
@@ -741,10 +741,10 @@ export function CalendarSettingsShell({
                           <span
                             className={`flex h-6 w-6 items-center justify-center rounded-full text-[12px] font-medium ${
                               isLibur
-                                ? "bg-red-500/20 text-red-300"
+                                ? "bg-destructive/20 text-destructive"
                                 : isWeekend
-                                  ? "bg-amber-500/20 text-amber-300"
-                                  : "text-white/80"
+                                  ? "bg-primary/20 text-app-accent-ink"
+                                  : "text-foreground/80"
                             }`}
                           >
                             {dateNum}
@@ -752,7 +752,7 @@ export function CalendarSettingsShell({
                           
                           {/* Total Hours Badge */}
                           <span className={`font-mono text-[9px] ${
-                            isLibur ? "text-red-400/50" : "text-white/40"
+                            isLibur ? "text-destructive/50" : "text-foreground/40"
                           }`}>
                             {day.totalCapacityHours}j
                           </span>
@@ -761,12 +761,12 @@ export function CalendarSettingsShell({
                         {/* Details */}
                         <div className="mt-auto pt-2 text-[9px] uppercase tracking-[0.05em]">
                           {isLibur ? (
-                            <span className="text-red-400">Libur</span>
+                            <span className="text-destructive">Libur</span>
                           ) : (
                             <div className="space-y-0.5">
-                              <p className="text-white/60">{day.workingHours}j Reg</p>
+                              <p className="text-foreground/60">{day.workingHours}j Reg</p>
                               {isOvertime && (
-                                <p className="text-amber-400">+{day.overtimeHours}j Lbr</p>
+                                <p className="text-app-accent-ink">+{day.overtimeHours}j Lbr</p>
                               )}
                             </div>
                           )}

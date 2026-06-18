@@ -103,22 +103,22 @@ interface GalleryPhotoState {
 
 function triageMeta(node: UnitBomNode | null): { label: string; tone: TriageTone; className: string } {
   if (!node) {
-    return { label: "Belum Ada Data", tone: "unknown", className: "border-white/10 text-white/40" };
+    return { label: "Belum Ada Data", tone: "unknown", className: "border-white/10 text-foreground/40" };
   }
 
   if (node.physicalStatus === "INSTALLED" || node.logisticStatus === "READY_GUDANG") {
-    return { label: "BAGUS", tone: "good", className: "border-emerald-500/20 bg-emerald-500/[0.04] text-emerald-400" };
+    return { label: "BAGUS", tone: "good", className: "border-success/20 bg-success/[0.04] text-success" };
   }
 
   if (node.physicalStatus === "IN_DIVISION" || node.logisticStatus === "AT_VENDOR") {
-    return { label: "REPAIR", tone: "repair", className: "border-amber-500/30 bg-amber-500/[0.04] text-amber-500" };
+    return { label: "REPAIR", tone: "repair", className: "border-primary/30 bg-primary/[0.04] text-app-accent-ink" };
   }
 
   if (node.physicalStatus === "DISASSEMBLED" || node.logisticStatus === "ORDER_PR") {
-    return { label: "REPLACE", tone: "replace", className: "border-red-500/20 bg-red-500/[0.04] text-red-400" };
+    return { label: "REPLACE", tone: "replace", className: "border-destructive/20 bg-destructive/[0.04] text-destructive" };
   }
 
-  return { label: "PERLU CEK", tone: "unknown", className: "border-white/10 text-white/40" };
+  return { label: "PERLU CEK", tone: "unknown", className: "border-white/10 text-foreground/40" };
 }
 
 function workStatusLabel(node: UnitBomNode): string {
@@ -158,7 +158,7 @@ function buildTimeline(node: UnitBomNode): TimelineItem[] {
       detail: `Didata untuk ${divisionName}`,
       date: "-",
       icon: Truck,
-      tone: "border-sky-400/30 bg-sky-400/10 text-sky-300",
+      tone: "border-info/30 bg-info/10 text-info",
     });
     if (node.physicalStatus === "INSTALLED") {
       items.push({
@@ -166,7 +166,7 @@ function buildTimeline(node: UnitBomNode): TimelineItem[] {
         detail: `Progress terakhir ${Math.round(node.progressPercent ?? 0)}%`,
         date: "-",
         icon: CheckCircle2,
-        tone: "border-emerald-400/30 bg-emerald-400/10 text-emerald-300",
+        tone: "border-success/30 bg-success/10 text-success",
       });
     }
   }
@@ -180,7 +180,7 @@ function buildTimeline(node: UnitBomNode): TimelineItem[] {
         detail: doc.description,
         date: "-",
         icon: Wrench,
-        tone: "border-sky-400/30 bg-sky-400/10 text-sky-300",
+        tone: "border-info/30 bg-info/10 text-info",
       });
     }
   }
@@ -192,7 +192,7 @@ function buildTimeline(node: UnitBomNode): TimelineItem[] {
       detail: node.logisticReference ?? "Sedang dikerjakan di Vendor",
       date: "-",
       icon: Wrench,
-      tone: "border-sky-400/30 bg-sky-400/10 text-sky-300",
+      tone: "border-info/30 bg-info/10 text-info",
     });
   }
 
@@ -245,7 +245,7 @@ function buildDocuments(node: UnitBomNode): DocumentCard[] {
         title: "PR Logistik",
         detail: node.logisticReference ?? "Menunggu kedatangan parts",
         icon: ShoppingCart,
-        tone: "border-amber-400/20 bg-amber-400/[0.08] text-amber-300",
+        tone: "border-primary/20 bg-primary/[0.08] text-app-accent-ink",
       });
     }
 
@@ -264,7 +264,7 @@ function buildDocuments(node: UnitBomNode): DocumentCard[] {
     title: "Pemakaian Bahan & Alat",
     detail: "Data konsumsi bahan dan alat yang digunakan (Hardener, Dempul, dll)",
     icon: Archive,
-    tone: "border-emerald-400/20 bg-emerald-400/[0.08] text-emerald-300",
+    tone: "border-success/20 bg-success/[0.08] text-success",
   });
 
   return cards;
@@ -344,9 +344,9 @@ function timelineIcon(eventType: UnitBomTimelineItem["eventType"]) {
 }
 
 function timelineTone(eventType: UnitBomTimelineItem["eventType"]) {
-  if (eventType === "HANDOVER") return "border-sky-400/30 bg-sky-400/10 text-sky-300";
-  if (eventType === "QC") return "border-emerald-400/30 bg-emerald-400/10 text-emerald-300";
-  return "border-amber-400/30 bg-amber-400/10 text-amber-300";
+  if (eventType === "HANDOVER") return "border-info/30 bg-info/10 text-info";
+  if (eventType === "QC") return "border-success/30 bg-success/10 text-success";
+  return "border-primary/30 bg-primary/10 text-app-accent-ink";
 }
 
 function mapDocumentCard(document: UnitBomDocument): DocumentCard {
@@ -357,9 +357,9 @@ function mapDocumentCard(document: UnitBomDocument): DocumentCard {
     TRANSFER: PackageSearch,
   };
   const toneMap: Record<UnitBomDocument["documentType"], string> = {
-    PR: "border-amber-400/20 bg-amber-400/[0.08] text-amber-300",
-    WOV: "border-sky-400/20 bg-sky-400/[0.08] text-sky-300",
-    STOCK: "border-emerald-400/20 bg-emerald-400/[0.08] text-emerald-300",
+    PR: "border-primary/20 bg-primary/[0.08] text-app-accent-ink",
+    WOV: "border-info/20 bg-info/[0.08] text-info",
+    STOCK: "border-success/20 bg-success/[0.08] text-success",
     TRANSFER: "border-rose-400/20 bg-rose-400/[0.08] text-rose-300",
   };
 
@@ -435,7 +435,7 @@ function JobTypeCombobox({
 
   return (
     <div className="relative">
-      <div className="flex h-10 items-center border border-white/10 bg-black transition-colors focus-within:border-amber-500/45">
+      <div className="flex h-10 items-center border border-white/10 bg-black transition-colors focus-within:border-primary/45">
         <input
           value={inputValue}
           onFocus={() => setIsOpen(true)}
@@ -449,13 +449,13 @@ function JobTypeCombobox({
             setIsOpen(true);
           }}
           placeholder="Cari atau pilih jobdesc"
-          className="h-full min-w-0 flex-1 bg-transparent px-3 text-[13px] text-white outline-none placeholder:text-white/25"
+          className="h-full min-w-0 flex-1 bg-transparent px-3 text-[13px] text-foreground outline-none placeholder:text-foreground/25"
         />
         <button
           type="button"
           onMouseDown={(event) => event.preventDefault()}
           onClick={() => setIsOpen((current) => !current)}
-          className="flex h-full w-9 shrink-0 items-center justify-center text-white/30 transition-colors hover:text-white/65"
+          className="flex h-full w-9 shrink-0 items-center justify-center text-foreground/30 transition-colors hover:text-foreground/65"
           aria-label="Buka pilihan jobdesc"
         >
           <ChevronDown className="h-3.5 w-3.5" />
@@ -463,7 +463,7 @@ function JobTypeCombobox({
       </div>
 
       {isOpen ? (
-        <div className="absolute left-0 right-0 top-[calc(100%+4px)] z-[90] max-h-56 overflow-auto border border-white/10 bg-[#0d0d10] py-1 shadow-2xl shadow-black/50">
+        <div className="absolute left-0 right-0 top-[calc(100%+4px)] z-[90] max-h-56 overflow-auto border border-white/10 bg-card py-1 shadow-2xl shadow-black/50">
           {filteredOptions.length > 0 ? (
             filteredOptions.map((option) => (
               <button
@@ -476,15 +476,15 @@ function JobTypeCombobox({
                   setIsOpen(false);
                 }}
                 className={[
-                  "w-full px-3 py-2 text-left text-[12px] transition-colors hover:bg-amber-500/[0.08] hover:text-amber-300",
-                  selectedValue === option.value ? "text-amber-300" : "text-white/70",
+                  "w-full px-3 py-2 text-left text-[12px] transition-colors hover:bg-primary/[0.08] hover:text-app-accent-ink",
+                  selectedValue === option.value ? "text-app-accent-ink" : "text-foreground/70",
                 ].join(" ")}
               >
                 {option.label}
               </button>
             ))
           ) : (
-            <div className="px-3 py-2 text-[11px] text-white/30">Tidak ada hasil</div>
+            <div className="px-3 py-2 text-[11px] text-foreground/30">Tidak ada hasil</div>
           )}
         </div>
       ) : null}
@@ -993,16 +993,16 @@ export function PanelDetailPage({
 
   return (
     <div className="space-y-2">
-      <div className="border border-white/5 bg-[#111114] px-4 py-3">
+      <div className="border border-white/5 bg-card px-4 py-3">
         <div className="flex items-center justify-between gap-4">
           <div>
-            <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">Rekam Part</p>
-            <h1 className="mt-0.5 text-[15px] font-mono text-white/90">{node.label}</h1>
-            <p className="mt-0.5 text-[11px] font-mono text-white/30">{hierarchyLabel(node)}</p>
+            <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30">Rekam Part</p>
+            <h1 className="mt-0.5 text-[15px] font-mono text-foreground/90">{node.label}</h1>
+            <p className="mt-0.5 text-[11px] font-mono text-foreground/30">{hierarchyLabel(node)}</p>
           </div>
           <Link
             href={`/units/${carId}?tab=parts-panels`}
-            className="inline-flex items-center gap-1.5 border border-white/10 px-3 py-1.5 text-[10px] font-mono uppercase tracking-[0.12em] text-white/40 hover:text-white transition-colors"
+            className="inline-flex items-center gap-1.5 border border-white/10 px-3 py-1.5 text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/40 hover:text-foreground transition-colors"
           >
             <ArrowLeft className="h-3.5 w-3.5" />
             Kembali
@@ -1012,9 +1012,9 @@ export function PanelDetailPage({
         <div className="mt-3 flex flex-wrap gap-2">
           {node.conditionType ? (
             <Badge className={
-              node.conditionType === "BARU" ? "border-emerald-500/20 bg-emerald-500/[0.04] text-emerald-400" :
-              node.conditionType === "RESTORE" ? "border-amber-500/20 bg-amber-500/[0.04] text-amber-400" :
-              "border-white/15 bg-white/5 text-white/60"
+              node.conditionType === "BARU" ? "border-success/20 bg-success/[0.04] text-success" :
+              node.conditionType === "RESTORE" ? "border-primary/20 bg-primary/[0.04] text-app-accent-ink" :
+              "border-white/15 bg-white/5 text-foreground/60"
             }>
               <Archive className="h-3.5 w-3.5" />
               Kondisi: {node.conditionType}
@@ -1026,19 +1026,19 @@ export function PanelDetailPage({
             </Badge>
           )}
 
-          <Badge className="border-white/10 text-white/50">
+          <Badge className="border-white/10 text-foreground/50">
             <MapPin className="h-3.5 w-3.5" />
             Lokasi: {locationDisplay}
           </Badge>
 
           {node.stockStatus && (
-            <Badge className="border-white/10 text-white/50">
+            <Badge className="border-white/10 text-foreground/50">
               <PackageCheck className="h-3.5 w-3.5" />
               Posisi: {node.stockStatus}
             </Badge>
           )}
 
-          <Badge className="border-white/10 text-white/60">
+          <Badge className="border-white/10 text-foreground/60">
             <Wrench className="h-3.5 w-3.5" />
             Status Kerja: {node.detail?.workStatusLabel ?? workStatusLabel(node)}
           </Badge>
@@ -1055,8 +1055,8 @@ export function PanelDetailPage({
                 className={[
                   "px-4 py-2 text-[10px] font-mono uppercase tracking-[0.12em] border-b-2 -mb-px transition-colors",
                   pageMode === mode
-                    ? "border-amber-500 text-amber-500"
-                    : "border-transparent text-white/30 hover:text-white/60",
+                    ? "border-primary text-app-accent-ink"
+                    : "border-transparent text-foreground/30 hover:text-foreground/60",
                 ].join(" ")}
               >
                 {mode === "detail" ? "Detail" : "Workflow"}
@@ -1078,8 +1078,8 @@ export function PanelDetailPage({
                     className={[
                       "px-4 py-2 text-[10px] font-mono uppercase tracking-[0.12em] border-b-2 -mb-px transition-colors",
                       isActive
-                        ? "border-amber-500 text-amber-500"
-                        : "border-transparent text-white/40 hover:text-white/70",
+                        ? "border-primary text-app-accent-ink"
+                        : "border-transparent text-foreground/40 hover:text-foreground/70",
                     ].join(" ")}
                   >
                     {tab.label}
@@ -1095,10 +1095,10 @@ export function PanelDetailPage({
         {pageMode === "detail" && (
           <>
           {activeTab === "timeline" ? (
-            <div className="overflow-x-auto border border-white/5 bg-[#111114]">
-              <table className="min-w-full text-left text-[12px] text-white">
+            <div className="overflow-x-auto border border-white/5 bg-card">
+              <table className="min-w-full text-left text-[12px] text-foreground">
                 <thead>
-                  <tr className="border-b border-white/[0.06] bg-[#0a0a0c] font-mono text-[10px] uppercase tracking-[0.12em] text-white/30">
+                  <tr className="border-b border-white/[0.06] bg-background font-mono text-[10px] uppercase tracking-[0.12em] text-foreground/30">
                     <th className="px-4 py-3 font-medium">Tanggal</th>
                     <th className="px-4 py-3 font-medium">Riwayat</th>
                     <th className="px-4 py-3 font-medium">Keterangan</th>
@@ -1109,13 +1109,13 @@ export function PanelDetailPage({
                     orderedTimeline.map((item, index) => {
                       return (
                         <tr key={`${item.eventType ?? "event"}-${item.title}-${item.date ?? "no-date"}-${index}`} className="transition-colors hover:bg-white/[0.015]">
-                          <td className="whitespace-nowrap px-4 py-4 align-top text-[12px] text-white/35">
+                          <td className="whitespace-nowrap px-4 py-4 align-top text-[12px] text-foreground/35">
                             {item.date ?? "-"}
                           </td>
                           <td className="px-4 py-4 align-top">
                             <span className="font-medium">{item.title}</span>
                           </td>
-                          <td className="px-4 py-4 align-top text-white/60">
+                          <td className="px-4 py-4 align-top text-foreground/60">
                             {item.detail}
                           </td>
                         </tr>
@@ -1123,7 +1123,7 @@ export function PanelDetailPage({
                     })
                   ) : (
                     <tr>
-                      <td colSpan={3} className="px-4 py-6 text-center text-[11px] font-mono text-white/25">
+                      <td colSpan={3} className="px-4 py-6 text-center text-[11px] font-mono text-foreground/25">
                         Belum ada riwayat tercatat.
                       </td>
                     </tr>
@@ -1136,13 +1136,13 @@ export function PanelDetailPage({
           {activeTab === "photos" ? (
             <div className="space-y-4">
               {galleryState.actualId === node.actualId && galleryState.isLoading ? (
-                <div className="border border-white/5 bg-[#111114] px-4 py-3 text-[11px] font-mono text-white/35">
+                <div className="border border-white/5 bg-card px-4 py-3 text-[11px] font-mono text-foreground/35">
                   Memuat foto pengerjaan...
                 </div>
               ) : null}
 
               {galleryState.actualId === node.actualId && galleryState.error ? (
-                <div className="border border-amber-500/20 bg-amber-500/[0.04] px-4 py-3 text-[11px] font-mono text-amber-400">
+                <div className="border border-primary/20 bg-primary/[0.04] px-4 py-3 text-[11px] font-mono text-app-accent-ink">
                   {galleryState.error}
                 </div>
               ) : null}
@@ -1153,7 +1153,7 @@ export function PanelDetailPage({
                   return (
                     <div
                       key={slot.label}
-                      className="min-h-[150px] border border-white/5 bg-[#111114] p-3"
+                      className="min-h-[150px] border border-white/5 bg-card p-3"
                     >
                       <div className="flex h-full flex-col justify-between">
                         {slot.latestPhotoUrl ? (
@@ -1165,17 +1165,17 @@ export function PanelDetailPage({
                             aria-label={slot.caption}
                           />
                         ) : (
-                          <div className="flex h-10 w-10 items-center justify-center border border-white/5 bg-[#0a0a0c] text-white/70">
+                          <div className="flex h-10 w-10 items-center justify-center border border-white/5 bg-background text-foreground/70">
                             <Icon className="h-5 w-5" />
                           </div>
                         )}
                         <div>
                           <div className="flex items-center justify-between gap-2">
-                            <p className="text-[12px] font-mono text-white/80">{slot.label}</p>
-                            <span className="border border-white/10 px-1.5 py-0.5 text-[10px] text-white/55">{slot.photoCount} foto</span>
+                            <p className="text-[12px] font-mono text-foreground/80">{slot.label}</p>
+                            <span className="border border-white/10 px-1.5 py-0.5 text-[10px] text-foreground/55">{slot.photoCount} foto</span>
                           </div>
-                          <p className="mt-1 text-[11px] text-white/30">{slot.caption}</p>
-                          {slot.latestPhotoAt ? <p className="mt-1 text-[10px] text-white/30">{formatShortDate(slot.latestPhotoAt)}</p> : null}
+                          <p className="mt-1 text-[11px] text-foreground/30">{slot.caption}</p>
+                          {slot.latestPhotoAt ? <p className="mt-1 text-[10px] text-foreground/30">{formatShortDate(slot.latestPhotoAt)}</p> : null}
                         </div>
                       </div>
                     </div>
@@ -1184,10 +1184,10 @@ export function PanelDetailPage({
               </div>
 
               {canMutatePhotos ? (
-                <div className="border border-white/5 bg-[#111114] px-4 py-3">
+                <div className="border border-white/5 bg-card px-4 py-3">
                   <div className="flex items-center gap-2">
-                    <Upload className="h-4 w-4 text-amber-400" />
-                    <h3 className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">Tambah Foto</h3>
+                    <Upload className="h-4 w-4 text-app-accent-ink" />
+                    <h3 className="text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30">Tambah Foto</h3>
                   </div>
                   <GalleryUploadForm
                     isUploading={isUploading}
@@ -1204,13 +1204,13 @@ export function PanelDetailPage({
               {canManagePhotos && galleryState.submittedToLedger ? null : null}
 
               {galleryPhotos.length > 0 ? (
-                <div className="border border-white/5 bg-[#111114] p-3">
+                <div className="border border-white/5 bg-card p-3">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <h3 className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">Foto Tersimpan</h3>
+                      <h3 className="text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30">Foto Tersimpan</h3>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="border border-white/10 px-2 py-0.5 font-mono text-[10px] text-white/45">
+                      <span className="border border-white/10 px-2 py-0.5 font-mono text-[10px] text-foreground/45">
                         {galleryPhotos.length} foto
                       </span>
                       {canDownloadPhotos ? (
@@ -1220,7 +1220,7 @@ export function PanelDetailPage({
                             void handleDownloadSelected();
                           }}
                           disabled={selectedPhotos.length === 0}
-                          className="inline-flex items-center gap-1.5 border border-white/10 px-2.5 py-1 font-mono text-[10px] text-white/60 hover:text-white disabled:cursor-not-allowed disabled:opacity-35"
+                          className="inline-flex items-center gap-1.5 border border-white/10 px-2.5 py-1 font-mono text-[10px] text-foreground/60 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-35"
                         >
                           <Download className="h-3.5 w-3.5" />
                           Unduh Terpilih ({selectedPhotos.length})
@@ -1238,7 +1238,7 @@ export function PanelDetailPage({
                       return (
                         <article
                           key={photo.photoId}
-                          className={`overflow-hidden border bg-[#111114] transition-colors ${isSelected ? "border-amber-400/35" : "border-white/[0.06]"
+                          className={`overflow-hidden border bg-card transition-colors ${isSelected ? "border-primary/35" : "border-white/[0.06]"
                             }`}
                         >
                           <div className="relative">
@@ -1253,10 +1253,10 @@ export function PanelDetailPage({
                                       : current.filter((id) => id !== photo.photoId),
                                   );
                                 }}
-                                className="h-3 w-3 rounded accent-amber-500"
+                                className="h-3 w-3 rounded accent-primary"
                               />
                             </label>
-                            <span className="absolute right-2.5 top-2.5 z-[1] bg-[#0a0a0c] border border-white/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-white/70">
+                            <span className="absolute right-2.5 top-2.5 z-[1] bg-background border border-white/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-foreground/70">
                               {humanizePhotoType(photo.photoType)}
                             </span>
                             <button
@@ -1279,12 +1279,12 @@ export function PanelDetailPage({
                                 }}
                               />
                             ) : (
-                              <p className="line-clamp-2 text-xs text-white/55">
+                              <p className="line-clamp-2 text-xs text-foreground/55">
                                 {photo.caption || "Tidak ada keterangan foto."}
                               </p>
                             )}
 
-                            <div className="flex flex-wrap gap-x-2 gap-y-1 text-[10px] text-white/35">
+                            <div className="flex flex-wrap gap-x-2 gap-y-1 text-[10px] text-foreground/35">
                               <span>{photo.uploadedByName || photo.uploadedBy || "-"}</span>
                               <span>-</span>
                               <span>{fmtDateTime(photo.uploadedAt)}</span>
@@ -1296,7 +1296,7 @@ export function PanelDetailPage({
                               <button
                                 type="button"
                                 onClick={() => window.open(photoUrl, "_blank", "noopener,noreferrer")}
-                                className="inline-flex items-center gap-1 border border-white/10 px-2 py-0.5 font-mono text-[10px] text-white/60 hover:text-white"
+                                className="inline-flex items-center gap-1 border border-white/10 px-2 py-0.5 font-mono text-[10px] text-foreground/60 hover:text-foreground"
                               >
                                 <Eye className="h-3 w-3" />
                                 Lihat
@@ -1308,7 +1308,7 @@ export function PanelDetailPage({
                                   onClick={() => {
                                     void downloadUrl(photoUrl, buildDownloadFileName(node.label, photo));
                                   }}
-                                  className="inline-flex items-center gap-1 border border-white/10 px-2 py-0.5 font-mono text-[10px] text-white/60 hover:text-white"
+                                  className="inline-flex items-center gap-1 border border-white/10 px-2 py-0.5 font-mono text-[10px] text-foreground/60 hover:text-foreground"
                                 >
                                   <Download className="h-3 w-3" />
                                   Unduh
@@ -1324,7 +1324,7 @@ export function PanelDetailPage({
                                       setReplaceTarget(photo);
                                       replaceInputRef.current?.click();
                                     }}
-                                    className="border border-white/10 px-2 py-0.5 font-mono text-[10px] text-white/60 hover:text-white disabled:opacity-35"
+                                    className="border border-white/10 px-2 py-0.5 font-mono text-[10px] text-foreground/60 hover:text-foreground disabled:opacity-35"
                                   >
                                     Ganti
                                   </button>
@@ -1334,14 +1334,14 @@ export function PanelDetailPage({
                                     onClick={() => {
                                       void handleDeletePhoto(photo.photoId);
                                     }}
-                                    className="inline-flex items-center gap-1 border border-red-500/20 bg-red-500/[0.04] px-2 py-0.5 font-mono text-[10px] text-red-400 disabled:opacity-35"
+                                    className="inline-flex items-center gap-1 border border-destructive/20 bg-destructive/[0.04] px-2 py-0.5 font-mono text-[10px] text-destructive disabled:opacity-35"
                                   >
                                     <Trash2 className="h-3 w-3" />
                                     Hapus
                                   </button>
                                 </>
                               ) : (
-                                <span className="border border-white/5 px-2 py-0.5 font-mono text-[10px] text-white/20">
+                                <span className="border border-white/5 px-2 py-0.5 font-mono text-[10px] text-foreground/20">
                                   Foto final
                                 </span>
                               )}
@@ -1376,14 +1376,14 @@ export function PanelDetailPage({
                 documents.map((document) => {
                   const Icon = document.icon;
                   return (
-                    <article key={document.title} className="border border-white/5 bg-[#111114] px-4 py-3">
+                    <article key={document.title} className="border border-white/5 bg-card px-4 py-3">
                       <div className="flex items-start gap-3">
                         <div className={`flex h-7 w-7 shrink-0 items-center justify-center border ${document.tone}`}>
                           <Icon className="h-3.5 w-3.5" />
                         </div>
                         <div>
-                          <h3 className="text-[12px] font-mono text-white/80">{document.title}</h3>
-                          <p className="mt-1 text-[11px] text-white/40">{document.detail}</p>
+                          <h3 className="text-[12px] font-mono text-foreground/80">{document.title}</h3>
+                          <p className="mt-1 text-[11px] text-foreground/40">{document.detail}</p>
                         </div>
                       </div>
                     </article>
@@ -1391,8 +1391,8 @@ export function PanelDetailPage({
                 })
               ) : (
                 <div className="border border-dashed border-white/10 px-4 py-8 text-center">
-                  <FolderOpen className="mx-auto h-5 w-5 text-white/20" />
-                  <h3 className="mt-4 text-[11px] font-mono text-white/30">Tidak ada data logistik</h3>
+                  <FolderOpen className="mx-auto h-5 w-5 text-foreground/20" />
+                  <h3 className="mt-4 text-[11px] font-mono text-foreground/30">Tidak ada data logistik</h3>
                 </div>
               )}
             </div>
@@ -2303,20 +2303,32 @@ function WorkflowBuilder({
     const nodes = flowNodes.length > 0 ? flowNodes : [createEndNode()];
     const maxX = Math.max(960, ...nodes.map((item) => item.x + item.width + 80));
     const maxY = Math.max(680, ...nodes.map((item) => item.y + item.height + 80));
+    const exportColors = {
+      accent: "rgb(253 179 96)",
+      success: "rgb(89 166 115)",
+      info: "rgb(121 161 190)",
+      danger: "rgb(209 101 82)",
+      warning: "rgb(200 157 116)",
+      surface: "rgb(43 43 44)",
+      page: "rgb(25 25 26)",
+      text: "rgb(239 239 240)",
+      muted: "rgb(161 160 165)",
+      grid: "rgb(78 78 80)",
+    };
     const connectionMarkup = connections
       .map((connection) => connectionPath(connection))
       .filter(Boolean)
-      .map((path) => `<path d="${path}" fill="none" stroke="#ba7517" stroke-width="2" marker-end="url(#arrow)" />`)
+      .map((path) => `<path d="${path}" fill="none" stroke="${exportColors.accent}" stroke-width="2" marker-end="url(#arrow)" />`)
       .join("");
     const nodeMarkup = nodes
       .map((item) => {
-        const stroke = item.isEnd ? "#10b981" : item.type === "handover" ? "#185fa5" : item.type === "doc" ? "#993c1d" : item.type === "wov" ? "#534ab7" : "#ba7517";
+        const stroke = item.isEnd ? exportColors.success : item.type === "handover" ? exportColors.info : item.type === "doc" ? exportColors.danger : item.type === "wov" ? exportColors.warning : exportColors.accent;
         return `
           <g>
-            <rect x="${item.x}" y="${item.y}" width="${item.width}" height="${item.height}" fill="#111114" stroke="${stroke}" stroke-width="1.5" />
+            <rect x="${item.x}" y="${item.y}" width="${item.width}" height="${item.height}" fill="${exportColors.surface}" stroke="${stroke}" stroke-width="1.5" />
             <text x="${item.x + 12}" y="${item.y + 22}" fill="${stroke}" font-family="monospace" font-size="10">${escapeXml(item.typeLabel)}</text>
-            <text x="${item.x + 12}" y="${item.y + 42}" fill="#f5f5f5" font-family="monospace" font-size="13">${escapeXml(item.title.slice(0, 28))}</text>
-            <text x="${item.x + 12}" y="${item.y + 62}" fill="#8a8a8a" font-family="monospace" font-size="10">${escapeXml(item.meta.slice(0, 36))}</text>
+            <text x="${item.x + 12}" y="${item.y + 42}" fill="${exportColors.text}" font-family="monospace" font-size="13">${escapeXml(item.title.slice(0, 28))}</text>
+            <text x="${item.x + 12}" y="${item.y + 62}" fill="${exportColors.muted}" font-family="monospace" font-size="10">${escapeXml(item.meta.slice(0, 36))}</text>
           </g>
         `;
       })
@@ -2326,13 +2338,13 @@ function WorkflowBuilder({
       <svg xmlns="http://www.w3.org/2000/svg" width="${maxX}" height="${maxY}" viewBox="0 0 ${maxX} ${maxY}">
         <defs>
           <marker id="arrow" markerHeight="7" markerWidth="7" orient="auto" refX="6" refY="3.5">
-            <path d="M 0 0 L 7 3.5 L 0 7 z" fill="#ba7517" />
+            <path d="M 0 0 L 7 3.5 L 0 7 z" fill="${exportColors.accent}" />
           </marker>
           <pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse">
-            <path d="M 24 0 H 0 V 24" fill="none" stroke="#202024" stroke-width="1" />
+            <path d="M 24 0 H 0 V 24" fill="none" stroke="${exportColors.grid}" stroke-width="1" />
           </pattern>
         </defs>
-        <rect width="100%" height="100%" fill="#0a0a0c" />
+        <rect width="100%" height="100%" fill="${exportColors.page}" />
         <rect width="100%" height="100%" fill="url(#grid)" opacity="0.65" />
         ${connectionMarkup}
         ${nodeMarkup}
@@ -2367,22 +2379,22 @@ function WorkflowBuilder({
   }
 
   const borderAccentClass: Record<WorkflowNodeType, string> = {
-    handover: "[border-left-color:#185fa5]",
-    job: "[border-left-color:#ba7517]",
-    doc: "[border-left-color:#993c1d]",
-    wov: "[border-left-color:#534ab7]",
+    handover: "border-l-info",
+    job: "border-l-primary",
+    doc: "border-l-destructive",
+    wov: "border-l-info",
   };
   const typeColorClass: Record<WorkflowNodeType, string> = {
-    handover: "text-[#185fa5]",
-    job: "text-[#ba7517]",
-    doc: "text-[#993c1d]",
-    wov: "text-[#534ab7]",
+    handover: "text-info",
+    job: "text-app-accent-ink",
+    doc: "text-destructive",
+    wov: "text-info",
   };
   const statusConfig = {
-    done: "border-emerald-500/20 bg-emerald-500/[0.04] text-emerald-400",
-    progress: "border-amber-500/30 bg-amber-500/[0.04] text-amber-500",
-    plan: "border-white/10 text-white/40",
-    open: "border-red-500/20 bg-red-500/[0.04] text-red-400",
+    done: "border-success/20 bg-success/[0.04] text-success",
+    progress: "border-primary/30 bg-primary/[0.04] text-app-accent-ink",
+    plan: "border-white/10 text-foreground/40",
+    open: "border-destructive/20 bg-destructive/[0.04] text-destructive",
   } as const;
   const orderedFlowNodes = getOrderedFlowNodes();
   const canCreateWorkflowSource = allowedCreateTypes.length > 0;
@@ -2399,8 +2411,8 @@ function WorkflowBuilder({
     <>
     <div className="grid min-h-[400px] grid-cols-[200px_1fr] border border-white/5">
       <div className="flex flex-col border-r border-white/5">
-        <div className="flex items-center gap-2 border-b border-white/5 bg-[#0a0a0c] px-3 py-2">
-          <p className="flex-1 text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">
+        <div className="flex items-center gap-2 border-b border-white/5 bg-background px-3 py-2">
+          <p className="flex-1 text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30">
             Sumber Job
             {localWorkflowSources.filter((s) => !flowNodes.find((n) => n.id === s.id)).length > 0 && (
               <span className="ml-1 opacity-50">
@@ -2418,14 +2430,14 @@ function WorkflowBuilder({
                 setIsCreateMinimized(false);
                 setIsCreateOpen(true);
               }}
-              className="flex h-7 w-7 items-center justify-center border border-amber-500/30 bg-amber-500/[0.06] text-amber-400 transition-colors hover:border-amber-500/60 hover:bg-amber-500/[0.12]"
+              className="flex h-7 w-7 items-center justify-center border border-primary/30 bg-primary/[0.06] text-app-accent-ink transition-colors hover:border-primary/60 hover:bg-primary/[0.12]"
               title="Tambah sumber job"
             >
               <Plus className="h-3.5 w-3.5" />
             </button>
           ) : null}
         </div>
-        <div className="flex-1 space-y-1.5 overflow-y-auto bg-[#0d0d10] p-2">
+        <div className="flex-1 space-y-1.5 overflow-y-auto bg-card p-2">
           {localWorkflowSources.map((src) => {
             const used = !!flowNodes.find((n) => n.id === src.id);
             return (
@@ -2435,18 +2447,18 @@ function WorkflowBuilder({
                 onDragStart={() => handleListDragStart(src.id)}
                 className={[
                   "border border-l-2 px-2.5 py-2 select-none transition-all",
-                  "border-white/5 bg-[#111114]",
+                  "border-white/5 bg-card",
                   borderAccentClass[src.type],
                   used
                     ? "opacity-25 pointer-events-none"
-                    : "cursor-grab hover:border-amber-500/25 hover:bg-[#151518]",
+                    : "cursor-grab hover:border-primary/25 hover:bg-accent",
                 ].join(" ")}
               >
                 <p className={`text-[9px] font-mono uppercase tracking-[0.08em] ${typeColorClass[src.type]}`}>
                   {src.typeLabel}
                 </p>
-                <p className="mt-0.5 text-[11px] leading-snug text-white/80">{src.title}</p>
-                <p className="mt-0.5 text-[9px] text-white/35">{src.meta}</p>
+                <p className="mt-0.5 text-[11px] leading-snug text-foreground/80">{src.title}</p>
+                <p className="mt-0.5 text-[9px] text-foreground/35">{src.meta}</p>
               </div>
             );
           })}
@@ -2455,20 +2467,20 @@ function WorkflowBuilder({
 
       <div className="flex min-w-0 flex-col">
         <div className="flex items-center gap-2 border-b border-white/5 px-3 py-2">
-          <p className="flex-1 text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">
+          <p className="flex-1 text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30">
             Flow Canvas
             {flowNodes.filter((item) => !item.isEnd).length > 0 && (
               <span className="ml-1 opacity-50">- {flowNodes.filter((item) => !item.isEnd).length} step</span>
             )}
           </p>
-          <p className="text-[9px] font-mono uppercase tracking-[0.08em] text-white/25">
+          <p className="text-[9px] font-mono uppercase tracking-[0.08em] text-foreground/25">
             {saveMessage ?? "Tarik titik biru untuk panah"}
           </p>
           {selectedConnectionId ? (
             <button
               type="button"
               onClick={handleDeleteSelectedConnection}
-              className="border border-red-500/20 bg-red-500/[0.04] px-2 py-0.5 text-[9px] font-mono uppercase tracking-[0.08em] text-red-400 transition-colors hover:border-red-500/35"
+              className="border border-destructive/20 bg-destructive/[0.04] px-2 py-0.5 text-[9px] font-mono uppercase tracking-[0.08em] text-destructive transition-colors hover:border-destructive/35"
             >
               Hapus panah
             </button>
@@ -2477,7 +2489,7 @@ function WorkflowBuilder({
             <button
               type="button"
               onClick={handleSaveCanvas}
-              className="inline-flex items-center gap-1 border border-white/10 px-2 py-0.5 text-[9px] font-mono uppercase tracking-[0.08em] text-white/35 transition-colors hover:border-emerald-500/20 hover:text-emerald-400"
+              className="inline-flex items-center gap-1 border border-white/10 px-2 py-0.5 text-[9px] font-mono uppercase tracking-[0.08em] text-foreground/35 transition-colors hover:border-success/20 hover:text-success"
             >
               <Save className="h-3 w-3" />
               Save
@@ -2486,14 +2498,14 @@ function WorkflowBuilder({
           <button
             type="button"
             onClick={handlePrintA4}
-            className="border border-white/10 px-2 py-0.5 text-[9px] font-mono uppercase tracking-[0.08em] text-white/35 transition-colors hover:border-amber-500/20 hover:text-amber-400"
+            className="border border-white/10 px-2 py-0.5 text-[9px] font-mono uppercase tracking-[0.08em] text-foreground/35 transition-colors hover:border-primary/20 hover:text-app-accent-ink"
           >
             Print
           </button>
           <button
             type="button"
             onClick={handleExportPng}
-            className="border border-white/10 px-2 py-0.5 text-[9px] font-mono uppercase tracking-[0.08em] text-white/35 transition-colors hover:border-amber-500/20 hover:text-amber-400"
+            className="border border-white/10 px-2 py-0.5 text-[9px] font-mono uppercase tracking-[0.08em] text-foreground/35 transition-colors hover:border-primary/20 hover:text-app-accent-ink"
           >
             PNG
           </button>
@@ -2501,7 +2513,7 @@ function WorkflowBuilder({
             <button
               type="button"
               onClick={handleClearFlow}
-              className="border border-white/10 px-2 py-0.5 text-[9px] font-mono uppercase tracking-[0.08em] text-white/30 transition-colors hover:border-red-500/20 hover:text-red-400"
+              className="border border-white/10 px-2 py-0.5 text-[9px] font-mono uppercase tracking-[0.08em] text-foreground/30 transition-colors hover:border-destructive/20 hover:text-destructive"
             >
               Reset
             </button>
@@ -2512,7 +2524,7 @@ function WorkflowBuilder({
           <div
             ref={canvasRef}
             tabIndex={0}
-            className="relative min-h-[520px] flex-1 overflow-auto bg-[#0a0a0c]"
+            className="relative min-h-[520px] flex-1 overflow-auto bg-background"
             onDragOver={(e) => e.preventDefault()}
             onDrop={handleCanvasDrop}
             onMouseMove={handleCanvasMouseMove}
@@ -2567,8 +2579,8 @@ function WorkflowBuilder({
                         y={bendPoint.y - 4}
                         width="8"
                         height="8"
-                        fill="#38bdf8"
-                        stroke="#bae6fd"
+                        fill="var(--info)"
+                        stroke="var(--card-foreground)"
                         strokeWidth="1"
                         className={bendPoint.axis === "x" ? "cursor-ew-resize" : "cursor-ns-resize"}
                         onMouseDown={(e) => {
@@ -2595,7 +2607,7 @@ function WorkflowBuilder({
             </svg>
 
             {flowNodes.filter((item) => !item.isEnd).length === 0 ? (
-              <div className="absolute left-4 right-4 top-4 border border-dashed border-white/10 px-4 py-10 text-center text-[10px] font-mono uppercase tracking-[0.08em] text-white/20">
+              <div className="absolute left-4 right-4 top-4 border border-dashed border-white/10 px-4 py-10 text-center text-[10px] font-mono uppercase tracking-[0.08em] text-foreground/20">
                 Drag job dari kiri ke sini untuk menyusun alur kerja
               </div>
             ) : (
@@ -2626,10 +2638,10 @@ function WorkflowBuilder({
                         connectFromId ? "cursor-crosshair" : "cursor-grab",
                         borderAccentClass[fn.type],
                         fn.isEnd
-                          ? "border-emerald-500/35 bg-emerald-500/[0.035]"
+                          ? "border-success/35 bg-success/[0.035]"
                           : isSelected || isConnectSource || connectTargetId === fn.id
-                          ? "border-amber-500/35 bg-amber-500/[0.04]"
-                          : "border-white/5 bg-[#111114] hover:border-white/10",
+                          ? "border-primary/35 bg-primary/[0.04]"
+                          : "border-white/5 bg-card hover:border-white/10",
                       ].join(" ")}
                       style={{ left: fn.x, top: fn.y, width: fn.width, minHeight: fn.height }}
                       >
@@ -2645,30 +2657,30 @@ function WorkflowBuilder({
                           type="button"
                           aria-label="Tarik panah dari atas"
                           onMouseDown={(e) => startConnectionFromHandle(fn, "top", e)}
-                          className="absolute left-1/2 top-[-5px] h-2.5 w-2.5 -translate-x-1/2 cursor-crosshair border border-sky-200 bg-sky-400"
+                          className="absolute left-1/2 top-[-5px] h-2.5 w-2.5 -translate-x-1/2 cursor-crosshair border border-info bg-info"
                         />
                         <button
                           type="button"
                           aria-label="Tarik panah dari bawah"
                           onMouseDown={(e) => startConnectionFromHandle(fn, "bottom", e)}
-                          className="absolute bottom-[-5px] left-1/2 h-2.5 w-2.5 -translate-x-1/2 cursor-crosshair border border-sky-200 bg-sky-400"
+                          className="absolute bottom-[-5px] left-1/2 h-2.5 w-2.5 -translate-x-1/2 cursor-crosshair border border-info bg-info"
                         />
                         <button
                           type="button"
                           aria-label="Tarik panah dari kiri"
                           onMouseDown={(e) => startConnectionFromHandle(fn, "left", e)}
-                          className="absolute left-[-5px] top-1/2 h-2.5 w-2.5 -translate-y-1/2 cursor-crosshair border border-sky-200 bg-sky-400"
+                          className="absolute left-[-5px] top-1/2 h-2.5 w-2.5 -translate-y-1/2 cursor-crosshair border border-info bg-info"
                         />
                         <button
                           type="button"
                           aria-label="Tarik panah dari kanan"
                           onMouseDown={(e) => startConnectionFromHandle(fn, "right", e)}
-                          className="absolute right-[-5px] top-1/2 h-2.5 w-2.5 -translate-y-1/2 cursor-crosshair border border-sky-200 bg-sky-400"
+                          className="absolute right-[-5px] top-1/2 h-2.5 w-2.5 -translate-y-1/2 cursor-crosshair border border-info bg-info"
                         />
-                        <span className="pointer-events-none absolute left-1/2 top-[-22px] h-3 w-px -translate-x-1/2 bg-sky-400/35" />
-                        <span className="pointer-events-none absolute bottom-[-22px] left-1/2 h-3 w-px -translate-x-1/2 bg-sky-400/35" />
-                        <span className="pointer-events-none absolute left-[-22px] top-1/2 h-px w-3 -translate-y-1/2 bg-sky-400/35" />
-                        <span className="pointer-events-none absolute right-[-22px] top-1/2 h-px w-3 -translate-y-1/2 bg-sky-400/35" />
+                        <span className="pointer-events-none absolute left-1/2 top-[-22px] h-3 w-px -translate-x-1/2 bg-info/35" />
+                        <span className="pointer-events-none absolute bottom-[-22px] left-1/2 h-3 w-px -translate-x-1/2 bg-info/35" />
+                        <span className="pointer-events-none absolute left-[-22px] top-1/2 h-px w-3 -translate-y-1/2 bg-info/35" />
+                        <span className="pointer-events-none absolute right-[-22px] top-1/2 h-px w-3 -translate-y-1/2 bg-info/35" />
                       </div>
                       <button
                         type="button"
@@ -2679,7 +2691,7 @@ function WorkflowBuilder({
                         }}
                         className={[
                           "absolute right-2 top-1.5 text-[10px] font-mono transition-colors",
-                          fn.isEnd ? "hidden" : "text-white/0 group-hover:text-white/25 hover:!text-red-400",
+                          fn.isEnd ? "hidden" : "text-foreground/0 group-hover:text-foreground/25 hover:!text-destructive",
                         ].join(" ")}
                       >
                         x
@@ -2687,10 +2699,10 @@ function WorkflowBuilder({
                       <p className={`text-[9px] font-mono uppercase tracking-[0.08em] ${typeColorClass[fn.type]}`}>
                         {fn.sourceLabel ?? fn.typeLabel}
                       </p>
-                      <p className="mt-0.5 text-[12px] font-mono leading-snug text-white/80">{fn.title}</p>
-                      <p className="mt-0.5 text-[10px] text-white/30">{fn.divisionLabel ?? fn.meta}</p>
+                      <p className="mt-0.5 text-[12px] font-mono leading-snug text-foreground/80">{fn.title}</p>
+                      <p className="mt-0.5 text-[10px] text-foreground/30">{fn.divisionLabel ?? fn.meta}</p>
                       {(fn.hourLabel || fn.progressLabel) ? (
-                        <div className="mt-2 grid grid-cols-2 gap-1 text-[9px] font-mono uppercase tracking-[0.06em] text-white/25">
+                        <div className="mt-2 grid grid-cols-2 gap-1 text-[9px] font-mono uppercase tracking-[0.06em] text-foreground/25">
                           <span>{fn.hourLabel ?? "Jam -"}</span>
                           <span>{fn.progressLabel ?? "0%"}</span>
                         </div>
@@ -2700,11 +2712,11 @@ function WorkflowBuilder({
                           {fn.statusLabel}
                         </span>
                         {fn.hasPhotos && (
-                          <span className="text-[9px] font-mono text-white/20">- foto</span>
+                          <span className="text-[9px] font-mono text-foreground/20">- foto</span>
                         )}
                       </div>
                       <span
-                        className="absolute bottom-[-4px] right-[-4px] h-3 w-3 cursor-nwse-resize border border-sky-300 bg-sky-400"
+                        className="absolute bottom-[-4px] right-[-4px] h-3 w-3 cursor-nwse-resize border border-info bg-info"
                         onMouseDown={(e) => {
                           e.stopPropagation();
                           clearLongPressTimer();
@@ -2729,14 +2741,14 @@ function WorkflowBuilder({
           {(selectedFlowNode || orderedFlowNodes.length > 0) && (
             <div className="flex w-[200px] flex-shrink-0 flex-col border-l border-white/5">
               <div className="flex items-center justify-between border-b border-white/5 px-3 py-2">
-                <p className="text-[10px] font-mono uppercase tracking-[0.08em] text-white/30">
+                <p className="text-[10px] font-mono uppercase tracking-[0.08em] text-foreground/30">
                   {selectedFlowNode ? "Detail" : "Urutan Flow"}
                 </p>
                 {selectedFlowNode ? (
                   <button
                     type="button"
                     onClick={() => setSelectedFlowNode(null)}
-                    className="text-[10px] font-mono text-white/20 hover:text-white/60"
+                    className="text-[10px] font-mono text-foreground/20 hover:text-foreground/60"
                   >
                     x
                   </button>
@@ -2746,73 +2758,73 @@ function WorkflowBuilder({
                 {selectedFlowNode ? (
                   <>
                     <div>
-                      <p className="mb-1 text-[9px] font-mono uppercase tracking-[0.08em] text-white/25">Sumber</p>
-                      <p className="text-[11px] font-mono leading-snug text-white/80">{selectedFlowNode.sourceLabel ?? selectedFlowNode.typeLabel}</p>
+                      <p className="mb-1 text-[9px] font-mono uppercase tracking-[0.08em] text-foreground/25">Sumber</p>
+                      <p className="text-[11px] font-mono leading-snug text-foreground/80">{selectedFlowNode.sourceLabel ?? selectedFlowNode.typeLabel}</p>
                     </div>
                     <div>
-                      <p className="mb-1 text-[9px] font-mono uppercase tracking-[0.08em] text-white/25">Master Jobdesc</p>
-                      <p className="text-[11px] font-mono leading-snug text-white/80">{selectedFlowNode.title}</p>
-                      <p className="mt-1 text-[10px] text-white/30">{selectedFlowNode.meta}</p>
+                      <p className="mb-1 text-[9px] font-mono uppercase tracking-[0.08em] text-foreground/25">Master Jobdesc</p>
+                      <p className="text-[11px] font-mono leading-snug text-foreground/80">{selectedFlowNode.title}</p>
+                      <p className="mt-1 text-[10px] text-foreground/30">{selectedFlowNode.meta}</p>
                     </div>
                     <div>
-                      <p className="mb-1 text-[9px] font-mono uppercase tracking-[0.08em] text-white/25">Divisi</p>
-                      <p className="text-[10px] font-mono text-white/55">{selectedFlowNode.divisionLabel ?? "-"}</p>
+                      <p className="mb-1 text-[9px] font-mono uppercase tracking-[0.08em] text-foreground/25">Divisi</p>
+                      <p className="text-[10px] font-mono text-foreground/55">{selectedFlowNode.divisionLabel ?? "-"}</p>
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <p className="mb-1 text-[9px] font-mono uppercase tracking-[0.08em] text-white/25">Jam</p>
-                        <p className="text-[10px] font-mono text-white/55">{selectedFlowNode.hourLabel ?? "-"}</p>
+                        <p className="mb-1 text-[9px] font-mono uppercase tracking-[0.08em] text-foreground/25">Jam</p>
+                        <p className="text-[10px] font-mono text-foreground/55">{selectedFlowNode.hourLabel ?? "-"}</p>
                       </div>
                       <div>
-                        <p className="mb-1 text-[9px] font-mono uppercase tracking-[0.08em] text-white/25">Progress</p>
-                        <p className="text-[10px] font-mono text-white/55">{selectedFlowNode.progressLabel ?? "-"}</p>
+                        <p className="mb-1 text-[9px] font-mono uppercase tracking-[0.08em] text-foreground/25">Progress</p>
+                        <p className="text-[10px] font-mono text-foreground/55">{selectedFlowNode.progressLabel ?? "-"}</p>
                       </div>
                     </div>
                     {selectedFlowNode.detail ? (
                       <div>
-                        <p className="mb-1 text-[9px] font-mono uppercase tracking-[0.08em] text-white/25">Detail</p>
-                        <p className="text-[10px] leading-relaxed text-white/45">{selectedFlowNode.detail}</p>
+                        <p className="mb-1 text-[9px] font-mono uppercase tracking-[0.08em] text-foreground/25">Detail</p>
+                        <p className="text-[10px] leading-relaxed text-foreground/45">{selectedFlowNode.detail}</p>
                       </div>
                     ) : null}
                     <div>
-                      <p className="mb-1 text-[9px] font-mono uppercase tracking-[0.08em] text-white/25">Status</p>
+                      <p className="mb-1 text-[9px] font-mono uppercase tracking-[0.08em] text-foreground/25">Status</p>
                       <span className={`border px-2 py-0.5 text-[9px] font-mono uppercase tracking-[0.06em] ${statusConfig[selectedFlowNode.status]}`}>
                         {selectedFlowNode.statusLabel}
                       </span>
                     </div>
                     <div>
-                      <p className="mb-1 text-[9px] font-mono uppercase tracking-[0.08em] text-white/25">Bukti Foto</p>
+                      <p className="mb-1 text-[9px] font-mono uppercase tracking-[0.08em] text-foreground/25">Bukti Foto</p>
                       {selectedFlowNode.hasPhotos ? (
                         <button
                           type="button"
                           onClick={onNavigateToPhotos}
-                          className="w-full border border-white/10 px-2 py-1 text-left text-[9px] font-mono uppercase tracking-[0.06em] text-white/35 transition-colors hover:border-amber-500/20 hover:text-amber-400"
+                          className="w-full border border-white/10 px-2 py-1 text-left text-[9px] font-mono uppercase tracking-[0.06em] text-foreground/35 transition-colors hover:border-primary/20 hover:text-app-accent-ink"
                         >
                           Lihat Galeri -&gt;
                         </button>
                       ) : (
-                        <p className="text-[10px] font-mono text-white/20">Belum ada foto</p>
+                        <p className="text-[10px] font-mono text-foreground/20">Belum ada foto</p>
                       )}
                     </div>
                     <div>
-                      <p className="mb-1 text-[9px] font-mono uppercase tracking-[0.08em] text-white/25">Bahan & Tools</p>
+                      <p className="mb-1 text-[9px] font-mono uppercase tracking-[0.08em] text-foreground/25">Bahan & Tools</p>
                       {selectedFlowNode.hasMaterials ? (
                         <button
                           type="button"
                           onClick={onNavigateToDocuments}
-                          className="w-full border border-white/10 px-2 py-1 text-left text-[9px] font-mono uppercase tracking-[0.06em] text-white/35 transition-colors hover:border-amber-500/20 hover:text-amber-400"
+                          className="w-full border border-white/10 px-2 py-1 text-left text-[9px] font-mono uppercase tracking-[0.06em] text-foreground/35 transition-colors hover:border-primary/20 hover:text-app-accent-ink"
                         >
                           Lihat Logistik -&gt;
                         </button>
                       ) : (
-                        <p className="text-[10px] font-mono text-white/20">Belum ada data</p>
+                        <p className="text-[10px] font-mono text-foreground/20">Belum ada data</p>
                       )}
                     </div>
                   </>
                 ) : null}
                 {orderedFlowNodes.length > 0 ? (
                   <div>
-                    <p className="mb-2 text-[9px] font-mono uppercase tracking-[0.08em] text-white/25">Urutan</p>
+                    <p className="mb-2 text-[9px] font-mono uppercase tracking-[0.08em] text-foreground/25">Urutan</p>
                     <div className="space-y-1.5">
                       {orderedFlowNodes.map((flowNode, index) => (
                         <button
@@ -2822,12 +2834,12 @@ function WorkflowBuilder({
                             setSelectedFlowNode(flowNode);
                             setSelectedConnectionId(null);
                           }}
-                          className="w-full border border-white/5 px-2 py-1.5 text-left transition-colors hover:border-amber-500/20"
+                          className="w-full border border-white/5 px-2 py-1.5 text-left transition-colors hover:border-primary/20"
                         >
-                          <p className="text-[9px] font-mono uppercase tracking-[0.08em] text-white/25">
+                          <p className="text-[9px] font-mono uppercase tracking-[0.08em] text-foreground/25">
                             {String(index + 1).padStart(2, "0")} - {flowNode.sourceLabel ?? flowNode.typeLabel}
                           </p>
-                          <p className="mt-0.5 line-clamp-2 text-[10px] text-white/70">{flowNode.title}</p>
+                          <p className="mt-0.5 line-clamp-2 text-[10px] text-foreground/70">{flowNode.title}</p>
                         </button>
                       ))}
                     </div>
@@ -2840,16 +2852,16 @@ function WorkflowBuilder({
       </div>
     </div>
     {isCreateOpen && isCreateMinimized ? (
-      <div className="fixed bottom-4 right-4 z-[80] w-[min(360px,calc(100vw-32px))] border border-white/10 bg-[#0d0d10] shadow-2xl">
+      <div className="fixed bottom-4 right-4 z-[80] w-[min(360px,calc(100vw-32px))] border border-white/10 bg-card shadow-2xl">
         <div className="flex items-center gap-3 px-3 py-2">
           <div className="min-w-0 flex-1">
-            <p className="truncate text-[10px] font-mono uppercase tracking-[0.12em] text-amber-500">Tambah Sumber Job</p>
-            <p className="truncate text-[12px] text-white/55">{createForm.title || node.label}</p>
+            <p className="truncate text-[10px] font-mono uppercase tracking-[0.12em] text-app-accent-ink">Tambah Sumber Job</p>
+            <p className="truncate text-[12px] text-foreground/55">{createForm.title || node.label}</p>
           </div>
           <button
             type="button"
             onClick={() => setIsCreateMinimized(false)}
-            className="border border-white/10 px-3 py-1.5 text-[10px] font-mono uppercase tracking-[0.1em] text-white/55 hover:text-white"
+            className="border border-white/10 px-3 py-1.5 text-[10px] font-mono uppercase tracking-[0.1em] text-foreground/55 hover:text-foreground"
           >
             Buka
           </button>
@@ -2859,7 +2871,7 @@ function WorkflowBuilder({
               setIsCreateOpen(false);
               setIsCreateMinimized(false);
             }}
-            className="flex h-7 w-7 items-center justify-center border border-white/10 text-white/35 hover:text-white"
+            className="flex h-7 w-7 items-center justify-center border border-white/10 text-foreground/35 hover:text-foreground"
           >
             <X className="h-3.5 w-3.5" />
           </button>
@@ -2867,17 +2879,17 @@ function WorkflowBuilder({
       </div>
     ) : isCreateOpen ? (
       <div className="fixed inset-0 z-[80] flex items-start justify-center overflow-y-auto bg-black/75 px-3 py-6 backdrop-blur-[2px]">
-        <div className="flex max-h-[calc(100vh-48px)] w-full max-w-3xl flex-col overflow-hidden border border-white/10 bg-[#0d0d10] shadow-2xl">
-          <div className="flex shrink-0 items-center justify-between border-b border-white/10 bg-[#111114] px-4 py-3">
+        <div className="flex max-h-[calc(100vh-48px)] w-full max-w-3xl flex-col overflow-hidden border border-white/10 bg-card shadow-2xl">
+          <div className="flex shrink-0 items-center justify-between border-b border-white/10 bg-card px-4 py-3">
             <div>
-              <p className="text-[11px] font-mono uppercase tracking-[0.12em] text-amber-500">Tambah Sumber Job</p>
-              <p className="mt-1 text-[13px] text-white/70">{node.label}</p>
+              <p className="text-[11px] font-mono uppercase tracking-[0.12em] text-app-accent-ink">Tambah Sumber Job</p>
+              <p className="mt-1 text-[13px] text-foreground/70">{node.label}</p>
             </div>
             <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => setIsCreateMinimized(true)}
-                className="flex h-8 w-8 items-center justify-center border border-white/10 text-white/45 hover:text-white"
+                className="flex h-8 w-8 items-center justify-center border border-white/10 text-foreground/45 hover:text-foreground"
                 title="Minimize"
               >
                 <span className="mb-1 text-lg leading-none">-</span>
@@ -2888,7 +2900,7 @@ function WorkflowBuilder({
                   setIsCreateOpen(false);
                   setIsCreateMinimized(false);
                 }}
-                className="flex h-8 w-8 items-center justify-center border border-white/10 text-white/45 hover:text-white"
+                className="flex h-8 w-8 items-center justify-center border border-white/10 text-foreground/45 hover:text-foreground"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -2897,7 +2909,7 @@ function WorkflowBuilder({
 
           <div className="grid flex-1 gap-3 overflow-y-auto px-4 py-4 sm:grid-cols-2">
             <div className="space-y-1.5 sm:col-span-2">
-              <span className="block text-[11px] font-mono uppercase tracking-[0.12em] text-white/35">Jenis</span>
+              <span className="block text-[11px] font-mono uppercase tracking-[0.12em] text-foreground/35">Jenis</span>
               <div className="grid grid-cols-2 gap-1 border border-white/10 bg-black p-1 sm:grid-cols-4">
                 {allowedCreateTypes.map((type) => (
                   <button
@@ -2910,8 +2922,8 @@ function WorkflowBuilder({
                     className={[
                       "h-9 text-[10px] font-mono uppercase tracking-[0.1em] transition-colors",
                       createForm.type === type
-                        ? "bg-amber-500 text-black"
-                        : "text-white/40 hover:bg-white/[0.04] hover:text-white/70",
+                        ? "bg-primary text-primary-foreground"
+                        : "text-foreground/40 hover:bg-white/[0.04] hover:text-foreground/70",
                     ].join(" ")}
                   >
                     {createTypeLabels[type]}
@@ -2920,7 +2932,7 @@ function WorkflowBuilder({
               </div>
             </div>
             <label className="space-y-1.5">
-              <span className="block text-[11px] font-mono uppercase tracking-[0.12em] text-white/35">Divisi</span>
+              <span className="block text-[11px] font-mono uppercase tracking-[0.12em] text-foreground/35">Divisi</span>
               <select
                 value={createForm.divisionId}
                 onChange={(event) => {
@@ -2928,7 +2940,7 @@ function WorkflowBuilder({
                   setJobTypeSearch("");
                 }}
                 disabled={createForm.type === "WOV"}
-                className="h-10 w-full border border-white/10 bg-black px-3 text-[13px] text-white outline-none focus:border-amber-500/45 disabled:cursor-not-allowed disabled:opacity-45"
+                className="h-10 w-full border border-white/10 bg-black px-3 text-[13px] text-foreground outline-none focus:border-primary/45 disabled:cursor-not-allowed disabled:opacity-45"
               >
                 <option value="">{node.divisionName ?? "Pilih divisi"}</option>
                 {countdownReferences.divisions.map((division) => (
@@ -2937,48 +2949,48 @@ function WorkflowBuilder({
               </select>
             </label>
             <label className="space-y-1.5">
-              <span className="block text-[11px] font-mono uppercase tracking-[0.12em] text-white/35">Unit</span>
+              <span className="block text-[11px] font-mono uppercase tracking-[0.12em] text-foreground/35">Unit</span>
               <input
                 value={carId}
                 readOnly
-                className="h-10 w-full border border-white/10 bg-white/[0.03] px-3 text-[13px] text-white/55 outline-none"
+                className="h-10 w-full border border-white/10 bg-white/[0.03] px-3 text-[13px] text-foreground/55 outline-none"
               />
             </label>
             <label className="space-y-1.5">
-              <span className="block text-[11px] font-mono uppercase tracking-[0.12em] text-white/35">Panel / Part</span>
+              <span className="block text-[11px] font-mono uppercase tracking-[0.12em] text-foreground/35">Panel / Part</span>
               <input
                 value={node.label}
                 readOnly
-                className="h-10 w-full border border-white/10 bg-white/[0.03] px-3 text-[13px] text-white/55 outline-none"
+                className="h-10 w-full border border-white/10 bg-white/[0.03] px-3 text-[13px] text-foreground/55 outline-none"
               />
             </label>
             <label className="space-y-1.5 sm:col-span-2">
-              <span className="block text-[11px] font-mono uppercase tracking-[0.12em] text-white/35">Pekerjaan</span>
+              <span className="block text-[11px] font-mono uppercase tracking-[0.12em] text-foreground/35">Pekerjaan</span>
               <input
                 value={createForm.title}
                 onChange={(event) => setCreateForm((current) => ({ ...current, title: event.target.value }))}
-                className="h-10 w-full border border-white/10 bg-black px-3 text-[13px] text-white outline-none focus:border-amber-500/45"
+                className="h-10 w-full border border-white/10 bg-black px-3 text-[13px] text-foreground outline-none focus:border-primary/45"
               />
             </label>
             {createForm.type === "COUNTDOWN" ? (
               <>
                 <label className="space-y-1.5">
-                  <span className="block text-[11px] font-mono uppercase tracking-[0.12em] text-white/35">Tipe</span>
+                  <span className="block text-[11px] font-mono uppercase tracking-[0.12em] text-foreground/35">Tipe</span>
                   <select
                     value={createForm.taskCategory}
                     onChange={(event) => setCreateForm((current) => ({ ...current, taskCategory: event.target.value as WorkflowCreateFormState["taskCategory"] }))}
-                    className="h-10 w-full border border-white/10 bg-black px-3 text-[13px] text-white outline-none focus:border-amber-500/45"
+                    className="h-10 w-full border border-white/10 bg-black px-3 text-[13px] text-foreground outline-none focus:border-primary/45"
                   >
                     <option value="MAIN">Main</option>
                     <option value="ADDITIONAL">Additional</option>
                   </select>
                 </label>
                 <label className="space-y-1.5">
-                  <span className="block text-[11px] font-mono uppercase tracking-[0.12em] text-white/35">Section</span>
+                  <span className="block text-[11px] font-mono uppercase tracking-[0.12em] text-foreground/35">Section</span>
                   <select
                     value={createForm.sectionName}
                     onChange={(event) => setCreateForm((current) => ({ ...current, sectionName: event.target.value }))}
-                    className="h-10 w-full border border-white/10 bg-black px-3 text-[13px] text-white outline-none focus:border-amber-500/45"
+                    className="h-10 w-full border border-white/10 bg-black px-3 text-[13px] text-foreground outline-none focus:border-primary/45"
                   >
                     <option value="">Pilih section</option>
                     {countdownReferences.sections.map((section) => (
@@ -2990,7 +3002,7 @@ function WorkflowBuilder({
                   </select>
                 </label>
                 <label className="space-y-1.5 sm:col-span-2">
-                  <span className="block text-[11px] font-mono uppercase tracking-[0.12em] text-white/35">Jobdesc</span>
+                  <span className="block text-[11px] font-mono uppercase tracking-[0.12em] text-foreground/35">Jobdesc</span>
                   {showJobTypeSearch ? (
                     <JobTypeCombobox
                       options={countdownJobTypeOptions}
@@ -3003,7 +3015,7 @@ function WorkflowBuilder({
                     <select
                       value={createForm.jobTypeId}
                       onChange={(event) => setCreateForm((current) => ({ ...current, jobTypeId: event.target.value }))}
-                      className="h-10 w-full border border-white/10 bg-black px-3 text-[13px] text-white outline-none focus:border-amber-500/45"
+                      className="h-10 w-full border border-white/10 bg-black px-3 text-[13px] text-foreground outline-none focus:border-primary/45"
                     >
                       <option value="">Pilih jobdesc</option>
                       {countdownJobTypeOptions.map((jobType) => (
@@ -3013,39 +3025,39 @@ function WorkflowBuilder({
                   )}
                 </label>
                 <label className="space-y-1.5">
-                  <span className="block text-[11px] font-mono uppercase tracking-[0.12em] text-white/35">Target Awal</span>
+                  <span className="block text-[11px] font-mono uppercase tracking-[0.12em] text-foreground/35">Target Awal</span>
                   <input
                     value={createForm.targetHours}
                     onChange={(event) => setCreateForm((current) => ({ ...current, targetHours: event.target.value }))}
                     placeholder="001:00"
-                    className="h-10 w-full border border-white/10 bg-black px-3 text-[13px] text-white outline-none focus:border-amber-500/45"
+                    className="h-10 w-full border border-white/10 bg-black px-3 text-[13px] text-foreground outline-none focus:border-primary/45"
                   />
                 </label>
                 <label className="space-y-1.5">
-                  <span className="block text-[11px] font-mono uppercase tracking-[0.12em] text-white/35">Start Date</span>
+                  <span className="block text-[11px] font-mono uppercase tracking-[0.12em] text-foreground/35">Start Date</span>
                   <input
                     type="date"
                     value={createForm.startDate}
                     onChange={(event) => setCreateForm((current) => ({ ...current, startDate: event.target.value }))}
-                    className="h-10 w-full border border-white/10 bg-black px-3 text-[13px] text-white outline-none focus:border-amber-500/45 [color-scheme:dark]"
+                    className="h-10 w-full border border-white/10 bg-black px-3 text-[13px] text-foreground outline-none focus:border-primary/45 [color-scheme:dark]"
                   />
                 </label>
                 <label className="space-y-1.5 sm:col-span-2">
-                  <span className="block text-[11px] font-mono uppercase tracking-[0.12em] text-white/35">Temuan Awal</span>
+                  <span className="block text-[11px] font-mono uppercase tracking-[0.12em] text-foreground/35">Temuan Awal</span>
                   <textarea
                     value={createForm.temuanAwal}
                     onChange={(event) => setCreateForm((current) => ({ ...current, temuanAwal: event.target.value }))}
                     rows={2}
-                    className="w-full resize-none border border-white/10 bg-black px-3 py-2 text-[13px] text-white outline-none focus:border-amber-500/45"
+                    className="w-full resize-none border border-white/10 bg-black px-3 py-2 text-[13px] text-foreground outline-none focus:border-primary/45"
                   />
                 </label>
                 <label className="space-y-1.5 sm:col-span-2">
-                  <span className="block text-[11px] font-mono uppercase tracking-[0.12em] text-white/35">Keterangan</span>
+                  <span className="block text-[11px] font-mono uppercase tracking-[0.12em] text-foreground/35">Keterangan</span>
                   <textarea
                     value={createForm.keterangan}
                     onChange={(event) => setCreateForm((current) => ({ ...current, keterangan: event.target.value }))}
                     rows={2}
-                    className="w-full resize-none border border-white/10 bg-black px-3 py-2 text-[13px] text-white outline-none focus:border-amber-500/45"
+                    className="w-full resize-none border border-white/10 bg-black px-3 py-2 text-[13px] text-foreground outline-none focus:border-primary/45"
                   />
                 </label>
               </>
@@ -3053,21 +3065,21 @@ function WorkflowBuilder({
             {createForm.type === "WO" ? (
               <>
                 <label className="space-y-1.5">
-                  <span className="block text-[11px] font-mono uppercase tracking-[0.12em] text-white/35">Qty</span>
+                  <span className="block text-[11px] font-mono uppercase tracking-[0.12em] text-foreground/35">Qty</span>
                   <input
                     type="number"
                     min="1"
                     value={createForm.qty}
                     onChange={(event) => setCreateForm((current) => ({ ...current, qty: event.target.value }))}
-                    className="h-10 w-full border border-white/10 bg-black px-3 text-[13px] text-white outline-none focus:border-amber-500/45"
+                    className="h-10 w-full border border-white/10 bg-black px-3 text-[13px] text-foreground outline-none focus:border-primary/45"
                   />
                 </label>
-                <label className="flex h-10 items-center gap-2 self-end border border-white/10 bg-black px-3 text-[12px] font-semibold text-white/65">
+                <label className="flex h-10 items-center gap-2 self-end border border-white/10 bg-black px-3 text-[12px] font-semibold text-foreground/65">
                   <input
                     type="checkbox"
                     checked={createForm.isPriority}
                     onChange={(event) => setCreateForm((current) => ({ ...current, isPriority: event.target.checked }))}
-                    className="h-4 w-4 accent-amber-500"
+                    className="h-4 w-4 accent-primary"
                   />
                   Urgent / Prioritas
                 </label>
@@ -3076,72 +3088,72 @@ function WorkflowBuilder({
             {(createForm.type === "PR" || createForm.type === "WOV") ? (
               <>
                 <label className="space-y-1.5">
-                  <span className="block text-[11px] font-mono uppercase tracking-[0.12em] text-white/35">Qty</span>
+                  <span className="block text-[11px] font-mono uppercase tracking-[0.12em] text-foreground/35">Qty</span>
                   <input
                     type="number"
                     min="1"
                     step="1"
                     value={createForm.qty}
                     onChange={(event) => setCreateForm((current) => ({ ...current, qty: event.target.value }))}
-                    className="h-10 w-full border border-white/10 bg-black px-3 text-[13px] text-white outline-none focus:border-amber-500/45"
+                    className="h-10 w-full border border-white/10 bg-black px-3 text-[13px] text-foreground outline-none focus:border-primary/45"
                   />
                 </label>
                 <label className="space-y-1.5">
-                  <span className="block text-[11px] font-mono uppercase tracking-[0.12em] text-white/35">Satuan</span>
+                  <span className="block text-[11px] font-mono uppercase tracking-[0.12em] text-foreground/35">Satuan</span>
                   <input
                     value={createForm.uom}
                     onChange={(event) => setCreateForm((current) => ({ ...current, uom: event.target.value }))}
-                    className="h-10 w-full border border-white/10 bg-black px-3 text-[13px] text-white outline-none focus:border-amber-500/45"
+                    className="h-10 w-full border border-white/10 bg-black px-3 text-[13px] text-foreground outline-none focus:border-primary/45"
                   />
                 </label>
               </>
             ) : null}
             {createForm.type === "WOV" ? (
               <label className="space-y-1.5">
-                <span className="block text-[11px] font-mono uppercase tracking-[0.12em] text-white/35">Vendor</span>
+                <span className="block text-[11px] font-mono uppercase tracking-[0.12em] text-foreground/35">Vendor</span>
                 <input
                   value={createForm.vendorName}
                   onChange={(event) => setCreateForm((current) => ({ ...current, vendorName: event.target.value }))}
-                  className="h-10 w-full border border-white/10 bg-black px-3 text-[13px] text-white outline-none focus:border-amber-500/45"
+                  className="h-10 w-full border border-white/10 bg-black px-3 text-[13px] text-foreground outline-none focus:border-primary/45"
                 />
               </label>
             ) : null}
             <label className="space-y-1.5">
-              <span className="block text-[11px] font-mono uppercase tracking-[0.12em] text-white/35">
+              <span className="block text-[11px] font-mono uppercase tracking-[0.12em] text-foreground/35">
                 {createForm.type === "WOV" ? "Target Kembali" : createForm.type === "WO" ? "Target Selesai" : "Deadline"}
               </span>
               <input
                 type="date"
                 value={createForm.targetDate}
                 onChange={(event) => setCreateForm((current) => ({ ...current, targetDate: event.target.value }))}
-                className="h-10 w-full border border-white/10 bg-black px-3 text-[13px] text-white outline-none focus:border-amber-500/45 [color-scheme:dark]"
+                className="h-10 w-full border border-white/10 bg-black px-3 text-[13px] text-foreground outline-none focus:border-primary/45 [color-scheme:dark]"
               />
             </label>
             <label className="space-y-1.5 sm:col-span-2">
-              <span className="block text-[11px] font-mono uppercase tracking-[0.12em] text-white/35">Catatan</span>
+              <span className="block text-[11px] font-mono uppercase tracking-[0.12em] text-foreground/35">Catatan</span>
               <textarea
                 value={createForm.notes}
                 onChange={(event) => setCreateForm((current) => ({ ...current, notes: event.target.value }))}
                 rows={2}
-                className="w-full resize-none border border-white/10 bg-black px-3 py-2 text-[13px] text-white outline-none focus:border-amber-500/45"
+                className="w-full resize-none border border-white/10 bg-black px-3 py-2 text-[13px] text-foreground outline-none focus:border-primary/45"
               />
             </label>
           </div>
 
           {createError ? (
-            <div className="mx-4 mb-3 border border-red-500/20 bg-red-500/[0.04] px-3 py-2 text-[11px] text-red-400">
+            <div className="mx-4 mb-3 border border-destructive/20 bg-destructive/[0.04] px-3 py-2 text-[11px] text-destructive">
               {createError}
             </div>
           ) : null}
 
-          <div className="flex shrink-0 justify-end gap-2 border-t border-white/10 bg-[#111114] px-4 py-3">
+          <div className="flex shrink-0 justify-end gap-2 border-t border-white/10 bg-card px-4 py-3">
             <button
               type="button"
               onClick={() => {
                 setIsCreateOpen(false);
                 setIsCreateMinimized(false);
               }}
-              className="border border-white/10 px-4 py-2 text-[11px] font-mono uppercase tracking-[0.12em] text-white/55 hover:text-white"
+              className="border border-white/10 px-4 py-2 text-[11px] font-mono uppercase tracking-[0.12em] text-foreground/55 hover:text-foreground"
             >
               Batal
             </button>
@@ -3151,7 +3163,7 @@ function WorkflowBuilder({
               onClick={() => {
                 void handleCreateWorkflowJob();
               }}
-              className="border border-amber-500/35 bg-amber-500 px-5 py-2 text-[11px] font-mono uppercase tracking-[0.12em] text-black disabled:cursor-not-allowed disabled:opacity-45"
+              className="border border-primary/35 bg-primary px-5 py-2 text-[11px] font-mono uppercase tracking-[0.12em] text-primary-foreground disabled:cursor-not-allowed disabled:opacity-45"
             >
               {isCreating ? "Menyimpan..." : "Buat"}
             </button>

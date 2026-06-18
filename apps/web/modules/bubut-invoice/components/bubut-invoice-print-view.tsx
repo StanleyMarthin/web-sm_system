@@ -139,15 +139,15 @@ export function BubutInvoicePrintView({ invoice }: { invoice: BubutInvoiceSnapsh
 
   return (
     <>
-      <div className="print:hidden fixed top-0 left-0 right-0 z-50 flex h-11 items-center justify-between border-b border-white/10 bg-[#111114] px-5">
+      <div className="print:hidden fixed top-0 left-0 right-0 z-50 flex h-11 items-center justify-between border-b border-white/10 bg-card px-5">
         <button
           type="button"
           onClick={() => window.history.back()}
-          className="font-mono text-[11px] text-white/45 transition-colors hover:text-white"
+          className="font-mono text-[11px] text-foreground/45 transition-colors hover:text-foreground"
         >
           Kembali
         </button>
-        <span className="font-mono text-[10px] text-white/35">
+        <span className="font-mono text-[10px] text-foreground/35">
           Klik field bergaris untuk edit
         </span>
         <div className="flex items-center gap-2">
@@ -157,8 +157,8 @@ export function BubutInvoicePrintView({ invoice }: { invoice: BubutInvoiceSnapsh
               onClick={() => setPrintMode("DIREKSI")}
               className={`h-full border-r px-3 font-mono text-[10px] uppercase tracking-[0.1em] transition-colors ${
                 printMode === "DIREKSI"
-                  ? "border-amber-500/30 bg-amber-500/10 text-amber-500"
-                  : "border-white/10 text-white/35 hover:text-white/60"
+                  ? "border-primary/30 bg-primary/10 text-app-accent-ink"
+                  : "border-white/10 text-foreground/35 hover:text-foreground/60"
               }`}
             >
               Direksi
@@ -168,8 +168,8 @@ export function BubutInvoicePrintView({ invoice }: { invoice: BubutInvoiceSnapsh
               onClick={() => setPrintMode("CUSTOMER")}
               className={`h-full px-3 font-mono text-[10px] uppercase tracking-[0.1em] transition-colors ${
                 printMode === "CUSTOMER"
-                  ? "bg-sky-500/10 text-sky-400"
-                  : "text-white/35 hover:text-white/60"
+                  ? "bg-info/10 text-info"
+                  : "text-foreground/35 hover:text-foreground/60"
               }`}
             >
               Customer
@@ -178,7 +178,7 @@ export function BubutInvoicePrintView({ invoice }: { invoice: BubutInvoiceSnapsh
           <button
             type="button"
             onClick={() => window.print()}
-            className="flex h-8 items-center gap-1.5 border border-amber-500/30 bg-amber-500/[0.04] px-3 font-mono text-[10px] uppercase tracking-[0.1em] text-amber-500 transition-colors hover:bg-amber-500/10"
+            className="flex h-8 items-center gap-1.5 border border-primary/30 bg-primary/[0.04] px-3 font-mono text-[10px] uppercase tracking-[0.1em] text-app-accent-ink transition-colors hover:bg-primary/10"
           >
             <Printer className="h-3 w-3" />
             Print {isCustomer ? "Customer" : "Direksi"}
@@ -186,8 +186,8 @@ export function BubutInvoicePrintView({ invoice }: { invoice: BubutInvoiceSnapsh
         </div>
       </div>
 
-      <main className="min-h-screen bg-[#1a1a1e] pt-11 print:block print:min-h-0 print:bg-white print:pt-0">
-        <section className="invoice-page mx-auto my-6 bg-white text-black shadow-2xl print:my-0 print:shadow-none">
+      <main className="min-h-screen bg-background pt-11 print:block print:min-h-0 print:bg-white print:pt-0">
+        <section className="invoice-page mx-auto my-6 bg-white text-primary-foreground shadow-2xl print:my-0 print:shadow-none">
           <header className="invoice-header">
             <div className="invoice-title-box">
               <div className="rule rule-light" />
@@ -456,7 +456,7 @@ export function BubutInvoicePrintView({ invoice }: { invoice: BubutInvoiceSnapsh
           width: 100%;
           min-width: 0;
           border: 0;
-          border-bottom: 1px dashed #d97706;
+          border-bottom: 1px dashed rgb(217 119 6);
           background: transparent;
           color: inherit;
           font: inherit;
@@ -481,11 +481,11 @@ export function BubutInvoicePrintView({ invoice }: { invoice: BubutInvoiceSnapsh
         }
 
         .rule-light {
-          background: #bdbdbd;
+          background: rgb(189 189 189);
         }
 
         .rule-dark {
-          background: #000;
+          background: rgb(0 0 0);
         }
 
         .invoice-title-box .rule-light {
@@ -513,7 +513,7 @@ export function BubutInvoicePrintView({ invoice }: { invoice: BubutInvoiceSnapsh
           flex-direction: column;
           align-items: flex-end;
           text-align: right;
-          color: #111;
+          color: rgb(17 17 17);
           line-height: 1.05;
         }
 
@@ -550,7 +550,7 @@ export function BubutInvoicePrintView({ invoice }: { invoice: BubutInvoiceSnapsh
         }
 
         .info-box {
-          background: #d0d0d0;
+          background: rgb(208 208 208);
           padding: 1.2mm 1.2mm 1.4mm;
           -webkit-print-color-adjust: exact;
           print-color-adjust: exact;
@@ -593,8 +593,8 @@ export function BubutInvoicePrintView({ invoice }: { invoice: BubutInvoiceSnapsh
         }
 
         .section-bar {
-          background: #000;
-          color: #ffc000;
+          background: rgb(0 0 0);
+          color: rgb(255 192 0);
           font-family: "Arial Black", Arial, Helvetica, sans-serif;
           font-size: 9pt;
           height: 4.7mm;
@@ -616,9 +616,9 @@ export function BubutInvoicePrintView({ invoice }: { invoice: BubutInvoiceSnapsh
 
         .sheet th {
           height: 5.1mm;
-          border: 1px solid #b7b7b7;
-          background: #3c3c3c;
-          color: #ffc000;
+          border: 1px solid rgb(183 183 183);
+          background: rgb(60 60 60);
+          color: rgb(255 192 0);
           font-family: "Arial Black", Arial, Helvetica, sans-serif;
           font-size: 8.3pt;
           line-height: 1.05;
@@ -630,7 +630,7 @@ export function BubutInvoicePrintView({ invoice }: { invoice: BubutInvoiceSnapsh
 
         .sheet td {
           height: 4.55mm;
-          border: 1px solid #b7b7b7;
+          border: 1px solid rgb(183 183 183);
           padding: 0 1mm;
           font-size: 8.1pt;
           font-weight: 600;
@@ -711,7 +711,7 @@ export function BubutInvoicePrintView({ invoice }: { invoice: BubutInvoiceSnapsh
         .formula {
           display: inline-block;
           min-width: 99mm;
-          background: #9e9e9e;
+          background: rgb(158 158 158);
           font-size: 7.7pt;
           font-weight: 500;
           height: 4.4mm;
@@ -732,7 +732,7 @@ export function BubutInvoicePrintView({ invoice }: { invoice: BubutInvoiceSnapsh
         .notes-title {
           display: inline-block;
           margin-bottom: 1.5mm;
-          border-bottom: 1px solid #000;
+          border-bottom: 1px solid rgb(0 0 0);
           font-family: "Arial Black", Arial, Helvetica, sans-serif;
           font-size: 8.2pt;
           line-height: 1;
@@ -817,8 +817,8 @@ export function BubutInvoicePrintView({ invoice }: { invoice: BubutInvoiceSnapsh
 
         .summary-table td {
           height: 5.6mm;
-          border: 1px solid #b7b7b7;
-          background: #d0d0d0;
+          border: 1px solid rgb(183 183 183);
+          background: rgb(208 208 208);
           font-size: 8.3pt;
           padding: 0 1.1mm;
           -webkit-print-color-adjust: exact;
@@ -844,7 +844,7 @@ export function BubutInvoicePrintView({ invoice }: { invoice: BubutInvoiceSnapsh
         }
 
         .summary-table .approval-row td {
-          background: #ffc000;
+          background: rgb(255 192 0);
         }
 
         .signature-table {
@@ -870,7 +870,7 @@ export function BubutInvoicePrintView({ invoice }: { invoice: BubutInvoiceSnapsh
           display: block;
           width: 25mm;
           margin: 0 auto 2.4mm;
-          border-top: 1px solid #000;
+          border-top: 1px solid rgb(0 0 0);
         }
 
         .sign-name {

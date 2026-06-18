@@ -39,7 +39,7 @@ interface QaWorkspaceShellProps {
 }
 
 const inputCls =
-  "h-10 rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 text-sm text-white outline-none transition-colors focus:border-amber-500/30 [color-scheme:dark]";
+  "h-10 rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 text-sm text-foreground outline-none transition-colors focus:border-primary/30 [color-scheme:dark]";
 
 
 
@@ -52,12 +52,12 @@ function StatusBadge({
 }) {
   const className =
     tone === "good"
-      ? "bg-emerald-400/10 text-emerald-200 ring-emerald-400/20"
+      ? "bg-success/10 text-success ring-success/20"
       : tone === "bad"
-        ? "bg-red-400/10 text-red-200 ring-red-400/20"
+        ? "bg-destructive/10 text-destructive ring-destructive/20"
         : tone === "warn"
-          ? "bg-amber-400/10 text-amber-200 ring-amber-400/20"
-          : "bg-white/[0.04] text-white/65 ring-white/[0.08]";
+          ? "bg-primary/10 text-app-accent-ink ring-primary/20"
+          : "bg-white/[0.04] text-foreground/65 ring-white/[0.08]";
   return <span className={`rounded-full px-2.5 py-1 text-[11px] font-medium ring-1 ${className}`}>{children}</span>;
 }
 
@@ -189,18 +189,18 @@ export function QaWorkspaceShell({
 
       {selectedInspection ? (
         <div className="fixed inset-0 z-[80] bg-black/80">
-          <div className="absolute inset-y-0 right-0 w-full max-w-2xl overflow-y-auto border-l border-white/[0.08] bg-[#090b0e] shadow-2xl">
-            <div className="sticky top-0 z-10 border-b border-white/[0.06] bg-[#090b0e]/95 px-5 py-4 backdrop-blur">
+          <div className="absolute inset-y-0 right-0 w-full max-w-2xl overflow-y-auto border-l border-white/[0.08] bg-popover shadow-2xl">
+            <div className="sticky top-0 z-10 border-b border-white/[0.06] bg-popover/95 px-5 py-4 backdrop-blur">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-[10px] uppercase tracking-[0.16em] text-amber-400/80">Investigasi QA</p>
-                  <h3 className="mt-1 text-lg font-semibold text-white">{selectedInspection.unitName}</h3>
-                  <p className="mt-1 text-sm text-white/45">{selectedInspection.jobName}</p>
+                  <p className="text-[10px] uppercase tracking-[0.16em] text-app-accent-ink/80">Investigasi QA</p>
+                  <h3 className="mt-1 text-lg font-semibold text-foreground">{selectedInspection.unitName}</h3>
+                  <p className="mt-1 text-sm text-foreground/45">{selectedInspection.jobName}</p>
                 </div>
                 <button
                   type="button"
                   onClick={() => setSelectedInspectionId(null)}
-                  className="rounded-full border border-white/[0.08] p-2 text-white/55 transition hover:text-white"
+                  className="rounded-full border border-white/[0.08] p-2 text-foreground/55 transition hover:text-foreground"
                 >
                   <XCircle className="h-5 w-5" />
                 </button>
@@ -210,21 +210,21 @@ export function QaWorkspaceShell({
             <div className="space-y-6 px-5 py-5">
               <section className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-4">
                 <div className="mb-4 flex items-center gap-2">
-                  <ClipboardList className="h-4 w-4 text-amber-300" />
-                  <p className="text-sm font-semibold text-white">Data inspeksi mobile</p>
+                  <ClipboardList className="h-4 w-4 text-app-accent-ink" />
+                  <p className="text-sm font-semibold text-foreground">Data inspeksi mobile</p>
                 </div>
-                <div className="grid gap-3 text-sm text-white/70 md:grid-cols-2">
+                <div className="grid gap-3 text-sm text-foreground/70 md:grid-cols-2">
                   <div>
-                    <p className="text-white/35">Inspektor</p>
-                    <p className="mt-1 text-white">{selectedInspection.inspectorName ?? "-"}</p>
+                    <p className="text-foreground/35">Inspektor</p>
+                    <p className="mt-1 text-foreground">{selectedInspection.inspectorName ?? "-"}</p>
                   </div>
                   <div>
-                    <p className="text-white/35">Status hasil</p>
-                    <p className="mt-1 text-white">{selectedInspection.resultStatus}</p>
+                    <p className="text-foreground/35">Status hasil</p>
+                    <p className="mt-1 text-foreground">{selectedInspection.resultStatus}</p>
                   </div>
                   <div className="md:col-span-2">
-                    <p className="text-white/35">Catatan QC</p>
-                    <p className="mt-1 whitespace-pre-wrap text-white">{selectedInspection.qcNotes ?? "-"}</p>
+                    <p className="text-foreground/35">Catatan QC</p>
+                    <p className="mt-1 whitespace-pre-wrap text-foreground">{selectedInspection.qcNotes ?? "-"}</p>
                   </div>
                 </div>
 
@@ -237,7 +237,7 @@ export function QaWorkspaceShell({
                       {photoUrl ? (
                         <Image src={photoUrl} alt={index === 0 ? "Foto sebelum" : "Foto bukti"} fill sizes="(max-width: 768px) 100vw, 33vw" className="object-cover" />
                       ) : (
-                        <div className="flex h-56 items-center justify-center text-white/25">
+                        <div className="flex h-56 items-center justify-center text-foreground/25">
                           <ImageIcon className="h-6 w-6" />
                         </div>
                       )}
@@ -249,8 +249,8 @@ export function QaWorkspaceShell({
               {selectedInspection.resultStatus !== "LOLOS" && (
                 <section className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-4">
                   <div className="mb-4 flex items-center gap-2">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-300" />
-                  <p className="text-sm font-semibold text-white">QA enrichment form</p>
+                  <CheckCircle2 className="h-4 w-4 text-success" />
+                  <p className="text-sm font-semibold text-foreground">QA enrichment form</p>
                 </div>
 
                 <QaInspectionForm
@@ -263,8 +263,8 @@ export function QaWorkspaceShell({
                   }}
                 />
 
-                {message ? <p className="mt-4 text-sm text-emerald-300">{message}</p> : null}
-                {error ? <p className="mt-4 text-sm text-red-300">{error}</p> : null}
+                {message ? <p className="mt-4 text-sm text-success">{message}</p> : null}
+                {error ? <p className="mt-4 text-sm text-destructive">{error}</p> : null}
                 </section>
               )}
             </div>

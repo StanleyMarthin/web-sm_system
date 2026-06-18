@@ -136,7 +136,7 @@ export function CountdownBoardForm({ initialValues, editorMode, references, isSa
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
       {/* ── Grup 1: Identitas Unit ── */}
       <div>
-        <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-white/25">Identitas Unit</p>
+        <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-foreground/25">Identitas Unit</p>
         <div className="grid gap-2 lg:grid-cols-5">
           <div>
             <FieldLabel required>Unit</FieldLabel>
@@ -180,13 +180,13 @@ export function CountdownBoardForm({ initialValues, editorMode, references, isSa
 
       {/* ── Grup 2: Detail Pekerjaan ── */}
       <div>
-        <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-white/25">Detail Job Description</p>
+        <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-foreground/25">Detail Job Description</p>
         <div className="grid gap-2 lg:grid-cols-4">
           <div>
             <FieldLabel required>Status</FieldLabel>
             {editorMode === "create" ? (
-              <div className="flex h-[30px] items-center rounded-lg border border-emerald-500/20 bg-emerald-500/[0.06] px-2.5">
-                <span className="text-[11px] font-semibold tracking-wider text-emerald-400">PLAN</span>
+              <div className="flex h-[30px] items-center rounded-lg border border-success/20 bg-success/[0.06] px-2.5">
+                <span className="text-[11px] font-semibold tracking-wider text-success">PLAN</span>
                 <input type="hidden" {...register("status")} value="PLAN" />
               </div>
             ) : (
@@ -220,7 +220,7 @@ export function CountdownBoardForm({ initialValues, editorMode, references, isSa
 
       {/* ── Grup 3: Jadwal & Referensi ── */}
       <div>
-        <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-white/25">Jadwal &amp; Referensi</p>
+        <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-foreground/25">Jadwal &amp; Referensi</p>
         <div className="grid gap-2 lg:grid-cols-4">
           <div>
             <FieldLabel required>Target Awal</FieldLabel>
@@ -243,7 +243,7 @@ export function CountdownBoardForm({ initialValues, editorMode, references, isSa
 
       {/* ── Footer ── */}
       <div className="flex items-center justify-between gap-2 rounded-lg border border-white/[0.05] bg-white/[0.01] px-3 py-2">
-        <p className="text-[11px] text-white/35">
+        <p className="text-[11px] text-foreground/35">
           {editorMode === "edit" ? "Edit Jobdesc" : "Form baru"}
         </p>
         <div className="flex gap-1.5">

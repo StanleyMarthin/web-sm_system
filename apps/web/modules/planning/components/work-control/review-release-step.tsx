@@ -57,30 +57,30 @@ function recommendationStyle(rec: PlanningRecommendation) {
   switch (rec) {
     case "SPK":
       return {
-        border: "border-emerald-500/25",
-        bg: "bg-emerald-500/[0.04]",
-        badge: "border-emerald-500/30 text-emerald-700 dark:text-emerald-300",
+        border: "border-success/25",
+        bg: "bg-success/[0.04]",
+        badge: "border-success/30 text-success dark:text-success",
         icon: "✅",
       };
     case "SPK_WITH_SPL":
       return {
-        border: "border-amber-500/25",
-        bg: "bg-amber-500/[0.04]",
-        badge: "border-amber-500/30 text-amber-700 dark:text-amber-300",
+        border: "border-primary/25",
+        bg: "bg-primary/[0.04]",
+        badge: "border-primary/30 text-app-accent-ink dark:text-app-accent-ink",
         icon: "⚠️",
       };
     case "HOLD":
       return {
-        border: "border-red-500/25",
-        bg: "bg-red-500/[0.04]",
-        badge: "border-red-500/30 text-red-700 dark:text-red-300",
+        border: "border-destructive/25",
+        bg: "bg-destructive/[0.04]",
+        badge: "border-destructive/30 text-destructive dark:text-destructive",
         icon: "🚫",
       };
     case "REVISE_TARGET":
       return {
-        border: "border-gray-200",
-        bg: "bg-gray-50 dark:bg-white/[0.02]",
-        badge: "border-gray-300 text-gray-600 dark:border-white/[0.1] dark:text-white/50",
+        border: "border-border",
+        bg: "bg-muted dark:bg-muted",
+        badge: "border-border text-muted-foreground dark:border-border dark:text-muted-foreground",
         icon: "↩️",
       };
   }
@@ -130,19 +130,19 @@ function ReviewUnitCard({ unit, onRevise }: { unit: ReviewUnit; onRevise: () => 
       {/* Card header */}
       <div className="flex flex-wrap items-start justify-between gap-2 px-4 py-3">
         <div>
-          <p className="text-[13px] font-semibold text-gray-900 dark:text-white">
+          <p className="text-[15px] font-semibold text-foreground dark:text-foreground">
             {unit.unitName}
           </p>
-          <p className="mt-0.5 font-mono text-[10px] text-gray-400 dark:text-white/30">
+          <p className="mt-0.5 font-mono text-[14px] text-muted-foreground dark:text-muted-foreground">
             {unit.divisionName} · {unit.customerName ?? "Customer belum diisi"} · {priorityLabel}
           </p>
         </div>
-        <span className={`border px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.1em] ${style.badge}`}>
+        <span className={`border px-2 py-0.5 font-mono text-[15px] uppercase tracking-[0.1em] ${style.badge}`}>
           {style.icon} {statusLabel}
         </span>
       </div>
 
-      <div className="px-4 pb-3 text-[12px] text-gray-700 dark:text-white/65">
+      <div className="px-4 pb-3 text-[14px] text-foreground dark:text-foreground">
         {decisionSummary}
       </div>
 
@@ -168,12 +168,12 @@ function ReviewUnitCard({ unit, onRevise }: { unit: ReviewUnit; onRevise: () => 
         ].map((m) => (
           <div
             key={m.label}
-            className="border border-white/60 bg-white px-3 py-2 dark:border-white/[0.05] dark:bg-[#111114]"
+            className="border border-border bg-card px-3 py-2 dark:border-border dark:bg-card"
           >
-            <p className="font-mono text-[9px] uppercase tracking-[0.1em] text-gray-400 dark:text-white/25">
+            <p className="font-mono text-[15px] uppercase tracking-[0.1em] text-muted-foreground dark:text-muted-foreground">
               {m.label}
             </p>
-            <p className="mt-0.5 font-mono text-[12px] font-medium text-gray-800 dark:text-white/80">
+            <p className="mt-0.5 font-mono text-[14px] font-medium text-foreground dark:text-foreground">
               {m.value}
             </p>
           </div>
@@ -182,7 +182,7 @@ function ReviewUnitCard({ unit, onRevise }: { unit: ReviewUnit; onRevise: () => 
 
       {/* SPL warning */}
       {overtimeNeed > 0 && recommendation === "SPK_WITH_SPL" && (
-        <div className="mx-4 mb-3 border border-amber-500/25 px-3 py-2 text-[11px] text-amber-700 dark:text-amber-300">
+        <div className="mx-4 mb-3 border border-primary/25 px-3 py-2 text-[15px] text-app-accent-ink dark:text-app-accent-ink">
           Butuh lembur sekitar{" "}
           <span className="font-semibold">{overtimeNeed.toFixed(0)} jam</span>. Target ini perlu
           ditindaklanjuti ke proses SPL setelah SPK dirilis.
@@ -190,34 +190,34 @@ function ReviewUnitCard({ unit, onRevise }: { unit: ReviewUnit; onRevise: () => 
       )}
 
       {isTargetTooTight && (
-        <div className="mx-4 mb-3 border border-red-500/25 px-3 py-2 text-[11px] text-red-600 dark:text-red-300">
+        <div className="mx-4 mb-3 border border-destructive/25 px-3 py-2 text-[15px] text-destructive dark:text-destructive">
           Target terlalu mepet. Permintaan selesai {requestedFinishLabel}, sedangkan prediksi aman
           {` ${safeFinish?.safeFinishDate ?? "-"}`}.
         </div>
       )}
 
-      <div className="mx-4 mb-3 grid gap-2 text-[11px] sm:grid-cols-2">
-        <div className="border border-white/60 bg-white px-3 py-2 dark:border-white/[0.05] dark:bg-[#111114]">
-          <p className="font-mono text-[9px] uppercase tracking-[0.1em] text-gray-400 dark:text-white/25">
+      <div className="mx-4 mb-3 grid gap-2 text-[15px] sm:grid-cols-2">
+        <div className="border border-border bg-card px-3 py-2 dark:border-border dark:bg-card">
+          <p className="font-mono text-[15px] uppercase tracking-[0.1em] text-muted-foreground dark:text-muted-foreground">
             Target selesai diminta
           </p>
-          <p className="mt-0.5 font-mono text-[12px] text-gray-800 dark:text-white/80">
+          <p className="mt-0.5 font-mono text-[14px] text-foreground dark:text-foreground">
             {requestedFinishLabel}
           </p>
         </div>
-        <div className="border border-white/60 bg-white px-3 py-2 dark:border-white/[0.05] dark:bg-[#111114]">
-          <p className="font-mono text-[9px] uppercase tracking-[0.1em] text-gray-400 dark:text-white/25">
+        <div className="border border-border bg-card px-3 py-2 dark:border-border dark:bg-card">
+          <p className="font-mono text-[15px] uppercase tracking-[0.1em] text-muted-foreground dark:text-muted-foreground">
             Risiko delivery
           </p>
-          <p className="mt-0.5 font-mono text-[12px] text-gray-800 dark:text-white/80">
+          <p className="mt-0.5 font-mono text-[14px] text-foreground dark:text-foreground">
             {formatRiskLabel(entry.riskLevel)}
           </p>
         </div>
       </div>
 
       {entry.targetOutput && (
-        <div className="mx-4 mb-3 text-[11px] text-gray-600 dark:text-white/50">
-          <span className="font-mono text-[9px] uppercase tracking-[0.1em] text-gray-400 dark:text-white/25">
+        <div className="mx-4 mb-3 text-[15px] text-muted-foreground dark:text-muted-foreground">
+          <span className="font-mono text-[15px] uppercase tracking-[0.1em] text-muted-foreground dark:text-muted-foreground">
             Output minggu ini:
           </span>{" "}
           {entry.targetOutput}
@@ -225,11 +225,11 @@ function ReviewUnitCard({ unit, onRevise }: { unit: ReviewUnit; onRevise: () => 
       )}
 
       {/* Actions */}
-      <div className="flex flex-wrap items-center gap-2 border-t border-gray-100 px-4 py-3 dark:border-white/[0.04]">
+      <div className="flex flex-wrap items-center gap-2 border-t border-border px-4 py-3 dark:border-border">
         <button
           type="button"
           onClick={onRevise}
-          className="inline-flex h-7 items-center gap-1.5 border border-gray-300 px-3 font-mono text-[10px] uppercase tracking-[0.1em] text-gray-600 transition-colors hover:bg-gray-50 dark:border-white/[0.08] dark:text-white/50"
+          className="inline-flex h-7 items-center gap-1.5 border border-border px-3 font-mono text-[14px] uppercase tracking-[0.1em] text-muted-foreground transition-colors hover:bg-muted dark:border-border dark:text-muted-foreground"
         >
           Ubah Target
         </button>
@@ -324,41 +324,41 @@ export function ReviewReleaseStep({
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="border border-gray-200 bg-white px-4 py-4 dark:border-white/[0.06] dark:bg-[#111114]">
-        <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-gray-400 dark:text-white/30">
+      <div className="border border-border bg-card px-4 py-4 dark:border-border dark:bg-card">
+        <p className="font-mono text-[14px] uppercase tracking-[0.12em] text-muted-foreground dark:text-muted-foreground">
           Langkah 5
         </p>
-        <h2 className="mt-1 text-[15px] font-semibold tracking-[-0.02em] text-gray-900 dark:text-white">
+        <h2 className="mt-1 text-[15px] font-semibold tracking-[-0.02em] text-foreground dark:text-foreground">
           Review & Rilis
         </h2>
-        <p className="mt-1 text-[12px] text-gray-500 dark:text-white/40">
+        <p className="mt-1 text-[14px] text-muted-foreground dark:text-muted-foreground">
           Cek keputusan akhir per unit. Kalau sudah pas, rilis SPK. Kalau masih mepet, kembali ubah
           target dulu.
         </p>
       </div>
 
       <div className="grid gap-2 md:grid-cols-3">
-        <div className="border border-gray-200 bg-white px-4 py-3 dark:border-white/[0.06] dark:bg-[#111114]">
-          <p className="font-mono text-[9px] uppercase tracking-[0.12em] text-gray-400 dark:text-white/25">
+        <div className="border border-border bg-card px-4 py-3 dark:border-border dark:bg-card">
+          <p className="font-mono text-[15px] uppercase tracking-[0.12em] text-muted-foreground dark:text-muted-foreground">
             Unit Direview
           </p>
-          <p className="mt-2 font-mono text-[18px] font-semibold text-gray-900 dark:text-white">
+          <p className="mt-2 font-mono text-[18px] font-semibold text-foreground dark:text-foreground">
             {units.length}
           </p>
         </div>
-        <div className="border border-gray-200 bg-white px-4 py-3 dark:border-white/[0.06] dark:bg-[#111114]">
-          <p className="font-mono text-[9px] uppercase tracking-[0.12em] text-gray-400 dark:text-white/25">
+        <div className="border border-border bg-card px-4 py-3 dark:border-border dark:bg-card">
+          <p className="font-mono text-[15px] uppercase tracking-[0.12em] text-muted-foreground dark:text-muted-foreground">
             Butuh SPL
           </p>
-          <p className="mt-2 font-mono text-[18px] font-semibold text-amber-700 dark:text-amber-300">
+          <p className="mt-2 font-mono text-[18px] font-semibold text-app-accent-ink dark:text-app-accent-ink">
             {overloadDivisions.length}
           </p>
         </div>
-        <div className="border border-gray-200 bg-white px-4 py-3 dark:border-white/[0.06] dark:bg-[#111114]">
-          <p className="font-mono text-[9px] uppercase tracking-[0.12em] text-gray-400 dark:text-white/25">
+        <div className="border border-border bg-card px-4 py-3 dark:border-border dark:bg-card">
+          <p className="font-mono text-[15px] uppercase tracking-[0.12em] text-muted-foreground dark:text-muted-foreground">
             Status Aksi
           </p>
-          <p className="mt-2 text-[13px] font-medium text-gray-700 dark:text-white/70">
+          <p className="mt-2 text-[15px] font-medium text-foreground dark:text-foreground">
             {allHold ? "Semua unit ditunda" : canManage ? "Siap dirilis" : "Baca saja"}
           </p>
         </div>
@@ -366,7 +366,7 @@ export function ReviewReleaseStep({
 
       {/* Summary warnings */}
       {anyOverload && (
-        <div className="border border-amber-500/25 bg-amber-500/[0.04] px-4 py-3 text-[12px] text-amber-700 dark:text-amber-300">
+        <div className="border border-primary/25 bg-primary/[0.04] px-4 py-3 text-[14px] text-app-accent-ink dark:text-app-accent-ink">
           ⚠️ Ada target yang butuh lembur. SPK tetap bisa dirilis, lalu lanjutkan ke proses SPL.
         </div>
       )}
@@ -388,37 +388,37 @@ export function ReviewReleaseStep({
 
       {/* Feedback messages */}
       {message && (
-        <div className="flex flex-col gap-2 border border-emerald-500/25 bg-emerald-500/[0.05] px-4 py-2.5 text-[12px] text-emerald-700 dark:text-emerald-300">
+        <div className="flex flex-col gap-2 border border-success/25 bg-success/[0.05] px-4 py-2.5 text-[14px] text-success dark:text-success">
           <span>{message}</span>
           {lastAction === "release" ? (
             <Link
               href={`/spk?date=${units[0]?.startDate || ""}`}
-              className="inline-flex max-w-fit items-center gap-1 font-semibold text-emerald-600 underline hover:text-emerald-500 dark:text-emerald-400 dark:hover:text-emerald-300"
+              className="inline-flex max-w-fit items-center gap-1 font-semibold text-success underline hover:text-success dark:text-success dark:hover:text-success"
             >
               Lihat SPK yang Dibuat ↗
             </Link>
           ) : null}
           <Link
             href={`/planning/evaluation?date=${units[0]?.startDate || ""}`}
-            className="inline-flex max-w-fit items-center gap-1 font-semibold text-emerald-600 underline hover:text-emerald-500 dark:text-emerald-400 dark:hover:text-emerald-300"
+            className="inline-flex max-w-fit items-center gap-1 font-semibold text-success underline hover:text-success dark:text-success dark:hover:text-success"
           >
             Buka Review Plan ↗
           </Link>
         </div>
       )}
       {errorMessage && (
-        <div className="border border-red-500/25 bg-red-500/[0.05] px-4 py-2.5 text-[12px] text-red-600 dark:text-red-300">
+        <div className="border border-destructive/25 bg-destructive/[0.05] px-4 py-2.5 text-[14px] text-destructive dark:text-destructive">
           {errorMessage}
         </div>
       )}
 
       {/* Footer actions */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border border-gray-200 bg-white px-4 py-4 dark:border-white/[0.06] dark:bg-[#111114]">
+      <div className="flex flex-wrap items-center justify-between gap-3 border border-border bg-card px-4 py-4 dark:border-border dark:bg-card">
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={onBack}
-            className="inline-flex h-10 items-center gap-2 border border-gray-300 px-4 font-mono text-[10px] uppercase tracking-[0.12em] text-gray-600 transition-colors hover:bg-gray-50 dark:border-white/[0.08] dark:text-white/55"
+            className="inline-flex h-10 items-center gap-2 border border-border px-4 font-mono text-[14px] uppercase tracking-[0.12em] text-muted-foreground transition-colors hover:bg-muted dark:border-border dark:text-muted-foreground"
           >
             ← Ubah Target
           </button>
@@ -430,7 +430,7 @@ export function ReviewReleaseStep({
               await onSaveDraft();
             }}
             disabled={isSaving || !hasAnyUnit}
-            className="inline-flex h-10 items-center gap-2 border border-gray-300 px-4 font-mono text-[10px] uppercase tracking-[0.12em] text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/[0.08] dark:text-white/55"
+            className="inline-flex h-10 items-center gap-2 border border-border px-4 font-mono text-[14px] uppercase tracking-[0.12em] text-muted-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40 dark:border-border dark:text-muted-foreground"
           >
             {isSaving ? "Menyimpan..." : "Simpan Draft"}
           </button>
@@ -439,20 +439,20 @@ export function ReviewReleaseStep({
         <div className="flex items-center gap-2">
           {confirmCancel ? (
             <>
-              <span className="text-[11px] text-red-500 dark:text-red-400">
+              <span className="text-[15px] text-destructive dark:text-destructive">
                 Yakin batalkan planning?
               </span>
               <button
                 type="button"
                 onClick={onCancel}
-                className="inline-flex h-10 items-center gap-2 border border-red-500/30 px-4 font-mono text-[10px] uppercase tracking-[0.12em] text-red-600 transition-colors hover:bg-red-500/10 dark:text-red-400"
+                className="inline-flex h-10 items-center gap-2 border border-destructive/30 px-4 font-mono text-[14px] uppercase tracking-[0.12em] text-destructive transition-colors hover:bg-destructive/10 dark:text-destructive"
               >
                 Ya, Batalkan
               </button>
               <button
                 type="button"
                 onClick={() => setConfirmCancel(false)}
-                className="inline-flex h-10 items-center border border-gray-300 px-3 font-mono text-[10px] uppercase tracking-[0.12em] text-gray-600 dark:border-white/[0.08] dark:text-white/55"
+                className="inline-flex h-10 items-center border border-border px-3 font-mono text-[14px] uppercase tracking-[0.12em] text-muted-foreground dark:border-border dark:text-muted-foreground"
               >
                 Tidak
               </button>
@@ -461,7 +461,7 @@ export function ReviewReleaseStep({
             <button
               type="button"
               onClick={() => setConfirmCancel(true)}
-              className="inline-flex h-10 items-center border border-red-500/20 px-3 font-mono text-[10px] uppercase tracking-[0.12em] text-red-500/70 transition-colors hover:border-red-500/40 hover:text-red-600 dark:text-red-400/60"
+              className="inline-flex h-10 items-center border border-destructive/20 px-3 font-mono text-[14px] uppercase tracking-[0.12em] text-destructive/70 transition-colors hover:border-destructive/40 hover:text-destructive dark:text-destructive/60"
             >
               Batalkan Planning
             </button>
@@ -477,7 +477,7 @@ export function ReviewReleaseStep({
               setShowSpkDialog(true);
             }}
             disabled={!hasAnyUnit || allHold}
-            className="inline-flex h-10 items-center gap-2 border border-amber-500/40 bg-amber-500/[0.08] px-4 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-700 transition-colors hover:bg-amber-500/[0.16] disabled:cursor-not-allowed disabled:opacity-40 dark:text-amber-300"
+            className="inline-flex h-10 items-center gap-2 border border-primary/40 bg-primary/[0.08] px-4 font-mono text-[14px] font-semibold uppercase tracking-[0.12em] text-app-accent-ink transition-colors hover:bg-primary/[0.16] disabled:cursor-not-allowed disabled:opacity-40 dark:text-app-accent-ink"
           >
             🚀 Rilis Semua SPK
           </button>

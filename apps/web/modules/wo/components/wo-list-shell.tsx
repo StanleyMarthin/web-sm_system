@@ -93,10 +93,10 @@ function SummaryCard({
   helper?: string;
 }) {
   return (
-    <div className="border border-gray-300 dark:border-white/[0.05] bg-white dark:bg-[#111114] px-3 py-2">
-      <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/30">{label}</p>
-      <p className="mt-1 font-mono text-[13px] text-gray-950 dark:text-white">{value}</p>
-      {helper ? <p className="mt-2 text-sm text-gray-400 dark:text-white/40">{helper}</p> : null}
+    <div className="border border-border dark:border-white/[0.05] bg-white dark:bg-card px-3 py-2">
+      <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30">{label}</p>
+      <p className="mt-1 font-mono text-[13px] text-foreground dark:text-foreground">{value}</p>
+      {helper ? <p className="mt-2 text-sm text-muted-foreground dark:text-foreground/40">{helper}</p> : null}
     </div>
   );
 }
@@ -153,7 +153,7 @@ const columns: SmartDataGridColumn[] = [
     renderCell: (value, row) => (
       <Link
         href={`/wo/${String(row.woId)}`}
-        className="text-amber-400 transition-colors hover:text-amber-300"
+        className="text-app-accent-ink transition-colors hover:text-app-accent-ink"
       >
         {String(value)}
       </Link>
@@ -171,7 +171,7 @@ const columns: SmartDataGridColumn[] = [
     key: "priority",
     label: "Prioritas",
     renderCell: (_value, row) => (
-      <span className={String(row.isPriority) === "true" ? "font-mono text-red-300" : "font-mono text-gray-500 dark:text-white/35"}>
+      <span className={String(row.isPriority) === "true" ? "font-mono text-destructive" : "font-mono text-muted-foreground dark:text-foreground/35"}>
         {String(row.isPriority) === "true" ? "Tinggi" : "Normal"}
       </span>
     ),
@@ -302,23 +302,23 @@ export function WoListShell({
         />
       </section>
 
-      <section className="border border-gray-300 dark:border-white/[0.05] bg-white dark:bg-[#111114] px-4 py-3">
+      <section className="border border-border dark:border-white/[0.05] bg-white dark:bg-card px-4 py-3">
         <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
           <div className="max-w-2xl">
             <div className="flex items-center gap-3">
-              <div className="flex h-8 w-8 items-center justify-center border border-gray-300 dark:border-white/[0.08] bg-slate-50 dark:bg-[#0a0a0c]">
-                <ClipboardPlus className="h-5 w-5 text-amber-400" />
+              <div className="flex h-8 w-8 items-center justify-center border border-border dark:border-white/[0.08] bg-muted dark:bg-background">
+                <ClipboardPlus className="h-5 w-5 text-app-accent-ink" />
               </div>
               <div>
-                <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/30">
+                <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30">
                   WO Ticket
                 </p>
-                <h3 className="mt-1 text-[13px] font-medium text-gray-950 dark:text-white">
+                <h3 className="mt-1 text-[13px] font-medium text-foreground dark:text-foreground">
                   Cross-division work order dan urgent board
                 </h3>
               </div>
             </div>
-            <p className="mt-2 text-[12px] text-gray-600 dark:text-white/45">
+            <p className="mt-2 text-[12px] text-muted-foreground dark:text-foreground/45">
               WO tetap tiket berbasis tabel existing. Countdown terkait dibaca lewat relasi
               `ref_taks_id`, bukan kolom baru.
             </p>
@@ -333,7 +333,7 @@ export function WoListShell({
                   pushViewMode(nextValue);
                 });
               }}
-              className="h-8 border border-gray-300 dark:border-white/[0.05] bg-slate-50 dark:bg-[#0a0a0c] px-2.5 font-mono text-[11px] text-gray-950 dark:text-white outline-none transition-colors focus:border-amber-500/30"
+              className="h-8 border border-border dark:border-white/[0.05] bg-muted dark:bg-background px-2.5 font-mono text-[11px] text-foreground dark:text-foreground outline-none transition-colors focus:border-primary/30"
             >
               <option value="active">Aktif</option>
               <option value="done">Selesai</option>
@@ -342,7 +342,7 @@ export function WoListShell({
             <button
               type="button"
               onClick={() => router.refresh()}
-              className="inline-flex h-8 items-center gap-2 border border-gray-300 dark:border-white/[0.08] bg-transparent px-3 font-mono text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/55 hover:text-gray-900 dark:text-white/80"
+              className="inline-flex h-8 items-center gap-2 border border-border dark:border-white/[0.08] bg-transparent px-3 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/55 hover:text-foreground dark:text-foreground/80"
             >
               <RefreshCcw className="h-3.5 w-3.5" />
               {isPending ? "Refreshing" : "Refresh"}
@@ -351,21 +351,21 @@ export function WoListShell({
         </div>
 
         <div className="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
-          <div className="overflow-hidden border border-gray-300 dark:border-white/[0.05] bg-white dark:bg-[#111114]">
-            <div className="flex items-center gap-3 border-b border-gray-300 dark:border-white/[0.06] px-4 py-3">
-              <AlertTriangle className="h-4 w-4 text-amber-400" />
+          <div className="overflow-hidden border border-border dark:border-white/[0.05] bg-white dark:bg-card">
+            <div className="flex items-center gap-3 border-b border-border dark:border-white/[0.06] px-4 py-3">
+              <AlertTriangle className="h-4 w-4 text-app-accent-ink" />
               <div>
-                <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/30">
+                <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30">
                   Urgent WO Board
                 </p>
-                <p className="text-[11px] text-gray-400 dark:text-white/40">
+                <p className="text-[11px] text-muted-foreground dark:text-foreground/40">
                   Tiket dengan priority tinggi atau aging risk tinggi.
                 </p>
               </div>
             </div>
             <div className="max-h-[360px] overflow-y-auto">
               {urgentRows.length === 0 ? (
-                <div className="px-4 py-6 text-[11px] text-gray-500 dark:text-white/35">
+                <div className="px-4 py-6 text-[11px] text-muted-foreground dark:text-foreground/35">
                   Belum ada urgent WO untuk scope aktif.
                 </div>
               ) : (
@@ -373,29 +373,29 @@ export function WoListShell({
                   <Link
                     key={row.woId}
                     href={`/wo/${row.woId}`}
-                    className="grid grid-cols-[1fr_0.9fr_0.5fr_0.5fr] gap-3 border-b border-white/[0.04] px-3 py-2 text-[12px] text-gray-800 dark:text-white/75 transition-colors hover:bg-gray-100 dark:hover:bg-white/[0.02] last:border-b-0"
+                    className="grid grid-cols-[1fr_0.9fr_0.5fr_0.5fr] gap-3 border-b border-white/[0.04] px-3 py-2 text-[12px] text-foreground dark:text-foreground/75 transition-colors hover:bg-muted dark:hover:bg-white/[0.02] last:border-b-0"
                   >
                     <div>
-                      <p className="font-mono text-[11px] text-amber-400">{row.woNumber}</p>
+                      <p className="font-mono text-[11px] text-app-accent-ink">{row.woNumber}</p>
                       <p className="mt-1">{row.unitName}</p>
                     </div>
                     <div>
                       <p>{row.toDivisionName}</p>
-                      <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/35">{row.status}</p>
+                      <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/35">{row.status}</p>
                     </div>
                     <div className="text-right font-mono tabular-nums">{row.agingHours}</div>
-                    <div className="text-right font-mono tabular-nums text-red-300">{row.agingScore}</div>
+                    <div className="text-right font-mono tabular-nums text-destructive">{row.agingScore}</div>
                   </Link>
                 ))
               )}
             </div>
           </div>
 
-          <div className="border border-gray-300 dark:border-white/[0.05] bg-white dark:bg-[#111114] px-3 py-3">
-            <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/30">
+          <div className="border border-border dark:border-white/[0.05] bg-white dark:bg-card px-3 py-3">
+            <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30">
               Create WO
             </p>
-            <p className="mt-2 text-[11px] text-gray-600 dark:text-white/45">
+            <p className="mt-2 text-[11px] text-muted-foreground dark:text-foreground/45">
               Form ini menulis ke `sm_jobdesc_wo` tanpa menambah kolom baru.
             </p>
 
@@ -406,7 +406,7 @@ export function WoListShell({
                   setForm((currentValue) => ({ ...currentValue, carId: event.target.value }))
                 }
                 disabled={!canCreate}
-                className="h-8 w-full border border-gray-300 dark:border-white/[0.05] bg-slate-50 dark:bg-[#0a0a0c] px-2.5 font-mono text-[11px] text-gray-950 dark:text-white outline-none transition-colors focus:border-amber-500/30 disabled:cursor-not-allowed disabled:opacity-50"
+                className="h-8 w-full border border-border dark:border-white/[0.05] bg-muted dark:bg-background px-2.5 font-mono text-[11px] text-foreground dark:text-foreground outline-none transition-colors focus:border-primary/30 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <option value="">Pilih Unit</option>
                 {references.units.map((option) => (
@@ -422,7 +422,7 @@ export function WoListShell({
                   setForm((currentValue) => ({ ...currentValue, toDivisionId: event.target.value }))
                 }
                 disabled={!canCreate}
-                className="h-8 w-full border border-gray-300 dark:border-white/[0.05] bg-slate-50 dark:bg-[#0a0a0c] px-2.5 font-mono text-[11px] text-gray-950 dark:text-white outline-none transition-colors focus:border-amber-500/30 disabled:cursor-not-allowed disabled:opacity-50"
+                className="h-8 w-full border border-border dark:border-white/[0.05] bg-muted dark:bg-background px-2.5 font-mono text-[11px] text-foreground dark:text-foreground outline-none transition-colors focus:border-primary/30 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <option value="">Pilih Divisi Tujuan</option>
                 {references.divisions.map((option) => (
@@ -434,7 +434,7 @@ export function WoListShell({
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="flex flex-col gap-1">
-                  <span className="pl-1 font-mono text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/30">Tanggal WO</span>
+                  <span className="pl-1 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30">Tanggal WO</span>
                   <input
                     type="date"
                     value={form.requestDate}
@@ -442,11 +442,11 @@ export function WoListShell({
                       setForm((currentValue) => ({ ...currentValue, requestDate: event.target.value }))
                     }
                     disabled={!canCreate}
-                    className="h-8 w-full border border-gray-300 dark:border-white/[0.05] bg-slate-50 dark:bg-[#0a0a0c] px-2.5 font-mono text-[11px] text-gray-950 dark:text-white outline-none transition-colors focus:border-amber-500/30 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="h-8 w-full border border-border dark:border-white/[0.05] bg-muted dark:bg-background px-2.5 font-mono text-[11px] text-foreground dark:text-foreground outline-none transition-colors focus:border-primary/30 disabled:cursor-not-allowed disabled:opacity-50"
                   />
                 </div>
                 <div className="flex flex-col gap-1 justify-end pb-3">
-                  <label className="flex cursor-pointer items-center gap-2 text-[11px] text-white/65">
+                  <label className="flex cursor-pointer items-center gap-2 text-[11px] text-foreground/65">
                     <input
                       type="checkbox"
                       checked={form.isPriority}
@@ -454,23 +454,23 @@ export function WoListShell({
                         setForm((currentValue) => ({ ...currentValue, isPriority: event.target.checked }))
                       }
                       disabled={!canCreate}
-                      className="h-4 w-4 border-white/20 bg-transparent text-amber-500 focus:ring-0"
+                      className="h-4 w-4 border-white/20 bg-transparent text-app-accent-ink focus:ring-0"
                     />
                     Prioritas tinggi
                   </label>
                 </div>
               </div>
 
-              <div className="border-t border-gray-300 dark:border-white/[0.06] my-2 pt-3">
+              <div className="border-t border-border dark:border-white/[0.06] my-2 pt-3">
                 <div className="flex items-center justify-between mb-3">
-                  <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/30">List Pekerjaan ({form.items.length})</span>
+                  <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30">List Pekerjaan ({form.items.length})</span>
                   <button
                     type="button"
                     onClick={() => setForm((current) => ({
                       ...current,
                       items: [...current.items, { jobDetail: "", panelName: "", panelCategory: "", addPanelToMaster: false, estimatedHours: "", notes: "" }]
                     }))}
-                    className="font-mono text-[10px] uppercase tracking-[0.12em] text-amber-400 transition-colors hover:text-amber-300"
+                    className="font-mono text-[10px] uppercase tracking-[0.12em] text-app-accent-ink transition-colors hover:text-app-accent-ink"
                   >
                     + Tambah Pekerjaan
                   </button>
@@ -478,9 +478,9 @@ export function WoListShell({
 
                 <div className="max-h-[350px] space-y-3 overflow-y-auto pr-1">
                   {form.items.map((item, index) => (
-                    <div key={index} className="relative space-y-2 border border-gray-300 dark:border-white/[0.05] bg-slate-50 dark:bg-[#0a0a0c] p-3">
+                    <div key={index} className="relative space-y-2 border border-border dark:border-white/[0.05] bg-muted dark:bg-background p-3">
                       <div className="flex items-center justify-between">
-                        <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-gray-400 dark:text-white/40">Pekerjaan #{index + 1}</span>
+                        <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/40">Pekerjaan #{index + 1}</span>
                         {form.items.length > 1 && (
                           <button
                             type="button"
@@ -488,7 +488,7 @@ export function WoListShell({
                               ...current,
                               items: current.items.filter((_, idx) => idx !== index)
                             }))}
-                            className="font-mono text-[10px] uppercase tracking-[0.12em] text-red-400 transition-colors hover:text-red-300"
+                            className="font-mono text-[10px] uppercase tracking-[0.12em] text-destructive transition-colors hover:text-destructive"
                           >
                             Hapus
                           </button>
@@ -507,7 +507,7 @@ export function WoListShell({
                         }}
                         disabled={!canCreate}
                         placeholder="Nama Panel / Section"
-                        className="h-8 w-full border border-gray-300 dark:border-white/[0.05] bg-white dark:bg-[#111114] px-2.5 text-[11px] text-gray-950 dark:text-white outline-none placeholder:text-gray-400 dark:text-white/20 focus:border-amber-500/30"
+                        className="h-8 w-full border border-border dark:border-white/[0.05] bg-white dark:bg-card px-2.5 text-[11px] text-foreground dark:text-foreground outline-none placeholder:text-muted-foreground dark:text-foreground/20 focus:border-primary/30"
                       />
 
                       <div className="grid gap-2 grid-cols-2">
@@ -523,7 +523,7 @@ export function WoListShell({
                           }}
                           disabled={!canCreate}
                           placeholder="Kategori Panel (e.g. BODY)"
-                          className="h-8 border border-gray-300 dark:border-white/[0.05] bg-white dark:bg-[#111114] px-2 text-[11px] text-gray-950 dark:text-white outline-none placeholder:text-gray-400 dark:text-white/20 focus:border-amber-500/30"
+                          className="h-8 border border-border dark:border-white/[0.05] bg-white dark:bg-card px-2 text-[11px] text-foreground dark:text-foreground outline-none placeholder:text-muted-foreground dark:text-foreground/20 focus:border-primary/30"
                         />
                         <input
                           type="number"
@@ -540,11 +540,11 @@ export function WoListShell({
                           }}
                           disabled={!canCreate}
                           placeholder="Estimasi Jam"
-                          className="h-8 border border-gray-300 dark:border-white/[0.05] bg-white dark:bg-[#111114] px-2 text-[11px] text-gray-950 dark:text-white outline-none placeholder:text-gray-400 dark:text-white/20 focus:border-amber-500/30"
+                          className="h-8 border border-border dark:border-white/[0.05] bg-white dark:bg-card px-2 text-[11px] text-foreground dark:text-foreground outline-none placeholder:text-muted-foreground dark:text-foreground/20 focus:border-primary/30"
                         />
                       </div>
 
-                      <label className="flex cursor-pointer items-center gap-2 pl-1 text-[11px] text-gray-500 dark:text-white/50">
+                      <label className="flex cursor-pointer items-center gap-2 pl-1 text-[11px] text-muted-foreground dark:text-foreground/50">
                         <input
                           type="checkbox"
                           checked={item.addPanelToMaster}
@@ -557,7 +557,7 @@ export function WoListShell({
                             });
                           }}
                           disabled={!canCreate}
-                          className="h-3.5 w-3.5 border-white/20 bg-transparent text-amber-500 focus:ring-0"
+                          className="h-3.5 w-3.5 border-white/20 bg-transparent text-app-accent-ink focus:ring-0"
                         />
                         Tambahkan Panel ke Master
                       </label>
@@ -574,7 +574,7 @@ export function WoListShell({
                         }}
                         disabled={!canCreate}
                         placeholder="Detail pekerjaan..."
-                        className="min-h-16 w-full border border-gray-300 dark:border-white/[0.05] bg-white dark:bg-[#111114] px-2.5 py-2 text-[11px] text-gray-950 dark:text-white outline-none placeholder:text-gray-400 dark:text-white/20 focus:border-amber-500/30"
+                        className="min-h-16 w-full border border-border dark:border-white/[0.05] bg-white dark:bg-card px-2.5 py-2 text-[11px] text-foreground dark:text-foreground outline-none placeholder:text-muted-foreground dark:text-foreground/20 focus:border-primary/30"
                       />
 
                       <textarea
@@ -589,7 +589,7 @@ export function WoListShell({
                         }}
                         disabled={!canCreate}
                         placeholder="Catatan opsional item"
-                        className="min-h-16 w-full border border-gray-300 dark:border-white/[0.05] bg-white dark:bg-[#111114] px-2.5 py-2 text-[11px] text-gray-950 dark:text-white outline-none placeholder:text-gray-400 dark:text-white/20 focus:border-amber-500/30"
+                        className="min-h-16 w-full border border-border dark:border-white/[0.05] bg-white dark:bg-card px-2.5 py-2 text-[11px] text-foreground dark:text-foreground outline-none placeholder:text-muted-foreground dark:text-foreground/20 focus:border-primary/30"
                       />
                     </div>
                   ))}
@@ -598,12 +598,12 @@ export function WoListShell({
             </div>
 
             {message ? (
-              <p className="mt-3 border border-emerald-500/30 px-3 py-2 text-[11px] text-emerald-300">
+              <p className="mt-3 border border-success/30 px-3 py-2 text-[11px] text-success">
                 {message}
               </p>
             ) : null}
             {error ? (
-              <p className="mt-3 border border-red-500/30 px-3 py-2 text-[11px] text-red-300">
+              <p className="mt-3 border border-destructive/30 px-3 py-2 text-[11px] text-destructive">
                 {error}
               </p>
             ) : null}
@@ -620,7 +620,7 @@ export function WoListShell({
               onClick={() => {
                 void handleCreate();
               }}
-              className="mt-3 inline-flex h-8 w-full items-center justify-center gap-2 border border-amber-500/40 px-3 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-300 transition-colors hover:bg-amber-500/10 disabled:cursor-not-allowed disabled:opacity-40"
+              className="mt-3 inline-flex h-8 w-full items-center justify-center gap-2 border border-primary/40 px-3 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-app-accent-ink transition-colors hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-40"
             >
               <ClipboardPlus className="h-4 w-4" />
               {isCreating ? "Creating..." : "Buat WO"}

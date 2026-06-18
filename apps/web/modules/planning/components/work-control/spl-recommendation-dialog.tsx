@@ -65,45 +65,45 @@ export function SplRecommendationDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
-      <div className="w-full max-w-2xl overflow-hidden border border-white/10 bg-[#111114]">
-        <div className="border-b border-white/5 px-5 py-4">
-          <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-white/30">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/50 px-4">
+      <div className="w-full max-w-2xl overflow-hidden border border-border bg-card">
+        <div className="border-b border-border px-5 py-4">
+          <p className="font-mono text-[14px] uppercase tracking-[0.12em] text-muted-foreground">
             Tindak Lanjut
           </p>
-          <h3 className="mt-0.5 font-mono text-[13px] text-white/80">
+          <h3 className="mt-0.5 font-mono text-[15px] text-foreground">
             Rekomendasi tambahan jam (SPL)
           </h3>
         </div>
 
         {error && (
-          <div className="mx-5 mt-4 border border-red-500/20 bg-red-500/[0.04] px-4 py-3 font-mono text-[11px] text-red-400">
+          <div className="mx-5 mt-4 border border-destructive/20 bg-destructive/[0.04] px-4 py-3 font-mono text-[15px] text-destructive">
             {error}
           </div>
         )}
 
-        <div className="grid gap-2 border-b border-white/5 px-5 py-4 md:grid-cols-3">
-          <div className="border border-white/5 bg-[#0a0a0c] px-4 py-3">
-            <p className="font-mono text-[9px] uppercase tracking-[0.12em] text-white/25">
+        <div className="grid gap-2 border-b border-border px-5 py-4 md:grid-cols-3">
+          <div className="border border-border bg-background px-4 py-3">
+            <p className="font-mono text-[15px] uppercase tracking-[0.12em] text-muted-foreground">
               Divisi Perlu SPL
             </p>
-            <p className="mt-2 font-mono text-[20px] font-semibold text-white/80">
+            <p className="mt-2 font-mono text-[20px] font-semibold text-foreground">
               {overloadDivisions.length}
             </p>
           </div>
-          <div className="border border-white/5 bg-[#0a0a0c] px-4 py-3">
-            <p className="font-mono text-[9px] uppercase tracking-[0.12em] text-white/25">
+          <div className="border border-border bg-background px-4 py-3">
+            <p className="font-mono text-[15px] uppercase tracking-[0.12em] text-muted-foreground">
               Total Kekurangan
             </p>
-            <p className="mt-2 font-mono text-[20px] font-semibold text-amber-500">
+            <p className="mt-2 font-mono text-[20px] font-semibold text-app-accent-ink">
               {overloadDivisions.reduce((sum, div) => sum + div.shortageHours, 0).toFixed(0)} jam
             </p>
           </div>
-          <div className="border border-white/5 bg-[#0a0a0c] px-4 py-3">
-            <p className="font-mono text-[9px] uppercase tracking-[0.12em] text-white/25">
+          <div className="border border-border bg-background px-4 py-3">
+            <p className="font-mono text-[15px] uppercase tracking-[0.12em] text-muted-foreground">
               Tujuan
             </p>
-            <p className="mt-2 text-[13px] font-medium text-white/55">
+            <p className="mt-2 text-[15px] font-medium text-muted-foreground">
               Simpan alasan lembur per divisi
             </p>
           </div>
@@ -111,35 +111,35 @@ export function SplRecommendationDialog({
 
         <div className="mt-4 max-h-[60vh] space-y-4 overflow-y-auto px-5 pb-1 pr-5">
           {overloadDivisions.map((div) => (
-            <div key={div.divisionId} className="border border-white/5 bg-[#0a0a0c] p-4">
+            <div key={div.divisionId} className="border border-border bg-background p-4">
               <div className="flex items-center justify-between">
-                <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-white/60">
+                <span className="font-mono text-[15px] uppercase tracking-[0.08em] text-foreground">
                   Divisi {div.divisionName}
                 </span>
-                <span className="border border-amber-500/30 bg-amber-500/[0.04] px-2 py-0.5 font-mono text-[10px] font-medium text-amber-400">
+                <span className="border border-primary/30 bg-primary/[0.04] px-2 py-0.5 font-mono text-[14px] font-medium text-app-accent-ink">
                   Kurang {div.shortageHours.toFixed(0)} Jam
                 </span>
               </div>
               <div className="mt-2">
-                <label className="mb-1 block font-mono text-[10px] text-white/30">Alasan Kebutuhan SPL *</label>
+                <label className="mb-1 block font-mono text-[14px] text-muted-foreground">Alasan Kebutuhan SPL *</label>
                 <textarea
                   placeholder="Contoh: Target delivery mepet / Kejar tayang sebelum libur..."
                   value={reasons[div.divisionId] ?? ""}
                   onChange={(e) => setReasons((prev) => ({ ...prev, [div.divisionId]: e.target.value }))}
                   rows={2}
-                  className="w-full resize-none border border-white/10 bg-[#111114] px-3 py-2 font-mono text-[11px] text-white/70 outline-none placeholder:text-white/20 focus:border-amber-500/40"
+                  className="w-full resize-none border border-border bg-card px-3 py-2 font-mono text-[15px] text-foreground outline-none placeholder:text-muted-foreground focus:border-primary/40"
                 />
               </div>
             </div>
           ))}
         </div>
 
-        <div className="mt-5 flex justify-end gap-2 border-t border-white/5 px-5 py-4">
+        <div className="mt-5 flex justify-end gap-2 border-t border-border px-5 py-4">
           <button
             type="button"
             onClick={onClose}
             disabled={isSubmitting}
-            className="inline-flex h-8 items-center border border-white/10 px-4 font-mono text-[10px] uppercase tracking-[0.12em] text-white/40 transition-colors hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
+            className="inline-flex h-8 items-center border border-border px-4 font-mono text-[14px] uppercase tracking-[0.12em] text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30"
           >
             Nanti Saja
           </button>
@@ -147,7 +147,7 @@ export function SplRecommendationDialog({
             type="button"
             onClick={() => void handleSubmit()}
             disabled={isSubmitting}
-            className="inline-flex h-8 items-center border border-amber-500/30 bg-amber-500/[0.04] px-4 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-500 transition-colors hover:bg-amber-500/10 disabled:cursor-not-allowed disabled:opacity-30"
+            className="inline-flex h-8 items-center border border-primary/30 bg-primary/[0.04] px-4 font-mono text-[14px] font-semibold uppercase tracking-[0.12em] text-app-accent-ink transition-colors hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-30"
           >
             {isSubmitting ? "Menyimpan..." : "Buat Rekomendasi SPL"}
           </button>

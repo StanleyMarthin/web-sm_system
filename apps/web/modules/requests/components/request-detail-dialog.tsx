@@ -232,7 +232,7 @@ export function RequestDetailDialog({
     fontSize: 9,
     textTransform: "uppercase",
     letterSpacing: 0.5,
-    backgroundColor: "#f3f3f3",
+    backgroundColor: "var(--muted)",
   };
   const tdStyle: React.CSSProperties = {
     border: "1px solid black",
@@ -243,15 +243,15 @@ export function RequestDetailDialog({
 
   const DigitalSignature = ({ text = "" }: { text?: string }) => (
     <div style={{ padding: "4px 0", textAlign: "center" }}>
-      <div style={{ fontSize: 9, fontWeight: 700, borderBottom: "1px solid #333", display: "inline-block", paddingBottom: 2, marginBottom: 2, letterSpacing: 0.5 }}>DIGITALLY APPROVED</div>
-      <div style={{ fontSize: 8, fontFamily: "monospace", color: "#555", textTransform: "uppercase" }}>{text}</div>
+      <div style={{ fontSize: 9, fontWeight: 700, borderBottom: "1px solid var(--foreground)", display: "inline-block", paddingBottom: 2, marginBottom: 2, letterSpacing: 0.5 }}>DIGITALLY APPROVED</div>
+      <div style={{ fontSize: 8, fontFamily: "var(--font-jetbrains-mono)", color: "var(--muted-foreground)", textTransform: "uppercase" }}>{text}</div>
     </div>
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-[1px] print:static print:block print:p-0 print:bg-transparent print:backdrop-blur-none">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-[1px] print:static print:block print:bg-transparent print:p-0 print:backdrop-blur-none">
       {/* Printable Area - Rendered off-screen normally, styled for high-contrast B&W print layout */}
-      <div id="printable-voucher" className="hidden print:block bg-white text-black font-sans w-full">
+      <div id="printable-voucher" className="hidden print:block bg-white text-primary-foreground font-sans w-full">
         <div className="p-6 max-w-[210mm] mx-auto flex flex-col">
 
           {/* ── HEADER ── */}
@@ -259,41 +259,41 @@ export function RequestDetailDialog({
             {/* Kiri: Info dokumen */}
             <div className="space-y-1 text-[11px]">
               <div className="flex gap-2">
-                <span className="w-32 font-bold uppercase text-gray-600">Car Type</span>
+                <span className="w-32 font-bold uppercase text-muted-foreground">Car Type</span>
                 <span className="font-semibold">: {unitName}</span>
               </div>
               <div className="flex gap-2">
-                <span className="w-32 font-bold uppercase text-gray-600">Date</span>
+                <span className="w-32 font-bold uppercase text-muted-foreground">Date</span>
                 <span>: {documentDateStr}</span>
               </div>
               <div className="flex gap-2">
-                <span className="w-32 font-bold uppercase text-gray-600">From</span>
+                <span className="w-32 font-bold uppercase text-muted-foreground">From</span>
                 <span>: {woRecord?.fromDivisionName || prRecord?.divisionName || vendorRecord?.divisionName || "-"}</span>
               </div>
               {type === "WO" && (
                 <div className="flex gap-2">
-                  <span className="w-32 font-bold uppercase text-gray-600">To Division</span>
+                  <span className="w-32 font-bold uppercase text-muted-foreground">To Division</span>
                   <span>: {woRecord?.toDivisionName || "-"}</span>
                 </div>
               )}
               {type === "PR" && (
                 <div className="flex gap-2">
-                  <span className="w-32 font-bold uppercase text-gray-600">Requested By</span>
+                  <span className="w-32 font-bold uppercase text-muted-foreground">Requested By</span>
                   <span>: {prRecord?.requestedByName || "-"}</span>
                 </div>
               )}
               {type === "WOV" && (
                 <div className="flex gap-2">
-                  <span className="w-32 font-bold uppercase text-gray-600">Vendor</span>
+                  <span className="w-32 font-bold uppercase text-muted-foreground">Vendor</span>
                   <span>: {vendorRecord?.vendorName || "-"}</span>
                 </div>
               )}
               <div className="flex gap-2">
-                <span className="w-32 font-bold uppercase text-gray-600">Customer</span>
+                <span className="w-32 font-bold uppercase text-muted-foreground">Customer</span>
                 <span>: {customerName}</span>
               </div>
               <div className="flex gap-2">
-                <span className="w-32 font-bold uppercase text-gray-600">Status</span>
+                <span className="w-32 font-bold uppercase text-muted-foreground">Status</span>
                 <span className="font-bold uppercase">: {status}</span>
               </div>
             </div>
@@ -305,22 +305,22 @@ export function RequestDetailDialog({
                 <img src="/favicon.ico" alt="SM Logo" className="h-14 w-14 object-contain" />
                 <div>
                   <p className="text-[18px] font-black uppercase tracking-tight leading-tight">STANLEY MARTHIN</p>
-                  <p className="text-[13px] font-bold uppercase tracking-wide text-gray-600">RESTORATION GARAGE</p>
-                  <p className="text-[9px] text-gray-500 mt-0.5">JL. Padasaluyu Utara II No. 8 Bandung 40154</p>
+                  <p className="text-[13px] font-bold uppercase tracking-wide text-muted-foreground">RESTORATION GARAGE</p>
+                  <p className="text-[9px] text-muted-foreground mt-0.5">JL. Padasaluyu Utara II No. 8 Bandung 40154</p>
                 </div>
               </div>
-              <div className="border-t border-gray-300 pt-2">
-                <p className="text-[20px] font-black uppercase tracking-[0.2em] text-black">
+              <div className="border-t border-border pt-2">
+                <p className="text-[20px] font-black uppercase tracking-[0.2em] text-primary-foreground">
                   {type === "WO" ? "WORK ORDER" : type === "PR" ? "PURCHASE REQUEST" : "VENDOR WORK ORDER"}
                 </p>
                 {type === "PR" && (
-                  <p className="text-[11px] font-bold uppercase tracking-widest text-gray-500 mt-0.5">
+                  <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground mt-0.5">
                     {printMode === "pr-handover" ? "SERAH TERIMA BARANG" : "BUKTI PENGAJUAN"}
                   </p>
                 )}
                 <p className="font-mono text-[13px] font-bold tracking-wider mt-0.5">{title}</p>
-                <p className="text-[9px] text-gray-400 mt-0.5">Tanggal Cetak: {new Date().toLocaleString("id-ID")}</p>
-                <p className="text-[9px] text-gray-500 mt-0.5">Dicetak oleh: {printUserName}</p>
+                <p className="text-[9px] text-muted-foreground mt-0.5">Tanggal Cetak: {new Date().toLocaleString("id-ID")}</p>
+                <p className="text-[9px] text-muted-foreground mt-0.5">Dicetak oleh: {printUserName}</p>
               </div>
             </div>
           </div>
@@ -353,7 +353,7 @@ export function RequestDetailDialog({
                 </tr>
                 {Array.from({ length: 2 }).map((_, i) => (
                   <tr key={i}>
-                    <td style={{ ...tdStyle, textAlign: "center", color: "#ccc" }}>{i + 2}</td>
+                    <td style={{ ...tdStyle, textAlign: "center", color: "var(--app-ink-subtle)" }}>{i + 2}</td>
                     <td style={tdStyle}>&nbsp;</td>
                     <td style={tdStyle}>&nbsp;</td>
                     <td style={tdStyle}>&nbsp;</td>
@@ -385,13 +385,13 @@ export function RequestDetailDialog({
                     <td style={{ ...tdStyle, textAlign: "center" }}>{idx + 1}</td>
                     <td style={tdStyle}>
                       <span style={{ fontWeight: 600 }}>{it.itemName}</span>
-                      {it.description && <span style={{ color: "#555" }}><br />{it.description}</span>}
+                      {it.description && <span style={{ color: "var(--muted-foreground)" }}><br />{it.description}</span>}
                     </td>
                     <td style={{ ...tdStyle, textAlign: "center" }}>{it.qty}</td>
                     <td style={{ ...tdStyle, textAlign: "center" }}>{it.uom}</td>
                     <td style={{ ...tdStyle, textAlign: "center" }}>{it.originType || "-"}</td>
                     {prHasPrice && (
-                      <td style={{ ...tdStyle, textAlign: "right", fontFamily: "monospace" }}>
+                      <td style={{ ...tdStyle, textAlign: "right", fontFamily: "var(--font-jetbrains-mono)" }}>
                         Rp {getPrItemPrice(it).toLocaleString("id-ID")}
                       </td>
                     )}
@@ -400,7 +400,7 @@ export function RequestDetailDialog({
                 {prHasPrice && (
                   <tr>
                     <td colSpan={5} style={{ ...tdStyle, textAlign: "right", fontWeight: 700 }}>TOTAL ESTIMASI</td>
-                    <td style={{ ...tdStyle, textAlign: "right", fontFamily: "monospace", fontWeight: 700 }}>
+                    <td style={{ ...tdStyle, textAlign: "right", fontFamily: "var(--font-jetbrains-mono)", fontWeight: 700 }}>
                       Rp {prTotalPrice.toLocaleString("id-ID")}
                     </td>
                   </tr>
@@ -439,13 +439,13 @@ export function RequestDetailDialog({
                     <td style={{ ...tdStyle, textAlign: "center" }}>{idx + 1}</td>
                     <td style={tdStyle}>
                       <span style={{ fontWeight: 600 }}>{it.itemName}</span>
-                      {it.description && <span style={{ color: "#555" }}><br />{it.description}</span>}
+                      {it.description && <span style={{ color: "var(--muted-foreground)" }}><br />{it.description}</span>}
                     </td>
                     <td style={{ ...tdStyle, textAlign: "center" }}>{it.qty}</td>
                     <td style={{ ...tdStyle, textAlign: "center" }}>{it.uom}</td>
                     <td style={{ ...tdStyle, textAlign: "center" }}>{it.originType || "-"}</td>
                     {prHasPrice && (
-                      <td style={{ ...tdStyle, textAlign: "right", fontFamily: "monospace" }}>
+                      <td style={{ ...tdStyle, textAlign: "right", fontFamily: "var(--font-jetbrains-mono)" }}>
                         Rp {getPrItemPrice(it).toLocaleString("id-ID")}
                       </td>
                     )}
@@ -455,7 +455,7 @@ export function RequestDetailDialog({
                 {prHasPrice && (
                   <tr>
                     <td colSpan={5} style={{ ...tdStyle, textAlign: "right", fontWeight: 700 }}>TOTAL</td>
-                    <td style={{ ...tdStyle, textAlign: "right", fontFamily: "monospace", fontWeight: 700 }}>
+                    <td style={{ ...tdStyle, textAlign: "right", fontFamily: "var(--font-jetbrains-mono)", fontWeight: 700 }}>
                       Rp {prTotalPrice.toLocaleString("id-ID")}
                     </td>
                     <td style={tdStyle}></td>
@@ -489,7 +489,7 @@ export function RequestDetailDialog({
                     <td style={{ ...tdStyle, textAlign: "center" }}>{it.uom || "pcs"}</td>
                     <td style={tdStyle}>{it.goodsConditionOut || "-"}</td>
                     {wovHasPrice && (
-                      <td style={{ ...tdStyle, textAlign: "right", fontFamily: "monospace" }}>
+                      <td style={{ ...tdStyle, textAlign: "right", fontFamily: "var(--font-jetbrains-mono)" }}>
                         Rp {Number(it.estimatedCost || 0).toLocaleString("id-ID")}
                       </td>
                     )}
@@ -498,7 +498,7 @@ export function RequestDetailDialog({
                 {wovHasPrice && (
                   <tr>
                     <td colSpan={6} style={{ ...tdStyle, textAlign: "right", fontWeight: 700 }}>TOTAL ESTIMASI</td>
-                    <td style={{ ...tdStyle, textAlign: "right", fontFamily: "monospace", fontWeight: 700 }}>
+                    <td style={{ ...tdStyle, textAlign: "right", fontFamily: "var(--font-jetbrains-mono)", fontWeight: 700 }}>
                       Rp {wovTotalPrice.toLocaleString("id-ID")}
                     </td>
                   </tr>
@@ -521,7 +521,7 @@ export function RequestDetailDialog({
           {/* ── CATATAN — hanya tampil jika ada isi ── */}
           {((type === "PR" && cleanPrNotes) || (type === "WOV" && cleanWovNotes)) ? (
             <div style={{ border: "1px solid black", padding: "10px 12px", marginBottom: 20, minHeight: 48 }}>
-              <p style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", color: "#888", marginBottom: 4 }}>Catatan</p>
+              <p style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", color: "var(--app-ink-subtle)", marginBottom: 4 }}>Catatan</p>
               <p style={{ fontSize: 10 }}>{type === "PR" ? cleanPrNotes : cleanWovNotes}</p>
             </div>
           ) : null}
@@ -543,7 +543,7 @@ export function RequestDetailDialog({
               </thead>
               <tbody>
                 <tr>
-                  <td style={{ ...tdStyle, height: 64, textAlign: "center", color: "#555", verticalAlign: "bottom", fontSize: 9 }}>
+                  <td style={{ ...tdStyle, height: 64, textAlign: "center", color: "var(--muted-foreground)", verticalAlign: "bottom", fontSize: 9 }}>
                     {woIssuedName}
                   </td>
                   <td style={{ ...tdStyle, height: 64, verticalAlign: "bottom", textAlign: "center" }}>
@@ -575,7 +575,7 @@ export function RequestDetailDialog({
               </thead>
               <tbody>
                 <tr>
-                  <td style={{ ...tdStyle, height: 64, textAlign: "center", color: "#555", verticalAlign: "bottom" }}>
+                  <td style={{ ...tdStyle, height: 64, textAlign: "center", color: "var(--muted-foreground)", verticalAlign: "bottom" }}>
                     {prRecord?.requestedByName || ""}
                   </td>
                   <td style={{ ...tdStyle, height: 64, verticalAlign: "bottom", textAlign: "center" }}>
@@ -628,7 +628,7 @@ export function RequestDetailDialog({
               </thead>
               <tbody>
                 <tr>
-                  <td style={{ ...tdStyle, height: 64, textAlign: "center", color: "#555", verticalAlign: "bottom", fontSize: 9 }}>
+                  <td style={{ ...tdStyle, height: 64, textAlign: "center", color: "var(--muted-foreground)", verticalAlign: "bottom", fontSize: 9 }}>
                     {wovIssuedName}
                   </td>
                   <td style={{ ...tdStyle, height: 64, verticalAlign: "bottom", textAlign: "center" }}>
@@ -646,7 +646,7 @@ export function RequestDetailDialog({
           )}
 
           {/* ── FOOTER ── */}
-          <div className="mt-4 border-t border-gray-200 pt-2 flex items-center justify-between text-[8px] text-gray-400">
+          <div className="mt-4 border-t border-border pt-2 flex items-center justify-between text-[8px] text-muted-foreground">
             <span>Stanley Marthin Restoration Garage · JL. Padasaluyu Utara II No. 8 Bandung 40154</span>
             <span>Dicetak oleh: {printUserName} · {new Date().toLocaleString("id-ID")}</span>
           </div>
@@ -655,27 +655,27 @@ export function RequestDetailDialog({
       </div>
 
       {/* Screen Display Overlay Content */}
-      <div className="relative w-full max-w-3xl border border-white/10 bg-[#111114] p-5 max-h-[90vh] overflow-y-auto flex flex-col print:hidden">
+      <div className="relative w-full max-w-3xl border border-border bg-card p-5 max-h-[90vh] overflow-y-auto flex flex-col print:hidden">
         {/* Header */}
-        <div className="flex items-start justify-between border-b border-white/5 pb-3">
+        <div className="flex items-start justify-between border-b border-border pb-3">
           <div>
             <div className="flex items-center gap-2">
-              <span className={`border px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] ${type === "WO" ? "border-amber-500/30 text-amber-500" :
-                  type === "PR" ? "border-purple-500/30 text-purple-400" : "border-sky-500/30 text-sky-400"
+              <span className={`border px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] ${type === "WO" ? "border-primary/30 text-app-accent-ink" :
+                  type === "PR" ? "border-info/30 text-info" : "border-info/30 text-info"
                 }`}>
                 {type === "WO" ? "Work Order" : type === "PR" ? "Purchase Request" : "Vendor WO"}
               </span>
               {woRecord?.isPriority && (
-                <span className="border border-red-500/30 px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-red-400">
+                <span className="border border-destructive/30 px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-destructive">
                   PRIORITAS TINGGI
                 </span>
               )}
             </div>
-            <h2 className="text-[13px] font-mono text-white mt-1.5 flex items-center gap-3">
+            <h2 className="text-[13px] font-mono text-foreground mt-1.5 flex items-center gap-3">
               {title}
             </h2>
-            <p className="text-[11px] font-mono text-white/40 mt-1">
-              Unit: <span className="text-white/70">{unitName}</span> · Pelanggan: <span className="text-white/70">{customerName}</span>
+            <p className="text-[11px] font-mono text-muted-foreground mt-1">
+              Unit: <span className="text-foreground">{unitName}</span> · Pelanggan: <span className="text-foreground">{customerName}</span>
             </p>
           </div>
 
@@ -684,14 +684,14 @@ export function RequestDetailDialog({
               <button
                 onClick={handlePrint}
                 title="Print dokumen"
-                className="border border-white/5 p-1.5 text-white/60 hover:text-white hover:bg-white/[0.06] transition-colors"
+                className="border border-border p-1.5 text-foreground hover:text-foreground hover:bg-accent transition-colors"
               >
                 <Printer className="h-4 w-4" />
               </button>
             )}
             <button
               onClick={onClose}
-              className="border border-white/5 p-1.5 text-white/60 hover:text-white hover:bg-white/[0.06] transition-colors"
+              className="border border-border p-1.5 text-foreground hover:text-foreground hover:bg-accent transition-colors"
             >
               <X className="h-4 w-4" />
             </button>
@@ -699,17 +699,17 @@ export function RequestDetailDialog({
         </div>
 
         {/* Tab System */}
-        <div className="flex border-b border-white/[0.04] mt-5">
+        <div className="flex border-b border-border mt-5">
           <button
             onClick={() => setActiveTab("detail")}
-            className={`py-2.5 px-4 text-[10px] font-mono uppercase tracking-[0.12em] transition-colors border-b-2 -mb-[1px] ${activeTab === "detail" ? "border-amber-500 text-amber-500" : "border-transparent text-white/40 hover:text-white/75"
+            className={`py-2.5 px-4 text-[10px] font-mono uppercase tracking-[0.12em] transition-colors border-b-2 -mb-[1px] ${activeTab === "detail" ? "border-primary text-app-accent-ink" : "border-transparent text-muted-foreground hover:text-foreground"
               }`}
           >
             Rincian & Aksi
           </button>
           <button
             onClick={() => setActiveTab("timeline")}
-            className={`py-2.5 px-4 text-[10px] font-mono uppercase tracking-[0.12em] transition-colors border-b-2 -mb-[1px] ${activeTab === "timeline" ? "border-amber-500 text-amber-500" : "border-transparent text-white/40 hover:text-white/75"
+            className={`py-2.5 px-4 text-[10px] font-mono uppercase tracking-[0.12em] transition-colors border-b-2 -mb-[1px] ${activeTab === "timeline" ? "border-primary text-app-accent-ink" : "border-transparent text-muted-foreground hover:text-foreground"
               }`}
           >
             Pelacakan Sesi
@@ -722,13 +722,13 @@ export function RequestDetailDialog({
             <div className="space-y-6">
               {/* Messages */}
               {success && (
-                <div className="p-3.5 border border-emerald-500/20 bg-emerald-500/[0.04] text-emerald-400 text-xs flex items-center gap-2">
+                <div className="p-3.5 border border-success/20 bg-success/[0.04] text-success text-xs flex items-center gap-2">
                   <CheckCircle className="h-4 w-4 shrink-0" />
                   <span>{success}</span>
                 </div>
               )}
               {error && (
-                <div className="p-3.5 border border-red-500/20 bg-red-500/[0.04] text-red-400 text-xs flex items-center gap-2">
+                <div className="p-3.5 border border-destructive/20 bg-destructive/[0.04] text-destructive text-xs flex items-center gap-2">
                   <AlertTriangle className="h-4 w-4 shrink-0" />
                   <span>{error}</span>
                 </div>
@@ -736,96 +736,96 @@ export function RequestDetailDialog({
 
               {/* Detail fields layout */}
               <div className="grid grid-cols-2 gap-4 text-xs">
-                <div className="space-y-1 border border-white/5 bg-[#0a0a0c] p-3">
-                  <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">Diajukan Oleh</span>
-                  <p className="text-[11px] font-mono text-white/70">
+                <div className="space-y-1 border border-border bg-background p-3">
+                  <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Diajukan Oleh</span>
+                  <p className="text-[11px] font-mono text-foreground">
                     {woRecord?.fromDivisionName || prRecord?.requestedByName || vendorRecord?.requestedByName}
                   </p>
                 </div>
-                <div className="space-y-1 border border-white/5 bg-[#0a0a0c] p-3">
-                  <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">Divisi Pemilik</span>
-                  <p className="text-[11px] font-mono text-white/70">
+                <div className="space-y-1 border border-border bg-background p-3">
+                  <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Divisi Pemilik</span>
+                  <p className="text-[11px] font-mono text-foreground">
                     {woRecord?.fromDivisionName || prRecord?.divisionName || vendorRecord?.divisionName}
                   </p>
                 </div>
                 {woRecord && (
                   <>
-                    <div className="space-y-1 border border-white/5 bg-[#0a0a0c] p-3">
-                      <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">Tujuan Divisi</span>
-                      <p className="text-[11px] font-mono text-white/70">{woRecord.toDivisionName}</p>
+                    <div className="space-y-1 border border-border bg-background p-3">
+                      <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Tujuan Divisi</span>
+                      <p className="text-[11px] font-mono text-foreground">{woRecord.toDivisionName}</p>
                     </div>
-                    <div className="space-y-1 border border-white/5 bg-[#0a0a0c] p-3">
-                      <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">Panel / Sektor</span>
-                      <p className="text-[11px] font-mono text-white/70">{woRecord.panelName || "-"}</p>
+                    <div className="space-y-1 border border-border bg-background p-3">
+                      <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Panel / Sektor</span>
+                      <p className="text-[11px] font-mono text-foreground">{woRecord.panelName || "-"}</p>
                     </div>
-                    <div className="space-y-1 border border-white/5 bg-[#0a0a0c] p-3 col-span-2">
-                      <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">Estimasi Waktu</span>
-                      <p className="text-[11px] font-mono text-white/70">{woRecord.estimatedHours || 0} Jam</p>
+                    <div className="space-y-1 border border-border bg-background p-3 col-span-2">
+                      <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Estimasi Waktu</span>
+                      <p className="text-[11px] font-mono text-foreground">{woRecord.estimatedHours || 0} Jam</p>
                     </div>
                   </>
                 )}
                 {vendorRecord && (
                   <>
-                    <div className="space-y-1 border border-white/5 bg-[#0a0a0c] p-3">
-                      <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">Nama Vendor</span>
-                      <p className="text-[11px] font-mono text-white/70">{vendorRecord.vendorName}</p>
+                    <div className="space-y-1 border border-border bg-background p-3">
+                      <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Nama Vendor</span>
+                      <p className="text-[11px] font-mono text-foreground">{vendorRecord.vendorName}</p>
                     </div>
-                    <div className="space-y-1 border border-white/5 bg-[#0a0a0c] p-3">
-                      <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">Target Pengembalian</span>
-                      <p className="text-[11px] font-mono text-white/70">{vendorRecord.targetDateReturn || "-"}</p>
+                    <div className="space-y-1 border border-border bg-background p-3">
+                      <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Target Pengembalian</span>
+                      <p className="text-[11px] font-mono text-foreground">{vendorRecord.targetDateReturn || "-"}</p>
                     </div>
                   </>
                 )}
               </div>
 
               {/* Notes */}
-              <div className="space-y-2 border border-white/5 bg-[#0a0a0c] p-4">
-                <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-amber-500">
+              <div className="space-y-2 border border-border bg-background p-4">
+                <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-app-accent-ink">
                   {type === "WO" ? "Deskripsi Detail Kerja" : "Catatan Permintaan"}
                 </span>
-                <p className="text-[11px] font-mono text-white/70 leading-relaxed">{notes}</p>
+                <p className="text-[11px] font-mono text-foreground leading-relaxed">{notes}</p>
               </div>
 
               {/* PR Items list layout */}
               {type === "PR" && prItems.length > 0 ? (
                 <div className="space-y-2.5">
-                  <span className="text-[10px] uppercase font-bold tracking-wider text-amber-500/70">
+                  <span className="text-[10px] uppercase font-bold tracking-wider text-app-accent-ink">
                     Daftar Item ({prItems.length})
                   </span>
-                  <div className="border border-white/[0.06] rounded-2xl bg-black/40 overflow-hidden divide-y divide-white/[0.04]">
+                  <div className="border border-border rounded-2xl bg-muted overflow-hidden divide-y divide-border">
                     {prItems.map((it: any, idx: number) => (
-                      <div key={idx} className="p-3.5 flex items-start justify-between text-xs hover:bg-white/[0.01] transition-colors">
+                      <div key={idx} className="p-3.5 flex items-start justify-between text-xs hover:bg-accent transition-colors">
                         <div className="flex gap-3">
                           {it.photoUrl ? (
                             <button
                               onClick={() => window.open(it.photoUrl, "_blank")}
-                              className="h-11 w-11 rounded-lg bg-black/40 border border-white/[0.08] overflow-hidden shrink-0 flex items-center justify-center relative group"
+                              className="h-11 w-11 rounded-lg bg-muted border border-border overflow-hidden shrink-0 flex items-center justify-center relative group"
                             >
                               <Image src={it.photoUrl} fill sizes="44px" className="object-cover transition-transform group-hover:scale-105" alt="it" />
-                              <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                                <Eye className="h-3 w-3 text-white" />
+                              <div className="absolute inset-0 bg-background/70 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                                <Eye className="h-3 w-3 text-foreground" />
                               </div>
                             </button>
                           ) : (
-                            <div className="h-11 w-11 rounded-lg bg-white/[0.02] border border-dashed border-white/10 shrink-0 flex items-center justify-center text-white/20">
+                            <div className="h-11 w-11 rounded-lg bg-muted border border-dashed border-border shrink-0 flex items-center justify-center text-muted-foreground">
                               <HelpCircle className="h-4 w-4" />
                             </div>
                           )}
                           <div className="min-w-0">
-                            <p className="font-semibold text-white/90">{it.itemName}</p>
-                            <p className="text-[10px] text-white/35 mt-0.5 truncate max-w-[350px]">{it.description || "-"}</p>
+                            <p className="font-semibold text-foreground">{it.itemName}</p>
+                            <p className="text-[10px] text-muted-foreground mt-0.5 truncate max-w-[350px]">{it.description || "-"}</p>
                           </div>
                         </div>
                         <div className="text-right">
-                          <p className="font-medium text-white/90">{it.qty} {it.uom}</p>
-                          <p className="text-[10px] text-amber-500/60 mt-0.5">Rp {Number(it.estimatedPrice || 0).toLocaleString("id-ID")}</p>
+                          <p className="font-medium text-foreground">{it.qty} {it.uom}</p>
+                          <p className="text-[10px] text-app-accent-ink mt-0.5">Rp {Number(it.estimatedPrice || 0).toLocaleString("id-ID")}</p>
                         </div>
                       </div>
                     ))}
                   </div>
                 </div>
               ) : type === "PR" ? (
-                <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4 text-xs text-white/45">
+                <div className="rounded-2xl border border-border bg-muted p-4 text-xs text-muted-foreground">
                   Rincian item lengkap dibuka dari modul PR utama agar data vendor, order, dan penerimaan tetap sinkron.
                 </div>
               ) : null}
@@ -833,21 +833,21 @@ export function RequestDetailDialog({
               {/* WOV Items list layout */}
               {type === "WOV" && wovItems.length > 0 && (
                 <div className="space-y-2.5">
-                  <span className="text-[10px] uppercase font-bold tracking-wider text-sky-500/70">
+                  <span className="text-[10px] uppercase font-bold tracking-wider text-info">
                     Daftar Pekerjaan Vendor ({wovItems.length})
                   </span>
-                  <div className="border border-white/[0.06] rounded-2xl bg-black/40 overflow-hidden divide-y divide-white/[0.04]">
+                  <div className="border border-border rounded-2xl bg-muted overflow-hidden divide-y divide-border">
                     {wovItems.map((it: any, idx: number) => (
-                      <div key={idx} className="p-3.5 flex items-start justify-between text-xs hover:bg-white/[0.01] transition-colors">
+                      <div key={idx} className="p-3.5 flex items-start justify-between text-xs hover:bg-accent transition-colors">
                         <div className="flex gap-3">
                           <div className="min-w-0">
-                            <p className="font-semibold text-white/90">{it.itemName}</p>
-                            <p className="text-[10px] text-white/35 mt-0.5 truncate max-w-[350px]">Kondisi Keluar: {it.goodsConditionOut || "-"}</p>
+                            <p className="font-semibold text-foreground">{it.itemName}</p>
+                            <p className="text-[10px] text-muted-foreground mt-0.5 truncate max-w-[350px]">Kondisi Keluar: {it.goodsConditionOut || "-"}</p>
                           </div>
                         </div>
                         <div className="text-right">
-                          <p className="font-medium text-white/90">{it.quantity || 1} {it.uom || "pcs"}</p>
-                          <p className="text-[10px] text-sky-500/60 mt-0.5">Rp {Number(it.estimatedCost || 0).toLocaleString("id-ID")}</p>
+                          <p className="font-medium text-foreground">{it.quantity || 1} {it.uom || "pcs"}</p>
+                          <p className="text-[10px] text-info mt-0.5">Rp {Number(it.estimatedCost || 0).toLocaleString("id-ID")}</p>
                         </div>
                       </div>
                     ))}
@@ -856,11 +856,11 @@ export function RequestDetailDialog({
               )}
 
               {/* Action Buttons Panel */}
-              <div className="border-t border-white/[0.06] pt-5 flex flex-wrap gap-3.5 justify-end">
+              <div className="border-t border-border pt-5 flex flex-wrap gap-3.5 justify-end">
                 <button
                   type="button"
                   onClick={openDetailModule}
-                  className="border border-amber-500/30 bg-amber-500/[0.04] px-3 py-1.5 text-[10px] font-mono uppercase tracking-[0.12em] text-amber-500 transition-colors"
+                  className="border border-primary/30 bg-primary/[0.04] px-3 py-1.5 text-[10px] font-mono uppercase tracking-[0.12em] text-app-accent-ink transition-colors"
                 >
                   Buka Modul {type}
                 </button>
@@ -872,7 +872,7 @@ export function RequestDetailDialog({
                     onClick={handlePrint}
                     disabled={!canPrint}
                     title={!canPrint ? "Dokumen harus disetujui dulu sebelum bisa dicetak" : "Print dokumen"}
-                    className="border border-white/10 px-3 py-1.5 text-[10px] font-mono uppercase text-white/50 hover:text-white transition-colors disabled:opacity-20 disabled:cursor-not-allowed"
+                    className="border border-border px-3 py-1.5 text-[10px] font-mono uppercase text-muted-foreground hover:text-foreground transition-colors disabled:opacity-20 disabled:cursor-not-allowed"
                   >
                     Print Cetakan
                   </button>
@@ -884,7 +884,7 @@ export function RequestDetailDialog({
                       onClick={handlePrintPrSubmission}
                       disabled={!canPrint}
                       title={!canPrint ? "Dokumen harus disetujui dulu sebelum bisa dicetak" : "Print bukti pengajuan"}
-                      className="border border-white/10 px-3 py-1.5 text-[10px] font-mono uppercase text-white/50 hover:text-white transition-colors disabled:opacity-20 disabled:cursor-not-allowed"
+                      className="border border-border px-3 py-1.5 text-[10px] font-mono uppercase text-muted-foreground hover:text-foreground transition-colors disabled:opacity-20 disabled:cursor-not-allowed"
                     >
                       Print Pengajuan
                     </button>
@@ -893,7 +893,7 @@ export function RequestDetailDialog({
                       onClick={handlePrintPrHandover}
                       disabled={!canPrint}
                       title={!canPrint ? "Dokumen harus disetujui dulu sebelum bisa dicetak" : "Print serah terima barang"}
-                      className="border border-white/10 px-3 py-1.5 text-[10px] font-mono uppercase text-white/50 hover:text-white transition-colors disabled:opacity-20 disabled:cursor-not-allowed"
+                      className="border border-border px-3 py-1.5 text-[10px] font-mono uppercase text-muted-foreground hover:text-foreground transition-colors disabled:opacity-20 disabled:cursor-not-allowed"
                     >
                       Print Serah Terima
                     </button>
@@ -902,19 +902,19 @@ export function RequestDetailDialog({
 
                 {/* WO KD assignment */}
                 {type === "WO" && canApproveWoKd && (
-                  <div className="w-full border border-white/5 bg-[#0a0a0c] p-3">
+                  <div className="w-full border border-border bg-background p-3">
                     <div className="grid grid-cols-2 gap-2">
                       <label className="space-y-1">
-                        <span className="block text-[9px] font-mono uppercase tracking-[0.12em] text-white/30">PIC</span>
+                        <span className="block text-[9px] font-mono uppercase tracking-[0.12em] text-muted-foreground">PIC</span>
                         <input
                           value={woApprovePicId}
                           onChange={(event) => setWoApprovePicId(event.target.value)}
                           placeholder="ID karyawan PIC"
-                          className="h-8 w-full border border-white/10 bg-black px-2 text-[11px] font-mono text-white outline-none focus:border-amber-500/40"
+                          className="h-8 w-full border border-border bg-background px-2 text-[11px] font-mono text-foreground outline-none focus:border-primary/40"
                         />
                       </label>
                       <label className="space-y-1">
-                        <span className="block text-[9px] font-mono uppercase tracking-[0.12em] text-white/30">Jam Kerja</span>
+                        <span className="block text-[9px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Jam Kerja</span>
                         <input
                           type="number"
                           min={0.25}
@@ -922,7 +922,7 @@ export function RequestDetailDialog({
                           value={woApproveHours}
                           onChange={(event) => setWoApproveHours(event.target.value)}
                           placeholder="Contoh: 6"
-                          className="h-8 w-full border border-white/10 bg-black px-2 text-[11px] font-mono text-white outline-none focus:border-amber-500/40"
+                          className="h-8 w-full border border-border bg-background px-2 text-[11px] font-mono text-foreground outline-none focus:border-primary/40"
                         />
                       </label>
                     </div>
@@ -930,7 +930,7 @@ export function RequestDetailDialog({
                       value={woApproveNotes}
                       onChange={(event) => setWoApproveNotes(event.target.value)}
                       placeholder="Catatan approval jika ada"
-                      className="mt-2 h-8 w-full border border-white/10 bg-black px-2 text-[11px] font-mono text-white outline-none focus:border-amber-500/40"
+                      className="mt-2 h-8 w-full border border-border bg-background px-2 text-[11px] font-mono text-foreground outline-none focus:border-primary/40"
                     />
                   </div>
                 )}
@@ -940,7 +940,7 @@ export function RequestDetailDialog({
                     value={woApproveNotes}
                     onChange={(event) => setWoApproveNotes(event.target.value)}
                     placeholder="Catatan approval jika ada"
-                    className="h-8 min-w-[220px] border border-white/10 bg-black px-2 text-[11px] font-mono text-white outline-none focus:border-amber-500/40"
+                    className="h-8 min-w-[220px] border border-border bg-background px-2 text-[11px] font-mono text-foreground outline-none focus:border-primary/40"
                   />
                 )}
 
@@ -964,7 +964,7 @@ export function RequestDetailDialog({
                         canApproveWoPm ? "WO disetujui PM dan masuk countdown." : "Approval WO diteruskan.",
                       );
                     }}
-                    className="border border-emerald-500/30 bg-emerald-500/[0.04] text-emerald-400 px-3 py-1.5 text-[10px] font-mono uppercase disabled:opacity-30"
+                    className="border border-success/30 bg-success/[0.04] text-success px-3 py-1.5 text-[10px] font-mono uppercase disabled:opacity-30"
                   >
                     {canApproveWoPm ? "Approve PM" : canApproveWoKp ? "Approve KP" : canApproveWoAdvisor ? "Approve Advisor" : "Approve KD"}
                   </button>
@@ -976,7 +976,7 @@ export function RequestDetailDialog({
                     type="button"
                     disabled={pending}
                     onClick={() => handleAction(() => markWoDone(id), "Work order berhasil diselesaikan.")}
-                    className="border border-amber-500/40 bg-amber-500/[0.06] text-amber-500 px-3 py-1.5 text-[10px] font-mono uppercase disabled:opacity-30"
+                    className="border border-primary/40 bg-primary/[0.06] text-app-accent-ink px-3 py-1.5 text-[10px] font-mono uppercase disabled:opacity-30"
                   >
                     Tandai Selesai
                   </button>
@@ -987,7 +987,7 @@ export function RequestDetailDialog({
                   <button
                     type="button"
                     onClick={() => setShowRejectForm(true)}
-                    className="border border-red-500/20 bg-red-500/[0.04] text-red-400 px-3 py-1.5 text-[10px] font-mono uppercase"
+                    className="border border-destructive/20 bg-destructive/[0.04] text-destructive px-3 py-1.5 text-[10px] font-mono uppercase"
                   >
                     Tolak WO
                   </button>
@@ -999,7 +999,7 @@ export function RequestDetailDialog({
                     type="button"
                     disabled={pending}
                     onClick={() => handleAction(() => approvePr(id, { notes: "Approved via requests space" }), "PR disetujui.")}
-                    className="border border-emerald-500/30 bg-emerald-500/[0.04] text-emerald-400 px-3 py-1.5 text-[10px] font-mono uppercase disabled:opacity-30"
+                    className="border border-success/30 bg-success/[0.04] text-success px-3 py-1.5 text-[10px] font-mono uppercase disabled:opacity-30"
                   >
                     Approve PR
                   </button>
@@ -1009,7 +1009,7 @@ export function RequestDetailDialog({
                   <button
                     type="button"
                     onClick={openDetailModule}
-                    className="border border-purple-500/30 bg-purple-500/[0.04] text-purple-400 px-3 py-1.5 text-[10px] font-mono uppercase disabled:opacity-30"
+                    className="border border-info/30 bg-info/[0.04] text-info px-3 py-1.5 text-[10px] font-mono uppercase disabled:opacity-30"
                   >
                     Lanjutkan Order di PR
                   </button>
@@ -1019,7 +1019,7 @@ export function RequestDetailDialog({
                   <button
                     type="button"
                     onClick={openDetailModule}
-                    className="border border-sky-500/30 bg-sky-500/[0.04] text-sky-400 px-3 py-1.5 text-[10px] font-mono uppercase disabled:opacity-30"
+                    className="border border-info/30 bg-info/[0.04] text-info px-3 py-1.5 text-[10px] font-mono uppercase disabled:opacity-30"
                   >
                     Lanjutkan Receive di PR
                   </button>
@@ -1031,7 +1031,7 @@ export function RequestDetailDialog({
                     type="button"
                     disabled={pending}
                     onClick={() => handleAction(() => approveVendor(id, { notes: "Approved via requests space" }), "Vendor WO disetujui.")}
-                    className="border border-emerald-500/30 bg-emerald-500/[0.04] text-emerald-400 px-3 py-1.5 text-[10px] font-mono uppercase disabled:opacity-30"
+                    className="border border-success/30 bg-success/[0.04] text-success px-3 py-1.5 text-[10px] font-mono uppercase disabled:opacity-30"
                   >
                     Setujui WOV
                   </button>
@@ -1041,7 +1041,7 @@ export function RequestDetailDialog({
                   <button
                     type="button"
                     onClick={openDetailModule}
-                    className="border border-sky-500/30 bg-sky-500/[0.04] text-sky-400 px-3 py-1.5 text-[10px] font-mono uppercase disabled:opacity-30"
+                    className="border border-info/30 bg-info/[0.04] text-info px-3 py-1.5 text-[10px] font-mono uppercase disabled:opacity-30"
                   >
                     Lanjutkan Receive di WOV
                   </button>
@@ -1051,19 +1051,19 @@ export function RequestDetailDialog({
 
               {/* Sub-form Reject */}
               {showRejectForm && (
-                <div className="mt-4 p-4 border border-white/5 bg-[#0a0a0c] space-y-3">
-                  <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-red-400">Tulis Alasan Penolakan</span>
+                <div className="mt-4 p-4 border border-border bg-background space-y-3">
+                  <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-destructive">Tulis Alasan Penolakan</span>
                   <textarea
                     value={rejectReason}
                     onChange={(e) => setRejectReason(e.target.value)}
                     placeholder="Contoh: Deskripsi kerja kurang detail / Divisi sedang overload..."
-                    className="w-full min-h-20 border border-white/10 bg-[#0a0a0c] p-3 text-[11px] font-mono text-white outline-none focus:border-amber-500/40 transition-colors placeholder:text-white/20"
+                    className="w-full min-h-20 border border-border bg-background p-3 text-[11px] font-mono text-foreground outline-none focus:border-primary/40 transition-colors placeholder:text-muted-foreground"
                   />
                   <div className="flex gap-2 justify-end">
                     <button
                       type="button"
                       onClick={() => setShowRejectForm(false)}
-                      className="border border-white/10 px-3 py-1.5 text-[10px] font-mono uppercase text-white/50 hover:text-white"
+                      className="border border-border px-3 py-1.5 text-[10px] font-mono uppercase text-muted-foreground hover:text-foreground"
                     >
                       Batal
                     </button>
@@ -1071,7 +1071,7 @@ export function RequestDetailDialog({
                       type="button"
                       disabled={pending || !rejectReason.trim()}
                       onClick={() => handleAction(() => rejectWo(id, { reason: rejectReason.trim() }), "Work order ditolak.")}
-                      className="border border-red-500/20 bg-red-500/[0.04] text-red-400 px-3 py-1.5 text-[10px] font-mono uppercase disabled:opacity-30"
+                      className="border border-destructive/20 bg-destructive/[0.04] text-destructive px-3 py-1.5 text-[10px] font-mono uppercase disabled:opacity-30"
                     >
                       Tolak Permanen
                     </button>
@@ -1081,18 +1081,18 @@ export function RequestDetailDialog({
             </div>
           ) : (
             <div className="space-y-4">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-white/30">Riwayat Status</span>
-              <div className="space-y-4 relative pl-4 before:absolute before:left-1 before:top-2 before:bottom-2 before:w-0.5 before:bg-white/[0.06]">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Riwayat Status</span>
+              <div className="space-y-4 relative pl-4 before:absolute before:left-1 before:top-2 before:bottom-2 before:w-0.5 before:bg-border">
                 <div className="relative">
-                  <div className="absolute -left-[18px] top-1.5 h-2 w-2 rounded-full bg-amber-500 border border-black shadow" />
-                  <p className="text-xs font-semibold text-white/80">Dokumen Dibuat</p>
-                  <p className="text-[10px] text-white/35 mt-0.5">Oleh {woRecord?.picName || prRecord?.requestedByName || vendorRecord?.requestedByName} · {woRecord?.createdAt || prRecord?.createdAt || vendorRecord?.createdAt}</p>
+                  <div className="absolute -left-[18px] top-1.5 h-2 w-2 rounded-full border border-background bg-primary shadow" />
+                  <p className="text-xs font-semibold text-foreground">Dokumen Dibuat</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">Oleh {woRecord?.picName || prRecord?.requestedByName || vendorRecord?.requestedByName} · {woRecord?.createdAt || prRecord?.createdAt || vendorRecord?.createdAt}</p>
                 </div>
                 {status !== "OPEN" && (
                   <div className="relative">
-                    <div className="absolute -left-[18px] top-1.5 h-2 w-2 rounded-full bg-emerald-500 border border-black shadow" />
-                    <p className="text-xs font-semibold text-white/80">Status Saat Ini: <span className="text-emerald-400 font-bold">{humanizeCodeLabel(status)}</span></p>
-                    <p className="text-[10px] text-white/35 mt-0.5">Terakhir dimutasi di sistem</p>
+                    <div className="absolute -left-[18px] top-1.5 h-2 w-2 rounded-full border border-background bg-success shadow" />
+                    <p className="text-xs font-semibold text-foreground">Status Saat Ini: <span className="text-success font-bold">{humanizeCodeLabel(status)}</span></p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">Terakhir dimutasi di sistem</p>
                   </div>
                 )}
               </div>

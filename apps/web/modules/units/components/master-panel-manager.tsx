@@ -16,6 +16,7 @@ import {
 } from "@/shared/api/units";
 
 const PAGE_SIZE = 20;
+const ICON_STROKE_WIDTH = 2.5;
 
 type FormMode =
   | { type: "create"; sectionMode: "existing" | "new" }
@@ -114,7 +115,7 @@ function SearchableField({
 
   return (
     <div className="relative">
-      <div className="flex h-8 items-center border border-white/10 bg-[#111114] transition-colors focus-within:border-amber-500/40">
+      <div className="flex h-8 items-center border border-white/10 bg-card transition-colors focus-within:border-primary/40">
         <input
           value={value}
           disabled={disabled}
@@ -125,21 +126,21 @@ function SearchableField({
             setIsOpen(true);
           }}
           placeholder={placeholder}
-          className="h-full min-w-0 flex-1 bg-transparent px-3 text-[11px] font-mono text-white/70 outline-none placeholder:text-white/20 disabled:cursor-not-allowed disabled:opacity-40"
+          className="h-full min-w-0 flex-1 bg-transparent px-3 text-[11px] font-mono text-foreground/70 outline-none placeholder:text-foreground/20 disabled:cursor-not-allowed disabled:opacity-40"
         />
         <button
           type="button"
           disabled={disabled}
           onMouseDown={(event) => event.preventDefault()}
           onClick={() => setIsOpen(open => !open)}
-          className="flex h-full w-8 shrink-0 items-center justify-center text-white/25 transition-colors hover:text-white/60 disabled:cursor-not-allowed disabled:opacity-35"
+          className="flex h-full w-8 shrink-0 items-center justify-center text-foreground/45 transition-colors hover:text-foreground/80 disabled:cursor-not-allowed disabled:opacity-35"
         >
-          <ChevronDown className="h-3 w-3" />
+          <ChevronDown className="h-3 w-3" strokeWidth={ICON_STROKE_WIDTH} />
         </button>
       </div>
 
       {isOpen && !disabled && (
-        <div className="absolute left-0 right-0 top-[calc(100%+4px)] z-30 max-h-44 overflow-auto border border-white/10 bg-[#0d0d10] py-1 shadow-xl shadow-black/40">
+        <div className="absolute left-0 right-0 top-[calc(100%+4px)] z-30 max-h-44 overflow-auto border border-white/10 bg-card py-1 shadow-xl shadow-black/40">
           {filteredOptions.length > 0 ? (
             filteredOptions.map(option => (
               <button
@@ -149,14 +150,14 @@ function SearchableField({
                   event.preventDefault();
                   chooseOption(option);
                 }}
-                className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-[11px] font-mono text-white/65 transition-colors hover:bg-amber-500/[0.07] hover:text-amber-400"
+                className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-[11px] font-mono text-foreground/65 transition-colors hover:bg-primary/[0.07] hover:text-app-accent-ink"
               >
                 <span className="min-w-0 truncate">{option.value}</span>
-                {option.label && <span className="shrink-0 text-[9px] uppercase tracking-[0.12em] text-white/25">{option.label}</span>}
+                {option.label && <span className="shrink-0 text-[9px] uppercase tracking-[0.12em] text-foreground/25">{option.label}</span>}
               </button>
             ))
           ) : (
-            <div className="px-3 py-2 text-[10px] font-mono text-white/25">
+            <div className="px-3 py-2 text-[10px] font-mono text-foreground/25">
               Tidak ada data cocok. Tekan Simpan untuk memakai teks ini.
             </div>
           )}
@@ -581,30 +582,30 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
   }
 
   return (
-    <section className="border border-white/5 bg-[#111114]">
+    <section className="border border-white/5 bg-card">
 
       {/* ── HEADER ── */}
       <div className="flex items-center justify-between border-b border-white/5 px-4 py-2">
         <div>
-          <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">Master Panel</p>
-          <h3 className="text-[13px] font-mono text-white/80">Panel dan Breakdown Part</h3>
+          <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30">Master Panel</p>
+          <h3 className="text-[13px] font-mono text-foreground/80">Panel dan Breakdown Part</h3>
         </div>
         <div className="flex items-center gap-2">
-          <span className="font-mono text-[10px] text-white/30">{rootCount} panel · {partCount} part</span>
+          <span className="font-mono text-[10px] text-foreground/30">{rootCount} panel · {partCount} part</span>
           <div className="w-px h-4 bg-white/10" />
           <button type="button" onClick={() => void loadPanels()}
-            className="inline-flex items-center gap-1.5 border border-white/10 px-2 py-1 text-[10px] font-mono uppercase text-white/40 hover:text-white hover:border-white/30 transition-colors">
-            <RefreshCw className="h-3 w-3" /> Refresh
+            className="inline-flex items-center gap-1.5 border border-white/10 px-2 py-1 text-[10px] font-mono uppercase text-foreground/55 hover:text-foreground hover:border-white/30 transition-colors">
+            <RefreshCw className="h-3 w-3" strokeWidth={ICON_STROKE_WIDTH} /> Refresh
           </button>
           {canManage && (
             <>
               <button type="button" onClick={openCreateRoot}
-                className="inline-flex items-center gap-1.5 border border-amber-500/30 bg-amber-500/[0.04] px-2 py-1 text-[10px] font-mono uppercase text-amber-500 hover:bg-amber-500/10 transition-colors">
-                <Plus className="h-3 w-3" /> Tambah Panel
+                className="inline-flex items-center gap-1.5 border border-primary/30 bg-primary/[0.04] px-2 py-1 text-[10px] font-mono uppercase text-app-accent-ink hover:bg-primary/10 transition-colors">
+                <Plus className="h-3 w-3" strokeWidth={ICON_STROKE_WIDTH} /> Tambah Panel
               </button>
               <button type="button" onClick={openCreateSection}
-                className="inline-flex items-center gap-1.5 border border-white/10 px-2 py-1 text-[10px] font-mono uppercase text-white/50 hover:border-white/30 hover:text-white transition-colors">
-                <Plus className="h-3 w-3" /> Tambah Panel + Section
+                className="inline-flex items-center gap-1.5 border border-white/10 px-2 py-1 text-[10px] font-mono uppercase text-foreground/60 hover:border-white/30 hover:text-foreground transition-colors">
+                <Plus className="h-3 w-3" strokeWidth={ICON_STROKE_WIDTH} /> Tambah Panel + Section
               </button>
             </>
           )}
@@ -612,12 +613,12 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
       </div>
 
       {/* ── SEARCH + CATEGORY TABS ── */}
-      <div className="border-b border-white/5 bg-[#0a0a0c]">
+      <div className="border-b border-white/5 bg-background">
         {/* Search bar + Section dropdown */}
         <div className="flex items-center gap-2 border-b border-white/5 px-4 py-2">
           {/* Search input — flex-1 */}
-          <div className="flex flex-1 items-center gap-2 border border-white/10 bg-[#111114] px-3">
-            <Search className="h-3.5 w-3.5 shrink-0 text-white/30" />
+          <div className="flex flex-1 items-center gap-2 border border-white/10 bg-card px-3">
+            <Search className="h-3.5 w-3.5 shrink-0 text-foreground/50" strokeWidth={ICON_STROKE_WIDTH} />
             <input
               value={search}
               onChange={(e) => {
@@ -625,7 +626,7 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
                 setCurrentPage(1);
               }}
               placeholder="Cari panel, part, section..."
-              className="h-8 w-full bg-transparent text-[11px] font-mono text-white/70 outline-none placeholder:text-white/20"
+              className="h-8 w-full bg-transparent text-[11px] font-mono text-foreground/70 outline-none placeholder:text-foreground/20"
             />
             {search && (
               <button
@@ -634,7 +635,7 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
                   setSearch("");
                   setCurrentPage(1);
                 }}
-                className="text-[10px] font-mono text-white/30 transition-colors hover:text-white">
+                className="text-[10px] font-mono text-foreground/30 transition-colors hover:text-foreground">
                 ✕
               </button>
             )}
@@ -648,27 +649,27 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
                 setActiveSection(e.target.value);
                 setCurrentPage(1);
               }}
-              className="h-8 min-w-[160px] max-w-[220px] cursor-pointer appearance-none border border-white/10 bg-[#111114] pl-3 pr-7 text-[10px] font-mono uppercase tracking-[0.08em] text-white/60 outline-none focus:border-amber-500/40 [color-scheme:dark]"
+              className="h-8 min-w-[160px] max-w-[220px] cursor-pointer appearance-none border border-white/10 bg-card pl-3 pr-7 text-[10px] font-mono uppercase tracking-[0.08em] text-foreground/60 outline-none focus:border-primary/40 [color-scheme:dark]"
             >
               {sections.map(sec => (
                 <option key={sec} value={sec}>{sec}</option>
               ))}
             </select>
-            <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-white/20">▾</span>
+            <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-foreground/20">▾</span>
           </div>
         </div>
 
         {/* Category tabs */}
         <div className="flex overflow-x-auto border-b border-white/5 px-4 gap-0 scrollbar-none">
-          <p className="shrink-0 self-center border-r border-white/5 mr-3 pr-3 text-[9px] font-mono uppercase tracking-[0.12em] text-white/20">
+          <p className="shrink-0 self-center border-r border-white/5 mr-3 pr-3 text-[9px] font-mono uppercase tracking-[0.12em] text-foreground/20">
             Kategori
           </p>
           {categories.map(cat => (
             <button key={cat} type="button" onClick={() => handleCategoryChange(cat)}
               className={`whitespace-nowrap px-3 py-2 text-[10px] font-mono uppercase tracking-[0.12em] border-b-2 transition-colors ${
                 activeCategory === cat
-                  ? "border-amber-500 text-amber-500"
-                  : "border-transparent text-white/35 hover:text-white/60"
+                  ? "border-primary text-app-accent-ink"
+                  : "border-transparent text-foreground/35 hover:text-foreground/60"
               }`}>
               {cat}
             </button>
@@ -677,42 +678,45 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
       </div>
 
       {/* ── MAIN GRID: TABLE + FORM ── */}
-      <div className="grid min-h-[300px] divide-x divide-white/5 xl:grid-cols-[minmax(0,1fr)_300px]">
+      <div className={mode !== null
+        ? "grid min-h-[300px] divide-x divide-white/5 xl:grid-cols-[minmax(0,1fr)_300px]"
+        : "min-h-[300px]"
+      }>
 
         {/* LEFT — Tabel */}
         <div className="overflow-auto">
           {message && (
-            <div className="border-b border-emerald-500/20 bg-emerald-500/[0.04] px-4 py-2 text-[11px] font-mono text-emerald-400">
+            <div className="border-b border-success/20 bg-success/[0.04] px-4 py-2 text-[11px] font-mono text-success">
               {message}
             </div>
           )}
           {error && (
-            <div className="border-b border-red-500/20 bg-red-500/[0.04] px-4 py-2 text-[11px] font-mono text-red-400">
+            <div className="border-b border-destructive/20 bg-destructive/[0.04] px-4 py-2 text-[11px] font-mono text-destructive">
               {error}
             </div>
           )}
 
           {isLoading ? (
-            <div className="px-4 py-6 text-[11px] font-mono text-white/30">Memuat master panel...</div>
+            <div className="px-4 py-6 text-[11px] font-mono text-foreground/30">Memuat master panel...</div>
           ) : filteredRows.length === 0 ? (
-            <div className="m-4 border border-dashed border-white/10 px-4 py-8 text-center text-[11px] font-mono text-white/25">
+            <div className="m-4 border border-dashed border-white/10 px-4 py-8 text-center text-[11px] font-mono text-foreground/25">
               {search ? `Tidak ada hasil untuk "${search}"` : "Belum ada panel pada filter ini."}
             </div>
           ) : (
             <table className="w-full text-left">
               <thead>
-                <tr className="sticky top-0 border-b border-white/5 bg-[#0a0a0c]">
-                  <th className="px-4 py-2 text-[10px] font-mono uppercase tracking-[0.12em] text-white/25">Kategori</th>
-                  <th className="px-4 py-2 text-[10px] font-mono uppercase tracking-[0.12em] text-white/25">Section</th>
-                  <th className="px-4 py-2 text-[10px] font-mono uppercase tracking-[0.12em] text-white/25">Panel / Part</th>
-                  <th className="px-4 py-2 text-right text-[10px] font-mono uppercase tracking-[0.12em] text-white/25">Qty</th>
-                  <th className="px-4 py-2 text-[10px] font-mono uppercase tracking-[0.12em] text-white/25">Lokasi</th>
-                  <th className="px-4 py-2 text-[10px] font-mono uppercase tracking-[0.12em] text-white/25">Posisi</th>
-                  <th className="px-4 py-2 text-[10px] font-mono uppercase tracking-[0.12em] text-white/25">Kondisi Barang</th>
-                  <th className="px-4 py-2 text-[10px] font-mono uppercase tracking-[0.12em] text-white/25 text-center">Part</th>
-                  <th className="px-4 py-2 text-[10px] font-mono uppercase tracking-[0.12em] text-white/25">Aktif</th>
+                <tr className="sticky top-0 border-b border-white/5 bg-background">
+                  <th className="px-4 py-2 text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/25">Kategori</th>
+                  <th className="px-4 py-2 text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/25">Section</th>
+                  <th className="px-4 py-2 text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/25">Panel / Part</th>
+                  <th className="px-4 py-2 text-right text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/25">Qty</th>
+                  <th className="px-4 py-2 text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/25">Lokasi</th>
+                  <th className="px-4 py-2 text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/25">Posisi</th>
+                  <th className="px-4 py-2 text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/25">Kondisi Barang</th>
+                  <th className="px-4 py-2 text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/25 text-center">Part</th>
+                  <th className="px-4 py-2 text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/25">Aktif</th>
                   {canManage && (
-                    <th className="px-4 py-2 text-right text-[10px] font-mono uppercase tracking-[0.12em] text-white/25">Aksi</th>
+                    <th className="px-4 py-2 text-right text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/25">Aksi</th>
                   )}
                 </tr>
               </thead>
@@ -721,10 +725,10 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
                   <React.Fragment key={row.id}>
                     {/* Panel row */}
                     <tr className="group border-b border-white/[0.04] transition-colors hover:bg-white/[0.015]">
-                      <td className="align-middle px-4 py-1.5 text-[10px] font-mono text-white/25">
+                      <td className="align-middle px-4 py-1.5 text-[10px] font-mono text-foreground/25">
                         {row.category ?? "-"}
                       </td>
-                      <td className="align-middle px-4 py-1.5 text-[10px] font-mono uppercase text-white/35">
+                      <td className="align-middle px-4 py-1.5 text-[10px] font-mono uppercase text-foreground/35">
                         {row.section}
                       </td>
                       <td className="px-4 py-1.5 align-middle">
@@ -734,11 +738,11 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
                             <button
                               type="button"
                               onClick={() => togglePanel(String(row.id))}
-                              className="shrink-0 text-white/25 hover:text-white/60 transition-colors"
+                              className="shrink-0 text-foreground/45 hover:text-foreground/80 transition-colors"
                             >
                               {expandedPanelIds.has(String(row.id))
-                                ? <ChevronDown className="h-3 w-3" />
-                                : <ChevronRight className="h-3 w-3" />
+                                ? <ChevronDown className="h-3 w-3" strokeWidth={ICON_STROKE_WIDTH} />
+                                : <ChevronRight className="h-3 w-3" strokeWidth={ICON_STROKE_WIDTH} />
                               }
                             </button>
                           ) : (
@@ -747,58 +751,58 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
 
                           {/* Panel name + inline badges */}
                           <div className="flex items-center gap-2 flex-wrap min-w-0">
-                            <p className="text-[11px] font-mono text-white/80 truncate">{row.name}</p>
+                            <p className="text-[11px] font-mono text-foreground/80 truncate">{row.name}</p>
                             <Link
                               href={buildPanelDetailHref(unitId, row.id)}
-                              className="shrink-0 text-white/10 opacity-0 transition-[color,opacity] group-hover:opacity-100 group-focus-within:opacity-100 hover:text-amber-400 focus-visible:opacity-100"
+                              className="shrink-0 text-foreground/10 opacity-0 transition-[color,opacity] group-hover:opacity-100 group-focus-within:opacity-100 hover:text-app-accent-ink focus-visible:opacity-100"
                               title="Buka detail workflow"
                             >
-                              <ArrowUpRight className="h-3.5 w-3.5" />
+                              <ArrowUpRight className="h-3.5 w-3.5" strokeWidth={ICON_STROKE_WIDTH} />
                             </Link>
                             {row.countdownUsageCount > 0 && (
-                              <span className="shrink-0 border border-amber-500/20 px-1.5 py-0.5 text-[8px] font-mono text-amber-400/60">
+                              <span className="shrink-0 border border-primary/20 px-1.5 py-0.5 text-[8px] font-mono text-app-accent-ink/60">
                                 {row.countdownUsageCount}cd
                               </span>
                             )}
                           </div>
                         </div>
                       </td>
-                      <td className="align-middle px-4 py-1.5 text-right font-mono text-[10px] text-white/50">
+                      <td className="align-middle px-4 py-1.5 text-right font-mono text-[10px] text-foreground/50">
                         {row.qty}
                       </td>
-                      <td className="align-middle px-4 py-1.5 font-mono text-[10px] text-white/35">
+                      <td className="align-middle px-4 py-1.5 font-mono text-[10px] text-foreground/35">
                         {LOCATION_LABEL[row.defaultLocationType]}
                       </td>
-                      <td className="align-middle px-4 py-1.5 font-mono text-[10px] text-white/35">
+                      <td className="align-middle px-4 py-1.5 font-mono text-[10px] text-foreground/35">
                         {STOCK_STATUS_LABEL[row.defaultStockStatus]}
                       </td>
-                      <td className="align-middle px-4 py-1.5 font-mono text-[10px] text-white/35">
+                      <td className="align-middle px-4 py-1.5 font-mono text-[10px] text-foreground/35">
                         {CONDITION_LABEL[row.defaultConditionType]}
                       </td>
                       <td className="px-4 py-1.5 text-center align-middle">
-                        <span className={`font-mono text-[11px] ${row.childCount > 0 ? "text-white/50" : "text-white/15"}`}>
+                        <span className={`font-mono text-[11px] ${row.childCount > 0 ? "text-foreground/50" : "text-foreground/15"}`}>
                           {row.childCount}
                         </span>
                       </td>
                       <td className="align-middle px-4 py-1.5">
                         {row.isActive
-                          ? <span className="border border-emerald-500/20 bg-emerald-500/[0.04] px-2 py-0.5 text-[9px] font-mono text-emerald-400">AKTIF</span>
-                          : <span className="border border-white/10 px-2 py-0.5 text-[9px] font-mono text-white/25">NONAKTIF</span>
+                          ? <span className="border border-success/20 bg-success/[0.04] px-2 py-0.5 text-[9px] font-mono text-success">AKTIF</span>
+                          : <span className="border border-white/10 px-2 py-0.5 text-[9px] font-mono text-foreground/25">NONAKTIF</span>
                         }
                       </td>
                       {canManage && (
                         <td className="align-middle px-4 py-1.5 text-right">
                           <div className="flex items-center justify-end gap-1">
                             <button type="button" onClick={() => openEdit(row)}
-                              className="border border-white/10 px-2 py-0.5 text-[9px] font-mono text-white/35 transition-colors hover:border-white/30 hover:text-white">
+                              className="border border-white/10 px-2 py-0.5 text-[9px] font-mono text-foreground/35 transition-colors hover:border-white/30 hover:text-foreground">
                               Edit
                             </button>
                             <button type="button" onClick={() => openCreateChild(row)}
-                              className="border border-white/10 px-2 py-0.5 text-[9px] font-mono text-white/35 transition-colors hover:border-white/30 hover:text-white">
+                              className="border border-white/10 px-2 py-0.5 text-[9px] font-mono text-foreground/35 transition-colors hover:border-white/30 hover:text-foreground">
                               + Part
                             </button>
                             <button type="button" onClick={() => void handleDelete(row)}
-                              className="border border-red-500/20 px-2 py-0.5 text-[9px] font-mono text-red-400/50 transition-colors hover:border-red-500/40 hover:text-red-400">
+                              className="border border-destructive/20 px-2 py-0.5 text-[9px] font-mono text-destructive/50 transition-colors hover:border-destructive/40 hover:text-destructive">
                               Hapus
                             </button>
                           </div>
@@ -808,49 +812,49 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
 
                     {/* Child part rows */}
                     {expandedPanelIds.has(String(row.id)) && row.children.map((child) => (
-                      <tr key={child.id} className="group border-b border-white/[0.025] bg-[#0a0a0c]/30 transition-colors hover:bg-white/[0.01]">
-                        <td className="align-middle px-4 py-1 text-[9px] font-mono text-white/15">{row.category ?? ""}</td>
-                        <td className="align-middle px-4 py-1 text-[9px] font-mono text-white/15">{row.section}</td>
+                      <tr key={child.id} className="group border-b border-white/[0.025] bg-background/30 transition-colors hover:bg-white/[0.01]">
+                        <td className="align-middle px-4 py-1 text-[9px] font-mono text-foreground/15">{row.category ?? ""}</td>
+                        <td className="align-middle px-4 py-1 text-[9px] font-mono text-foreground/15">{row.section}</td>
                         <td className="px-4 py-1 align-middle">
                           <div className="flex items-center gap-2" style={{ paddingLeft: "20px" }}>
-                            <span className="text-white/15 text-[9px] shrink-0">└</span>
-                            <span className="text-[10px] font-mono text-white/50 truncate">{child.name}</span>
+                            <span className="text-foreground/15 text-[9px] shrink-0">└</span>
+                            <span className="text-[10px] font-mono text-foreground/50 truncate">{child.name}</span>
                             <Link
                               href={buildPanelDetailHref(unitId, child.id)}
-                              className="shrink-0 text-white/10 opacity-0 transition-[color,opacity] group-hover:opacity-100 group-focus-within:opacity-100 hover:text-amber-400 focus-visible:opacity-100"
+                              className="shrink-0 text-foreground/10 opacity-0 transition-[color,opacity] group-hover:opacity-100 group-focus-within:opacity-100 hover:text-app-accent-ink focus-visible:opacity-100"
                               title="Buka detail workflow"
                             >
-                              <ArrowUpRight className="h-3 w-3" />
+                              <ArrowUpRight className="h-3 w-3" strokeWidth={ICON_STROKE_WIDTH} />
                             </Link>
                             {child.countdownUsageCount > 0 && (
-                              <span className="shrink-0 border border-amber-500/15 px-1 py-0.5 text-[8px] font-mono text-amber-400/40">
+                              <span className="shrink-0 border border-primary/15 px-1 py-0.5 text-[8px] font-mono text-app-accent-ink/40">
                                 {child.countdownUsageCount}cd
                               </span>
                             )}
                           </div>
                         </td>
-                        <td className="align-middle px-4 py-1 text-right font-mono text-[9px] text-white/35">{child.qty}</td>
-                        <td className="align-middle px-4 py-1 font-mono text-[9px] text-white/25">{LOCATION_LABEL[child.defaultLocationType]}</td>
-                        <td className="align-middle px-4 py-1 font-mono text-[9px] text-white/25">{STOCK_STATUS_LABEL[child.defaultStockStatus]}</td>
-                        <td className="align-middle px-4 py-1 font-mono text-[9px] text-white/25">{CONDITION_LABEL[child.defaultConditionType]}</td>
+                        <td className="align-middle px-4 py-1 text-right font-mono text-[9px] text-foreground/35">{child.qty}</td>
+                        <td className="align-middle px-4 py-1 font-mono text-[9px] text-foreground/25">{LOCATION_LABEL[child.defaultLocationType]}</td>
+                        <td className="align-middle px-4 py-1 font-mono text-[9px] text-foreground/25">{STOCK_STATUS_LABEL[child.defaultStockStatus]}</td>
+                        <td className="align-middle px-4 py-1 font-mono text-[9px] text-foreground/25">{CONDITION_LABEL[child.defaultConditionType]}</td>
                         <td className="align-middle px-4 py-1 text-center">
-                          <span className="border border-white/5 px-1.5 py-0.5 text-[8px] font-mono text-white/20">PART</span>
+                          <span className="border border-white/5 px-1.5 py-0.5 text-[8px] font-mono text-foreground/20">PART</span>
                         </td>
                         <td className="align-middle px-4 py-1">
                           {child.isActive
-                            ? <span className="border border-emerald-500/15 px-1.5 py-0.5 text-[8px] font-mono text-emerald-400/60">AKTIF</span>
-                            : <span className="border border-white/10 px-1.5 py-0.5 text-[8px] font-mono text-white/20">NONAKTIF</span>
+                            ? <span className="border border-success/15 px-1.5 py-0.5 text-[8px] font-mono text-success/60">AKTIF</span>
+                            : <span className="border border-white/10 px-1.5 py-0.5 text-[8px] font-mono text-foreground/20">NONAKTIF</span>
                           }
                         </td>
                         {canManage && (
                           <td className="align-middle px-4 py-1 text-right">
                             <div className="flex items-center justify-end gap-1">
                               <button type="button" onClick={() => openEdit(child)}
-                                className="border border-white/10 px-1.5 py-0.5 text-[8px] font-mono text-white/30 transition-colors hover:text-white">
+                                className="border border-white/10 px-1.5 py-0.5 text-[8px] font-mono text-foreground/30 transition-colors hover:text-foreground">
                                 Edit
                               </button>
                               <button type="button" onClick={() => void handleDelete(child)}
-                                className="border border-red-500/15 px-1.5 py-0.5 text-[8px] font-mono text-red-400/40 transition-colors hover:text-red-400">
+                                className="border border-destructive/15 px-1.5 py-0.5 text-[8px] font-mono text-destructive/40 transition-colors hover:text-destructive">
                                 Hapus
                               </button>
                             </div>
@@ -865,8 +869,8 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
           )}
 
           {totalPages > 1 && (
-            <div className="flex items-center justify-between border-t border-white/5 bg-[#0a0a0c] px-4 py-2">
-              <span className="font-mono text-[10px] text-white/30">
+            <div className="flex items-center justify-between border-t border-white/5 bg-background px-4 py-2">
+              <span className="font-mono text-[10px] text-foreground/30">
                 {filteredRows.length} panel · hal {currentPage} dari {totalPages}
               </span>
               <div className="flex items-center gap-1">
@@ -874,7 +878,7 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
                   type="button"
                   onClick={() => setCurrentPage(1)}
                   disabled={currentPage === 1}
-                  className="border border-white/10 px-2 py-1 text-[10px] font-mono text-white/40 transition-colors hover:text-white disabled:cursor-not-allowed disabled:opacity-20"
+                  className="border border-white/10 px-2 py-1 text-[10px] font-mono text-foreground/40 transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-20"
                 >
                   «
                 </button>
@@ -882,7 +886,7 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
                   type="button"
                   onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                   disabled={currentPage === 1}
-                  className="border border-white/10 px-2 py-1 text-[10px] font-mono text-white/40 transition-colors hover:text-white disabled:cursor-not-allowed disabled:opacity-20"
+                  className="border border-white/10 px-2 py-1 text-[10px] font-mono text-foreground/40 transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-20"
                 >
                   ‹
                 </button>
@@ -903,7 +907,7 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
                   }, [])
                   .map((item, idx) =>
                     item === "..." ? (
-                      <span key={`ellipsis-${idx}`} className="px-2 text-[10px] font-mono text-white/20">...</span>
+                      <span key={`ellipsis-${idx}`} className="px-2 text-[10px] font-mono text-foreground/20">...</span>
                     ) : (
                       <button
                         key={item}
@@ -911,8 +915,8 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
                         onClick={() => setCurrentPage(item)}
                         className={`border px-2.5 py-1 text-[10px] font-mono transition-colors ${
                           currentPage === item
-                            ? "border-amber-500/40 bg-amber-500/[0.06] text-amber-500"
-                            : "border-white/10 text-white/40 hover:text-white"
+                            ? "border-primary/40 bg-primary/[0.06] text-app-accent-ink"
+                            : "border-white/10 text-foreground/40 hover:text-foreground"
                         }`}
                       >
                         {item}
@@ -925,7 +929,7 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
                   type="button"
                   onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                   disabled={currentPage === totalPages}
-                  className="border border-white/10 px-2 py-1 text-[10px] font-mono text-white/40 transition-colors hover:text-white disabled:cursor-not-allowed disabled:opacity-20"
+                  className="border border-white/10 px-2 py-1 text-[10px] font-mono text-foreground/40 transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-20"
                 >
                   ›
                 </button>
@@ -933,7 +937,7 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
                   type="button"
                   onClick={() => setCurrentPage(totalPages)}
                   disabled={currentPage === totalPages}
-                  className="border border-white/10 px-2 py-1 text-[10px] font-mono text-white/40 transition-colors hover:text-white disabled:cursor-not-allowed disabled:opacity-20"
+                  className="border border-white/10 px-2 py-1 text-[10px] font-mono text-foreground/40 transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-20"
                 >
                   »
                 </button>
@@ -942,38 +946,31 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
           )}
         </div>
 
-        {/* RIGHT — Form Sidebar */}
-        <div className="sticky top-0 self-start bg-[#0a0a0c] px-4 py-3">
+        {/* RIGHT — Form Sidebar (hanya tampil saat sedang tambah/edit) */}
+        {mode !== null && (
+        <div className="sticky top-0 self-start bg-background px-4 py-3">
           <div className="mb-3 flex items-center gap-2">
-            <Boxes className="h-3.5 w-3.5 text-amber-500" />
-            <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">
-              {mode === null ? "Form Master Panel"
-                : mode.type === "edit" ? `Edit ${mode.record.nodeType === "PANEL" ? "Panel" : "Part"}`
+            <Boxes className="h-3.5 w-3.5 text-app-accent-ink" strokeWidth={ICON_STROKE_WIDTH} />
+            <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30">
+              {mode.type === "edit" ? `Edit ${mode.record.nodeType === "PANEL" ? "Panel" : "Part"}`
                 : mode.sectionMode === "new" ? "Tambah Panel + Section"
                 : form.nodeType === "PART" ? "Tambah Part"
                 : "Tambah Panel"}
             </span>
           </div>
 
-          {!canManage ? (
-            <p className="text-[11px] font-mono text-white/25">Akses baca saja.</p>
-          ) : mode === null ? (
-            <div className="border border-dashed border-white/10 px-4 py-6 text-center text-[10px] font-mono text-white/20">
-                  Pilih panel/part untuk diedit, atau tambah panel dengan kategori/section dari toolbar.
-            </div>
-          ) : (
             <form className="space-y-3" onSubmit={(event) => void handleSubmit(event)}>
               {mode.type === "create" && mode.sectionMode === "existing" && (
                 <div className="space-y-1">
-                  <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">Buat</span>
-                  <div className="grid grid-cols-2 gap-1 border border-white/10 bg-[#111114] p-1">
+                  <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30">Buat</span>
+                  <div className="grid grid-cols-2 gap-1 border border-white/10 bg-card p-1">
                     <button
                       type="button"
                       onClick={() => selectNodeType("Panel")}
                       className={`px-2 py-1.5 text-[10px] font-mono uppercase tracking-[0.12em] transition-colors ${
                         form.nodeType === "PANEL"
-                          ? "bg-amber-500/[0.08] text-amber-500"
-                          : "text-white/35 hover:text-white"
+                          ? "bg-primary/[0.08] text-app-accent-ink"
+                          : "text-foreground/35 hover:text-foreground"
                       }`}
                     >
                       Panel
@@ -983,8 +980,8 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
                       onClick={() => selectNodeType("Part")}
                       className={`px-2 py-1.5 text-[10px] font-mono uppercase tracking-[0.12em] transition-colors ${
                         form.nodeType === "PART"
-                          ? "bg-amber-500/[0.08] text-amber-500"
-                          : "text-white/35 hover:text-white"
+                          ? "bg-primary/[0.08] text-app-accent-ink"
+                          : "text-foreground/35 hover:text-foreground"
                       }`}
                     >
                       Part
@@ -995,7 +992,7 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
 
               {mode.type === "create" && mode.sectionMode === "existing" && (
                 <label className="block space-y-1">
-                  <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">Kategori</span>
+                  <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30">Kategori</span>
                   <SearchableField
                     value={form.category}
                     options={categoryOptions}
@@ -1006,13 +1003,13 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
               )}
 
               <label className="block space-y-1">
-                <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">Section</span>
+                <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30">Section</span>
                 {mode.type === "create" && mode.sectionMode === "new" ? (
                   <input
                     value={form.section}
                     onChange={(e) => setForm(c => ({ ...c, section: e.target.value }))}
                     placeholder="Nama section baru"
-                    className="h-8 w-full border border-white/10 bg-[#111114] px-3 text-[11px] font-mono text-white/70 outline-none transition-colors placeholder:text-white/20 focus:border-amber-500/40"
+                    className="h-8 w-full border border-white/10 bg-card px-3 text-[11px] font-mono text-foreground/70 outline-none transition-colors placeholder:text-foreground/20 focus:border-primary/40"
                   />
                 ) : (
                   <SearchableField
@@ -1027,7 +1024,7 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
 
               {mode.type === "create" && form.nodeType === "PART" && (
                 <label className="block space-y-1">
-                  <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">Panel Parent</span>
+                  <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30">Panel Parent</span>
                   <SearchableField
                     value={parentPanelValue}
                     options={parentPanelOptions}
@@ -1040,13 +1037,13 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
 
               <>
                 {mode.type === "edit" && mode.record.nodeType === "PART" && selectedParentPanel && (
-                  <div className="border border-amber-500/20 bg-amber-500/[0.04] px-3 py-2 text-[10px] font-mono text-amber-400">
+                  <div className="border border-primary/20 bg-primary/[0.04] px-3 py-2 text-[10px] font-mono text-app-accent-ink">
                     Parent: {selectedParentPanel.name}
                   </div>
                 )}
 
                 <label className="block space-y-1">
-                  <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">
+                  <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30">
                     {mode.type === "create" && mode.sectionMode === "new"
                       ? "Nama Panel Pertama"
                       : form.nodeType === "PART"
@@ -1056,13 +1053,13 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
                   <input value={form.name}
                     onChange={(e) => setForm(c => ({ ...c, name: e.target.value }))}
                     placeholder={mode.type === "create" && mode.sectionMode === "new" ? "Contoh: Body Depan" : undefined}
-                    className="h-8 w-full border border-white/10 bg-[#111114] px-3 text-[11px] font-mono text-white/70 outline-none transition-colors placeholder:text-white/20 focus:border-amber-500/40" />
+                    className="h-8 w-full border border-white/10 bg-card px-3 text-[11px] font-mono text-foreground/70 outline-none transition-colors placeholder:text-foreground/20 focus:border-primary/40" />
                 </label>
               </>
 
               {mode.type !== "create" || mode.sectionMode !== "existing" ? (
                 <label className="block space-y-1">
-                  <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">Kategori</span>
+                  <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30">Kategori</span>
                   <SearchableField
                     value={form.category}
                     options={categoryOptions}
@@ -1072,27 +1069,27 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
                 </label>
               ) : null}
 
-              <label className="flex items-center gap-3 border border-white/5 bg-[#111114] px-3 py-2">
+              <label className="flex items-center gap-3 border border-white/5 bg-card px-3 py-2">
                 <input type="checkbox" checked={form.isActive}
                   onChange={(e) => setForm(c => ({ ...c, isActive: e.target.checked }))}
                   className="h-4 w-4 border-white/20 bg-transparent" />
-                <span className="text-[10px] font-mono text-white/50">Aktifkan {form.nodeType === "PART" ? "part" : "panel"} ini</span>
+                <span className="text-[10px] font-mono text-foreground/50">Aktifkan {form.nodeType === "PART" ? "part" : "panel"} ini</span>
               </label>
 
               <div className="grid grid-cols-2 gap-2">
                   <label className="block space-y-1">
-                    <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">Qty</span>
+                    <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30">Qty</span>
                     <input
                       type="number"
                       min="0.01"
                       step="0.01"
                       value={form.qty}
                       onChange={(e) => setForm(c => ({ ...c, qty: e.target.value }))}
-                      className="h-8 w-full border border-white/10 bg-[#111114] px-3 text-[11px] font-mono text-white/70 outline-none transition-colors focus:border-amber-500/40"
+                      className="h-8 w-full border border-white/10 bg-card px-3 text-[11px] font-mono text-foreground/70 outline-none transition-colors focus:border-primary/40"
                     />
                   </label>
                   <label className="block space-y-1">
-                    <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">Lokasi</span>
+                    <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30">Lokasi</span>
                     <select
                       value={form.defaultLocationType}
                       onChange={(e) => {
@@ -1103,7 +1100,7 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
                           defaultStockStatus: stockStatusForLocation(defaultLocationType),
                         }));
                       }}
-                      className="h-8 w-full border border-white/10 bg-[#111114] px-2 text-[10px] font-mono text-white/70 outline-none transition-colors focus:border-amber-500/40 [color-scheme:dark]"
+                      className="h-8 w-full border border-white/10 bg-card px-2 text-[10px] font-mono text-foreground/70 outline-none transition-colors focus:border-primary/40 [color-scheme:dark]"
                     >
                       <option value="UNIT">{LOCATION_LABEL.UNIT}</option>
                       <option value="WORKSHOP">{LOCATION_LABEL.WORKSHOP}</option>
@@ -1111,12 +1108,12 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
                     </select>
                   </label>
                   <label className="block space-y-1">
-                    <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">Posisi</span>
+                    <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30">Posisi</span>
                     <select
                       value={form.defaultStockStatus}
                       onChange={(e) => setForm(c => ({ ...c, defaultStockStatus: e.target.value as PanelFormState["defaultStockStatus"] }))}
                       disabled={form.defaultLocationType === "UNIT"}
-                      className="h-8 w-full border border-white/10 bg-[#111114] px-2 text-[10px] font-mono text-white/70 outline-none transition-colors focus:border-amber-500/40 disabled:cursor-not-allowed disabled:text-white/40 [color-scheme:dark]"
+                      className="h-8 w-full border border-white/10 bg-card px-2 text-[10px] font-mono text-foreground/70 outline-none transition-colors focus:border-primary/40 disabled:cursor-not-allowed disabled:text-foreground/40 [color-scheme:dark]"
                     >
                       <option value="INSTALLED">{STOCK_STATUS_LABEL.INSTALLED}</option>
                       <option value="IN_STORAGE">{STOCK_STATUS_LABEL.IN_STORAGE}</option>
@@ -1125,11 +1122,11 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
                     </select>
                   </label>
                   <label className="block space-y-1">
-                    <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">Kondisi Barang</span>
+                    <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30">Kondisi Barang</span>
                     <select
                       value={form.defaultConditionType}
                       onChange={(e) => setForm(c => ({ ...c, defaultConditionType: e.target.value as PanelFormState["defaultConditionType"] }))}
-                      className="h-8 w-full border border-white/10 bg-[#111114] px-2 text-[10px] font-mono text-white/70 outline-none transition-colors focus:border-amber-500/40 [color-scheme:dark]"
+                      className="h-8 w-full border border-white/10 bg-card px-2 text-[10px] font-mono text-foreground/70 outline-none transition-colors focus:border-primary/40 [color-scheme:dark]"
                     >
                       <option value="BEKAS">{CONDITION_LABEL.BEKAS}</option>
                       <option value="RESTORE">{CONDITION_LABEL.RESTORE}</option>
@@ -1140,17 +1137,17 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
 
               <div className="flex gap-2 pt-1">
                 <button type="submit" disabled={isSubmitting}
-                  className="border border-amber-500/40 bg-amber-500/[0.06] px-3 py-1.5 text-[10px] font-mono uppercase tracking-[0.12em] text-amber-500 transition-colors hover:bg-amber-500/10 disabled:opacity-30">
+                  className="border border-primary/40 bg-primary/[0.06] px-3 py-1.5 text-[10px] font-mono uppercase tracking-[0.12em] text-app-accent-ink transition-colors hover:bg-primary/10 disabled:opacity-30">
                   {isSubmitting ? "Menyimpan..." : "Simpan"}
                 </button>
                 <button type="button" onClick={closeForm}
-                  className="border border-white/10 px-3 py-1.5 text-[10px] font-mono uppercase tracking-[0.12em] text-white/40 transition-colors hover:text-white">
+                  className="border border-white/10 px-3 py-1.5 text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/40 transition-colors hover:text-foreground">
                   Batal
                 </button>
               </div>
             </form>
-          )}
         </div>
+        )}
 
       </div>
     </section>

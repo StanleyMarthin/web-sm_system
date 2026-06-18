@@ -59,9 +59,9 @@ export function UserResetPasswordForm({ user, onSuccess, onError, onClose }: Use
           type="password"
           {...register("newPassword")}
           placeholder="Kata sandi baru, minimal 8 karakter"
-          className="h-11 w-full rounded-2xl border border-white/[0.08] bg-white/[0.03] px-3 text-sm text-white outline-none focus:border-amber-500/40"
+          className="h-11 w-full rounded-2xl border border-white/[0.08] bg-white/[0.03] px-3 text-sm text-foreground outline-none focus:border-primary/40"
         />
-        {errors.newPassword && <p className="text-xs text-red-400">{errors.newPassword.message}</p>}
+        {errors.newPassword && <p className="text-xs text-destructive">{errors.newPassword.message}</p>}
       </div>
 
       <div className="flex justify-end gap-2">
@@ -69,14 +69,14 @@ export function UserResetPasswordForm({ user, onSuccess, onError, onClose }: Use
           type="button"
           onClick={onClose}
           disabled={isPending}
-          className="rounded-full border border-white/[0.08] px-4 py-2 text-sm text-white/60 hover:text-white"
+          className="rounded-full border border-white/[0.08] px-4 py-2 text-sm text-foreground/60 hover:text-foreground"
         >
           Batal
         </button>
         <button
           type="submit"
           disabled={isPending || !isValid}
-          className="inline-flex items-center gap-2 rounded-full bg-amber-500 px-4 py-2 text-sm font-semibold text-black hover:bg-amber-400 disabled:opacity-40"
+          className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary disabled:opacity-40"
         >
           <RefreshCcw className="h-4 w-4" />
           Reset Sandi

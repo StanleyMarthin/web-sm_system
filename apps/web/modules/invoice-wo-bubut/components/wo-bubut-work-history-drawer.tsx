@@ -54,9 +54,9 @@ function asBubutInvoiceSourceSnapshot(value: BubutInvoiceSnapshot["sourceSnapsho
 function ResultBadge({ status }: { status: string | null | undefined }) {
   if (!status) return <span>-</span>;
   const s = status.toUpperCase();
-  if (s === "DONE") return <span className="inline-flex border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[9px] font-semibold tracking-widest text-emerald-400">DONE</span>;
-  if (s === "ON PROGRESS") return <span className="inline-flex border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-[9px] font-semibold tracking-widest text-amber-400">ON PROGRESS</span>;
-  return <span className="inline-flex border border-white/10 bg-white/5 px-2 py-0.5 text-[9px] font-semibold tracking-widest text-white/70">{s}</span>;
+  if (s === "DONE") return <span className="inline-flex border border-success/20 bg-success/10 px-2 py-0.5 text-[9px] font-semibold tracking-widest text-success">DONE</span>;
+  if (s === "ON PROGRESS") return <span className="inline-flex border border-primary/20 bg-primary/10 px-2 py-0.5 text-[9px] font-semibold tracking-widest text-app-accent-ink">ON PROGRESS</span>;
+  return <span className="inline-flex border border-white/10 bg-white/5 px-2 py-0.5 text-[9px] font-semibold tracking-widest text-foreground/70">{s}</span>;
 }
 
 export function WoBubutWorkHistoryDrawer({
@@ -251,25 +251,25 @@ export function WoBubutWorkHistoryDrawer({
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-sm">
-      <div className="flex h-full w-full max-w-5xl flex-col border-l border-white/5 bg-[#0a0a0c] text-white shadow-2xl">
+      <div className="flex h-full w-full max-w-5xl flex-col border-l border-white/5 bg-background text-foreground shadow-2xl">
         {/* ── HEADER ── */}
-        <header className="flex shrink-0 items-center justify-between border-b border-white/5 bg-[#111114] px-4 py-3">
+        <header className="flex shrink-0 items-center justify-between border-b border-white/5 bg-card px-4 py-3">
           <div>
             {editMode ? (
               <>
-                <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-white/40">
+                <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-foreground/40">
                   Edit Invoice
                 </p>
-                <h2 className="mt-0.5 text-[13px] font-mono text-amber-400">
+                <h2 className="mt-0.5 text-[13px] font-mono text-app-accent-ink">
                   {editMode.invoiceType === "CUSTOMER" ? "Customer" : "Direksi"} — {data?.header.wobNo}
                 </h2>
               </>
             ) : (
               <>
-                <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-white/40">
+                <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-foreground/40">
                   Riwayat Pengerjaan WO
                 </p>
-                <h2 className="mt-0.5 text-[13px] font-mono text-white/80">
+                <h2 className="mt-0.5 text-[13px] font-mono text-foreground/80">
                   {data?.header.wobNo ?? sourceKey}
                 </h2>
               </>
@@ -281,7 +281,7 @@ export function WoBubutWorkHistoryDrawer({
             <button
               type="button"
               onClick={editMode ? exitEditMode : onClose}
-              className="flex h-7 w-7 items-center justify-center border border-white/5 bg-white/[0.02] text-white/50 hover:bg-white/[0.05] hover:text-white transition-colors"
+              className="flex h-7 w-7 items-center justify-center border border-white/5 bg-white/[0.02] text-foreground/50 hover:bg-white/[0.05] hover:text-foreground transition-colors"
               aria-label="Tutup"
             >
               <X className="h-4 w-4" />
@@ -292,19 +292,19 @@ export function WoBubutWorkHistoryDrawer({
         {/* ── BODY ── */}
         <div className="flex-1 overflow-auto">
           {isLoading ? (
-            <div className="flex h-full items-center justify-center gap-3 text-sm text-white/40 font-mono">
-              <Loader2 className="h-4 w-4 animate-spin text-amber-500" />
+            <div className="flex h-full items-center justify-center gap-3 text-sm text-foreground/40 font-mono">
+              <Loader2 className="h-4 w-4 animate-spin text-app-accent-ink" />
               MEMUAT DATA...
             </div>
           ) : error ? (
-            <div className="m-6 border border-red-500/20 bg-red-500/5 p-4 text-sm text-red-300">
+            <div className="m-6 border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive">
               {error}
             </div>
           ) : data ? (
             <div className="flex flex-col">
               {/* Ringkasan WO */}
               <div className="px-4 pt-3 pb-0">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-3 border border-white/5 bg-[#111114] px-4 py-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-3 border border-white/5 bg-card px-4 py-3">
                   <InfoItem label="No WOB" value={data.header.wobNo} />
                   <InfoItem label="WO Date" value={data.header.woDate} />
                   <InfoItem label="Team / PM" value={data.header.teamName} />
@@ -334,8 +334,8 @@ export function WoBubutWorkHistoryDrawer({
                     className={[
                       "border-b-2 px-4 py-2 text-[10px] font-mono uppercase tracking-[0.12em] transition-colors",
                       activeTab === tab
-                        ? "border-amber-500 text-amber-500"
-                        : "border-transparent text-white/40 hover:text-white/70",
+                        ? "border-primary text-app-accent-ink"
+                        : "border-transparent text-foreground/40 hover:text-foreground/70",
                     ].join(" ")}
                   >
                     {label}
@@ -347,39 +347,39 @@ export function WoBubutWorkHistoryDrawer({
               <div className="px-4 py-3">
                 {activeTab === "work" && (
                   <div className="flex flex-col gap-0">
-                    <div className="overflow-x-auto border border-white/5 bg-[#111114]">
+                    <div className="overflow-x-auto border border-white/5 bg-card">
                     <table className="w-full text-left text-xs">
                       <thead>
                         <tr className="border-b border-white/5 bg-black/20">
-                          <th className="px-4 py-3 font-mono text-[10px] uppercase tracking-wider text-white/40">Tanggal</th>
-                          <th className="px-4 py-3 font-mono text-[10px] uppercase tracking-wider text-white/40">Jam Kerja</th>
-                          <th className="px-4 py-3 font-mono text-[10px] uppercase tracking-wider text-white/40">Durasi</th>
-                          <th className="px-4 py-3 font-mono text-[10px] uppercase tracking-wider text-white/40">Operator</th>
-                          <th className="px-4 py-3 font-mono text-[10px] uppercase tracking-wider text-white/40">Panel/Part</th>
-                          <th className="px-4 py-3 font-mono text-[10px] uppercase tracking-wider text-white/40">Jobdesc</th>
-                          <th className="px-4 py-3 font-mono text-[10px] uppercase tracking-wider text-white/40">Result</th>
-                          <th className="px-4 py-3 font-mono text-[10px] uppercase tracking-wider text-white/40 text-right">Total Harga</th>
+                          <th className="px-4 py-3 font-mono text-[10px] uppercase tracking-wider text-foreground/40">Tanggal</th>
+                          <th className="px-4 py-3 font-mono text-[10px] uppercase tracking-wider text-foreground/40">Jam Kerja</th>
+                          <th className="px-4 py-3 font-mono text-[10px] uppercase tracking-wider text-foreground/40">Durasi</th>
+                          <th className="px-4 py-3 font-mono text-[10px] uppercase tracking-wider text-foreground/40">Operator</th>
+                          <th className="px-4 py-3 font-mono text-[10px] uppercase tracking-wider text-foreground/40">Panel/Part</th>
+                          <th className="px-4 py-3 font-mono text-[10px] uppercase tracking-wider text-foreground/40">Jobdesc</th>
+                          <th className="px-4 py-3 font-mono text-[10px] uppercase tracking-wider text-foreground/40">Result</th>
+                          <th className="px-4 py-3 font-mono text-[10px] uppercase tracking-wider text-foreground/40 text-right">Total Harga</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-white/5">
                         {data.workRows.length > 0 ? (
                           data.workRows.map((row, idx) => (
                             <tr key={row.id} className={idx % 2 === 0 ? "bg-white/[0.01] hover:bg-white/[0.03] transition-colors" : "hover:bg-white/[0.03] transition-colors"}>
-                              <td className="px-4 py-3 font-mono text-white/70">{text(row.workDate)}</td>
-                              <td className="px-4 py-3 font-mono text-white/50">
+                              <td className="px-4 py-3 font-mono text-foreground/70">{text(row.workDate)}</td>
+                              <td className="px-4 py-3 font-mono text-foreground/50">
                                 {fmtTime(row.startTime)} – {fmtTime(row.finishTime)}
                               </td>
-                              <td className={`px-4 py-3 font-mono font-semibold ${row.workingHourDecimal > 4 ? "text-amber-500" : "text-white/80"}`}>{row.workingHourText}</td>
-                              <td className="px-4 py-3 text-white/80">{text(row.operatorName)}</td>
-                              <td className="px-4 py-3 text-white/80">{text(row.panelPartName)}</td>
-                              <td className="px-4 py-3 text-white/60 max-w-[150px] truncate" title={row.jobdesc || undefined}>{text(row.jobdesc)}</td>
+                              <td className={`px-4 py-3 font-mono font-semibold ${row.workingHourDecimal > 4 ? "text-app-accent-ink" : "text-foreground/80"}`}>{row.workingHourText}</td>
+                              <td className="px-4 py-3 text-foreground/80">{text(row.operatorName)}</td>
+                              <td className="px-4 py-3 text-foreground/80">{text(row.panelPartName)}</td>
+                              <td className="px-4 py-3 text-foreground/60 max-w-[150px] truncate" title={row.jobdesc || undefined}>{text(row.jobdesc)}</td>
                               <td className="px-4 py-3"><ResultBadge status={row.resultStatus} /></td>
-                              <td className="px-4 py-3 font-mono text-right text-white/90">{rupiah(row.workingHourCost)}</td>
+                              <td className="px-4 py-3 font-mono text-right text-foreground/90">{rupiah(row.workingHourCost)}</td>
                             </tr>
                           ))
                         ) : (
                           <tr>
-                            <td colSpan={8} className="px-4 py-8 text-center text-white/40 italic">
+                            <td colSpan={8} className="px-4 py-8 text-center text-foreground/40 italic">
                               Belum ada detail pengerjaan.
                             </td>
                           </tr>
@@ -389,17 +389,17 @@ export function WoBubutWorkHistoryDrawer({
                   </div>
 
                   {editMode && (
-                    <div className="mt-4 border border-white/5 bg-[#111114] p-4">
+                    <div className="mt-4 border border-white/5 bg-card p-4">
                       <div className="flex items-center justify-between">
                         <div>
-                          <h3 className="font-mono text-[11px] uppercase tracking-[0.12em] text-white/50">Gabungkan WO Lain</h3>
-                          <p className="mt-1 text-xs text-white/40">WO dengan kendaraan dan panel yang sama dapat digabung ke invoice ini.</p>
+                          <h3 className="font-mono text-[11px] uppercase tracking-[0.12em] text-foreground/50">Gabungkan WO Lain</h3>
+                          <p className="mt-1 text-xs text-foreground/40">WO dengan kendaraan dan panel yang sama dapat digabung ke invoice ini.</p>
                         </div>
                         <button
                           type="button"
                           onClick={() => setShowWoPicker(!showWoPicker)}
                           className={`border px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider transition-colors ${
-                            showWoPicker ? "border-amber-500/30 bg-amber-500/10 text-amber-500" : "border-white/10 bg-white/5 text-white/60 hover:bg-white/10 hover:text-white"
+                            showWoPicker ? "border-primary/30 bg-primary/10 text-app-accent-ink" : "border-white/10 bg-white/5 text-foreground/60 hover:bg-white/10 hover:text-foreground"
                           }`}
                         >
                           {showWoPicker ? "Tutup" : "+ Tampilkan WO"}
@@ -409,7 +409,7 @@ export function WoBubutWorkHistoryDrawer({
                       {showWoPicker && (
                         <div className="mt-4 border-t border-white/5 pt-4">
                           {isLoadingWos ? (
-                            <p className="font-mono text-xs text-white/40">Mencari WO yang cocok...</p>
+                            <p className="font-mono text-xs text-foreground/40">Mencari WO yang cocok...</p>
                           ) : mergeableWos.length > 0 ? (
                             <div className="grid gap-2">
                               {mergeableWos.map((wo) => {
@@ -418,12 +418,12 @@ export function WoBubutWorkHistoryDrawer({
                                   <label
                                     key={wo.sourceKey}
                                     className={`flex cursor-pointer items-start gap-3 border p-3 transition-colors ${
-                                      isChecked ? "border-amber-500/40 bg-amber-500/5" : "border-white/5 bg-black/20 hover:border-white/10"
+                                      isChecked ? "border-primary/40 bg-primary/5" : "border-white/5 bg-black/20 hover:border-white/10"
                                     }`}
                                   >
                                     <input
                                       type="checkbox"
-                                      className="mt-0.5 accent-amber-500"
+                                      className="mt-0.5 accent-primary"
                                       checked={isChecked}
                                       onChange={(e) => {
                                         if (e.target.checked && wo.sourceKey) setEditMergedWoIds((prev) => [...prev, wo.sourceKey!]);
@@ -432,17 +432,17 @@ export function WoBubutWorkHistoryDrawer({
                                     />
                                     <div className="flex flex-col gap-1">
                                       <div className="flex items-center gap-2">
-                                        <span className="font-mono text-[11px] font-bold text-white/90">{wo.sourceWobNo}</span>
-                                        <span className="font-mono text-[10px] text-white/40">&bull; {wo.woDate}</span>
+                                        <span className="font-mono text-[11px] font-bold text-foreground/90">{wo.sourceWobNo}</span>
+                                        <span className="font-mono text-[10px] text-foreground/40">&bull; {wo.woDate}</span>
                                       </div>
-                                      <span className="text-xs text-white/60">{text(wo.sparepartName)}</span>
+                                      <span className="text-xs text-foreground/60">{text(wo.sparepartName)}</span>
                                     </div>
                                   </label>
                                 );
                               })}
                             </div>
                           ) : (
-                            <p className="font-mono text-xs text-white/40">Tidak ada WO lain yang dapat digabungkan.</p>
+                            <p className="font-mono text-xs text-foreground/40">Tidak ada WO lain yang dapat digabungkan.</p>
                           )}
                         </div>
                       )}
@@ -452,15 +452,15 @@ export function WoBubutWorkHistoryDrawer({
                 )}
 
                 {activeTab === "material" && (
-                  <div className="overflow-x-auto border border-white/5 bg-[#111114]">
+                  <div className="overflow-x-auto border border-white/5 bg-card">
                     <table className="w-full text-left text-xs">
                       <thead>
                         <tr className="border-b border-white/5 bg-black/20">
-                          <th className="px-4 py-3 font-mono text-[10px] uppercase tracking-wider text-white/40">Nama Material</th>
-                          <th className="px-4 py-3 font-mono text-[10px] uppercase tracking-wider text-white/40 text-right">QTY</th>
-                          <th className="px-4 py-3 font-mono text-[10px] uppercase tracking-wider text-white/40">Satuan</th>
-                          <th className="px-4 py-3 font-mono text-[10px] uppercase tracking-wider text-white/40 text-right">Harga Satuan</th>
-                          <th className="px-4 py-3 font-mono text-[10px] uppercase tracking-wider text-white/40 text-right">Total</th>
+                          <th className="px-4 py-3 font-mono text-[10px] uppercase tracking-wider text-foreground/40">Nama Material</th>
+                          <th className="px-4 py-3 font-mono text-[10px] uppercase tracking-wider text-foreground/40 text-right">QTY</th>
+                          <th className="px-4 py-3 font-mono text-[10px] uppercase tracking-wider text-foreground/40">Satuan</th>
+                          <th className="px-4 py-3 font-mono text-[10px] uppercase tracking-wider text-foreground/40 text-right">Harga Satuan</th>
+                          <th className="px-4 py-3 font-mono text-[10px] uppercase tracking-wider text-foreground/40 text-right">Total</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-white/5">
@@ -477,7 +477,7 @@ export function WoBubutWorkHistoryDrawer({
                                       newArr[idx].materialName = e.target.value;
                                       setEditMaterialOverrides(newArr);
                                     }}
-                                    className="w-full border-b border-transparent bg-transparent py-1 text-white/80 outline-none focus:border-amber-500/50"
+                                    className="w-full border-b border-transparent bg-transparent py-1 text-foreground/80 outline-none focus:border-primary/50"
                                     placeholder="Nama Material"
                                   />
                                 </td>
@@ -490,10 +490,10 @@ export function WoBubutWorkHistoryDrawer({
                                       newArr[idx].qty = parseFloat(e.target.value) || 0;
                                       setEditMaterialOverrides(newArr);
                                     }}
-                                    className="w-full border-b border-transparent bg-transparent py-1 text-right font-mono text-white/70 outline-none focus:border-amber-500/50"
+                                    className="w-full border-b border-transparent bg-transparent py-1 text-right font-mono text-foreground/70 outline-none focus:border-primary/50"
                                   />
                                 </td>
-                                <td className="px-4 py-2 text-white/50">-</td>
+                                <td className="px-4 py-2 text-foreground/50">-</td>
                                 <td className="px-4 py-2">
                                   <input
                                     type="number"
@@ -503,10 +503,10 @@ export function WoBubutWorkHistoryDrawer({
                                       newArr[idx].price = parseFloat(e.target.value) || 0;
                                       setEditMaterialOverrides(newArr);
                                     }}
-                                    className="w-full border-b border-transparent bg-transparent py-1 text-right font-mono text-white/70 outline-none focus:border-amber-500/50"
+                                    className="w-full border-b border-transparent bg-transparent py-1 text-right font-mono text-foreground/70 outline-none focus:border-primary/50"
                                   />
                                 </td>
-                                <td className="px-4 py-2 text-right font-mono text-amber-500/80">
+                                <td className="px-4 py-2 text-right font-mono text-app-accent-ink/80">
                                   {rupiah(row.qty * row.price)}
                                   <button
                                     type="button"
@@ -515,7 +515,7 @@ export function WoBubutWorkHistoryDrawer({
                                       newArr.splice(idx, 1);
                                       setEditMaterialOverrides(newArr);
                                     }}
-                                    className="ml-3 text-red-500/50 hover:text-red-500"
+                                    className="ml-3 text-destructive/50 hover:text-destructive"
                                   >
                                     <X className="inline h-3 w-3" />
                                   </button>
@@ -532,7 +532,7 @@ export function WoBubutWorkHistoryDrawer({
                                       { materialName: "", qty: 1, price: 0 },
                                     ])
                                   }
-                                  className="font-mono text-[10px] uppercase tracking-wider text-amber-500 hover:text-amber-400 transition-colors"
+                                  className="font-mono text-[10px] uppercase tracking-wider text-app-accent-ink hover:text-app-accent-ink transition-colors"
                                 >
                                   + Tambah Bahan Baru
                                 </button>
@@ -542,19 +542,19 @@ export function WoBubutWorkHistoryDrawer({
                         ) : data.materialRows.length > 0 ? (
                           data.materialRows.map((row, idx) => (
                             <tr key={row.id} className={idx % 2 === 0 ? "bg-white/[0.01] hover:bg-white/[0.03] transition-colors" : "hover:bg-white/[0.03] transition-colors"}>
-                              <td className="px-4 py-3 text-white/80">{row.materialName}</td>
-                              <td className="px-4 py-3 font-mono text-right text-white/70">{row.qty}</td>
-                              <td className="px-4 py-3 text-white/50">{text(row.quom)}</td>
-                              <td className="px-4 py-3 font-mono text-right text-white/70">{rupiah(row.price)}</td>
-                              <td className="px-4 py-3 font-mono text-right text-amber-500/80">{rupiah(row.total)}</td>
+                              <td className="px-4 py-3 text-foreground/80">{row.materialName}</td>
+                              <td className="px-4 py-3 font-mono text-right text-foreground/70">{row.qty}</td>
+                              <td className="px-4 py-3 text-foreground/50">{text(row.quom)}</td>
+                              <td className="px-4 py-3 font-mono text-right text-foreground/70">{rupiah(row.price)}</td>
+                              <td className="px-4 py-3 font-mono text-right text-app-accent-ink/80">{rupiah(row.total)}</td>
                             </tr>
                           ))
                         ) : (
                           <tr>
                             <td colSpan={5} className="px-4 py-16 text-center">
                               <div className="flex flex-col items-center gap-3">
-                                <PackageX className="h-8 w-8 text-white/20" />
-                                <span className="font-mono text-xs uppercase tracking-wider text-white/40">Tidak memakai bahan</span>
+                                <PackageX className="h-8 w-8 text-foreground/20" />
+                                <span className="font-mono text-xs uppercase tracking-wider text-foreground/40">Tidak memakai bahan</span>
                               </div>
                             </td>
                           </tr>
@@ -575,13 +575,13 @@ export function WoBubutWorkHistoryDrawer({
 
                         if (editMode) {
                           return (
-                            <div key={url} className={`group relative overflow-hidden border ${isBefore || isAfter ? "border-amber-500/50" : "border-white/5"} bg-[#111114]`}>
+                            <div key={url} className={`group relative overflow-hidden border ${isBefore || isAfter ? "border-primary/50" : "border-white/5"} bg-card`}>
                               <img src={resolvedUrl} alt="" className="aspect-square w-full object-cover" />
                               <div className="absolute inset-0 bg-black/40" />
                               
                               <div className="absolute top-2 left-2 flex gap-1">
-                                {isBefore && <span className="rounded-sm bg-amber-500 px-1.5 py-0.5 text-[9px] font-bold text-black">BEFORE</span>}
-                                {isAfter && <span className="rounded-sm bg-emerald-500 px-1.5 py-0.5 text-[9px] font-bold text-black">AFTER</span>}
+                                {isBefore && <span className="rounded-sm bg-primary px-1.5 py-0.5 text-[9px] font-bold text-primary-foreground">BEFORE</span>}
+                                {isAfter && <span className="rounded-sm bg-success px-1.5 py-0.5 text-[9px] font-bold text-primary-foreground">AFTER</span>}
                               </div>
 
                               <div className="absolute bottom-0 left-0 right-0 flex gap-1 border-t border-white/10 bg-black/80 p-1.5">
@@ -589,7 +589,7 @@ export function WoBubutWorkHistoryDrawer({
                                   type="button"
                                   onClick={() => toggleEditPicture("before", url)}
                                   className={`flex-1 py-1 text-[9px] font-mono font-bold uppercase transition-colors ${
-                                    isBefore ? "bg-amber-500 text-black" : "bg-white/5 text-white/70 hover:bg-white/20 hover:text-white"
+                                    isBefore ? "bg-primary text-primary-foreground" : "bg-white/5 text-foreground/70 hover:bg-white/20 hover:text-foreground"
                                   }`}
                                 >
                                   {isBefore ? "Batal" : "Before"}
@@ -598,7 +598,7 @@ export function WoBubutWorkHistoryDrawer({
                                   type="button"
                                   onClick={() => toggleEditPicture("after", url)}
                                   className={`flex-1 py-1 text-[9px] font-mono font-bold uppercase transition-colors ${
-                                    isAfter ? "bg-emerald-500 text-black" : "bg-white/5 text-white/70 hover:bg-white/20 hover:text-white"
+                                    isAfter ? "bg-success text-primary-foreground" : "bg-white/5 text-foreground/70 hover:bg-white/20 hover:text-foreground"
                                   }`}
                                 >
                                   {isAfter ? "Batal" : "After"}
@@ -614,7 +614,7 @@ export function WoBubutWorkHistoryDrawer({
                             href={resolvedUrl}
                             target="_blank"
                             rel="noreferrer"
-                            className="group relative overflow-hidden border border-white/5 bg-[#111114]"
+                            className="group relative overflow-hidden border border-white/5 bg-card"
                           >
                             <img
                               src={resolvedUrl}
@@ -623,7 +623,7 @@ export function WoBubutWorkHistoryDrawer({
                             />
                             <div className="absolute inset-0 bg-black/0 transition-colors group-hover:bg-black/40" />
                             <div className="absolute bottom-0 left-0 right-0 translate-y-full border-t border-white/10 bg-black/80 p-2 text-center transition-transform duration-300 group-hover:translate-y-0">
-                              <span className="inline-flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-wider text-white">
+                              <span className="inline-flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-wider text-foreground">
                                 <ExternalLink className="h-3 w-3" /> Buka
                               </span>
                             </div>
@@ -631,10 +631,10 @@ export function WoBubutWorkHistoryDrawer({
                         );
                       })
                     ) : (
-                      <div className="col-span-full border border-white/5 bg-[#111114] px-4 py-16 text-center">
+                      <div className="col-span-full border border-white/5 bg-card px-4 py-16 text-center">
                         <div className="flex flex-col items-center gap-3">
-                          <CameraOff className="h-8 w-8 text-white/20" />
-                          <span className="font-mono text-xs uppercase tracking-wider text-white/40">Belum ada dokumentasi</span>
+                          <CameraOff className="h-8 w-8 text-foreground/20" />
+                          <span className="font-mono text-xs uppercase tracking-wider text-foreground/40">Belum ada dokumentasi</span>
                         </div>
                       </div>
                     )}
@@ -655,9 +655,9 @@ export function WoBubutWorkHistoryDrawer({
                   const customerRoundedTotal = isPreview ? (pt!.priceRounding || pt!.totalPriceBubut) : dt!.customerRoundedTotal;
 
                   return (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-0 border border-white/5 bg-[#111114]">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-0 border border-white/5 bg-card">
                       <div className="flex flex-col gap-0 border-r border-white/5 px-4 py-3">
-                         <h3 className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30 mb-2">Base Cost (Direksi & Customer)</h3>
+                         <h3 className="text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30 mb-2">Base Cost (Direksi & Customer)</h3>
                          <div className="grid gap-3">
                            <SummaryCard label="Total Jam Kerja" value={totalWorkHourText} />
                            <SummaryCard label="Total Harga Jam Kerja" value={rupiah(totalWorkingHourCost)} />
@@ -666,7 +666,7 @@ export function WoBubutWorkHistoryDrawer({
                          </div>
                       </div>
                       <div className="flex flex-col gap-0 px-4 py-3">
-                         <h3 className="text-[10px] font-mono uppercase tracking-[0.12em] text-amber-500/40 mb-2">Markup Cost (Customer Only)</h3>
+                         <h3 className="text-[10px] font-mono uppercase tracking-[0.12em] text-app-accent-ink/40 mb-2">Markup Cost (Customer Only)</h3>
                          <div className="grid gap-3">
                            <SummaryCard label="UP 235% Customer" value={rupiah(customerUpTotal)} />
                            <SummaryCard label="Final Price Customer" value={rupiah(customerRoundedTotal)} highlight amber />
@@ -683,7 +683,7 @@ export function WoBubutWorkHistoryDrawer({
 
         {/* ── FOOTER ── */}
         {data && (
-          <footer className="shrink-0 border-t border-white/5 bg-[#111114] px-4 py-3">
+          <footer className="shrink-0 border-t border-white/5 bg-card px-4 py-3">
             <div className="flex justify-end gap-3">
               {editMode ? (
                 // Edit mode footer
@@ -691,7 +691,7 @@ export function WoBubutWorkHistoryDrawer({
                   <button
                     type="button"
                     onClick={exitEditMode}
-                    className="border border-white/10 h-8 px-4 text-[10px] font-mono uppercase text-white/40 hover:text-white transition-colors"
+                    className="border border-white/10 h-8 px-4 text-[10px] font-mono uppercase text-foreground/40 hover:text-foreground transition-colors"
                   >
                     Batal
                   </button>
@@ -699,7 +699,7 @@ export function WoBubutWorkHistoryDrawer({
                     type="button"
                     disabled={isPending || !editPreview}
                     onClick={saveEdit}
-                    className="flex items-center gap-2 rounded-sm bg-amber-500 px-6 py-2 font-mono text-[11px] font-bold uppercase tracking-[0.1em] text-amber-950 transition-colors hover:bg-amber-400 disabled:opacity-50"
+                    className="flex items-center gap-2 rounded-sm bg-primary px-6 py-2 font-mono text-[11px] font-bold uppercase tracking-[0.1em] text-primary-foreground transition-colors hover:bg-primary disabled:opacity-50"
                   >
                     {isPending ? "Menyimpan..." : "Simpan Perubahan"}
                   </button>
@@ -709,13 +709,13 @@ export function WoBubutWorkHistoryDrawer({
                 <>
                   {canRelease && !data.header.direksiInvoiceId && (
                     <button type="button" onClick={() => onRelease(data.sourceKey, "DIREKSI")}
-                      className="border border-amber-500/40 bg-transparent px-5 py-2 font-mono text-[10px] uppercase tracking-wider text-amber-500 hover:bg-amber-500/10 transition-colors">
+                      className="border border-primary/40 bg-transparent px-5 py-2 font-mono text-[10px] uppercase tracking-wider text-app-accent-ink hover:bg-primary/10 transition-colors">
                       Rilis Direksi
                     </button>
                   )}
                   {canRelease && !data.header.customerInvoiceId && (
                     <button type="button" onClick={() => onRelease(data.sourceKey, "CUSTOMER")}
-                      className="border border-sky-500/30 bg-transparent px-5 py-2 font-mono text-[10px] uppercase tracking-wider text-sky-400 hover:bg-sky-500/10 transition-colors">
+                      className="border border-info/30 bg-transparent px-5 py-2 font-mono text-[10px] uppercase tracking-wider text-info hover:bg-info/10 transition-colors">
                       Rilis Customer
                     </button>
                   )}
@@ -724,19 +724,19 @@ export function WoBubutWorkHistoryDrawer({
                     <>
                       {canRelease && (
                         <button type="button" onClick={() => enterEditMode(data.header.direksiInvoiceId!, "DIREKSI")}
-                          className="inline-flex items-center gap-1.5 border border-amber-500/30 bg-transparent px-4 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-amber-500 hover:bg-amber-500/10 transition-colors">
+                          className="inline-flex items-center gap-1.5 border border-primary/30 bg-transparent px-4 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-app-accent-ink hover:bg-primary/10 transition-colors">
                           <Pencil className="h-3 w-3" /> Edit Direksi
                         </button>
                       )}
                       {canPrint && (
                         <Link href={`/invoice/wo-bubut/${data.header.direksiInvoiceId}/print`}
-                          className="inline-flex items-center gap-2 border border-amber-500/30 bg-amber-500/[0.04] px-4 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-amber-500 hover:bg-amber-500/10 transition-colors">
+                          className="inline-flex items-center gap-2 border border-primary/30 bg-primary/[0.04] px-4 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-app-accent-ink hover:bg-primary/10 transition-colors">
                           <Printer className="h-3.5 w-3.5" /> Print Direksi
                         </Link>
                       )}
                     </>
                   ) : (
-                    <button disabled className="inline-flex cursor-not-allowed items-center gap-2 border border-white/5 px-4 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-white/15">
+                    <button disabled className="inline-flex cursor-not-allowed items-center gap-2 border border-white/5 px-4 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-foreground/15">
                       <Printer className="h-3.5 w-3.5" /> Print Direksi
                     </button>
                   )}
@@ -745,19 +745,19 @@ export function WoBubutWorkHistoryDrawer({
                     <>
                       {canRelease && (
                         <button type="button" onClick={() => enterEditMode(data.header.customerInvoiceId!, "CUSTOMER")}
-                          className="inline-flex items-center gap-1.5 border border-sky-500/30 bg-transparent px-4 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-sky-400 hover:bg-sky-500/10 transition-colors">
+                          className="inline-flex items-center gap-1.5 border border-info/30 bg-transparent px-4 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-info hover:bg-info/10 transition-colors">
                           <Pencil className="h-3 w-3" /> Edit Customer
                         </button>
                       )}
                       {canPrint && (
                         <Link href={`/invoice/wo-bubut/${data.header.customerInvoiceId}/print`}
-                          className="inline-flex items-center gap-2 border border-sky-500/30 bg-sky-500/[0.04] px-4 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-sky-400 hover:bg-sky-500/10 transition-colors">
+                          className="inline-flex items-center gap-2 border border-info/30 bg-info/[0.04] px-4 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-info hover:bg-info/10 transition-colors">
                           <Printer className="h-3.5 w-3.5" /> Print Customer
                         </Link>
                       )}
                     </>
                   ) : (
-                    <button disabled className="inline-flex cursor-not-allowed items-center gap-2 border border-white/5 px-4 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-white/15">
+                    <button disabled className="inline-flex cursor-not-allowed items-center gap-2 border border-white/5 px-4 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-foreground/15">
                       <Printer className="h-3.5 w-3.5" /> Print Customer
                     </button>
                   )}
@@ -774,21 +774,21 @@ export function WoBubutWorkHistoryDrawer({
 function InfoItem({ label, value }: { label: string; value: string | null | undefined }) {
   return (
     <div className="flex flex-col gap-1">
-      <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-white/40">
+      <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-foreground/40">
         {label}
       </span>
-      <span className="text-[11px] font-mono text-white/70">{text(value)}</span>
+      <span className="text-[11px] font-mono text-foreground/70">{text(value)}</span>
     </div>
   );
 }
 
 function SummaryCard({ label, value, highlight, amber }: { label: string; value: string; highlight?: boolean; amber?: boolean }) {
-  const colorClass = amber ? "text-amber-500" : "text-white/90";
+  const colorClass = amber ? "text-app-accent-ink" : "text-foreground/90";
   const sizeClass = highlight ? "text-[12px]" : "text-[11px]";
   
   return (
     <div className="flex items-center justify-between border-b border-white/5 py-2">
-      <span className="font-mono text-[10px] uppercase tracking-widest text-white/40">
+      <span className="font-mono text-[10px] uppercase tracking-widest text-foreground/40">
         {label}
       </span>
       <span className={`font-mono font-bold tracking-wide ${sizeClass} ${colorClass}`}>

@@ -236,7 +236,7 @@ export function AppShell({ user, navigation, children }: AppShellProps) {
           if (!subItem.href && hasChildren) {
             return (
               <div key={subItem.id} className="pt-2 first:pt-1 pb-0.5">
-                <p className="px-2 pb-1 font-mono text-[11px] uppercase tracking-[0.08em] text-gray-600 dark:text-white/45">
+                <p className="px-2 pb-1 font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground dark:text-foreground/45">
                   {subItem.label}
                 </p>
                 {renderSubItems(subItem.subItems!, depth + 1)}
@@ -253,14 +253,14 @@ export function AppShell({ user, navigation, children }: AppShellProps) {
                   "flex w-full items-center gap-2 px-2 py-1.5 text-left transition-colors",
                   depth === 0 ? "text-[13px]" : "text-[12px]",
                   active
-                    ? "font-medium text-amber-500 dark:text-amber-400"
-                    : "text-gray-500 hover:text-gray-800 dark:text-white/45 dark:hover:text-white/75"
+                    ? "border-l-2 border-sidebar-active bg-sidebar-accent font-semibold text-sidebar-foreground dark:border-primary dark:text-primary"
+                    : "text-sidebar-foreground/90 hover:bg-sidebar-accent hover:text-sidebar-foreground dark:text-muted-foreground dark:hover:bg-accent dark:hover:text-foreground"
                 ].join(" ")}
               >
                 {active ? (
-                  <span className="h-1 w-1 shrink-0 rounded-full bg-amber-500 dark:bg-amber-400" />
+                  <span className="h-1 w-1 shrink-0 rounded-full bg-sidebar-active dark:bg-primary" />
                 ) : (
-                  <span className="h-1 w-1 shrink-0 rounded-full bg-gray-300 dark:bg-white/[0.12]" />
+                  <span className="h-1 w-1 shrink-0 rounded-full bg-sidebar-foreground/35 dark:bg-muted-foreground/40" />
                 )}
                 {subItem.label}
               </Link>
@@ -287,17 +287,17 @@ export function AppShell({ user, navigation, children }: AppShellProps) {
             className={[
               "flex w-full items-center gap-2.5 rounded-sm px-2.5 py-2 text-[13px] transition-colors",
               active
-                ? "font-medium text-gray-900 dark:text-white/80"
-                : "text-gray-600 hover:bg-gray-100 hover:text-gray-800 dark:text-white/48 dark:hover:bg-white/[0.04] dark:hover:text-white/78"
+                ? "border-l-2 border-sidebar-active bg-sidebar-accent font-semibold text-sidebar-foreground dark:border-primary dark:text-foreground"
+                : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground dark:text-muted-foreground dark:hover:bg-accent dark:hover:text-foreground"
             ].join(" ")}
           >
-            <Icon className={active ? "w-3.5 h-3.5 shrink-0 text-amber-500 dark:text-amber-400" : "w-3.5 h-3.5 shrink-0 text-gray-400 dark:text-white/20"} />
+            <Icon className={active ? "w-3.5 h-3.5 shrink-0 text-sidebar-active dark:text-primary" : "w-3.5 h-3.5 shrink-0 text-sidebar-foreground/75 dark:text-muted-foreground"} />
             <span className="flex-1 truncate text-left">{item.label}</span>
             <ChevronDown className={["w-3 h-3 shrink-0 transition-transform duration-250 ease-in-out", isExpanded ? "rotate-180" : ""].join(" ")} />
           </button>
 
           <div className={[
-            "overflow-hidden transition-[max-height] duration-250 ease-in-out ml-3 pl-2 border-l border-gray-200 dark:border-white/[0.06] mt-1",
+            "overflow-hidden transition-[max-height] duration-250 ease-in-out ml-3 pl-2 border-l border-border dark:border-white/[0.06] mt-1",
             isExpanded ? "max-h-[500px]" : "max-h-0"
           ].join(" ")}>
             {renderSubItems(item.subItems!)}
@@ -314,11 +314,11 @@ export function AppShell({ user, navigation, children }: AppShellProps) {
         className={[
           "flex w-full items-center gap-2.5 rounded-sm px-2.5 py-2 text-[13px] transition-colors",
           active
-            ? "font-medium bg-amber-500/10 text-amber-500 dark:bg-amber-500/[0.08] dark:text-amber-400"
-            : "text-gray-600 hover:bg-gray-100 hover:text-gray-800 dark:text-white/48 dark:hover:bg-white/[0.04] dark:hover:text-white/78"
+            ? "border-l-2 border-sidebar-active bg-sidebar-primary font-semibold text-sidebar-primary-foreground"
+            : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground dark:text-muted-foreground dark:hover:bg-accent dark:hover:text-foreground"
         ].join(" ")}
       >
-        <Icon className={active ? "w-3.5 h-3.5 shrink-0 text-amber-500 dark:text-amber-400" : "w-3.5 h-3.5 shrink-0 text-gray-400 dark:text-white/20"} />
+        <Icon className={active ? "w-3.5 h-3.5 shrink-0 text-sidebar-primary-foreground" : "w-3.5 h-3.5 shrink-0 text-sidebar-foreground/75 dark:text-muted-foreground"} />
         <span className="flex-1 truncate">{item.label}</span>
       </Link>
     );
@@ -342,24 +342,24 @@ export function AppShell({ user, navigation, children }: AppShellProps) {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-gray-50 text-gray-900 dark:bg-[#0a0a0c] dark:text-white print:block print:h-auto print:bg-white print:text-black print:overflow-visible">
+    <div className="flex h-screen overflow-hidden bg-background text-foreground print:block print:h-auto print:bg-white print:text-primary-foreground print:overflow-visible">
 
       {/* ── Sidebar ── */}
       <aside className={[
-        "flex shrink-0 flex-col overflow-hidden border-r border-gray-200 bg-white transition-all duration-200 dark:border-white/[0.05] dark:bg-[#111114] print:hidden",
+        "flex shrink-0 flex-col overflow-hidden border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-all duration-200 dark:border-border dark:bg-sidebar print:hidden",
         isSidebarOpen ? "w-[248px]" : "w-0",
       ].join(" ")}>
 
         {/* Brand Header */}
-        <div className="flex h-16 shrink-0 items-center gap-2.5 border-b border-gray-200 px-3 dark:border-white/[0.06]">
-          <div className="h-8 w-8 shrink-0 overflow-hidden border border-gray-300 dark:border-white/[0.10] rounded-sm">
+        <div className="flex h-16 shrink-0 items-center gap-2.5 border-b border-sidebar-border px-3 dark:border-border">
+          <div className="h-8 w-8 shrink-0 overflow-hidden rounded-sm border border-sidebar-border dark:border-border">
             <Image src="/sm.jpeg" alt="SM" width={32} height={32} className="object-cover w-full h-full" />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-[14px] font-semibold text-gray-900 leading-none dark:text-white/90" style={SERIF_STYLE}>
+            <p className="truncate text-[14px] font-semibold leading-none text-sidebar-foreground dark:text-foreground" style={SERIF_STYLE}>
               Stanley Marthin System
             </p>
-            <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.04em] text-gray-500 leading-tight dark:text-white/45">
+            <p className="mt-1 font-mono text-[10px] uppercase leading-tight tracking-[0.04em] text-sidebar-foreground/75 dark:text-muted-foreground">
               Classic Restoration<br/>Garage
             </p>
           </div>
@@ -374,10 +374,10 @@ export function AppShell({ user, navigation, children }: AppShellProps) {
           {Array.from(new Set(navigation.map(i => i.group).filter(Boolean))).map(groupName => (
             <div key={groupName!} className="mt-4 first:mt-0">
               <div className="flex items-center gap-2 px-2 pt-3 pb-1.5">
-                <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-gray-500 dark:text-white/35">
+                <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-sidebar-foreground/75 dark:text-muted-foreground">
                   {groupName}
                 </span>
-                <div className="flex-1 h-px bg-gray-200 dark:bg-white/[0.05]" />
+                <div className="h-px flex-1 bg-sidebar-border dark:bg-border" />
               </div>
               <div className="space-y-0.5">
                 {navigation.filter(item => item.group === groupName).map(item => renderNavItem(item))}
@@ -391,13 +391,13 @@ export function AppShell({ user, navigation, children }: AppShellProps) {
       <main className="flex-1 min-w-0 flex flex-col h-screen overflow-hidden print:block print:h-auto print:overflow-visible">
 
         {/* Topbar — 56px ERP style */}
-        <header className="z-50 flex h-16 shrink-0 items-center gap-4 border-b border-gray-200 bg-white px-4 dark:border-white/[0.06] dark:bg-[#111114] print:hidden">
+        <header className="z-50 flex h-16 shrink-0 items-center gap-4 border-b border-border bg-card px-4 print:hidden">
 
           {/* Hamburger */}
           <button
             type="button"
             onClick={() => setIsSidebarOpen((v) => !v)}
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border border-transparent text-gray-400 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:text-gray-600 dark:text-white/35 dark:hover:border-white/[0.08] dark:hover:bg-white/[0.03] dark:hover:text-white/70"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border border-transparent text-muted-foreground transition-colors hover:border-border hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
           >
             <Menu className="w-4 h-4" />
           </button>
@@ -405,17 +405,17 @@ export function AppShell({ user, navigation, children }: AppShellProps) {
           {/* Title & Breadcrumb */}
           <div className="flex-1 flex flex-col justify-center min-w-0">
             {activeParentLabel ? (
-              <div className="flex items-center gap-1.5 text-[13px] font-medium tracking-wide text-gray-600 dark:text-white/50">
+              <div className="flex items-center gap-1.5 text-[13px] font-medium tracking-wide text-muted-foreground">
                 <span>{activeParentLabel}</span>
                 {activeChildLabel ? (
                   <>
-                    <span className="text-gray-300 dark:text-white/15">/</span>
+                    <span className="text-app-ink-subtle">/</span>
                     <span>{activeChildLabel}</span>
                   </>
                 ) : null}
               </div>
             ) : null}
-            <h1 className="text-[20px] font-bold truncate leading-tight text-gray-900 dark:text-white/95">
+            <h1 className="truncate text-[20px] font-bold leading-tight text-foreground">
               {activeChildLabel || activeParentLabel || "Dashboard"}
             </h1>
           </div>
@@ -425,44 +425,44 @@ export function AppShell({ user, navigation, children }: AppShellProps) {
             <button
               type="button"
               onClick={() => setIsProfileMenuOpen((v) => !v)}
-              className="flex items-center gap-3 px-3 py-1.5 rounded-lg transition-colors hover:bg-gray-100 dark:hover:bg-white/[0.03]"
+              className="flex items-center gap-3 rounded-lg px-3 py-1.5 transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
             >
               <div className="text-right hidden sm:block">
-                <p className="text-[14px] font-semibold leading-none truncate text-gray-800 dark:text-white/85">
+                <p className="truncate text-[14px] font-semibold leading-none text-foreground">
                   {user.fullName}
                 </p>
-                <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.08em] leading-none text-gray-500 dark:text-white/45">
+                <p className="mt-1 font-mono text-[10px] uppercase leading-none tracking-[0.08em] text-muted-foreground">
                   {user.divisionName}
                 </p>
               </div>
 
-              <div className="relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-gray-200 bg-slate-50 dark:border-white/[0.05] dark:bg-[#0a0a0c]">
+              <div className="relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-border bg-muted">
                 {user.photoUrl ? (
                   <Image src={user.photoUrl} alt={user.fullName} fill sizes="36px" className="object-cover" />
                 ) : (
-                  <span className="text-[12px] font-bold text-gray-400 dark:text-white/40">
+                  <span className="text-[12px] font-bold text-muted-foreground">
                     {initialsFromName(user.fullName)}
                   </span>
                 )}
               </div>
-              <ChevronDown className="w-4 h-4 text-gray-400 dark:text-white/30" />
+              <ChevronDown className="h-4 w-4 text-muted-foreground" />
             </button>
 
             {/* Dropdown */}
             {isProfileMenuOpen && (
-              <div className="absolute right-0 top-full mt-2 w-72 z-50 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-xl py-1 dark:border-white/[0.07] dark:bg-[#111114]">
-                <div className="px-4 py-3 border-b border-gray-200 mb-1 dark:border-white/[0.05]">
-                  <p className="text-[14px] font-semibold truncate leading-tight text-gray-900 dark:text-white">{user.fullName}</p>
-                  <p className="text-[10px] font-mono mt-1 uppercase tracking-[0.08em] leading-snug text-gray-500 dark:text-white/50">{user.divisionName}</p>
+              <div className="absolute right-0 top-full z-50 mt-2 w-72 overflow-hidden rounded-lg border border-border bg-popover py-1 shadow-xl">
+                <div className="mb-1 border-b border-border px-4 py-3">
+                  <p className="truncate text-[14px] font-semibold leading-tight text-popover-foreground">{user.fullName}</p>
+                  <p className="mt-1 font-mono text-[10px] uppercase leading-snug tracking-[0.08em] text-muted-foreground">{user.divisionName}</p>
                 </div>
 
                 <div className="px-2 py-1 space-y-0.5">
                   <button
                     onClick={() => setTheme(isDark ? "light" : "dark")}
-                    className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left text-[13px] transition-colors text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-white/[0.04] dark:hover:text-white"
+                    className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left text-[13px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     {isDark ? (
-                      <Sun className="h-4 w-4 text-gray-500 dark:text-gray-400" />
+                      <Sun className="h-4 w-4 text-muted-foreground" />
                     ) : (
                       <Moon className="h-4 w-4" />
                     )}
@@ -472,7 +472,7 @@ export function AppShell({ user, navigation, children }: AppShellProps) {
                   <Link
                     href="/profile"
                     onClick={() => setIsProfileMenuOpen(false)}
-                    className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-[13px] transition-colors text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-white/[0.04] dark:hover:text-white"
+                    className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-[13px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     <User className="w-4 h-4" />
                     Profile Settings
@@ -481,14 +481,14 @@ export function AppShell({ user, navigation, children }: AppShellProps) {
                   <Link
                     href="/settings/password"
                     onClick={() => setIsProfileMenuOpen(false)}
-                    className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-[13px] transition-colors text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-white/[0.04] dark:hover:text-white"
+                    className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-[13px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     <Lock className="w-4 h-4" />
                     Change Password
                   </Link>
                 </div>
 
-                <div className="h-px bg-gray-200 my-1 mx-2 dark:bg-white/[0.05]" />
+                <div className="mx-2 my-1 h-px bg-border" />
 
                 <div className="px-2 py-1">
                   <button
@@ -506,13 +506,13 @@ export function AppShell({ user, navigation, children }: AppShellProps) {
                       setIsLoggingOut(false);
                       setLogoutError("Logout gagal. Coba lagi.");
                     }}
-                    className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-[13px] text-red-500/80 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-40 dark:text-red-400/80 dark:hover:bg-red-500/10 dark:hover:text-red-400"
+                    className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-[13px] text-destructive transition-colors hover:bg-destructive/10 hover:text-destructive disabled:cursor-not-allowed disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     <LogOut className="w-4 h-4" />
                     {isLoggingOut ? "Signing Out..." : "Sign Out"}
                   </button>
                   {logoutError && (
-                    <p className="px-3 pb-2 pt-1 text-[11px] text-red-500/80 dark:text-red-300/80">
+                    <p className="px-3 pb-2 pt-1 text-[11px] text-destructive">
                       {logoutError}
                     </p>
                   )}
@@ -523,7 +523,7 @@ export function AppShell({ user, navigation, children }: AppShellProps) {
         </header>
 
         {/* Page content — full width, tight padding */}
-        <div className="flex-1 overflow-y-auto bg-slate-50 dark:bg-[#0a0a0c] print:overflow-visible print:bg-white">
+        <div className="flex-1 overflow-y-auto bg-background print:overflow-visible print:bg-white">
           <div className="p-4">
             {children}
           </div>

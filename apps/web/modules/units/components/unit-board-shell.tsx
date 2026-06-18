@@ -246,8 +246,8 @@ export function UnitBoardShell({ rows, meta, state, user }: UnitBoardShellProps)
       sticky: true,
       renderCell: (value, row) => (
         <div className="space-y-1">
-          <p className="font-mono text-[12px] font-medium text-white">{String(value ?? "-")}</p>
-          <p className="font-mono text-[10px] text-white/40">{String(row.unitId ?? "-")}</p>
+          <p className="font-mono text-[12px] font-medium text-foreground">{String(value ?? "-")}</p>
+          <p className="font-mono text-[10px] text-foreground/40">{String(row.unitId ?? "-")}</p>
         </div>
       ),
     },
@@ -285,7 +285,7 @@ export function UnitBoardShell({ rows, meta, state, user }: UnitBoardShellProps)
         <div className="flex items-center justify-center gap-1.5">
           <Link
             href={`/units/${String(row.unitId ?? "")}`}
-            className="inline-flex border border-amber-500/30 bg-amber-500/[0.04] px-2 py-0.5 text-[10px] font-mono uppercase tracking-[0.12em] text-amber-500 transition-colors hover:border-amber-500/60 hover:bg-amber-500/10 hover:text-amber-400"
+            className="inline-flex border border-primary/30 bg-primary/[0.04] px-2 py-0.5 text-[10px] font-mono uppercase tracking-[0.12em] text-app-accent-ink transition-colors hover:border-primary/60 hover:bg-primary/10 hover:text-app-accent-ink"
           >
             Workspace
           </Link>
@@ -294,7 +294,7 @@ export function UnitBoardShell({ rows, meta, state, user }: UnitBoardShellProps)
               <button
                 type="button"
                 onClick={() => openEdit(String(row.unitId ?? ""))}
-                className="inline-flex h-6 w-6 items-center justify-center border border-white/10 bg-transparent text-white/40 transition-colors hover:border-amber-500/40 hover:bg-amber-500/10 hover:text-amber-400"
+                className="inline-flex h-6 w-6 items-center justify-center border border-white/10 bg-transparent text-foreground/40 transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-app-accent-ink"
                 title="Edit unit"
               >
                 <Pencil className="h-3.5 w-3.5" />
@@ -302,7 +302,7 @@ export function UnitBoardShell({ rows, meta, state, user }: UnitBoardShellProps)
               <button
                 type="button"
                 onClick={() => handleDelete(String(row.unitId ?? ""), String(row.unitName ?? "-"))}
-                className="inline-flex h-6 w-6 items-center justify-center border border-white/10 bg-transparent text-white/35 transition-colors hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-400"
+                className="inline-flex h-6 w-6 items-center justify-center border border-white/10 bg-transparent text-foreground/35 transition-colors hover:border-destructive/40 hover:bg-destructive/10 hover:text-destructive"
                 title="Hapus unit"
               >
                 <Trash2 className="h-3.5 w-3.5" />
@@ -383,7 +383,7 @@ export function UnitBoardShell({ rows, meta, state, user }: UnitBoardShellProps)
           <button
             type="button"
             onClick={openCreate}
-            className="inline-flex items-center gap-1.5 border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-[10px] font-mono uppercase tracking-[0.12em] text-amber-500 shadow-sm transition-colors hover:bg-amber-500/20 hover:text-amber-400"
+            className="inline-flex items-center gap-1.5 border border-primary/40 bg-primary/10 px-3 py-1.5 text-[10px] font-mono uppercase tracking-[0.12em] text-app-accent-ink shadow-sm transition-colors hover:bg-primary/20 hover:text-app-accent-ink"
           >
             <Plus className="h-3.5 w-3.5" />
             Tambah Unit
@@ -422,24 +422,24 @@ function UnitMutationDialog({
   onSubmit: () => void;
 }) {
   const fieldClass =
-    "h-8 w-full border border-white/10 bg-black px-3 text-[11px] font-mono text-white/80 outline-none transition-colors placeholder:text-white/20 focus:border-amber-500/40";
+    "h-8 w-full border border-white/10 bg-black px-3 text-[11px] font-mono text-foreground/80 outline-none transition-colors placeholder:text-foreground/20 focus:border-primary/40";
   const labelClass = "space-y-1.5";
-  const captionClass = "block text-[10px] font-mono uppercase tracking-[0.12em] text-white/40";
+  const captionClass = "block text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/40";
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-3xl border border-white/10 bg-[#111114] shadow-2xl">
-        <div className="flex items-center justify-between border-b border-amber-500/20 bg-amber-500/[0.02] px-4 py-3">
+      <div className="w-full max-w-3xl border border-white/10 bg-card shadow-2xl">
+        <div className="flex items-center justify-between border-b border-primary/20 bg-primary/[0.02] px-4 py-3">
           <div>
-            <p className="text-[10px] font-mono uppercase tracking-[0.14em] text-amber-500">
+            <p className="text-[10px] font-mono uppercase tracking-[0.14em] text-app-accent-ink">
               {mode === "create" ? "Tambah Unit" : "Edit Unit"}
             </p>
-            <p className="mt-1 text-[11px] font-mono text-white/50">{form.unitName || "Data unit baru"}</p>
+            <p className="mt-1 text-[11px] font-mono text-foreground/50">{form.unitName || "Data unit baru"}</p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex h-8 w-8 items-center justify-center border border-transparent text-white/40 hover:border-white/10 hover:text-white transition-colors bg-transparent"
+            className="inline-flex h-8 w-8 items-center justify-center border border-transparent text-foreground/40 hover:border-white/10 hover:text-foreground transition-colors bg-transparent"
           >
             <X className="h-4 w-4" />
           </button>
@@ -452,7 +452,7 @@ function UnitMutationDialog({
               value={form.unitId}
               disabled={mode === "edit"}
               onChange={(event) => onChange({ ...form, unitId: event.target.value })}
-              className={`${fieldClass} disabled:cursor-not-allowed disabled:border-white/5 disabled:bg-white/[0.02] disabled:text-white/30`}
+              className={`${fieldClass} disabled:cursor-not-allowed disabled:border-white/5 disabled:bg-white/[0.02] disabled:text-foreground/30`}
             />
           </label>
           <label className={labelClass}>
@@ -525,22 +525,22 @@ function UnitMutationDialog({
               className={`${fieldClass} [color-scheme:dark]`}
             />
           </label>
-          <label className="flex items-center gap-2 pt-6 text-[11px] font-mono text-white/50">
+          <label className="flex items-center gap-2 pt-6 text-[11px] font-mono text-foreground/50">
             <input
               type="checkbox"
               checked={form.isMargin}
               onChange={(event) => onChange({ ...form, isMargin: event.target.checked })}
-              className="h-3.5 w-3.5 border-white/20 bg-black checked:bg-amber-500 checked:border-amber-500"
+              className="h-3.5 w-3.5 border-white/20 bg-black checked:bg-primary checked:border-primary"
             />
             Unit margin
           </label>
         </div>
 
-        <div className="flex justify-end gap-2 border-t border-white/5 bg-[#0a0a0c] px-4 py-3">
+        <div className="flex justify-end gap-2 border-t border-white/5 bg-background px-4 py-3">
           <button
             type="button"
             onClick={onClose}
-            className="border border-white/10 px-4 py-1.5 text-[10px] font-mono uppercase tracking-[0.12em] text-white/40 transition-colors hover:text-white hover:border-white/30 bg-transparent"
+            className="border border-white/10 px-4 py-1.5 text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/40 transition-colors hover:text-foreground hover:border-white/30 bg-transparent"
           >
             Batal
           </button>
@@ -548,7 +548,7 @@ function UnitMutationDialog({
             type="button"
             disabled={pending || !form.unitId.trim() || !form.unitName.trim()}
             onClick={onSubmit}
-            className="border border-amber-500/40 bg-amber-500/10 px-4 py-1.5 text-[10px] font-mono uppercase tracking-[0.12em] text-amber-500 shadow-sm transition-colors hover:bg-amber-500/20 hover:text-amber-400 disabled:cursor-not-allowed disabled:opacity-45"
+            className="border border-primary/40 bg-primary/10 px-4 py-1.5 text-[10px] font-mono uppercase tracking-[0.12em] text-app-accent-ink shadow-sm transition-colors hover:bg-primary/20 hover:text-app-accent-ink disabled:cursor-not-allowed disabled:opacity-45"
           >
             Simpan
           </button>

@@ -327,7 +327,7 @@ export function PlanningWorkControlPage({
   return (
     <div className="space-y-3">
       {loadError && (
-        <div className="border border-red-500/25 bg-red-500/[0.04] px-4 py-2.5 text-[12px] text-red-600 dark:text-red-300">
+        <div className="border border-destructive/25 bg-destructive/[0.04] px-4 py-2.5 text-[14px] text-destructive dark:text-destructive">
           {loadError}
         </div>
       )}

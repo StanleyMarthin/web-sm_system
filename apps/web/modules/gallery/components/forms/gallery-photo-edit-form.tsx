@@ -36,7 +36,7 @@ function humanizePhotoType(photoType: GalleryPhotoType): string {
 }
 
 const inputCls =
-  "h-9 rounded-lg border border-white/[0.08] bg-white/[0.03] px-2.5 text-[12px] text-white outline-none transition-colors focus:border-amber-500/30 [color-scheme:dark]";
+  "h-9 rounded-lg border border-white/[0.08] bg-white/[0.03] px-2.5 text-[12px] text-foreground outline-none transition-colors focus:border-primary/30 [color-scheme:dark]";
 
 export function GalleryPhotoEditForm({ initialPhotoType, initialCaption, isBusy, onSave }: GalleryPhotoEditFormProps) {
   const { register, handleSubmit } = useForm<EditFormValues>({
@@ -67,7 +67,7 @@ export function GalleryPhotoEditForm({ initialPhotoType, initialCaption, isBusy,
         <button
           type="submit"
           disabled={isBusy}
-          className="inline-flex items-center gap-1 rounded-full bg-amber-500/12 px-2.5 py-1 text-[11px] text-amber-300 ring-1 ring-amber-500/20 disabled:opacity-35"
+          className="inline-flex items-center gap-1 rounded-full bg-primary/12 px-2.5 py-1 text-[11px] text-app-accent-ink ring-1 ring-primary/20 disabled:opacity-35"
         >
           <Pencil className="h-3 w-3" />
           Simpan

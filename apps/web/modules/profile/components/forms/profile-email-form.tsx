@@ -64,24 +64,24 @@ export function ProfileEmailForm({ user, onSuccess, onError }: ProfileEmailFormP
 
   if (!isEditing) {
     return (
-      <div className="bg-[#0f0f0f] border border-white/[0.06] rounded-xl p-6">
+      <div className="bg-card border border-white/[0.06] rounded-xl p-6">
         <div className="flex items-center justify-between mb-5">
-          <h3 className="text-base font-medium text-white">Informasi Kontak</h3>
+          <h3 className="text-base font-medium text-foreground">Informasi Kontak</h3>
           <button
             type="button"
             onClick={() => setIsEditing(true)}
-            className="flex items-center gap-1.5 text-xs text-amber-500/80 hover:text-amber-400 transition-colors"
+            className="flex items-center gap-1.5 text-xs text-app-accent-ink/80 hover:text-app-accent-ink transition-colors"
           >
             <Pencil className="w-3 h-3" />
             Edit
           </button>
         </div>
         <div>
-          <label className="block text-xs font-medium text-white/40 mb-1.5 uppercase tracking-wider">
+          <label className="block text-xs font-medium text-foreground/40 mb-1.5 uppercase tracking-wider">
             Email
           </label>
-          <div className="px-4 py-2.5 bg-black/40 border border-white/[0.06] rounded-lg text-white/80 text-sm">
-            {user.email || <span className="text-white/25 italic">—</span>}
+          <div className="px-4 py-2.5 bg-black/40 border border-white/[0.06] rounded-lg text-foreground/80 text-sm">
+            {user.email || <span className="text-foreground/25 italic">—</span>}
           </div>
         </div>
       </div>
@@ -89,20 +89,20 @@ export function ProfileEmailForm({ user, onSuccess, onError }: ProfileEmailFormP
   }
 
   return (
-    <div className="bg-[#0f0f0f] border border-white/[0.06] rounded-xl p-6">
-      <h3 className="text-base font-medium text-white mb-5">Informasi Kontak</h3>
+    <div className="bg-card border border-white/[0.06] rounded-xl p-6">
+      <h3 className="text-base font-medium text-foreground mb-5">Informasi Kontak</h3>
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">
         <div>
-          <label className="block text-xs font-medium text-white/40 mb-1.5 uppercase tracking-wider">
+          <label className="block text-xs font-medium text-foreground/40 mb-1.5 uppercase tracking-wider">
             Email
           </label>
           <input
             {...register("email")}
-            className="w-full px-4 py-2.5 bg-black/60 border border-white/10 rounded-lg text-white text-sm outline-none focus:border-amber-500/50 transition-colors"
+            className="w-full px-4 py-2.5 bg-black/60 border border-white/10 rounded-lg text-foreground text-sm outline-none focus:border-primary/50 transition-colors"
             placeholder="nama@email.com"
             autoFocus
           />
-          {errors.email && <p className="text-xs text-red-400 mt-1">{errors.email.message}</p>}
+          {errors.email && <p className="text-xs text-destructive mt-1">{errors.email.message}</p>}
         </div>
         <div className="flex gap-2 justify-end">
           <button
@@ -112,7 +112,7 @@ export function ProfileEmailForm({ user, onSuccess, onError }: ProfileEmailFormP
               reset();
             }}
             disabled={isPending}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-white/40 hover:text-white/70 transition-colors rounded-lg border border-white/[0.06] hover:border-white/10"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-foreground/40 hover:text-foreground/70 transition-colors rounded-lg border border-white/[0.06] hover:border-white/10"
           >
             <X className="w-3 h-3" />
             Batal
@@ -120,7 +120,7 @@ export function ProfileEmailForm({ user, onSuccess, onError }: ProfileEmailFormP
           <button
             type="submit"
             disabled={isPending || !isValid}
-            className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-amber-500 text-black font-medium rounded-lg hover:bg-amber-400 transition-colors disabled:opacity-60"
+            className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-primary text-primary-foreground font-medium rounded-lg hover:bg-primary transition-colors disabled:opacity-60"
           >
             {isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
             Simpan

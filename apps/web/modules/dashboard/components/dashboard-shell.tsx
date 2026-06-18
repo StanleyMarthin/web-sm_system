@@ -445,7 +445,7 @@ function Card({
 }) {
   return (
     <section
-      className={`overflow-hidden border border-white/[0.05] bg-[#0d0d10] ${className}`}
+      className={`overflow-hidden border border-border bg-card ${className}`}
     >
       {children}
     </section>
@@ -470,14 +470,14 @@ function SectionHeader({
   return (
     <div className="flex flex-wrap items-start justify-between gap-3 px-4 py-3">
       <div className="space-y-1">
-        <p className="font-mono text-[10px] uppercase tracking-widest text-white/25">
+        <p className="font-mono text-[14px] uppercase tracking-widest text-muted-foreground">
           {eyebrow}
         </p>
         {title ? (
-          <h3 className="text-[13px] font-medium text-white">{title}</h3>
+          <h3 className="text-[15px] font-semibold text-foreground">{title}</h3>
         ) : null}
         {detail ? (
-          <p className="text-[11px] text-white/35">{detail}</p>
+          <p className="text-[15px] text-muted-foreground">{detail}</p>
         ) : null}
       </div>
       {right ??
@@ -485,7 +485,7 @@ function SectionHeader({
           <Link
             href={href}
             prefetch={false}
-            className="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-widest text-white/30 transition hover:bg-white/[0.03] hover:text-white/60"
+            className="inline-flex items-center gap-1 font-mono text-[14px] uppercase tracking-widest text-muted-foreground transition hover:bg-accent hover:text-foreground"
           >
             {hrefLabel}
             <ArrowRight className="h-3 w-3" />
@@ -497,7 +497,7 @@ function SectionHeader({
 
 function EmptyState({ message }: { message: string }) {
   return (
-    <div className="border border-dashed border-white/[0.08] bg-white/[0.02] px-3 py-4 font-mono text-[11px] text-white/30">
+    <div className="border border-dashed border-border bg-muted px-3 py-4 font-mono text-[15px] text-muted-foreground">
       {message}
     </div>
   );
@@ -512,16 +512,16 @@ function InlineBadge({
 }) {
   const className =
     tone === "good"
-      ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-300"
+      ? "border-success/30 bg-success/15 text-success"
       : tone === "warn"
-        ? "border-amber-500/30 bg-amber-500/15 text-amber-300"
+        ? "border-primary/30 bg-primary/15 text-app-accent-ink"
         : tone === "danger"
-          ? "border-red-500/30 bg-red-500/15 text-red-300"
-          : "border-white/10 bg-white/[0.02] text-white/60";
+          ? "border-destructive/30 bg-destructive/15 text-destructive"
+          : "border-border bg-muted text-foreground";
 
   return (
     <span
-      className={`inline-flex items-center border px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest ${className}`}
+      className={`inline-flex items-center border px-2 py-0.5 font-mono text-[14px] uppercase tracking-widest ${className}`}
     >
       {children}
     </span>
@@ -591,14 +591,14 @@ function InteractiveCalendar({
     <div className="space-y-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="space-y-1.5">
-          <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-white/30">
+          <p className="font-mono text-[14px] uppercase tracking-[0.12em] text-muted-foreground">
             Kalender deadline
           </p>
-          <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
-            <span className="border border-white/[0.06] px-2 py-1 text-white/38">
-              Dipilih: <b className="font-semibold text-white">{selectedDate ? fmtDate(selectedDate) : "Semua Bulan Ini"}</b>
+          <div className="flex flex-wrap items-center gap-1.5 text-[15px]">
+            <span className="border border-border px-2 py-1 text-muted-foreground">
+              Dipilih: <b className="font-semibold text-foreground">{selectedDate ? fmtDate(selectedDate) : "Semua Bulan Ini"}</b>
             </span>
-            <span className="border border-amber-400/35 bg-amber-400/[0.08] px-2 py-1 text-amber-300">
+            <span className="border border-primary/35 bg-primary/[0.08] px-2 py-1 text-app-accent-ink">
               Hari ini: <b className="font-semibold">{fmtDate(todayStr)}</b>
             </span>
           </div>
@@ -613,11 +613,11 @@ function InteractiveCalendar({
                   : { year: currentYear, month: currentMonth - 1 },
               )
             }
-            className="border border-white/[0.06] p-1 text-white/40 transition hover:bg-white/[0.05]"
+            className="border border-border p-1 text-muted-foreground transition hover:bg-accent"
           >
             <ChevronLeft className="h-3.5 w-3.5" />
           </button>
-          <p className="min-w-[112px] text-center font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-white">
+          <p className="min-w-[112px] text-center font-mono text-[15px] font-semibold uppercase tracking-[0.12em] text-foreground">
             {monthLabel}
           </p>
           <button
@@ -629,14 +629,14 @@ function InteractiveCalendar({
                   : { year: currentYear, month: currentMonth + 1 },
               )
             }
-            className="border border-white/[0.06] p-1 text-white/40 transition hover:bg-white/[0.05]"
+            className="border border-border p-1 text-muted-foreground transition hover:bg-accent"
           >
             <ChevronRight className="h-3.5 w-3.5" />
           </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-7 text-center font-mono text-[9px] uppercase tracking-[0.1em] text-white/28">
+      <div className="grid grid-cols-7 text-center font-mono text-[15px] uppercase tracking-[0.1em] text-muted-foreground">
         {["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"].map((day) => (
           <span key={day} className="py-1">
             {day}
@@ -644,10 +644,10 @@ function InteractiveCalendar({
         ))}
       </div>
 
-      <div className="grid grid-cols-7 gap-px bg-white/[0.04]">
+      <div className="grid grid-cols-7 gap-px bg-border">
         {cells.map((cell, index) => {
           if (!cell.day || !cell.dateStr) {
-            return <div key={`empty-${index}`} className="aspect-square bg-[#111114]" />;
+            return <div key={`empty-${index}`} className="aspect-square bg-card" />;
           }
 
           const scheduledUnits = unitsByDate.get(cell.dateStr) ?? [];
@@ -667,14 +667,29 @@ function InteractiveCalendar({
               aria-pressed={dayState.isSelected}
               className={dayState.dayClassName}
             >
-              <span>{cell.day}</span>
+              <span className="font-mono text-[13px] font-semibold text-foreground">
+                {cell.day}
+              </span>
               {scheduledUnits.length > 0 ? (
-                <span className="mt-0.5 text-[8px] leading-none text-emerald-400">
-                  {scheduledUnits.length}
+                <span className="mt-1 flex min-w-0 flex-col gap-0.5">
+                  {scheduledUnits.slice(0, 3).map((unit) => (
+                    <span
+                      key={unit.carId}
+                      className="truncate font-mono text-[11px] font-semibold leading-tight text-success"
+                      title={unit.unitName}
+                    >
+                      {unit.unitName}
+                    </span>
+                  ))}
+                  {scheduledUnits.length > 3 ? (
+                    <span className="font-mono text-[11px] font-semibold leading-tight text-muted-foreground">
+                      +{scheduledUnits.length - 3} unit
+                    </span>
+                  ) : null}
                 </span>
               ) : null}
               {dayState.isToday ? (
-                <span className="mt-1 border border-amber-400/30 px-1 py-0.5 font-mono text-[7px] uppercase leading-none text-amber-300">
+                <span className="mt-auto self-start border border-primary/30 px-1 py-0.5 font-mono text-[11px] uppercase leading-none text-app-accent-ink">
                   Hari ini
                 </span>
               ) : null}
@@ -683,10 +698,10 @@ function InteractiveCalendar({
         })}
       </div>
 
-      <div className="border-t border-white/[0.04] pt-3">
+      <div className="border-t border-border pt-3">
         {selectedUnits.length > 0 ? (
           <div className="space-y-2">
-            <p className="font-mono text-[9px] uppercase tracking-[0.12em] text-white/30">
+            <p className="font-mono text-[15px] uppercase tracking-[0.12em] text-muted-foreground">
               {selectedDate ? `Unit deadline ${fmtDate(selectedDate)}` : `Semua unit bulan ini`} · {selectedUnits.length} unit
             </p>
             <div className="flex flex-wrap gap-1.5">
@@ -700,10 +715,10 @@ function InteractiveCalendar({
                     unitId: unit.carId,
                   })}
                   prefetch={false}
-                  className={`inline-flex items-center border px-2 py-1 font-mono text-[10px] leading-none transition ${
+                  className={`inline-flex items-center border px-2 py-1 font-mono text-[14px] leading-none transition ${
                     selectedUnitId === unit.carId
-                      ? "border-amber-500/35 bg-amber-500/[0.08] text-amber-300"
-                      : "border-emerald-400/25 bg-emerald-400/[0.05] text-emerald-300 hover:bg-emerald-500/[0.08]"
+                      ? "border-primary/35 bg-primary/[0.08] text-app-accent-ink"
+                      : "border-success/25 bg-success/[0.05] text-success hover:bg-success/[0.08]"
                   }`}
                 >
                   {unit.unitName}
@@ -712,7 +727,7 @@ function InteractiveCalendar({
             </div>
           </div>
         ) : (
-          <p className="font-mono text-[10px] text-white/28">
+          <p className="font-mono text-[14px] text-muted-foreground">
             Tidak ada unit deadline pada {selectedDate ? fmtDate(selectedDate) : "bulan ini"}.
           </p>
         )}
@@ -827,21 +842,21 @@ export function DashboardShell({
   };
 
   return (
-    <div className="min-h-screen bg-[#111114]">
+    <div className="min-h-screen bg-card">
       {/* Top Header Bar */}
-      <div className="flex items-center justify-between border-b border-white/[0.06] bg-[#111114] px-4 py-3">
+      <div className="flex items-center justify-between border-b border-border bg-card px-4 py-3">
         <div>
-          <p className="font-mono text-[10px] uppercase tracking-widest text-white/30">
+          <p className="font-mono text-[14px] uppercase tracking-widest text-muted-foreground">
             DASHBOARD OPERASIONAL
           </p>
-          <h1 className="text-[22px] font-light text-white">
-            {greeting}, <span className="text-amber-400">{name}</span>
+          <h1 className="text-[24px] font-semibold text-foreground">
+            {greeting}, <span className="text-app-accent-ink">{name}</span>
           </h1>
         </div>
         <div className="flex flex-col items-end gap-1.5">
           <div className="flex items-center gap-2">
             {/* Filter Divisi */}
-            <div className="min-w-[180px] border border-white/10 bg-[#1a1a1f] text-[12px] text-white">
+            <div className="min-w-[180px] border border-border bg-popover text-[14px] text-foreground">
               <SearchableSelect
                 value={activeDivisionId}
                 onChange={(value) =>
@@ -862,7 +877,7 @@ export function DashboardShell({
               />
             </div>
             {/* Filter Unit */}
-            <div className="min-w-[180px] border border-white/10 bg-[#1a1a1f] text-[12px] text-white">
+            <div className="min-w-[180px] border border-border bg-popover text-[14px] text-foreground">
               <SearchableSelect
                 value={activeUnitId}
                 onChange={(value) =>
@@ -882,14 +897,14 @@ export function DashboardShell({
               <button
                 type="button"
                 onClick={() => pushDashboard({ divisionId: null, unitId: null, date: null })}
-                className="border border-white/[0.08] px-2 py-1.5 font-mono text-[10px] uppercase tracking-widest text-white/40 transition hover:bg-white/[0.04] hover:text-white/70"
+                className="border border-border px-2 py-1.5 font-mono text-[14px] uppercase tracking-widest text-muted-foreground transition hover:bg-border hover:text-foreground"
               >
                 Reset
               </button>
             ) : null}
           </div>
-          <p className="mt-1 font-mono text-[11px] text-white/35">
-            <span className="mr-2 text-white/15">|</span>
+          <p className="mt-1 font-mono text-[15px] text-muted-foreground">
+            <span className="mr-2 text-muted-foreground">|</span>
             {fmtDate(todayStr)}
           </p>
         </div>
@@ -913,7 +928,7 @@ export function DashboardShell({
                       dateTo: null,
                     })
                   }
-                  className="inline-flex items-center gap-1 border border-amber-500/25 bg-amber-500/[0.08] px-2 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-amber-300 transition hover:bg-amber-500/[0.14]"
+                  className="inline-flex items-center gap-1 border border-primary/25 bg-primary/[0.08] px-2 py-1 font-mono text-[14px] uppercase tracking-[0.12em] text-app-accent-ink transition hover:bg-primary/[0.14]"
                 >
                   Hari ini
                 </button>
@@ -944,7 +959,7 @@ export function DashboardShell({
         <div className="flex flex-col gap-3">
           <Card className="flex-1">
             <SectionHeader eyebrow="Prioritas" title="5 Unit Mendekati Deadline" />
-            <div className="divide-y divide-white/[0.04]">
+            <div className="divide-y divide-border">
               {top5Deadline.length > 0 ? (
                 top5Deadline.map((unit) => {
                   const tone =
@@ -964,13 +979,13 @@ export function DashboardShell({
                         unitId: unit.carId,
                       })}
                       prefetch={false}
-                      className="flex items-center justify-between gap-3 px-3 py-2 transition hover:bg-white/[0.03]"
+                      className="flex items-center justify-between gap-3 px-3 py-2 transition hover:bg-accent"
                     >
                       <div className="min-w-0 space-y-0.5">
-                        <p className="truncate text-[12px] font-medium text-white">
+                        <p className="truncate text-[14px] font-medium text-foreground">
                           {unit.unitName}
                         </p>
-                        <p className="font-mono text-[10px] text-white/35">
+                        <p className="font-mono text-[14px] text-muted-foreground">
                           {fmtDate(unit.targetDeliveryDate)}
                         </p>
                       </div>
@@ -994,22 +1009,22 @@ export function DashboardShell({
             </div>
           </Card>
 
-          <div className="border border-white/[0.05] bg-[#0d0d10] p-3">
-            <p className="mb-2 font-mono text-[10px] uppercase tracking-widest text-white/30">
+          <div className="border border-border bg-card p-3">
+            <p className="mb-2 font-mono text-[14px] uppercase tracking-widest text-muted-foreground">
               PERMINTAAN MASUK HARI INI
             </p>
             <div className="grid grid-cols-3 gap-2">
-              <div className="border border-white/[0.05] bg-white/[0.01] p-3">
-                <p className="mb-1 font-mono text-[9px] uppercase text-white/25">WORK ORDER (WO)</p>
-                <p className="font-mono text-[32px] font-bold leading-none text-amber-400">{fmt(woIncoming)}</p>
+              <div className="border border-border bg-muted p-3">
+                <p className="mb-1 font-mono text-[15px] uppercase text-muted-foreground">WORK ORDER (WO)</p>
+                <p className="font-mono text-[32px] font-bold leading-none text-app-accent-ink">{fmt(woIncoming)}</p>
               </div>
-              <div className="border border-white/[0.05] bg-white/[0.01] p-3">
-                <p className="mb-1 font-mono text-[9px] uppercase text-white/25">PURCHASE REQUEST (PR)</p>
-                <p className="font-mono text-[32px] font-bold leading-none text-sky-400">{fmt(prIncoming)}</p>
+              <div className="border border-border bg-muted p-3">
+                <p className="mb-1 font-mono text-[15px] uppercase text-muted-foreground">PURCHASE REQUEST (PR)</p>
+                <p className="font-mono text-[32px] font-bold leading-none text-info">{fmt(prIncoming)}</p>
               </div>
-              <div className="border border-white/[0.05] bg-white/[0.01] p-3">
-                <p className="mb-1 font-mono text-[9px] uppercase text-white/25">WO VENDOR (WOV)</p>
-                <p className="font-mono text-[32px] font-bold leading-none text-white">{fmt(wovIncoming)}</p>
+              <div className="border border-border bg-muted p-3">
+                <p className="mb-1 font-mono text-[15px] uppercase text-muted-foreground">WO VENDOR (WOV)</p>
+                <p className="font-mono text-[32px] font-bold leading-none text-foreground">{fmt(wovIncoming)}</p>
               </div>
             </div>
           </div>
@@ -1018,8 +1033,8 @@ export function DashboardShell({
 
       {/* SPK table section */}
       <div className="px-3 pb-3">
-        <div className="border border-white/[0.05] bg-[#0d0d10]">
-          <div className="flex items-center justify-between border-b border-white/[0.05] px-4 py-3">
+        <div className="border border-border bg-card">
+          <div className="flex items-center justify-between border-b border-border px-4 py-3">
             <div className="flex gap-4">
               {(["all", "normal", "lembur"] as SpkWorkType[]).map((type) => {
                 const label = type === "all" ? "SEMUA" : type === "normal" ? "NORMAL (SPK)" : "LEMBUR (SPL)";
@@ -1028,10 +1043,10 @@ export function DashboardShell({
                   <button
                     key={type}
                     onClick={() => setSpkWorkType(type)}
-                    className={`font-mono text-[11px] uppercase tracking-widest ${
+                    className={`font-mono text-[15px] uppercase tracking-widest ${
                       isActive
-                        ? "border-b-2 border-amber-400 pb-1 text-amber-400"
-                        : "text-white/35 transition hover:text-white/60"
+                        ? "border-b-2 border-primary pb-1 text-app-accent-ink"
+                        : "text-muted-foreground transition hover:text-foreground"
                     }`}
                   >
                     {label}
@@ -1039,12 +1054,12 @@ export function DashboardShell({
                 );
               })}
             </div>
-            <p className="font-mono text-[11px] text-white/30">
+            <p className="font-mono text-[15px] text-muted-foreground">
               {selectedDate === todayStr ? "Hari ini" : "Filter"} · {fmtDate(selectedDate || todayStr)}
             </p>
           </div>
           
-          <div className="grid grid-cols-[140px_1fr_120px_120px] border-b border-white/[0.05] px-4 py-2 font-mono text-[9px] uppercase tracking-widest text-white/25">
+          <div className="grid grid-cols-[140px_1fr_120px_120px] border-b border-border px-4 py-2 font-mono text-[15px] uppercase tracking-widest text-muted-foreground">
             <div>DIVISI</div>
             <div>UNIT</div>
             <div>TARGET JAM</div>
@@ -1054,24 +1069,24 @@ export function DashboardShell({
           <div className="max-h-[400px] overflow-y-auto">
             {spkRows.map((division) => (
               division.units.map((unit, idx) => (
-                <div key={`${division.divisionId}-${unit.planId}`} className="grid grid-cols-[140px_1fr_120px_120px] items-center border-b border-white/[0.04] px-4 py-2.5 hover:bg-white/[0.02]">
-                  <div className="truncate pr-4 text-[11px] text-white/35">
+                <div key={`${division.divisionId}-${unit.planId}`} className="grid grid-cols-[140px_1fr_120px_120px] items-center border-b border-border px-4 py-2.5 hover:bg-muted">
+                  <div className="truncate pr-4 text-[15px] text-muted-foreground">
                     {idx === 0 ? division.divisionName : ""}
                   </div>
-                  <div className="truncate pr-4 text-[13px] font-medium text-white">
+                  <div className="truncate pr-4 text-[15px] font-semibold text-foreground">
                     {unit.unitName}
                   </div>
-                  <div className="font-mono text-[12px] text-white/50">
+                  <div className="font-mono text-[14px] text-foreground">
                     {fmtWorkHours(unit.targetHours)}
                   </div>
-                  <div className="font-mono text-[13px] font-semibold text-amber-300">
+                  <div className="font-mono text-[15px] font-semibold text-app-accent-ink">
                     {fmtWorkHours(unit.actualHours)}
                   </div>
                 </div>
               ))
             ))}
             {spkRows.length === 0 && (
-              <div className="px-4 py-8 text-center text-[12px] text-white/30">
+              <div className="px-4 py-8 text-center text-[14px] text-muted-foreground">
                 Tidak ada data SPK
               </div>
             )}
@@ -1081,11 +1096,11 @@ export function DashboardShell({
 
       <div className="grid gap-3 px-3 pb-3 xl:grid-cols-2">
         {/* Issue Log Belum Selesai */}
-        <div className="border border-white/[0.05] bg-[#0d0d10]">
+        <div className="border border-border bg-card">
           <SectionHeader
             eyebrow="ISSUE LOG BELUM SELESAI"
           />
-          <div className="grid grid-cols-[1fr_80px_80px] border-b border-white/[0.05] px-4 py-2 font-mono text-[9px] uppercase tracking-widest text-white/25">
+          <div className="grid grid-cols-[1fr_80px_80px] border-b border-border px-4 py-2 font-mono text-[15px] uppercase tracking-widest text-muted-foreground">
             <div>DIVISI</div>
             <div className="text-center">OPEN</div>
             <div className="text-center">HIGH</div>
@@ -1094,29 +1109,29 @@ export function DashboardShell({
             {issueRows.map((row) => {
               const highIssues = row.issues.filter(i => i.severity === "HIGH" || i.isUrgent).length;
               return (
-                <div key={row.divisionId} className="grid grid-cols-[1fr_80px_80px] items-center border-b border-white/[0.04] px-4 py-2.5 hover:bg-white/[0.02]">
-                  <div className="truncate pr-4 text-[13px] text-white">
+                <div key={row.divisionId} className="grid grid-cols-[1fr_80px_80px] items-center border-b border-border px-4 py-2.5 hover:bg-muted">
+                  <div className="truncate pr-4 text-[15px] text-foreground">
                     {row.divisionName}
                   </div>
                   <div className="text-center">
-                    <span className="inline-block min-w-[28px] border border-amber-500/25 bg-amber-500/15 px-2 py-0.5 text-center font-mono text-[11px] font-bold text-amber-300">
+                    <span className="inline-block min-w-[28px] border border-primary/25 bg-primary/15 px-2 py-0.5 text-center font-mono text-[15px] font-bold text-app-accent-ink">
                       {row.issueCount}
                     </span>
                   </div>
                   <div className="text-center">
                     {highIssues > 0 ? (
-                      <span className="inline-block min-w-[28px] border border-red-500/25 bg-red-500/15 px-2 py-0.5 text-center font-mono text-[11px] font-bold text-red-300">
+                      <span className="inline-block min-w-[28px] border border-destructive/25 bg-destructive/15 px-2 py-0.5 text-center font-mono text-[15px] font-bold text-destructive">
                         {highIssues}
                       </span>
                     ) : (
-                      <span className="font-mono text-white/20">–</span>
+                      <span className="font-mono text-muted-foreground">–</span>
                     )}
                   </div>
                 </div>
               );
             })}
             {issueRows.length === 0 && (
-              <div className="px-4 py-6 text-center text-[12px] text-white/30">
+              <div className="px-4 py-6 text-center text-[14px] text-muted-foreground">
                 Tidak ada issue open
               </div>
             )}
@@ -1124,27 +1139,27 @@ export function DashboardShell({
         </div>
 
         {/* QC Tidak Lolos */}
-        <div className="border border-white/[0.05] bg-[#0d0d10]">
+        <div className="border border-border bg-card">
           <SectionHeader
             eyebrow="QC TIDAK LOLOS"
           />
-          <div className="grid grid-cols-[1fr_120px] border-b border-white/[0.05] px-4 py-2 font-mono text-[9px] uppercase tracking-widest text-white/25">
+          <div className="grid grid-cols-[1fr_120px] border-b border-border px-4 py-2 font-mono text-[15px] uppercase tracking-widest text-muted-foreground">
             <div>DIVISI</div>
             <div>HASIL</div>
           </div>
           <div>
             {qcFailRows.map((row) => (
-              <div key={row.divisionName} className="grid grid-cols-[1fr_120px] items-center border-b border-white/[0.04] px-4 py-2.5 hover:bg-white/[0.02]">
-                <div className="truncate pr-4 text-[13px] text-white">
+              <div key={row.divisionName} className="grid grid-cols-[1fr_120px] items-center border-b border-border px-4 py-2.5 hover:bg-muted">
+                <div className="truncate pr-4 text-[15px] text-foreground">
                   {row.divisionName}
                 </div>
                 <div>
                   {row.reworkCount > 0 ? (
-                    <span className="inline-block border border-red-500/25 bg-red-500/15 px-2 py-0.5 font-mono text-[10px] uppercase text-red-300">
+                    <span className="inline-block border border-destructive/25 bg-destructive/15 px-2 py-0.5 font-mono text-[14px] uppercase text-destructive">
                       {row.reworkCount} GAGAL
                     </span>
                   ) : (
-                    <span className="inline-block border border-emerald-500/25 bg-emerald-500/15 px-2 py-0.5 font-mono text-[10px] uppercase text-emerald-300">
+                    <span className="inline-block border border-success/25 bg-success/15 px-2 py-0.5 font-mono text-[14px] uppercase text-success">
                       LOLOS
                     </span>
                   )}
@@ -1152,7 +1167,7 @@ export function DashboardShell({
               </div>
             ))}
             {qcFailRows.length === 0 && (
-              <div className="px-4 py-6 text-center text-[12px] text-white/30">
+              <div className="px-4 py-6 text-center text-[14px] text-muted-foreground">
                 Tidak ada QC gagal
               </div>
             )}
@@ -1161,9 +1176,9 @@ export function DashboardShell({
       </div>
 
       <div className="px-3 pb-3">
-        <div className="border border-white/[0.05] bg-[#0d0d10]">
+        <div className="border border-border bg-card">
           <SectionHeader eyebrow="CONTROL MONITORING PER DIVISI" />
-          <div className="grid grid-cols-[minmax(150px,1fr)_80px_80px_80px_80px_80px_140px] border-b border-white/[0.05] px-4 py-2 font-mono text-[9px] uppercase tracking-widest text-white/25">
+          <div className="grid grid-cols-[minmax(150px,1fr)_80px_80px_80px_80px_80px_140px] border-b border-border px-4 py-2 font-mono text-[15px] uppercase tracking-widest text-muted-foreground">
             <div>DIVISI</div>
             <div className="text-center">BLM MULAI</div>
             <div className="text-center">PENDING</div>
@@ -1175,27 +1190,27 @@ export function DashboardShell({
           <div>
             {taskRows.map((row) => {
               const renderBadge = (count: number, type: 'amber' | 'sky' | 'plain') => {
-                if (count === 0) return <span className="text-white/15">0</span>;
-                if (type === 'plain') return <span className="font-mono text-white/50">{count}</span>;
+                if (count === 0) return <span className="text-muted-foreground">0</span>;
+                if (type === 'plain') return <span className="font-mono text-foreground">{count}</span>;
                 const classes = type === 'amber' 
-                  ? 'border-amber-500/25 bg-amber-500/15 text-amber-300'
-                  : 'border-sky-500/25 bg-sky-500/15 text-sky-300';
-                return <span className={`inline-block border px-2 py-0.5 font-mono text-[11px] font-bold ${classes}`}>{count}</span>;
+                  ? 'border-primary/25 bg-primary/15 text-app-accent-ink'
+                  : 'border-info/25 bg-info/15 text-info';
+                return <span className={`inline-block border px-2 py-0.5 font-mono text-[15px] font-bold ${classes}`}>{count}</span>;
               };
 
-              let perfColor = "bg-emerald-400";
-              let perfText = "text-emerald-400";
+              let perfColor = "bg-success";
+              let perfText = "text-success";
               if (row.performancePct < 50) {
-                perfColor = "bg-red-400";
-                perfText = "text-red-400";
+                perfColor = "bg-destructive";
+                perfText = "text-destructive";
               } else if (row.performancePct < 80) {
-                perfColor = "bg-amber-400";
-                perfText = "text-amber-400";
+                perfColor = "bg-primary";
+                perfText = "text-app-accent-ink";
               }
 
               return (
-                <div key={row.divisionId} className="grid grid-cols-[minmax(150px,1fr)_80px_80px_80px_80px_80px_140px] items-center border-b border-white/[0.04] px-4 py-2.5 hover:bg-white/[0.02]">
-                  <div className="truncate pr-4 text-[13px] text-white">
+                <div key={row.divisionId} className="grid grid-cols-[minmax(150px,1fr)_80px_80px_80px_80px_80px_140px] items-center border-b border-border px-4 py-2.5 hover:bg-muted">
+                  <div className="truncate pr-4 text-[15px] text-foreground">
                     {row.divisionName}
                   </div>
                   <div className="text-center">{renderBadge(row.belumMulai, 'amber')}</div>
@@ -1204,10 +1219,10 @@ export function DashboardShell({
                   <div className="text-center">{renderBadge(row.submit, 'sky')}</div>
                   <div className="text-center">{renderBadge(row.done, 'plain')}</div>
                   <div className="flex items-center gap-3">
-                    <span className={`w-10 font-mono text-[11px] font-bold ${perfText}`}>
+                    <span className={`w-10 font-mono text-[15px] font-bold ${perfText}`}>
                       {fmtPct(row.performancePct)}
                     </span>
-                    <div className="h-1 w-16 bg-white/[0.06]">
+                    <div className="h-1 w-16 bg-border">
                       <div className={`h-1 ${perfColor}`} style={{ width: `${clampPct(row.performancePct)}%` }} />
                     </div>
                   </div>
@@ -1215,7 +1230,7 @@ export function DashboardShell({
               );
             })}
             {taskRows.length === 0 && (
-              <div className="px-4 py-6 text-center text-[12px] text-white/30">
+              <div className="px-4 py-6 text-center text-[14px] text-muted-foreground">
                 Belum ada data monitoring
               </div>
             )}

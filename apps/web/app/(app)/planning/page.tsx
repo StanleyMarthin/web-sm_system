@@ -82,12 +82,12 @@ export default async function PlanningWorkspacePage({
         </p>
       </div>
 
-      <section className="border border-white/5 bg-[#111114] px-4 py-3 flex flex-wrap items-center justify-between gap-4">
+      <section className="border border-white/5 bg-card px-4 py-3 flex flex-wrap items-center justify-between gap-4">
         <div>
-          <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-white/30">
+          <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-foreground/30">
             Planning
           </p>
-          <h1 className="text-[13px] font-mono text-white/80">
+          <h1 className="text-[13px] font-mono text-foreground/80">
             Planning & ETA
           </h1>
         </div>
@@ -102,8 +102,8 @@ export default async function PlanningWorkspacePage({
                 className={[
                   "inline-flex h-8 items-center border px-3 font-mono text-[10px] uppercase tracking-[0.12em] transition-colors",
                   isActive
-                    ? "border-amber-500/30 bg-amber-500/[0.08] text-amber-500"
-                    : "border-white/10 text-white/40 hover:bg-white/[0.04] hover:text-white hover:border-white/30",
+                    ? "border-primary/30 bg-primary/[0.08] text-app-accent-ink"
+                    : "border-white/10 text-foreground/40 hover:bg-white/[0.04] hover:text-foreground hover:border-white/30",
                 ].join(" ")}
               >
                 {tab.label}

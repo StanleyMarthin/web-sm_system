@@ -37,9 +37,9 @@ function SummaryCard({
 }) {
   return (
     <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-5">
-      <p className="text-[10px] uppercase tracking-[0.18em] text-white/35">{label}</p>
-      <p className="mt-3 text-lg text-white">{value}</p>
-      {helper ? <p className="mt-2 text-sm text-white/40">{helper}</p> : null}
+      <p className="text-[10px] uppercase tracking-[0.18em] text-foreground/35">{label}</p>
+      <p className="mt-3 text-lg text-foreground">{value}</p>
+      {helper ? <p className="mt-2 text-sm text-foreground/40">{helper}</p> : null}
     </div>
   );
 }
@@ -129,26 +129,26 @@ export function IssueDetailShell({
         />
       </section>
 
-      <section className="rounded-[28px] border border-white/[0.06] bg-[#050505] p-6 shadow-[0_0_0_1px_rgba(255,255,255,0.02)]">
+      <section className="rounded-[28px] border border-white/[0.06] bg-card p-6 shadow-[0_0_0_1px_rgba(255,255,255,0.02)]">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div className="max-w-3xl">
-            <p className="text-[11px] uppercase tracking-[0.18em] text-amber-500/70">
+            <p className="text-[11px] uppercase tracking-[0.18em] text-app-accent-ink/70">
               Detail Issue
             </p>
-            <h1 className="mt-2 text-2xl font-medium text-white">{issue.title}</h1>
-            <p className="mt-3 text-sm leading-6 text-white/50">{issue.description}</p>
+            <h1 className="mt-2 text-2xl font-medium text-foreground">{issue.title}</h1>
+            <p className="mt-3 text-sm leading-6 text-foreground/50">{issue.description}</p>
           </div>
           <div className="flex items-center gap-2">
             <Link
               href="/issues"
-              className="rounded-full bg-white/[0.03] px-3 py-1.5 text-[11px] uppercase tracking-[0.16em] text-white/60 ring-1 ring-white/[0.06] hover:text-white/80"
+              className="rounded-full bg-white/[0.03] px-3 py-1.5 text-[11px] uppercase tracking-[0.16em] text-foreground/60 ring-1 ring-white/[0.06] hover:text-foreground/80"
             >
               Kembali ke Daftar Issue
             </Link>
             <button
               type="button"
               onClick={() => router.refresh()}
-              className="inline-flex items-center gap-2 rounded-full bg-white/[0.03] px-3 py-1.5 text-[11px] uppercase tracking-[0.16em] text-white/60 ring-1 ring-white/[0.06] hover:text-white/80"
+              className="inline-flex items-center gap-2 rounded-full bg-white/[0.03] px-3 py-1.5 text-[11px] uppercase tracking-[0.16em] text-foreground/60 ring-1 ring-white/[0.06] hover:text-foreground/80"
             >
               <RefreshCcw className="h-3.5 w-3.5" />
               Muat Ulang
@@ -158,8 +158,8 @@ export function IssueDetailShell({
 
         <div className="mt-6 grid gap-4 md:grid-cols-2">
           <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-5">
-            <p className="text-[10px] uppercase tracking-[0.18em] text-white/35">Ringkasan</p>
-            <div className="mt-4 space-y-2 text-sm text-white/60">
+            <p className="text-[10px] uppercase tracking-[0.18em] text-foreground/35">Ringkasan</p>
+            <div className="mt-4 space-y-2 text-sm text-foreground/60">
               <p>Dilaporkan oleh: {issue.reportedByName ?? "-"}</p>
               <p>Ditangani oleh: {issue.assignedToName ?? "-"}</p>
               <p>Dibuat: {fmtDateTime(issue.createdAt)}</p>
@@ -168,8 +168,8 @@ export function IssueDetailShell({
             </div>
           </div>
           <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-5">
-            <p className="text-[10px] uppercase tracking-[0.18em] text-white/35">Unit Terkait</p>
-            <div className="mt-4 space-y-2 text-sm text-white/60">
+            <p className="text-[10px] uppercase tracking-[0.18em] text-foreground/35">Unit Terkait</p>
+            <div className="mt-4 space-y-2 text-sm text-foreground/60">
               <p>Customer: {issue.customerName ?? "-"}</p>
               <p>ID Unit: {issue.carId}</p>
               <p>Countdown ID: {issue.countdownId ?? "-"}</p>
@@ -181,9 +181,9 @@ export function IssueDetailShell({
       </section>
 
       <section className="grid gap-6 xl:grid-cols-2">
-        <div className="rounded-[28px] border border-white/[0.06] bg-[#050505] p-6 shadow-[0_0_0_1px_rgba(255,255,255,0.02)]">
-          <p className="text-[11px] uppercase tracking-[0.18em] text-amber-500/70">Tindakan</p>
-          <h2 className="mt-1 text-lg font-medium text-white">Perbarui Alur Penanganan</h2>
+        <div className="rounded-[28px] border border-white/[0.06] bg-card p-6 shadow-[0_0_0_1px_rgba(255,255,255,0.02)]">
+          <p className="text-[11px] uppercase tracking-[0.18em] text-app-accent-ink/70">Tindakan</p>
+          <h2 className="mt-1 text-lg font-medium text-foreground">Perbarui Alur Penanganan</h2>
 
           <div className="mt-5 space-y-4">
             {canValidate && canAcknowledge(issue.status) ? (
@@ -191,7 +191,7 @@ export function IssueDetailShell({
                 type="button"
                 disabled={isSubmitting}
                 onClick={() => void runAction(() => acknowledgeIssue(issue.issueId))}
-                className="inline-flex h-11 items-center gap-2 rounded-2xl bg-amber-500 px-4 text-sm font-semibold text-black transition-colors hover:bg-amber-400 disabled:opacity-60"
+                className="inline-flex h-11 items-center gap-2 rounded-2xl bg-primary px-4 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary disabled:opacity-60"
               >
                 <CheckCircle2 className="h-4 w-4" />
                 Terima Issue
@@ -200,11 +200,11 @@ export function IssueDetailShell({
 
             {canValidate ? (
               <div className="space-y-3 rounded-2xl border border-white/[0.06] bg-white/[0.03] p-4">
-                <p className="text-sm text-white">Tentukan PIC Issue</p>
+                <p className="text-sm text-foreground">Tentukan PIC Issue</p>
                 <select
                   value={assignTo}
                   onChange={(event) => setAssignTo(event.target.value)}
-                  className="h-11 w-full rounded-2xl border border-white/[0.06] bg-black/40 px-3 text-sm text-white outline-none focus:border-amber-500/30"
+                  className="h-11 w-full rounded-2xl border border-white/[0.06] bg-black/40 px-3 text-sm text-foreground outline-none focus:border-primary/30"
                 >
                   <option value="">Pilih PIC</option>
                   {employeeOptions.map((employee) => (
@@ -225,7 +225,7 @@ export function IssueDetailShell({
                       });
                     })
                   }
-                  className="inline-flex h-11 items-center rounded-2xl border border-white/[0.06] bg-white/[0.04] px-4 text-sm text-white/80 hover:text-white disabled:opacity-60"
+                  className="inline-flex h-11 items-center rounded-2xl border border-white/[0.06] bg-white/[0.04] px-4 text-sm text-foreground/80 hover:text-foreground disabled:opacity-60"
                 >
                   Simpan PIC
                 </button>
@@ -237,7 +237,7 @@ export function IssueDetailShell({
                 type="button"
                 disabled={isSubmitting}
                 onClick={() => void runAction(() => startIssue(issue.issueId))}
-                className="inline-flex h-11 items-center rounded-2xl border border-white/[0.06] bg-white/[0.04] px-4 text-sm text-white/80 hover:text-white disabled:opacity-60"
+                className="inline-flex h-11 items-center rounded-2xl border border-white/[0.06] bg-white/[0.04] px-4 text-sm text-foreground/80 hover:text-foreground disabled:opacity-60"
               >
                 Mulai Progres
               </button>
@@ -248,7 +248,7 @@ export function IssueDetailShell({
                 type="button"
                 disabled={isSubmitting}
                 onClick={() => void runAction(() => markIssueQcRecheck(issue.issueId))}
-                className="inline-flex h-11 items-center rounded-2xl border border-white/[0.06] bg-white/[0.04] px-4 text-sm text-white/80 hover:text-white disabled:opacity-60"
+                className="inline-flex h-11 items-center rounded-2xl border border-white/[0.06] bg-white/[0.04] px-4 text-sm text-foreground/80 hover:text-foreground disabled:opacity-60"
               >
                 Tandai QC Ulang
               </button>
@@ -256,13 +256,13 @@ export function IssueDetailShell({
 
             {canValidate && canResolve(issue.status) ? (
               <div className="space-y-3 rounded-2xl border border-white/[0.06] bg-white/[0.03] p-4">
-                <p className="text-sm text-white">Selesaikan Issue</p>
+                <p className="text-sm text-foreground">Selesaikan Issue</p>
                 <textarea
                   value={resolutionNotes}
                   onChange={(event) => setResolutionNotes(event.target.value)}
                   rows={3}
                   placeholder="Catatan penyelesaian"
-                  className="w-full rounded-2xl border border-white/[0.06] bg-black/40 px-3 py-3 text-sm text-white outline-none placeholder:text-white/20 focus:border-amber-500/30"
+                  className="w-full rounded-2xl border border-white/[0.06] bg-black/40 px-3 py-3 text-sm text-foreground outline-none placeholder:text-foreground/20 focus:border-primary/30"
                 />
                 <button
                   type="button"
@@ -274,7 +274,7 @@ export function IssueDetailShell({
                       }),
                     )
                   }
-                  className="inline-flex h-11 items-center rounded-2xl bg-amber-500 px-4 text-sm font-semibold text-black hover:bg-amber-400 disabled:opacity-60"
+                  className="inline-flex h-11 items-center rounded-2xl bg-primary px-4 text-sm font-semibold text-primary-foreground hover:bg-primary disabled:opacity-60"
                 >
                   Selesaikan
                 </button>
@@ -283,13 +283,13 @@ export function IssueDetailShell({
 
             {canValidate && canEscalate(issue.status) ? (
               <div className="space-y-3 rounded-2xl border border-white/[0.06] bg-white/[0.03] p-4">
-                <p className="text-sm text-white">Eskalasi Issue</p>
+                <p className="text-sm text-foreground">Eskalasi Issue</p>
                 <textarea
                   value={escalateNotes}
                   onChange={(event) => setEscalateNotes(event.target.value)}
                   rows={3}
                   placeholder="Alasan eskalasi"
-                  className="w-full rounded-2xl border border-white/[0.06] bg-black/40 px-3 py-3 text-sm text-white outline-none placeholder:text-white/20 focus:border-amber-500/30"
+                  className="w-full rounded-2xl border border-white/[0.06] bg-black/40 px-3 py-3 text-sm text-foreground outline-none placeholder:text-foreground/20 focus:border-primary/30"
                 />
                 <button
                   type="button"
@@ -301,7 +301,7 @@ export function IssueDetailShell({
                       }),
                     )
                   }
-                  className="inline-flex h-11 items-center rounded-2xl border border-white/[0.06] bg-white/[0.04] px-4 text-sm text-white/80 hover:text-white disabled:opacity-60"
+                  className="inline-flex h-11 items-center rounded-2xl border border-white/[0.06] bg-white/[0.04] px-4 text-sm text-foreground/80 hover:text-foreground disabled:opacity-60"
                 >
                   Eskalasi
                 </button>
@@ -310,13 +310,13 @@ export function IssueDetailShell({
 
             {canValidate && canWaive(issue.status) ? (
               <div className="space-y-3 rounded-2xl border border-white/[0.06] bg-white/[0.03] p-4">
-                <p className="text-sm text-white">Tutup dengan Pengecualian</p>
+                <p className="text-sm text-foreground">Tutup dengan Pengecualian</p>
                 <textarea
                   value={waiveNotes}
                   onChange={(event) => setWaiveNotes(event.target.value)}
                   rows={3}
                   placeholder="Alasan waive"
-                  className="w-full rounded-2xl border border-white/[0.06] bg-black/40 px-3 py-3 text-sm text-white outline-none placeholder:text-white/20 focus:border-amber-500/30"
+                  className="w-full rounded-2xl border border-white/[0.06] bg-black/40 px-3 py-3 text-sm text-foreground outline-none placeholder:text-foreground/20 focus:border-primary/30"
                 />
                 <button
                   type="button"
@@ -328,21 +328,21 @@ export function IssueDetailShell({
                       }),
                     )
                   }
-                  className="inline-flex h-11 items-center rounded-2xl border border-white/[0.06] bg-white/[0.04] px-4 text-sm text-white/80 hover:text-white disabled:opacity-60"
+                  className="inline-flex h-11 items-center rounded-2xl border border-white/[0.06] bg-white/[0.04] px-4 text-sm text-foreground/80 hover:text-foreground disabled:opacity-60"
                 >
                   Ajukan Pengecualian
                 </button>
               </div>
             ) : null}
 
-            {message ? <p className="text-sm text-emerald-300">{message}</p> : null}
-            {error ? <p className="text-sm text-red-300">{error}</p> : null}
+            {message ? <p className="text-sm text-success">{message}</p> : null}
+            {error ? <p className="text-sm text-destructive">{error}</p> : null}
           </div>
         </div>
 
-        <div className="rounded-[28px] border border-white/[0.06] bg-[#050505] p-6 shadow-[0_0_0_1px_rgba(255,255,255,0.02)]">
-          <p className="text-[11px] uppercase tracking-[0.18em] text-amber-500/70">Issue Terkait</p>
-          <h2 className="mt-1 text-lg font-medium text-white">Issue lain pada unit ini</h2>
+        <div className="rounded-[28px] border border-white/[0.06] bg-card p-6 shadow-[0_0_0_1px_rgba(255,255,255,0.02)]">
+          <p className="text-[11px] uppercase tracking-[0.18em] text-app-accent-ink/70">Issue Terkait</p>
+          <h2 className="mt-1 text-lg font-medium text-foreground">Issue lain pada unit ini</h2>
 
           <div className="mt-5 space-y-3">
             {relatedIssues.map((row) => (
@@ -352,15 +352,15 @@ export function IssueDetailShell({
                 className={[
                   "block rounded-2xl border px-4 py-4 transition-colors",
                   row.issueId === issue.issueId
-                    ? "border-amber-500/30 bg-amber-500/10"
+                    ? "border-primary/30 bg-primary/10"
                     : "border-white/[0.06] bg-white/[0.03] hover:bg-white/[0.04]",
                 ].join(" ")}
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0">
-                    <p className="font-mono text-xs text-amber-400">{row.issueNumber}</p>
-                    <p className="mt-2 text-sm text-white">{row.title}</p>
-                    <p className="mt-1 text-sm text-white/45">{row.status} · {row.severity}</p>
+                    <p className="font-mono text-xs text-app-accent-ink">{row.issueNumber}</p>
+                    <p className="mt-2 text-sm text-foreground">{row.title}</p>
+                    <p className="mt-1 text-sm text-foreground/45">{row.status} · {row.severity}</p>
                   </div>
                 </div>
               </Link>

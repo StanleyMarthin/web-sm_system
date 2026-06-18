@@ -130,159 +130,153 @@ export function PlanningEvaluationShell({
   }
 
   return (
-    <div className="space-y-2">
-      <section className="border border-white/5 bg-[#111114] px-4 py-3">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex flex-wrap items-center gap-4">
-            <div>
-              <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-white/30">
-                Planning
-              </p>
-              <h2 className="text-[13px] font-mono text-white/80">
-                Review Plan & Realisasi
-              </h2>
-            </div>
-            
-            <div className="h-6 w-px bg-white/10 hidden sm:block"></div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="flex items-center gap-1.5 border border-white/10 bg-[#0a0a0c] p-1">
-                {(["daily", "weekly"] as const).map((value) => (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => pushSpan(value)}
-                    className={[
-                      "px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.12em] transition-colors",
-                      activeSpan === value
-                        ? "bg-amber-500/10 text-amber-500"
-                        : "text-white/40 hover:text-white/70",
-                    ].join(" ")}
-                  >
-                    {value === "daily" ? "Harian" : "Mingguan"}
-                  </button>
-                ))}
-              </div>
-
-              <div className="flex items-center gap-1.5 border border-white/10 bg-[#0a0a0c] p-1">
-                {([
-                  { value: "all", label: "Semua" },
-                  { value: "normal", label: "Normal" },
-                  { value: "overtime", label: "Lembur" },
-                ] as const).map((option) => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    onClick={() => pushMode(option.value)}
-                    className={[
-                      "px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.12em] transition-colors",
-                      activeMode === option.value
-                        ? "bg-amber-500/10 text-amber-500"
-                        : "text-white/40 hover:text-white/70",
-                    ].join(" ")}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-            </div>
+    <div className="space-y-3">
+      <SectionCard label="Evaluasi planning" className="space-y-3">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0">
+            <h2 className="text-[18px] font-semibold text-foreground">Bandingkan rencana dan realisasi</h2>
+            <p className="mt-1 max-w-2xl text-[14px] leading-6 text-muted-foreground">
+              Gunakan halaman ini untuk melihat apakah jam kerja aktual sudah mengikuti rencana SPK.
+            </p>
           </div>
+          <div className="flex flex-wrap gap-2">
+            <ActionButton onClick={openLinkedSpk}>Buka SPK</ActionButton>
+            <ActionButton onClick={openLinkedSpl}>Buka SPL</ActionButton>
+            <ActionButton onClick={() => router.refresh()}>
+              <RefreshCcw className="h-3 w-3" />
+              Refresh
+            </ActionButton>
+          </div>
+        </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <ActionButton onClick={openLinkedSpk}>
-              Buka SPK
-            </ActionButton>
-            <ActionButton onClick={openLinkedSpl}>
-              Buka SPL
-            </ActionButton>
+        <div className="grid gap-3 border border-border bg-background p-3 lg:grid-cols-[minmax(240px,1fr)_minmax(220px,0.7fr)_minmax(220px,0.7fr)]">
+          <label className="space-y-1">
+            <span className="block font-mono text-[12px] uppercase tracking-[0.12em] text-muted-foreground">
+              Tanggal review
+            </span>
             {activeSpan === "daily" ? (
-              <div className="w-40">
-                <CompactDateInput value={date} onChange={pushDailyDate} className="w-64" />
-              </div>
+              <CompactDateInput value={date} onChange={pushDailyDate} />
             ) : (
               <CompactDateRangeInput
                 from={date}
                 to={resolvedDateTo}
                 onChange={applyRangeSelection}
                 selectionBehavior="single-or-range"
-                className="w-64"
               />
             )}
-            <span className="border border-white/5 bg-[#0a0a0c] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-white/45 h-8 flex items-center">
-              {activeSpan === "daily" ? "Review harian" : "Maks 7 hari"}
+          </label>
+
+          <div className="space-y-1">
+            <span className="block font-mono text-[12px] uppercase tracking-[0.12em] text-muted-foreground">
+              Rentang
             </span>
+            <div className="grid grid-cols-2 gap-1 border border-border bg-card p-1">
+              {(["daily", "weekly"] as const).map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => pushSpan(value)}
+                  className={[
+                    "px-2.5 py-2 font-mono text-[12px] uppercase tracking-[0.12em] transition-colors",
+                    activeSpan === value
+                      ? "bg-primary/10 text-app-accent-ink"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                  ].join(" ")}
+                >
+                  {value === "daily" ? "Harian" : "Mingguan"}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <span className="block font-mono text-[12px] uppercase tracking-[0.12em] text-muted-foreground">
+              Jenis jam
+            </span>
+            <div className="grid grid-cols-3 gap-1 border border-border bg-card p-1">
+              {([
+                { value: "all", label: "Semua" },
+                { value: "normal", label: "Normal" },
+                { value: "overtime", label: "Lembur" },
+              ] as const).map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => pushMode(option.value)}
+                  className={[
+                    "px-2 py-2 font-mono text-[12px] uppercase tracking-[0.12em] transition-colors",
+                    activeMode === option.value
+                      ? "bg-primary/10 text-app-accent-ink"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                  ].join(" ")}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
-      </section>
+      </SectionCard>
 
-      <section className="border border-white/5 bg-[#111114] px-4 py-3 flex flex-wrap items-center justify-between gap-4">
-        <MetricBar
-          items={[
-            { label: "Rencana Awal", value: formatHours(summary.baselineHours) },
-            { label: "Rencana Update", value: formatHours(summary.revisionHours), tone: "warn" },
-            { label: "Realisasi", value: formatHours(summary.actualHours), tone: "up" },
-            {
-              label: "Selisih Rencana",
-              value: formatHours(summary.revisionDeltaHours),
-              tone: summary.revisionDeltaHours > 0 ? "warn" : summary.revisionDeltaHours < 0 ? "down" : "muted",
-            },
-            {
-              label: "Selisih Realisasi",
-              value: formatHours(summary.actualDeltaHours),
-              tone: summary.actualDeltaHours > 0 ? "warn" : summary.actualDeltaHours < 0 ? "down" : "muted",
-            },
-          ]}
-        />
-        <ActionButton onClick={() => router.refresh()}>
-          <RefreshCcw className="h-3 w-3" />
-          Refresh
-        </ActionButton>
-      </section>
+      <MetricBar
+        items={[
+          { label: "Rencana Awal", value: formatHours(summary.baselineHours) },
+          { label: "Update", value: formatHours(summary.revisionHours), tone: "warn" },
+          { label: "Realisasi", value: formatHours(summary.actualHours), tone: "up" },
+          {
+            label: "Selisih Plan",
+            value: formatHours(summary.revisionDeltaHours),
+            tone: summary.revisionDeltaHours > 0 ? "warn" : summary.revisionDeltaHours < 0 ? "down" : "muted",
+          },
+          {
+            label: "Selisih Aktual",
+            value: formatHours(summary.actualDeltaHours),
+            tone: summary.actualDeltaHours > 0 ? "warn" : summary.actualDeltaHours < 0 ? "down" : "muted",
+          },
+        ]}
+      />
 
-      <SectionCard label="Per divisi" count={rows.length}>
-        <div className="flex flex-wrap items-center justify-between gap-2 border border-white/[0.05] bg-[#0a0a0c] px-3 py-2">
-          <p className="text-[12px] text-white/50">
-            Review ini tersambung ke SPK tanggal <span className="font-mono text-white/70">{spkDate}</span>
-            {" "}dan SPL periode yang sama.
-          </p>
-          <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-white/35">
-            Sorted by source data
-          </span>
-        </div>
+      <SectionCard label="Hasil per divisi" count={rows.length}>
         <div className="overflow-x-auto">
-          <table className="min-w-full text-[12px] text-white/70">
-            <thead className="sticky top-0 z-10 bg-[#111114]">
-              <tr className="border-b border-white/[0.06] text-left font-mono text-[10px] uppercase tracking-[0.12em] text-white/30">
+          <table className="min-w-full text-[14px] text-foreground">
+            <thead className="sticky top-0 z-10 bg-card">
+              <tr className="border-b border-border text-left font-mono text-[14px] uppercase tracking-[0.12em] text-muted-foreground">
                 <th className="px-3 py-2">Divisi</th>
                 <th className="px-3 py-2 text-right">Rencana Awal</th>
-                <th className="px-3 py-2 text-right">Rencana Update</th>
+                <th className="px-3 py-2 text-right">Update</th>
                 <th className="px-3 py-2 text-right">Realisasi</th>
-                <th className="px-3 py-2 text-right">Selisih Rencana</th>
-                <th className="px-3 py-2 text-right">Selisih Realisasi</th>
-                <th className="px-3 py-2 text-right">Unit Awal</th>
-                <th className="px-3 py-2 text-right">Job Direncanakan</th>
-                <th className="px-3 py-2 text-right">Unit Dikerjakan</th>
+                <th className="px-3 py-2 text-right">Selisih</th>
+                <th className="px-3 py-2 text-right">Output</th>
               </tr>
             </thead>
             <tbody>
               {rows.length > 0 ? rows.map((row) => (
                 <tr
                   key={`${row.divisionId ?? "unknown"}:${row.divisionName ?? "-"}`}
-                  className="border-b border-white/[0.04] hover:bg-white/[0.02]"
+                  className="border-b border-border hover:bg-muted"
                 >
-                  <td className="px-3 py-2 text-white">{row.divisionName ?? "-"}</td>
+                  <td className="px-3 py-2 text-foreground">{row.divisionName ?? "-"}</td>
                   <td className="px-3 py-2 text-right font-mono tabular-nums">{formatHours(row.baselineHours)}</td>
-                  <td className="px-3 py-2 text-right font-mono tabular-nums text-amber-500">{formatHours(row.revisionHours)}</td>
-                  <td className="px-3 py-2 text-right font-mono tabular-nums text-emerald-400">{formatHours(row.actualHours)}</td>
-                  <td className="px-3 py-2 text-right font-mono tabular-nums">{formatHours(row.revisionDeltaHours)}</td>
-                  <td className="px-3 py-2 text-right font-mono tabular-nums">{formatHours(row.actualDeltaHours)}</td>
-                  <td className="px-3 py-2 text-right font-mono tabular-nums">{row.baselineUnitCount}</td>
-                  <td className="px-3 py-2 text-right font-mono tabular-nums">{row.revisionJobCount}</td>
-                  <td className="px-3 py-2 text-right font-mono tabular-nums">{row.actualUnitCount}</td>
+                  <td className="px-3 py-2 text-right font-mono tabular-nums text-app-accent-ink">{formatHours(row.revisionHours)}</td>
+                  <td className="px-3 py-2 text-right font-mono tabular-nums text-success">{formatHours(row.actualHours)}</td>
+                  <td className="px-3 py-2 text-right font-mono tabular-nums">
+                    <span className={row.revisionDeltaHours > 0 ? "text-app-accent-ink" : row.revisionDeltaHours < 0 ? "text-destructive" : "text-muted-foreground"}>
+                      Plan {formatHours(row.revisionDeltaHours)}
+                    </span>
+                    <span className="block text-[12px] text-muted-foreground">
+                      Aktual {formatHours(row.actualDeltaHours)}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2 text-right font-mono tabular-nums">
+                    {row.actualUnitCount} unit
+                    <span className="block text-[12px] text-muted-foreground">
+                      {row.revisionJobCount} job plan
+                    </span>
+                  </td>
                 </tr>
               )) : (
                 <tr>
-                  <td colSpan={9} className="px-3 py-10 text-center text-sm text-white/35">
+                  <td colSpan={6} className="px-3 py-10 text-center text-sm text-muted-foreground">
                     Belum ada data evaluasi untuk filter yang dipilih.
                   </td>
                 </tr>

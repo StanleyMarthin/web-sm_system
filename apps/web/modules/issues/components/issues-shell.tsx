@@ -51,10 +51,10 @@ function SummaryCard({
   helper: string;
 }) {
   return (
-    <div className="border border-gray-300 dark:border-white/[0.05] bg-white dark:bg-[#111114] px-3 py-2">
-      <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/30">{label}</p>
-      <p className="mt-1 font-mono text-[13px] text-gray-950 dark:text-white">{value}</p>
-      <p className="mt-1 text-[11px] text-gray-400 dark:text-white/40">{helper}</p>
+    <div className="border border-border dark:border-white/[0.05] bg-white dark:bg-card px-3 py-2">
+      <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30">{label}</p>
+      <p className="mt-1 font-mono text-[13px] text-foreground dark:text-foreground">{value}</p>
+      <p className="mt-1 text-[11px] text-muted-foreground dark:text-foreground/40">{helper}</p>
     </div>
   );
 }
@@ -124,7 +124,7 @@ export function IssuesShell({
         sticky: true,
         kind: "text",
         renderCell: (value, row) => (
-          <span className="font-mono text-[11px] text-gray-500 dark:text-white/55">{String(value)}</span>
+          <span className="font-mono text-[11px] text-muted-foreground dark:text-foreground/55">{String(value)}</span>
         ),
       },
       {
@@ -141,11 +141,11 @@ export function IssuesShell({
           <div className="min-w-0">
             <Link
               href={`/issues/${String(row.issueId)}`}
-              className="font-medium text-gray-950 dark:text-white transition-colors hover:text-amber-300"
+              className="font-medium text-foreground dark:text-foreground transition-colors hover:text-app-accent-ink"
             >
               {String(value)}
             </Link>
-            <p className="mt-0.5 truncate font-mono text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/30">
+            <p className="mt-0.5 truncate font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30">
               {String(row.issueNumber ?? "-")} · {String(row.unitName ?? "-")} · {String(row.divisionName ?? "-")}
             </p>
           </div>
@@ -247,22 +247,22 @@ export function IssuesShell({
       </section>
 
       <section className="grid gap-3 xl:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)]">
-        <div className="border border-gray-300 dark:border-white/[0.05] bg-white dark:bg-[#111114] px-4 py-3">
+        <div className="border border-border dark:border-white/[0.05] bg-white dark:bg-card px-4 py-3">
           <div className="flex items-center gap-3">
-            <div className="flex h-8 w-8 items-center justify-center border border-gray-300 dark:border-white/[0.08] bg-slate-50 dark:bg-[#0a0a0c]">
-              <AlertTriangle className="h-5 w-5 text-amber-400" />
+            <div className="flex h-8 w-8 items-center justify-center border border-border dark:border-white/[0.08] bg-muted dark:bg-background">
+              <AlertTriangle className="h-5 w-5 text-app-accent-ink" />
             </div>
             <div>
-              <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/30">
+              <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30">
                 Urgent Board
               </p>
-              <h2 className="mt-1 text-[13px] font-medium text-gray-950 dark:text-white">Issue prioritas tinggi</h2>
+              <h2 className="mt-1 text-[13px] font-medium text-foreground dark:text-foreground">Issue prioritas tinggi</h2>
             </div>
           </div>
 
           <div className="mt-3 space-y-2">
             {urgentRows.length === 0 ? (
-              <div className="border border-dashed border-gray-300 dark:border-white/[0.08] bg-slate-50 dark:bg-[#0a0a0c] px-3 py-4 text-[11px] text-gray-500 dark:text-white/35">
+              <div className="border border-dashed border-border dark:border-white/[0.08] bg-muted dark:bg-background px-3 py-4 text-[11px] text-muted-foreground dark:text-foreground/35">
                 Tidak ada urgent issue di scope saat ini.
               </div>
             ) : null}
@@ -270,17 +270,17 @@ export function IssuesShell({
               <Link
                 key={issue.issueId}
                 href={`/issues/${issue.issueId}`}
-                className="block border border-gray-300 dark:border-white/[0.05] bg-slate-50 dark:bg-[#0a0a0c] px-3 py-3 transition-colors hover:bg-gray-100 dark:hover:bg-white/[0.03]"
+                className="block border border-border dark:border-white/[0.05] bg-muted dark:bg-background px-3 py-3 transition-colors hover:bg-muted dark:hover:bg-white/[0.03]"
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0">
-                    <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-gray-400 dark:text-white/40">{issue.issueNumber}</p>
-                    <p className="mt-1 text-[12px] text-gray-950 dark:text-white">{issue.title}</p>
-                    <p className="mt-1 text-[11px] text-gray-600 dark:text-white/45">
+                    <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/40">{issue.issueNumber}</p>
+                    <p className="mt-1 text-[12px] text-foreground dark:text-foreground">{issue.title}</p>
+                    <p className="mt-1 text-[11px] text-muted-foreground dark:text-foreground/45">
                       {issue.unitName} · {issue.divisionName ?? "-"}
                     </p>
                   </div>
-                  <div className="shrink-0 border border-red-500/30 px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-red-300">
+                  <div className="shrink-0 border border-destructive/30 px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-destructive">
                     {issue.status}
                   </div>
                 </div>
@@ -289,21 +289,21 @@ export function IssuesShell({
           </div>
         </div>
 
-        <div className="border border-gray-300 dark:border-white/[0.05] bg-white dark:bg-[#111114] px-4 py-3">
+        <div className="border border-border dark:border-white/[0.05] bg-white dark:bg-card px-4 py-3">
           <div className="flex items-center gap-3">
-            <div className="flex h-8 w-8 items-center justify-center border border-gray-300 dark:border-white/[0.08] bg-slate-50 dark:bg-[#0a0a0c]">
-              <Plus className="h-5 w-5 text-amber-400" />
+            <div className="flex h-8 w-8 items-center justify-center border border-border dark:border-white/[0.08] bg-muted dark:bg-background">
+              <Plus className="h-5 w-5 text-app-accent-ink" />
             </div>
             <div>
-              <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/30">
+              <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30">
                 Manual Issue
               </p>
-              <h2 className="mt-1 text-[13px] font-medium text-gray-950 dark:text-white">Buat issue baru</h2>
+              <h2 className="mt-1 text-[13px] font-medium text-foreground dark:text-foreground">Buat issue baru</h2>
             </div>
           </div>
 
           {!canCreate ? (
-            <p className="mt-3 border border-dashed border-gray-300 dark:border-white/[0.08] bg-slate-50 dark:bg-[#0a0a0c] px-3 py-4 text-[11px] text-gray-500 dark:text-white/35">
+            <p className="mt-3 border border-dashed border-border dark:border-white/[0.08] bg-muted dark:bg-background px-3 py-4 text-[11px] text-muted-foreground dark:text-foreground/35">
               Aksi create issue dibatasi untuk user dengan permission submit QC.
             </p>
           ) : (
@@ -340,7 +340,7 @@ export function IssuesShell({
               router.push(`${pathname}?${nextParams.toString()}`);
               router.refresh();
             }}
-            className="inline-flex h-8 items-center gap-2 border border-gray-300 dark:border-white/[0.08] bg-transparent px-3 font-mono text-[10px] uppercase tracking-[0.12em] text-gray-700 dark:text-white/60 hover:text-gray-900 dark:text-white/80"
+            className="inline-flex h-8 items-center gap-2 border border-border dark:border-white/[0.08] bg-transparent px-3 font-mono text-[10px] uppercase tracking-[0.12em] text-foreground dark:text-foreground/60 hover:text-foreground dark:text-foreground/80"
           >
             <RefreshCcw className="h-3.5 w-3.5" />
             Refresh

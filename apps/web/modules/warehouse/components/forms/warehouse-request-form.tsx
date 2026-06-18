@@ -123,11 +123,11 @@ export function WarehouseRequestForm({
   const selectedStockCard = stockCards.find((s) => s.stockCardId === tempStockCardId) ?? null;
 
   const inputCls =
-    "h-9 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-2.5 text-[12px] text-white outline-none transition-colors focus:border-amber-500/30 [color-scheme:dark]";
+    "h-9 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-2.5 text-[12px] text-foreground outline-none transition-colors focus:border-primary/30 [color-scheme:dark]";
 
   const darkSelectStyle = {
-    backgroundColor: "#111111",
-    color: "#ffffff",
+    backgroundColor: "var(--card)",
+    color: "var(--card-foreground)",
   } as const;
 
   const handleAddDraft = () => {
@@ -165,7 +165,7 @@ export function WarehouseRequestForm({
   return (
     <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-4">
       <div className="grid gap-4">
-        <label className="grid gap-2 text-sm text-white/75">
+        <label className="grid gap-2 text-sm text-foreground/75">
           <span>Divisi pengaju</span>
           <select
             {...register("divisionId")}
@@ -184,19 +184,19 @@ export function WarehouseRequestForm({
             <option value="">{canChooseRequestDivision ? "Pilih divisi" : currentUserDivisionName ?? "Divisi aktif"}</option>
             {divisions.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
           </select>
-          {errors.divisionId && <span className="text-xs text-red-400">{errors.divisionId.message}</span>}
+          {errors.divisionId && <span className="text-xs text-destructive">{errors.divisionId.message}</span>}
         </label>
 
-        <label className="grid gap-2 text-sm text-white/75">
+        <label className="grid gap-2 text-sm text-foreground/75">
           <span>Nama PIC / pengaju</span>
           <select {...register("requesterEmployeeId")} className={inputCls} style={darkSelectStyle} disabled={!divisionId}>
             <option value="">{!divisionId ? "Pilih divisi dulu" : isLoading ? "Memuat anggota divisi..." : "Pilih anggota divisi"}</option>
             {employees.map((e) => <option key={e.value} value={e.value}>{e.label}</option>)}
           </select>
-          {errors.requesterEmployeeId && <span className="text-xs text-red-400">{errors.requesterEmployeeId.message}</span>}
+          {errors.requesterEmployeeId && <span className="text-xs text-destructive">{errors.requesterEmployeeId.message}</span>}
         </label>
 
-        <label className="grid gap-2 text-sm text-white/75">
+        <label className="grid gap-2 text-sm text-foreground/75">
           <span>Jobdesc aktif</span>
           <select
             {...register("coreId")}
@@ -218,21 +218,21 @@ export function WarehouseRequestForm({
               <option key={j.coreId} value={j.coreId}>{[j.unitName, j.panelName, j.jobName].filter(Boolean).join(" · ")}</option>
             ))}
           </select>
-          {errors.coreId && <span className="text-xs text-red-400">{errors.coreId.message}</span>}
+          {errors.coreId && <span className="text-xs text-destructive">{errors.coreId.message}</span>}
         </label>
 
         {selectedJob && (
-          <div className="rounded-[14px] border border-amber-500/20 bg-amber-500/[0.06] p-3">
-            <div className="grid gap-3 text-sm text-white/78 md:grid-cols-3">
-              <div><p className="text-[10px] uppercase tracking-[0.18em] text-white/35">Unit</p><p className="mt-1 font-medium text-white">{selectedJob.unitName}</p></div>
-              <div><p className="text-[10px] uppercase tracking-[0.18em] text-white/35">Panel</p><p className="mt-1 font-medium text-white">{selectedJob.panelName ?? "-"}</p></div>
-              <div><p className="text-[10px] uppercase tracking-[0.18em] text-white/35">Pekerjaan</p><p className="mt-1 font-medium text-white">{selectedJob.jobName ?? "-"}</p></div>
+          <div className="rounded-[14px] border border-primary/20 bg-primary/[0.06] p-3">
+            <div className="grid gap-3 text-sm text-foreground/78 md:grid-cols-3">
+              <div><p className="text-[10px] uppercase tracking-[0.18em] text-foreground/35">Unit</p><p className="mt-1 font-medium text-foreground">{selectedJob.unitName}</p></div>
+              <div><p className="text-[10px] uppercase tracking-[0.18em] text-foreground/35">Panel</p><p className="mt-1 font-medium text-foreground">{selectedJob.panelName ?? "-"}</p></div>
+              <div><p className="text-[10px] uppercase tracking-[0.18em] text-foreground/35">Pekerjaan</p><p className="mt-1 font-medium text-foreground">{selectedJob.jobName ?? "-"}</p></div>
             </div>
           </div>
         )}
 
         <div className="grid gap-4 md:grid-cols-2">
-          <label className="grid gap-2 text-sm text-white/75">
+          <label className="grid gap-2 text-sm text-foreground/75">
             <span>Kategori barang</span>
             <select
               {...register("itemCategory")}
@@ -254,7 +254,7 @@ export function WarehouseRequestForm({
           </label>
 
           {itemCategory === "SPARE_PART" ? (
-            <label className="grid gap-2 text-sm text-white/75">
+            <label className="grid gap-2 text-sm text-foreground/75">
               <span>Tipe transaksi</span>
               <select
                 {...register("transactionType")}
@@ -275,24 +275,24 @@ export function WarehouseRequestForm({
               </select>
             </label>
           ) : (
-            <div className="rounded-[14px] border border-white/[0.06] bg-white/[0.03] px-3 py-2 text-sm text-white/65">
+            <div className="rounded-[14px] border border-white/[0.06] bg-white/[0.03] px-3 py-2 text-sm text-foreground/65">
               {itemCategory === "BAHAN" ? "Alur bahan: Ketua Divisi → Kepala Gudang → PPIC." : "Tools langsung masuk antrean gudang tanpa approval tambahan."}
             </div>
           )}
         </div>
 
         {itemCategory === "SPARE_PART" && transactionType === "PENGAMBILAN" && (
-          <label className="flex items-start gap-3 rounded-[14px] border border-white/[0.06] bg-white/[0.03] px-3 py-3 text-sm text-white/75">
-            <input type="checkbox" {...register("installToUnit")} className="mt-0.5 h-4 w-4 rounded border-white/15 bg-black accent-amber-500" />
+          <label className="flex items-start gap-3 rounded-[14px] border border-white/[0.06] bg-white/[0.03] px-3 py-3 text-sm text-foreground/75">
+            <input type="checkbox" {...register("installToUnit")} className="mt-0.5 h-4 w-4 rounded border-white/15 bg-black accent-primary" />
             <span>
-              <span className="block font-medium text-white">Langsung dipasang ke unit</span>
-              <span className="mt-1 block text-[12px] text-white/45">Gunakan bila barang begitu keluar langsung dipasang.</span>
+              <span className="block font-medium text-foreground">Langsung dipasang ke unit</span>
+              <span className="mt-1 block text-[12px] text-foreground/45">Gunakan bila barang begitu keluar langsung dipasang.</span>
             </span>
           </label>
         )}
 
         <div className={itemCategory === "TOOLS" ? "grid gap-4" : "grid gap-4 md:grid-cols-[1.4fr,1fr]"}>
-          <label className="grid gap-2 text-sm text-white/75">
+          <label className="grid gap-2 text-sm text-foreground/75">
             <span>Nama barang</span>
             <input
               {...register("tempItemName")}
@@ -308,7 +308,7 @@ export function WarehouseRequestForm({
           </label>
 
           {itemCategory !== "TOOLS" && (
-            <label className="grid gap-2 text-sm text-white/75">
+            <label className="grid gap-2 text-sm text-foreground/75">
               <span>{transactionType === "TRANSFER_PART" ? "Part donor (wajib)" : "Pilih dari stok terkait (opsional)"}</span>
               <select
                 {...register("tempStockCardId")}
@@ -337,40 +337,40 @@ export function WarehouseRequestForm({
         </div>
 
         <div className="grid gap-4 md:grid-cols-2">
-          <label className="grid gap-2 text-sm text-white/75">
+          <label className="grid gap-2 text-sm text-foreground/75">
             <span>Jumlah</span>
             <input {...register("tempQty")} className={inputCls} inputMode="decimal" />
           </label>
-          <label className="grid gap-2 text-sm text-white/75">
+          <label className="grid gap-2 text-sm text-foreground/75">
             <span>Satuan</span>
             <input {...register("tempUom")} className={inputCls} />
           </label>
         </div>
 
         <div className="flex items-center justify-between gap-3">
-          <div className="text-[12px] text-white/45">Tambahkan beberapa barang dulu bila mau diajukan sekaligus.</div>
+          <div className="text-[12px] text-foreground/45">Tambahkan beberapa barang dulu bila mau diajukan sekaligus.</div>
           <button
             type="button"
             onClick={handleAddDraft}
-            className="inline-flex items-center gap-2 rounded-full border border-amber-500/35 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-200"
+            className="inline-flex items-center gap-2 rounded-full border border-primary/35 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-app-accent-ink"
           >
             <PackagePlus className="h-3.5 w-3.5" /> Tambah ke daftar
           </button>
         </div>
 
         {fields.length > 0 && (
-          <div className="rounded-[14px] border border-white/[0.06] bg-[#0c0c0c]">
+          <div className="rounded-[14px] border border-white/[0.06] bg-card">
             <div className="flex items-center justify-between gap-3 border-b border-white/[0.06] px-4 py-3">
-              <div><p className="text-sm font-medium text-white">Daftar item</p><p className="text-[12px] text-white/45">{fields.length} item siap diajukan</p></div>
+              <div><p className="text-sm font-medium text-foreground">Daftar item</p><p className="text-[12px] text-foreground/45">{fields.length} item siap diajukan</p></div>
             </div>
             <div className="divide-y divide-white/[0.06]">
               {fields.map((item, index) => (
                 <div key={item.id} className="flex items-center gap-3 px-4 py-3">
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-white">{item.itemName}</p>
-                    <p className="text-[12px] text-white/45">{item.qty} {item.uom}{item.stockCardId ? " · tersambung ke stok gudang" : ""}</p>
+                    <p className="truncate text-sm font-medium text-foreground">{item.itemName}</p>
+                    <p className="text-[12px] text-foreground/45">{item.qty} {item.uom}{item.stockCardId ? " · tersambung ke stok gudang" : ""}</p>
                   </div>
-                  <button type="button" onClick={() => remove(index)} className="rounded-full border border-white/[0.08] p-2 text-white/45 transition-colors hover:border-red-500/30 hover:text-red-300">
+                  <button type="button" onClick={() => remove(index)} className="rounded-full border border-white/[0.08] p-2 text-foreground/45 transition-colors hover:border-destructive/30 hover:text-destructive">
                     <Trash2 className="h-4 w-4" />
                   </button>
                 </div>
@@ -379,9 +379,9 @@ export function WarehouseRequestForm({
           </div>
         )}
 
-        <label className="grid gap-2 text-sm text-white/75">
+        <label className="grid gap-2 text-sm text-foreground/75">
           <span>Catatan (opsional)</span>
-          <textarea {...register("notes")} className="min-h-24 rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-sm text-white outline-none focus:border-amber-500/30" placeholder="Catatan tambahan bila diperlukan" />
+          <textarea {...register("notes")} className="min-h-24 rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-sm text-foreground outline-none focus:border-primary/30" placeholder="Catatan tambahan bila diperlukan" />
         </label>
       </div>
 
@@ -389,7 +389,7 @@ export function WarehouseRequestForm({
         <button
           type="submit"
           disabled={isPending}
-          className="inline-flex items-center gap-2 rounded-full bg-amber-500 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-black disabled:opacity-50"
+          className="inline-flex items-center gap-2 rounded-full bg-primary px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-primary-foreground disabled:opacity-50"
         >
           {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PackagePlus className="h-3.5 w-3.5" />}
           Kirim permintaan

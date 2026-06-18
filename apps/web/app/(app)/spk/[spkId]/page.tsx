@@ -19,23 +19,23 @@ function SpkUnavailableState({
 }) {
   return (
     <div className="space-y-6">
-      <div className="rounded-md border border-white/5 bg-[#111114] p-6">
-        <p className="text-[12px] uppercase tracking-[0.2em] text-amber-500/70">SPK</p>
-        <h1 className="mt-3 text-[13px] font-semibold text-white">Detail SPK belum bisa dimuat</h1>
-        <p className="mt-2 text-[12px] text-white/40">
-          Data untuk nomor <span className="text-white/80">{spkId}</span> belum bisa dibaca saat
+      <div className="rounded-md border border-white/5 bg-card p-6">
+        <p className="text-[12px] uppercase tracking-[0.2em] text-app-accent-ink/70">SPK</p>
+        <h1 className="mt-3 text-[13px] font-semibold text-foreground">Detail SPK belum bisa dimuat</h1>
+        <p className="mt-2 text-[12px] text-foreground/40">
+          Data untuk nomor <span className="text-foreground/80">{spkId}</span> belum bisa dibaca saat
           ini. Coba muat ulang beberapa saat lagi.
         </p>
         <div className="mt-5 flex flex-wrap gap-2">
           <Link
             href="/spk"
-            className="inline-flex items-center gap-2 rounded border border-white/10 px-4 py-2 text-[12px] text-white/80 hover:text-white"
+            className="inline-flex items-center gap-2 rounded border border-white/10 px-4 py-2 text-[12px] text-foreground/80 hover:text-foreground"
           >
             Kembali ke Daftar
           </Link>
           <Link
             href="/dashboard"
-            className="inline-flex items-center gap-2 rounded bg-amber-500 px-4 py-2 text-[12px] font-semibold text-[#0a0a0c] hover:bg-amber-400"
+            className="inline-flex items-center gap-2 rounded bg-primary px-4 py-2 text-[12px] font-semibold text-primary-foreground hover:bg-primary"
           >
             Ke Dashboard
           </Link>

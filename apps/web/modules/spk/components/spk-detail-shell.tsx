@@ -15,10 +15,10 @@ interface SpkDetailShellProps {
 }
 
 function statusClassName(status: string) {
-  if (status === "ACTIVE") return "border-emerald-500/25 bg-emerald-500/[0.06] text-emerald-400";
-  if (status === "DONE") return "border-white/10 bg-white/[0.03] text-white/50";
-  if (status === "REJECTED") return "border-red-500/25 bg-red-500/[0.06] text-red-400";
-  return "border-amber-500/25 bg-amber-500/[0.06] text-amber-400";
+  if (status === "ACTIVE") return "border-success/25 bg-success/[0.06] text-success";
+  if (status === "DONE") return "border-white/10 bg-white/[0.03] text-foreground/50";
+  if (status === "REJECTED") return "border-destructive/25 bg-destructive/[0.06] text-destructive";
+  return "border-primary/25 bg-primary/[0.06] text-app-accent-ink";
 }
 
 export function SpkDetailShell({ header, details, canStart, canEditBreakdown }: SpkDetailShellProps) {
@@ -62,12 +62,12 @@ export function SpkDetailShell({ header, details, canStart, canEditBreakdown }: 
 
   return (
     <div className="space-y-4">
-      <section className="border border-white/5 bg-[#111114]">
+      <section className="border border-white/5 bg-card">
         <div className="flex flex-wrap items-center justify-between border-b border-white/5 px-4 py-3">
           <div className="flex flex-wrap items-center gap-3">
             <Link
               href={`/spk?date=${header.spkDate}`}
-              className="inline-flex items-center gap-2 border border-white/10 px-3 py-2 font-mono text-[10px] uppercase tracking-[0.12em] text-white/40 hover:text-white hover:border-white/30 transition-colors"
+              className="inline-flex items-center gap-2 border border-white/10 px-3 py-2 font-mono text-[10px] uppercase tracking-[0.12em] text-foreground/40 hover:text-foreground hover:border-white/30 transition-colors"
             >
               <ArrowLeft className="h-3.5 w-3.5" /> Kembali
             </Link>
@@ -75,21 +75,21 @@ export function SpkDetailShell({ header, details, canStart, canEditBreakdown }: 
               {header.status}
             </span>
           </div>
-          <div className="font-mono text-[10px] uppercase tracking-[0.12em] text-white/30">
+          <div className="font-mono text-[10px] uppercase tracking-[0.12em] text-foreground/30">
             {header.spkNumber} • {header.spkDate}
           </div>
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-4 p-5">
           <div>
-            <h1 className="text-[13px] font-mono text-white/80">Matriks Pekerjaan SPK</h1>
+            <h1 className="text-[13px] font-mono text-foreground/80">Matriks Pekerjaan SPK</h1>
           </div>
           
           {canStartSpk && (
             <button
               onClick={handleStartSpk}
               disabled={isStarting}
-              className="inline-flex h-10 items-center justify-center gap-2 bg-amber-500 px-4 font-mono text-[11px] font-semibold uppercase tracking-[0.1em] text-black hover:bg-amber-400 disabled:opacity-50"
+              className="inline-flex h-10 items-center justify-center gap-2 bg-primary px-4 font-mono text-[11px] font-semibold uppercase tracking-[0.1em] text-primary-foreground hover:bg-primary disabled:opacity-50"
             >
               <Play className="h-4 w-4" />
               {isStarting ? "Memulai..." : "Mulai SPK"}
@@ -97,15 +97,15 @@ export function SpkDetailShell({ header, details, canStart, canEditBreakdown }: 
           )}
         </div>
         
-        {error && <div className="border-t border-red-500/20 bg-red-500/[0.04] px-4 py-2 text-[11px] font-mono text-red-400">{error}</div>}
+        {error && <div className="border-t border-destructive/20 bg-destructive/[0.04] px-4 py-2 text-[11px] font-mono text-destructive">{error}</div>}
       </section>
 
       {/* Spreadsheet / Matrix View */}
-      <section className="overflow-x-auto border border-white/5 bg-[#111114]">
-        <table className="w-full text-left text-sm text-gray-700 dark:text-white/70">
-          <thead className="border-b border-white/5 bg-[#0a0a0c]">
+      <section className="overflow-x-auto border border-white/5 bg-card">
+        <table className="w-full text-left text-sm text-foreground dark:text-foreground/70">
+          <thead className="border-b border-white/5 bg-background">
             <tr>
-              <th className="sticky left-0 border-r border-white/5 bg-[#0a0a0c] px-4 py-2 font-mono text-[11px] uppercase tracking-[0.1em]">
+              <th className="sticky left-0 border-r border-white/5 bg-background px-4 py-2 font-mono text-[11px] uppercase tracking-[0.1em]">
                 UNIT \ DIVISI
               </th>
               {divisions.map(div => (
@@ -118,8 +118,8 @@ export function SpkDetailShell({ header, details, canStart, canEditBreakdown }: 
           <tbody className="divide-y divide-white/5">
             {units.map((unit, idx) => (
               <tr key={unit} className="transition-colors hover:bg-white/[0.015]">
-                <td className="sticky left-0 border-r border-white/5 bg-[#111114] px-4 py-2 font-semibold text-white">
-                  <span className="mr-2 font-mono text-[10px] text-white/25">{idx + 1}.</span>
+                <td className="sticky left-0 border-r border-white/5 bg-card px-4 py-2 font-semibold text-foreground">
+                  <span className="mr-2 font-mono text-[10px] text-foreground/25">{idx + 1}.</span>
                   {unit}
                 </td>
                 {divisions.map(div => {
@@ -131,30 +131,30 @@ export function SpkDetailShell({ header, details, canStart, canEditBreakdown }: 
                       {allocation ? (
                         <div className="flex flex-col gap-2">
                           <div className="border-b border-white/5 pb-2">
-                            <span className="font-mono text-[9px] uppercase tracking-wider text-amber-500">
+                            <span className="font-mono text-[9px] uppercase tracking-wider text-app-accent-ink">
                               Target PM: {allocation.targetHours} Jam
                             </span>
                           </div>
                           
                           {detailRecords.length > 0 ? (
                             detailRecords.map((d, i) => (
-                              <div key={i} className="border border-white/5 bg-[#0a0a0c] px-3 py-2">
-                                <div className="flex items-center gap-1 font-mono text-[11px] text-white/70">
+                              <div key={i} className="border border-white/5 bg-background px-3 py-2">
+                                <div className="flex items-center gap-1 font-mono text-[11px] text-foreground/70">
                                   <User className="h-3 w-3" /> <span>{d.picNameSnapshot || 'Mekanik'}</span>
                                 </div>
-                                <div className="mt-1 flex items-center gap-1 font-mono text-[10px] text-white/30">
+                                <div className="mt-1 flex items-center gap-1 font-mono text-[10px] text-foreground/30">
                                   <Clock className="h-3 w-3" /> {d.targetHoursSnapshot} jam
                                 </div>
                               </div>
                             ))
                           ) : (
-                            <div className="flex flex-col items-center justify-center p-2 text-white/30">
-                              <span className="mt-1 font-mono text-[9px] text-white/20">(Mekanik blm ditentukan)</span>
+                            <div className="flex flex-col items-center justify-center p-2 text-foreground/30">
+                              <span className="mt-1 font-mono text-[9px] text-foreground/20">(Mekanik blm ditentukan)</span>
                             </div>
                           )}
                         </div>
                       ) : (
-                        <div className="flex h-full items-center justify-center text-white/10">-</div>
+                        <div className="flex h-full items-center justify-center text-foreground/10">-</div>
                       )}
                     </td>
                   );

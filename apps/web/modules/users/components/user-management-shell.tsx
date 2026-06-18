@@ -235,21 +235,21 @@ export function UserManagementShell({
             <button
               type="button"
               onClick={() => openEditEditor(user)}
-              className="rounded-full border border-gray-300 dark:border-white/[0.08] px-3 py-1 text-[11px] uppercase tracking-[0.13em] text-gray-800 dark:text-white/70 hover:text-gray-950 dark:text-white"
+              className="rounded-full border border-border dark:border-white/[0.08] px-3 py-1 text-[11px] uppercase tracking-[0.13em] text-foreground dark:text-foreground/70 hover:text-foreground dark:text-foreground"
             >
               Ubah
             </button>
             <button
               type="button"
               onClick={() => openResetEditor(user)}
-              className="rounded-full border border-amber-500/30 px-3 py-1 text-[11px] uppercase tracking-[0.13em] text-amber-300 hover:text-amber-200"
+              className="rounded-full border border-primary/30 px-3 py-1 text-[11px] uppercase tracking-[0.13em] text-app-accent-ink hover:text-app-accent-ink"
             >
               Reset Sandi
             </button>
             <button
               type="button"
               onClick={() => runAsyncAction(() => submitDeactivate(user))}
-              className="rounded-full border border-red-500/30 px-3 py-1 text-[11px] uppercase tracking-[0.13em] text-red-300 hover:text-red-200"
+              className="rounded-full border border-destructive/30 px-3 py-1 text-[11px] uppercase tracking-[0.13em] text-destructive hover:text-destructive"
             >
               Nonaktifkan
             </button>
@@ -299,7 +299,7 @@ export function UserManagementShell({
           <button
             type="button"
             onClick={openCreateEditor}
-            className="inline-flex items-center gap-2 rounded-full border border-emerald-400/35 bg-emerald-500/10 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-200 hover:bg-emerald-500/20"
+            className="inline-flex items-center gap-2 rounded-full border border-success/35 bg-success/10 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-success hover:bg-success/20"
           >
             <Plus className="h-3.5 w-3.5" />
             Tambah Pengguna
@@ -309,9 +309,9 @@ export function UserManagementShell({
 
       {editorMode ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 px-4 backdrop-blur-[1px]">
-          <div className="w-full max-w-3xl rounded-3xl border border-gray-300 dark:border-white/[0.08] bg-[#0a0a0a] p-6">
+          <div className="w-full max-w-3xl rounded-3xl border border-border dark:border-white/[0.08] bg-background p-6">
             <div className="flex items-center justify-between">
-              <h3 className="text-lg text-gray-950 dark:text-white">
+              <h3 className="text-lg text-foreground dark:text-foreground">
                 {editorMode === "create"
                   ? "Buat Pengguna"
                   : editorMode === "edit"
@@ -321,7 +321,7 @@ export function UserManagementShell({
               <button
                 type="button"
                 onClick={closeEditor}
-                className="rounded-full border border-gray-300 dark:border-white/[0.08] px-3 py-1 text-xs uppercase tracking-[0.15em] text-gray-500 dark:text-white/50 hover:text-gray-950 dark:text-white"
+                className="rounded-full border border-border dark:border-white/[0.08] px-3 py-1 text-xs uppercase tracking-[0.15em] text-muted-foreground dark:text-foreground/50 hover:text-foreground dark:text-foreground"
               >
                 Tutup
               </button>

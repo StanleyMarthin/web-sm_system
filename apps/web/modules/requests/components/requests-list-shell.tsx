@@ -135,7 +135,7 @@ export function RequestsListShell({
       <div className="space-y-3 print:hidden">
 
       {/* ── Unified Filter Bar ── */}
-      <div className="border border-gray-300 dark:border-white/[0.05] bg-white dark:bg-[#111114] px-3 py-3 space-y-2">
+      <div className="border border-border dark:border-white/[0.05] bg-white dark:bg-card px-3 py-3 space-y-2">
 
         {/* Row 1: Role tabs + Search */}
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -144,45 +144,45 @@ export function RequestsListShell({
               onClick={() => setRoleFilter("ALL")}
               className={`border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.12em] transition-colors ${
                 roleFilter === "ALL"
-                  ? "border-amber-500/30 bg-transparent text-amber-300"
-                  : "border-gray-300 dark:border-white/[0.08] bg-transparent text-gray-400 dark:text-white/40 hover:text-gray-950 dark:text-white"
+                  ? "border-primary/30 bg-transparent text-app-accent-ink"
+                  : "border-border dark:border-white/[0.08] bg-transparent text-muted-foreground dark:text-foreground/40 hover:text-foreground dark:text-foreground"
               }`}
             >Semua</button>
             <button
               onClick={() => setRoleFilter("DIAJUKAN")}
               className={`border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.12em] transition-colors ${
                 roleFilter === "DIAJUKAN"
-                  ? "border-amber-500/30 bg-transparent text-amber-400"
-                  : "border-gray-300 dark:border-white/[0.08] bg-transparent text-gray-400 dark:text-white/40 hover:text-gray-950 dark:text-white"
+                  ? "border-primary/30 bg-transparent text-app-accent-ink"
+                  : "border-border dark:border-white/[0.08] bg-transparent text-muted-foreground dark:text-foreground/40 hover:text-foreground dark:text-foreground"
               }`}
             >Diajukan</button>
             <button
               onClick={() => setRoleFilter("PERLU_DIKERJAKAN")}
               className={`border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.12em] transition-colors ${
                 roleFilter === "PERLU_DIKERJAKAN"
-                  ? "border-emerald-500/30 bg-transparent text-emerald-400"
-                  : "border-gray-300 dark:border-white/[0.08] bg-transparent text-gray-400 dark:text-white/40 hover:text-gray-950 dark:text-white"
+                  ? "border-success/30 bg-transparent text-success"
+                  : "border-border dark:border-white/[0.08] bg-transparent text-muted-foreground dark:text-foreground/40 hover:text-foreground dark:text-foreground"
               }`}
             >Perlu Dikerjakan</button>
           </div>
           <div className="relative">
-            <Search className="absolute left-2.5 top-2.5 h-3 w-3 text-gray-500 dark:text-white/30" />
+            <Search className="absolute left-2.5 top-2.5 h-3 w-3 text-muted-foreground dark:text-foreground/30" />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Cari nomor / unit / pelanggan..."
-              className="h-8 w-64 border border-gray-300 dark:border-white/[0.05] bg-slate-50 dark:bg-[#0a0a0c] pl-7 pr-3 font-mono text-[11px] text-gray-950 dark:text-white outline-none focus:border-amber-500/30 transition-colors placeholder:text-gray-400 dark:text-white/20"
+              className="h-8 w-64 border border-border dark:border-white/[0.05] bg-muted dark:bg-background pl-7 pr-3 font-mono text-[11px] text-foreground dark:text-foreground outline-none focus:border-primary/30 transition-colors placeholder:text-muted-foreground dark:text-foreground/20"
             />
           </div>
         </div>
 
         {/* Row 2: Type + Unit + Division + Date range + Reset */}
-        <div className="flex flex-wrap items-center gap-2 border-t border-gray-300 dark:border-white/[0.05] pt-2">
+        <div className="flex flex-wrap items-center gap-2 border-t border-border dark:border-white/[0.05] pt-2">
           <select
             value={activeTypeTab}
             onChange={(e) => setActiveTypeTab(e.target.value as "ALL" | "WO" | "PR" | "WOV")}
-            className="h-8 border border-gray-300 dark:border-white/[0.05] bg-slate-50 dark:bg-[#0a0a0c] px-2.5 font-mono text-[11px] text-gray-950 dark:text-white outline-none focus:border-amber-500/30"
+            className="h-8 border border-border dark:border-white/[0.05] bg-muted dark:bg-background px-2.5 font-mono text-[11px] text-foreground dark:text-foreground outline-none focus:border-primary/30"
           >
             <option value="ALL">Semua Jenis</option>
             <option value="WO">Work Order</option>
@@ -193,7 +193,7 @@ export function RequestsListShell({
           <select
             value={filterUnit}
             onChange={(e) => setFilterUnit(e.target.value)}
-            className="h-8 border border-gray-300 dark:border-white/[0.05] bg-slate-50 dark:bg-[#0a0a0c] px-2.5 font-mono text-[11px] text-gray-950 dark:text-white outline-none focus:border-amber-500/30"
+            className="h-8 border border-border dark:border-white/[0.05] bg-muted dark:bg-background px-2.5 font-mono text-[11px] text-foreground dark:text-foreground outline-none focus:border-primary/30"
           >
             <option value="">Semua Unit</option>
             {unitsList.map((u: any) => (
@@ -205,7 +205,7 @@ export function RequestsListShell({
             value={filterDivision}
             disabled={isDivisionLeadScope}
             onChange={(e) => setFilterDivision(e.target.value)}
-            className="h-8 border border-gray-300 dark:border-white/[0.05] bg-slate-50 dark:bg-[#0a0a0c] px-2.5 font-mono text-[11px] text-gray-950 dark:text-white outline-none focus:border-amber-500/30 disabled:opacity-50"
+            className="h-8 border border-border dark:border-white/[0.05] bg-muted dark:bg-background px-2.5 font-mono text-[11px] text-foreground dark:text-foreground outline-none focus:border-primary/30 disabled:opacity-50"
           >
             {isDivisionLeadScope ? (
               <option value={user.divisionName}>{user.divisionName}</option>
@@ -224,14 +224,14 @@ export function RequestsListShell({
               type="date"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
-              className="h-8 border border-gray-300 dark:border-white/[0.05] bg-slate-50 dark:bg-[#0a0a0c] px-2.5 font-mono text-[11px] text-gray-950 dark:text-white outline-none focus:border-amber-500/30 [color-scheme:dark]"
+              className="h-8 border border-border dark:border-white/[0.05] bg-muted dark:bg-background px-2.5 font-mono text-[11px] text-foreground dark:text-foreground outline-none focus:border-primary/30 [color-scheme:dark]"
             />
-            <span className="text-gray-400 dark:text-white/20 text-[10px]">–</span>
+            <span className="text-muted-foreground dark:text-foreground/20 text-[10px]">–</span>
             <input
               type="date"
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
-              className="h-8 border border-gray-300 dark:border-white/[0.05] bg-slate-50 dark:bg-[#0a0a0c] px-2.5 font-mono text-[11px] text-gray-950 dark:text-white outline-none focus:border-amber-500/30 [color-scheme:dark]"
+              className="h-8 border border-border dark:border-white/[0.05] bg-muted dark:bg-background px-2.5 font-mono text-[11px] text-foreground dark:text-foreground outline-none focus:border-primary/30 [color-scheme:dark]"
             />
             {hasActiveFilters && (
               <button
@@ -240,7 +240,7 @@ export function RequestsListShell({
                   if (!isDivisionLeadScope) setFilterDivision("");
                 }}
                 title="Reset filter"
-                className="flex h-8 w-8 items-center justify-center border border-gray-300 dark:border-white/[0.05] bg-transparent text-gray-400 dark:text-white/40 transition-colors hover:text-gray-950 dark:text-white"
+                className="flex h-8 w-8 items-center justify-center border border-border dark:border-white/[0.05] bg-transparent text-muted-foreground dark:text-foreground/40 transition-colors hover:text-foreground dark:text-foreground"
               >
                 <RotateCcw className="h-3.5 w-3.5" />
               </button>
@@ -251,10 +251,10 @@ export function RequestsListShell({
       </div>
 
       {/* Grid Sheet table */}
-      <div className="overflow-x-auto border border-gray-300 dark:border-white/[0.05] bg-white dark:bg-[#111114]">
+      <div className="overflow-x-auto border border-border dark:border-white/[0.05] bg-white dark:bg-card">
         <table className="w-full text-xs text-left border-collapse min-w-[900px]">
-          <thead className="sticky top-0 z-10 bg-white dark:bg-[#111114]">
-            <tr className="border-b border-gray-300 dark:border-white/[0.06] bg-white dark:bg-[#111114] font-mono text-[10px] uppercase tracking-[0.12em] text-gray-500 dark:text-white/30">
+          <thead className="sticky top-0 z-10 bg-white dark:bg-card">
+            <tr className="border-b border-border dark:border-white/[0.06] bg-white dark:bg-card font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30">
               {activeTypeTab === "ALL" && (
                 <>
                   <th className="px-3 py-2">Tipe</th>
@@ -316,12 +316,12 @@ export function RequestsListShell({
               <tr>
                 <td colSpan={12} className="py-16 text-center">
                   <div className="mx-auto flex max-w-md flex-col items-center justify-center space-y-3">
-                    <div className="border border-gray-300 dark:border-white/[0.06] p-3 text-gray-500 dark:text-white/30">
+                    <div className="border border-border dark:border-white/[0.06] p-3 text-muted-foreground dark:text-foreground/30">
                       <Search className="h-5 w-5" />
                     </div>
                     <div className="space-y-1">
-                      <p className="text-sm font-semibold text-gray-900 dark:text-white/80">Pencarian Tidak Ditemukan</p>
-                      <p className="text-[11px] text-gray-500 dark:text-white/35 leading-relaxed">
+                      <p className="text-sm font-semibold text-foreground dark:text-foreground/80">Pencarian Tidak Ditemukan</p>
+                      <p className="text-[11px] text-muted-foreground dark:text-foreground/35 leading-relaxed">
                         Tidak ada data requests yang cocok dengan unit, divisi, rentang tanggal, atau kata kunci pencarian Anda saat ini.
                       </p>
                     </div>
@@ -334,7 +334,7 @@ export function RequestsListShell({
                           setEndDate("");
                           if (!isDivisionLeadScope) setFilterDivision("");
                         }}
-                        className="border border-gray-300 dark:border-white/[0.08] px-3 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-gray-950 dark:text-white hover:bg-white/[0.06]"
+                        className="border border-border dark:border-white/[0.08] px-3 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-foreground dark:text-foreground hover:bg-white/[0.06]"
                       >
                         Reset Pencarian & Filter
                       </button>
@@ -347,28 +347,28 @@ export function RequestsListShell({
                 <tr
                   key={row.id}
                   onClick={() => setSelectedItem({ type: row.reqType, id: row.id })}
-                  className="group cursor-pointer transition-colors hover:bg-gray-100 dark:hover:bg-white/[0.02]"
+                  className="group cursor-pointer transition-colors hover:bg-muted dark:hover:bg-white/[0.02]"
                 >
                   {/* Dynamic Render cells based on selected type filter */}
                   {activeTypeTab === "ALL" && (
                     <>
                       <td className="px-3 py-2">
-                        <span className="border border-gray-300 dark:border-white/[0.08] px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-gray-600 dark:text-white/45">
+                        <span className="border border-border dark:border-white/[0.08] px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/45">
                           {row.reqType}
                         </span>
                       </td>
-                      <td className="px-3 py-2 font-mono text-gray-900 dark:text-white/80">{row.number}</td>
-                      <td className="px-3 py-2 font-medium text-white/90">{row.unitName || "-"}</td>
-                      <td className="px-3 py-2 text-gray-700 dark:text-white/60">{row.customerName || "-"}</td>
-                      <td className="max-w-[200px] truncate px-3 py-2 text-gray-600 dark:text-white/45" title={row.info}>{row.info || "-"}</td>
+                      <td className="px-3 py-2 font-mono text-foreground dark:text-foreground/80">{row.number}</td>
+                      <td className="px-3 py-2 font-medium text-foreground/90">{row.unitName || "-"}</td>
+                      <td className="px-3 py-2 text-foreground dark:text-foreground/60">{row.customerName || "-"}</td>
+                      <td className="max-w-[200px] truncate px-3 py-2 text-muted-foreground dark:text-foreground/45" title={row.info}>{row.info || "-"}</td>
                       <td className="px-3 py-2 text-center">
-                        <span className="border border-gray-300 dark:border-white/[0.08] px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-gray-600 dark:text-white/45">
+                        <span className="border border-border dark:border-white/[0.08] px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/45">
                           {row.status}
                         </span>
                       </td>
-                      <td className="px-3 py-2 text-right font-mono text-gray-500 dark:text-white/30">
+                      <td className="px-3 py-2 text-right font-mono text-muted-foreground dark:text-foreground/30">
                         <span className="flex items-center gap-1.5 justify-end">
-                          <Calendar className="h-3 w-3 text-gray-400 dark:text-white/20" />
+                          <Calendar className="h-3 w-3 text-muted-foreground dark:text-foreground/20" />
                           <span>{row.date}</span>
                         </span>
                       </td>
@@ -377,73 +377,73 @@ export function RequestsListShell({
 
                   {activeTypeTab === "WO" && (
                     <>
-                      <td className="px-3 py-2 font-mono text-gray-900 dark:text-white/80">{row.woNumber}</td>
-                      <td className="px-3 py-2 font-medium text-white/90">{row.unitName || "-"}</td>
-                      <td className="px-3 py-2 text-gray-700 dark:text-white/60">{row.customerName || "-"}</td>
-                      <td className="px-3 py-2 text-gray-500 dark:text-white/50">{row.fromDivisionName || "-"}</td>
-                      <td className="px-3 py-2 text-gray-500 dark:text-white/50">{row.toDivisionName || "-"}</td>
-                      <td className="px-3 py-2 font-mono text-white/65">{row.panelName || "-"}</td>
-                      <td className="max-w-[150px] truncate px-3 py-2 text-gray-600 dark:text-white/45" title={row.jobDetail}>{row.jobDetail || "-"}</td>
-                      <td className="px-3 py-2 text-center font-mono text-white/65">{row.estimatedHours || 0} Jam</td>
+                      <td className="px-3 py-2 font-mono text-foreground dark:text-foreground/80">{row.woNumber}</td>
+                      <td className="px-3 py-2 font-medium text-foreground/90">{row.unitName || "-"}</td>
+                      <td className="px-3 py-2 text-foreground dark:text-foreground/60">{row.customerName || "-"}</td>
+                      <td className="px-3 py-2 text-muted-foreground dark:text-foreground/50">{row.fromDivisionName || "-"}</td>
+                      <td className="px-3 py-2 text-muted-foreground dark:text-foreground/50">{row.toDivisionName || "-"}</td>
+                      <td className="px-3 py-2 font-mono text-foreground/65">{row.panelName || "-"}</td>
+                      <td className="max-w-[150px] truncate px-3 py-2 text-muted-foreground dark:text-foreground/45" title={row.jobDetail}>{row.jobDetail || "-"}</td>
+                      <td className="px-3 py-2 text-center font-mono text-foreground/65">{row.estimatedHours || 0} Jam</td>
                       <td className="px-3 py-2 text-center">
-                        <span className="border border-gray-300 dark:border-white/[0.08] px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-gray-600 dark:text-white/45">
+                        <span className="border border-border dark:border-white/[0.08] px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/45">
                           {row.status}
                         </span>
                       </td>
-                      <td className="px-3 py-2 text-right font-mono text-gray-500 dark:text-white/30">{row.requestDate}</td>
+                      <td className="px-3 py-2 text-right font-mono text-muted-foreground dark:text-foreground/30">{row.requestDate}</td>
                     </>
                   )}
 
                   {activeTypeTab === "PR" && (
                     <>
-                      <td className="px-3 py-2 font-mono text-gray-900 dark:text-white/80">{row.prNumber}</td>
-                      <td className="px-3 py-2 font-medium text-white/90">{row.unitName || "-"}</td>
-                      <td className="px-3 py-2 text-gray-500 dark:text-white/50">{row.divisionName || "-"}</td>
+                      <td className="px-3 py-2 font-mono text-foreground dark:text-foreground/80">{row.prNumber}</td>
+                      <td className="px-3 py-2 font-medium text-foreground/90">{row.unitName || "-"}</td>
+                      <td className="px-3 py-2 text-muted-foreground dark:text-foreground/50">{row.divisionName || "-"}</td>
                       <td className="px-3 py-2 text-center">
                         <span className={`border px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] ${
-                          row.accTracking === "APPROVED" ? "border-emerald-500/30 text-emerald-400" :
-                          row.accTracking === "REJECTED" ? "border-red-500/30 text-red-400" : "border-gray-300 dark:border-white/[0.08] text-gray-400 dark:text-white/40"
+                          row.accTracking === "APPROVED" ? "border-success/30 text-success" :
+                          row.accTracking === "REJECTED" ? "border-destructive/30 text-destructive" : "border-border dark:border-white/[0.08] text-muted-foreground dark:text-foreground/40"
                         }`}>
                           {row.accTracking || "PENDING"}
                         </span>
                       </td>
-                      <td className="px-3 py-2 text-center font-mono text-white/65">{row.totalItems || 0} Items</td>
-                      <td className="px-3 py-2 text-right font-mono text-gray-800 dark:text-white/75">
+                      <td className="px-3 py-2 text-center font-mono text-foreground/65">{row.totalItems || 0} Items</td>
+                      <td className="px-3 py-2 text-right font-mono text-foreground dark:text-foreground/75">
                         Rp {Number(row.totalEstimatedPrice || 0).toLocaleString("id-ID")}
                       </td>
                       <td className="px-3 py-2 text-center">
-                        <span className="border border-gray-300 dark:border-white/[0.08] px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-gray-600 dark:text-white/45">
+                        <span className="border border-border dark:border-white/[0.08] px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/45">
                           {row.status}
                         </span>
                       </td>
-                      <td className="px-3 py-2 text-right font-mono text-gray-500 dark:text-white/30">{row.date}</td>
+                      <td className="px-3 py-2 text-right font-mono text-muted-foreground dark:text-foreground/30">{row.date}</td>
                     </>
                   )}
 
                   {activeTypeTab === "WOV" && (
                     <>
-                      <td className="px-3 py-2 font-mono text-gray-900 dark:text-white/80">{row.wovNumber}</td>
-                      <td className="px-3 py-2 font-medium text-white/90">{row.unitName || "-"}</td>
-                      <td className="px-3 py-2 text-gray-500 dark:text-white/50">{row.divisionName || "-"}</td>
-                      <td className="px-3 py-2 text-gray-800 dark:text-white/75">{row.vendorName || "-"}</td>
-                      <td className="max-w-[120px] truncate px-3 py-2 text-gray-700 dark:text-white/60" title={row.itemName}>{row.itemName || "-"}</td>
+                      <td className="px-3 py-2 font-mono text-foreground dark:text-foreground/80">{row.wovNumber}</td>
+                      <td className="px-3 py-2 font-medium text-foreground/90">{row.unitName || "-"}</td>
+                      <td className="px-3 py-2 text-muted-foreground dark:text-foreground/50">{row.divisionName || "-"}</td>
+                      <td className="px-3 py-2 text-foreground dark:text-foreground/75">{row.vendorName || "-"}</td>
+                      <td className="max-w-[120px] truncate px-3 py-2 text-foreground dark:text-foreground/60" title={row.itemName}>{row.itemName || "-"}</td>
                       <td className="px-3 py-2 text-center">
                         <span className={`border px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] ${
-                          row.accTracking === "APPROVED" ? "border-emerald-500/30 text-emerald-400" :
-                          row.accTracking === "REJECTED" ? "border-red-500/30 text-red-400" : "border-gray-300 dark:border-white/[0.08] text-gray-400 dark:text-white/40"
+                          row.accTracking === "APPROVED" ? "border-success/30 text-success" :
+                          row.accTracking === "REJECTED" ? "border-destructive/30 text-destructive" : "border-border dark:border-white/[0.08] text-muted-foreground dark:text-foreground/40"
                         }`}>
                           {row.accTracking || "PENDING"}
                         </span>
                       </td>
-                      <td className="px-3 py-2 text-right font-mono text-gray-800 dark:text-white/75">
+                      <td className="px-3 py-2 text-right font-mono text-foreground dark:text-foreground/75">
                         Rp {Number(row.totalEstimatedPrice || 0).toLocaleString("id-ID")}
                       </td>
                       <td className="px-3 py-2 text-center">
-                        <span className="border border-gray-300 dark:border-white/[0.08] px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-gray-600 dark:text-white/45">
+                        <span className="border border-border dark:border-white/[0.08] px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/45">
                           {row.status}
                         </span>
                       </td>
-                      <td className="px-3 py-2 text-right font-mono text-gray-500 dark:text-white/30">{row.date}</td>
+                      <td className="px-3 py-2 text-right font-mono text-muted-foreground dark:text-foreground/30">{row.date}</td>
                     </>
                   )}
 
@@ -454,7 +454,7 @@ export function RequestsListShell({
                         e.stopPropagation();
                         setSelectedItem({ type: row.reqType, id: row.id });
                       }}
-                      className="border border-gray-300 dark:border-white/[0.05] p-1.5 text-gray-700 dark:text-white/60 transition-colors hover:bg-gray-100 dark:hover:bg-white/[0.04] hover:text-gray-950 dark:text-white"
+                      className="border border-border dark:border-white/[0.05] p-1.5 text-foreground dark:text-foreground/60 transition-colors hover:bg-muted dark:hover:bg-white/[0.04] hover:text-foreground dark:text-foreground"
                     >
                       <Eye className="h-3.5 w-3.5" />
                     </button>

@@ -36,7 +36,7 @@ function humanizePhotoType(photoType: GalleryPhotoType): string {
 }
 
 const inputCls =
-  "h-9 rounded-lg border border-white/[0.08] bg-white/[0.03] px-2.5 text-[12px] text-white outline-none transition-colors focus:border-amber-500/30 [color-scheme:dark]";
+  "h-9 rounded-lg border border-white/[0.08] bg-white/[0.03] px-2.5 text-[12px] text-foreground outline-none transition-colors focus:border-primary/30 [color-scheme:dark]";
 
 export function GalleryUploadForm({ isUploading, isDisabled, defaultCaption, onSubmit }: GalleryUploadFormProps) {
   const { register, handleSubmit, watch, reset, formState: { errors } } = useForm<UploadFormValues>({
@@ -87,7 +87,7 @@ export function GalleryUploadForm({ isUploading, isDisabled, defaultCaption, onS
       <button
         type="submit"
         disabled={!hasFile || isDisabled || isUploading}
-        className="rounded-lg bg-amber-500 px-4 py-2 text-[12px] font-semibold text-black hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-40"
+        className="rounded-lg bg-primary px-4 py-2 text-[12px] font-semibold text-primary-foreground hover:bg-primary disabled:cursor-not-allowed disabled:opacity-40"
       >
         {isUploading ? "Mengirim..." : "Tambah Foto"}
       </button>

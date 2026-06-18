@@ -88,9 +88,9 @@ function SummaryCard({
 }) {
   return (
     <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-5">
-      <p className="text-[10px] uppercase tracking-[0.18em] text-white/35">{label}</p>
-      <p className="mt-3 text-lg text-white">{value}</p>
-      <p className="mt-2 text-sm text-white/40">{helper}</p>
+      <p className="text-[10px] uppercase tracking-[0.18em] text-foreground/35">{label}</p>
+      <p className="mt-3 text-lg text-foreground">{value}</p>
+      <p className="mt-2 text-sm text-foreground/40">{helper}</p>
     </div>
   );
 }
@@ -236,7 +236,7 @@ export function QcShell({
               params.set("carId", String(row.carId));
             });
           }}
-          className="text-amber-400 transition-colors hover:text-amber-300"
+          className="text-app-accent-ink transition-colors hover:text-app-accent-ink"
         >
           {String(value)}
         </button>
@@ -424,14 +424,14 @@ export function QcShell({
 
       <section className="grid gap-6 xl:grid-cols-[minmax(0,1.18fr)_minmax(360px,0.82fr)]">
         <div className="space-y-6">
-          <div className="rounded-[28px] border border-white/[0.06] bg-[#050505] p-6 shadow-[0_0_0_1px_rgba(255,255,255,0.02)]">
+          <div className="rounded-[28px] border border-white/[0.06] bg-card p-6 shadow-[0_0_0_1px_rgba(255,255,255,0.02)]">
             <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
               <div>
-                <p className="text-[11px] uppercase tracking-[0.18em] text-amber-500/70">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-app-accent-ink/70">
                   QC Center
                 </p>
-                <h1 className="mt-1 text-xl font-medium text-white">Antrian Operasional</h1>
-                <p className="mt-3 max-w-2xl text-sm leading-6 text-white/45">
+                <h1 className="mt-1 text-xl font-medium text-foreground">Antrian Operasional</h1>
+                <p className="mt-3 max-w-2xl text-sm leading-6 text-foreground/45">
                   Queue QC dibedakan menjadi antrian awal, task rework aktif, dan task yang siap
                   QC ulang. Semua list tetap server-side dan scope mengikuti permission user aktif.
                 </p>
@@ -440,7 +440,7 @@ export function QcShell({
               <button
                 type="button"
                 onClick={() => router.refresh()}
-                className="inline-flex items-center gap-2 rounded-full bg-white/[0.03] px-3 py-1.5 text-[11px] uppercase tracking-[0.16em] text-white/55 ring-1 ring-white/[0.06] hover:text-white/80"
+                className="inline-flex items-center gap-2 rounded-full bg-white/[0.03] px-3 py-1.5 text-[11px] uppercase tracking-[0.16em] text-foreground/55 ring-1 ring-white/[0.06] hover:text-foreground/80"
               >
                 <RefreshCcw className="h-3.5 w-3.5" />
                 Muat Ulang
@@ -461,8 +461,8 @@ export function QcShell({
                   className={[
                     "rounded-full px-3 py-1.5 text-[11px] uppercase tracking-[0.16em] transition-colors",
                     activeTab === tab.id
-                      ? "bg-amber-500/12 text-amber-300 ring-1 ring-amber-500/30"
-                      : "bg-white/[0.03] text-white/40 ring-1 ring-white/[0.06] hover:text-white/70",
+                      ? "bg-primary/12 text-app-accent-ink ring-1 ring-primary/30"
+                      : "bg-white/[0.03] text-foreground/40 ring-1 ring-white/[0.06] hover:text-foreground/70",
                   ].join(" ")}
                 >
                   {tab.label}
@@ -497,7 +497,7 @@ export function QcShell({
             searchPlaceholder="Cari unit, panel, job, atau divisi..."
             emptyMessage="Belum ada data QC pada scope query saat ini."
             headerActions={
-              <div className="inline-flex items-center gap-2 rounded-full bg-white/[0.03] px-3 py-1.5 text-[11px] uppercase tracking-[0.16em] text-white/50 ring-1 ring-white/[0.06]">
+              <div className="inline-flex items-center gap-2 rounded-full bg-white/[0.03] px-3 py-1.5 text-[11px] uppercase tracking-[0.16em] text-foreground/50 ring-1 ring-white/[0.06]">
                 <ShieldCheck className="h-3.5 w-3.5" />
                 {selectedUnitLabel}
               </div>
@@ -506,28 +506,28 @@ export function QcShell({
         </div>
 
         <div className="space-y-6">
-          <div className="rounded-[28px] border border-white/[0.06] bg-[#050505] p-6 shadow-[0_0_0_1px_rgba(255,255,255,0.02)]">
+          <div className="rounded-[28px] border border-white/[0.06] bg-card p-6 shadow-[0_0_0_1px_rgba(255,255,255,0.02)]">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-amber-500/10 ring-1 ring-amber-500/20">
-                <ClipboardCheck className="h-5 w-5 text-amber-400" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 ring-1 ring-primary/20">
+                <ClipboardCheck className="h-5 w-5 text-app-accent-ink" />
               </div>
               <div>
-                <p className="text-[11px] uppercase tracking-[0.18em] text-amber-500/70">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-app-accent-ink/70">
                   QC Detail
                 </p>
-                <h2 className="mt-1 text-lg font-medium text-white">
+                <h2 className="mt-1 text-lg font-medium text-foreground">
                   {detail ? detail.jobName : "Pilih item QC"}
                 </h2>
               </div>
             </div>
 
             {!detail ? (
-              <div className="mt-5 rounded-2xl border border-dashed border-white/[0.08] bg-white/[0.02] px-4 py-5 text-sm text-white/35">
+              <div className="mt-5 rounded-2xl border border-dashed border-white/[0.08] bg-white/[0.02] px-4 py-5 text-sm text-foreground/35">
                 Klik `coreId` pada grid untuk membuka detail inspeksi dan final checklist unit.
               </div>
             ) : (
               <div className="mt-5 space-y-5">
-                <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-4 text-sm text-white/60">
+                <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-4 text-sm text-foreground/60">
                   <p>Unit: {detail.unitName}</p>
                   <p>Divisi: {detail.divisionName ?? "-"}</p>
                   <p>Panel: {detail.panelName ?? "-"}</p>
@@ -544,7 +544,7 @@ export function QcShell({
                       setPassForm((current) => ({ ...current, notes: event.target.value }))
                     }
                     placeholder="Catatan QC"
-                    className="h-11 w-full rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 text-sm text-white outline-none focus:border-amber-500/30"
+                    className="h-11 w-full rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 text-sm text-foreground outline-none focus:border-primary/30"
                   />
                   <div className="grid gap-3 md:grid-cols-2">
                     <input
@@ -556,7 +556,7 @@ export function QcShell({
                         }))
                       }
                       placeholder="Durasi inspeksi (menit)"
-                      className="h-11 rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 text-sm text-white outline-none focus:border-amber-500/30"
+                      className="h-11 rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 text-sm text-foreground outline-none focus:border-primary/30"
                     />
                     <input
                       value={passForm.photoBeforeUrl}
@@ -564,7 +564,7 @@ export function QcShell({
                         setPassForm((current) => ({ ...current, photoBeforeUrl: event.target.value }))
                       }
                       placeholder="Tautan foto sebelum"
-                      className="h-11 rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 text-sm text-white outline-none focus:border-amber-500/30"
+                      className="h-11 rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 text-sm text-foreground outline-none focus:border-primary/30"
                     />
                   </div>
                   <input
@@ -573,7 +573,7 @@ export function QcShell({
                       setPassForm((current) => ({ ...current, evidencePhotoUrl: event.target.value }))
                     }
                     placeholder="Tautan foto bukti"
-                    className="h-11 w-full rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 text-sm text-white outline-none focus:border-amber-500/30"
+                    className="h-11 w-full rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 text-sm text-foreground outline-none focus:border-primary/30"
                   />
                 </div>
 
@@ -583,21 +583,21 @@ export function QcShell({
                       type="button"
                       disabled={isSubmitting}
                       onClick={() => void handlePass()}
-                      className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-amber-500 px-4 text-sm font-semibold text-black transition-colors hover:bg-amber-400 disabled:opacity-60"
+                      className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-primary px-4 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary disabled:opacity-60"
                     >
                       <CheckCircle2 className="h-4 w-4" />
                       Lolos QC
                     </button>
 
                     <div className="space-y-3 rounded-2xl border border-white/[0.06] bg-white/[0.03] p-4">
-                      <p className="text-sm text-white">Tolak dan buat rework</p>
+                      <p className="text-sm text-foreground">Tolak dan buat rework</p>
                       <input
                         value={rejectForm.reworkDate}
                         onChange={(event) =>
                           setRejectForm((current) => ({ ...current, reworkDate: event.target.value }))
                         }
                         type="date"
-                        className="h-11 w-full rounded-2xl border border-white/[0.06] bg-black/40 px-3 text-sm text-white outline-none focus:border-amber-500/30"
+                        className="h-11 w-full rounded-2xl border border-white/[0.06] bg-black/40 px-3 text-sm text-foreground outline-none focus:border-primary/30"
                       />
                       <input
                         value={rejectForm.reworkAssignedUser}
@@ -608,7 +608,7 @@ export function QcShell({
                           }))
                         }
                         placeholder="PIC rework (ID pegawai)"
-                        className="h-11 w-full rounded-2xl border border-white/[0.06] bg-black/40 px-3 text-sm text-white outline-none focus:border-amber-500/30"
+                        className="h-11 w-full rounded-2xl border border-white/[0.06] bg-black/40 px-3 text-sm text-foreground outline-none focus:border-primary/30"
                       />
                       <div className="grid gap-3 md:grid-cols-3">
                         <input
@@ -620,7 +620,7 @@ export function QcShell({
                             }))
                           }
                           placeholder="HH:MM"
-                          className="h-11 rounded-2xl border border-white/[0.06] bg-black/40 px-3 text-sm text-white outline-none focus:border-amber-500/30"
+                          className="h-11 rounded-2xl border border-white/[0.06] bg-black/40 px-3 text-sm text-foreground outline-none focus:border-primary/30"
                         />
                         <input
                           value={rejectForm.reworkStartTime}
@@ -631,7 +631,7 @@ export function QcShell({
                             }))
                           }
                           placeholder="Mulai"
-                          className="h-11 rounded-2xl border border-white/[0.06] bg-black/40 px-3 text-sm text-white outline-none focus:border-amber-500/30"
+                          className="h-11 rounded-2xl border border-white/[0.06] bg-black/40 px-3 text-sm text-foreground outline-none focus:border-primary/30"
                         />
                         <input
                           value={rejectForm.reworkFinishTime}
@@ -642,7 +642,7 @@ export function QcShell({
                             }))
                           }
                           placeholder="Selesai"
-                          className="h-11 rounded-2xl border border-white/[0.06] bg-black/40 px-3 text-sm text-white outline-none focus:border-amber-500/30"
+                          className="h-11 rounded-2xl border border-white/[0.06] bg-black/40 px-3 text-sm text-foreground outline-none focus:border-primary/30"
                         />
                       </div>
                       <textarea
@@ -655,10 +655,10 @@ export function QcShell({
                         }
                         rows={3}
                         placeholder="Deskripsi rework"
-                        className="w-full rounded-2xl border border-white/[0.06] bg-black/40 px-3 py-3 text-sm text-white outline-none placeholder:text-white/20 focus:border-amber-500/30"
+                        className="w-full rounded-2xl border border-white/[0.06] bg-black/40 px-3 py-3 text-sm text-foreground outline-none placeholder:text-foreground/20 focus:border-primary/30"
                       />
                       <div className="grid gap-2 md:grid-cols-2">
-                        <label className="flex items-center gap-2 text-sm text-white/65">
+                        <label className="flex items-center gap-2 text-sm text-foreground/65">
                           <input
                             type="checkbox"
                             checked={rejectForm.reworkIsPriority}
@@ -671,7 +671,7 @@ export function QcShell({
                           />
                           Prioritas
                         </label>
-                        <label className="flex items-center gap-2 text-sm text-white/65">
+                        <label className="flex items-center gap-2 text-sm text-foreground/65">
                           <input
                             type="checkbox"
                             checked={rejectForm.reworkIsOvertime}
@@ -689,14 +689,14 @@ export function QcShell({
                         type="button"
                         disabled={isSubmitting}
                         onClick={() => void handleReject()}
-                        className="inline-flex h-11 items-center justify-center rounded-2xl border border-red-500/20 bg-red-500/10 px-4 text-sm text-red-200 transition-colors hover:bg-red-500/15 disabled:opacity-60"
+                        className="inline-flex h-11 items-center justify-center rounded-2xl border border-destructive/20 bg-destructive/10 px-4 text-sm text-destructive transition-colors hover:bg-destructive/15 disabled:opacity-60"
                       >
                         Tolak + Rework
                       </button>
                     </div>
                   </div>
                 ) : (
-                  <p className="rounded-2xl border border-dashed border-white/[0.08] bg-white/[0.02] px-4 py-5 text-sm text-white/35">
+                  <p className="rounded-2xl border border-dashed border-white/[0.08] bg-white/[0.02] px-4 py-5 text-sm text-foreground/35">
                     Aksi kirim QC hanya tersedia pada tab Siap QC dan QC Ulang.
                   </p>
                 )}
@@ -705,7 +705,7 @@ export function QcShell({
                   <button
                     type="button"
                     onClick={() => router.push(`/issues/${detail.linkedIssueId}`)}
-                    className="inline-flex h-11 items-center justify-center rounded-2xl border border-white/[0.06] bg-white/[0.03] px-4 text-sm text-white/75 hover:text-white"
+                    className="inline-flex h-11 items-center justify-center rounded-2xl border border-white/[0.06] bg-white/[0.03] px-4 text-sm text-foreground/75 hover:text-foreground"
                   >
                     Buka Issue Terkait
                   </button>
@@ -714,21 +714,21 @@ export function QcShell({
             )}
           </div>
 
-          <div className="rounded-[28px] border border-white/[0.06] bg-[#050505] p-6 shadow-[0_0_0_1px_rgba(255,255,255,0.02)]">
+          <div className="rounded-[28px] border border-white/[0.06] bg-card p-6 shadow-[0_0_0_1px_rgba(255,255,255,0.02)]">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-amber-500/10 ring-1 ring-amber-500/20">
-                <AlertTriangle className="h-5 w-5 text-amber-400" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 ring-1 ring-primary/20">
+                <AlertTriangle className="h-5 w-5 text-app-accent-ink" />
               </div>
               <div>
-                <p className="text-[11px] uppercase tracking-[0.18em] text-amber-500/70">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-app-accent-ink/70">
                   Final Checklist
                 </p>
-                <h2 className="mt-1 text-lg font-medium text-white">{selectedUnitLabel}</h2>
+                <h2 className="mt-1 text-lg font-medium text-foreground">{selectedUnitLabel}</h2>
               </div>
             </div>
 
             {!finalChecklist ? (
-              <div className="mt-5 rounded-2xl border border-dashed border-white/[0.08] bg-white/[0.02] px-4 py-5 text-sm text-white/35">
+              <div className="mt-5 rounded-2xl border border-dashed border-white/[0.08] bg-white/[0.02] px-4 py-5 text-sm text-foreground/35">
                 Pilih item grid untuk memuat readiness per unit dan status final delivery.
               </div>
             ) : (
@@ -746,7 +746,7 @@ export function QcShell({
                   />
                 </div>
 
-                <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-4 text-sm text-white/60">
+                <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-4 text-sm text-foreground/60">
                   <p>Customer: {finalChecklist.checklist.customerName ?? "-"}</p>
                   <p>Target Delivery: {finalChecklist.checklist.targetDeliveryDate ?? "-"}</p>
                   <p>Disetujui pada: {finalChecklist.checklist.approvedAt ?? "-"}</p>
@@ -757,8 +757,8 @@ export function QcShell({
                     <span
                       className={
                         finalChecklist.checklist.isReadyForDelivery
-                          ? "text-emerald-300"
-                          : "text-red-300"
+                          ? "text-success"
+                          : "text-destructive"
                       }
                     >
                       {finalChecklist.checklist.isReadyForDelivery ? "Ya" : "Tidak"}
@@ -774,13 +774,13 @@ export function QcShell({
                     >
                       <div className="flex items-start justify-between gap-4">
                         <div className="min-w-0">
-                          <p className="font-mono text-xs text-amber-400">{item.coreId}</p>
-                          <p className="mt-2 text-sm text-white">{item.jobName}</p>
-                          <p className="mt-1 text-sm text-white/45">
+                          <p className="font-mono text-xs text-app-accent-ink">{item.coreId}</p>
+                          <p className="mt-2 text-sm text-foreground">{item.jobName}</p>
+                          <p className="mt-1 text-sm text-foreground/45">
                             {item.divisionName ?? "-"} · {item.panelName ?? "-"}
                           </p>
                         </div>
-                        <div className="text-right text-xs text-white/45">
+                        <div className="text-right text-xs text-foreground/45">
                           <p>{humanizeCodeLabel(item.countdownStatus)}</p>
                           <p>{item.qcLastStatus ? humanizeCodeLabel(item.qcLastStatus) : "-"}</p>
                           <p>{item.issueStatus ? humanizeCodeLabel(item.issueStatus) : "-"}</p>
@@ -797,13 +797,13 @@ export function QcShell({
                       onChange={(event) => setFinalNotes(event.target.value)}
                       rows={3}
                       placeholder="Catatan final kesiapan kirim"
-                      className="w-full rounded-2xl border border-white/[0.06] bg-black/40 px-3 py-3 text-sm text-white outline-none placeholder:text-white/20 focus:border-amber-500/30"
+                      className="w-full rounded-2xl border border-white/[0.06] bg-black/40 px-3 py-3 text-sm text-foreground outline-none placeholder:text-foreground/20 focus:border-primary/30"
                     />
                     <button
                       type="button"
                       disabled={isSubmitting || !finalChecklist.checklist.isReadyForDelivery}
                       onClick={() => void handleApproveFinal()}
-                      className="inline-flex h-11 items-center justify-center rounded-2xl bg-amber-500 px-4 text-sm font-semibold text-black transition-colors hover:bg-amber-400 disabled:opacity-60"
+                      className="inline-flex h-11 items-center justify-center rounded-2xl bg-primary px-4 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary disabled:opacity-60"
                     >
                       Setujui Kesiapan Kirim
                     </button>
@@ -813,8 +813,8 @@ export function QcShell({
             )}
           </div>
 
-          {message ? <p className="text-sm text-emerald-300">{message}</p> : null}
-          {error ? <p className="text-sm text-red-300">{error}</p> : null}
+          {message ? <p className="text-sm text-success">{message}</p> : null}
+          {error ? <p className="text-sm text-destructive">{error}</p> : null}
         </div>
       </section>
     </div>

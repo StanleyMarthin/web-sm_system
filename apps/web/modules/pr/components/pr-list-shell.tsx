@@ -93,9 +93,9 @@ function SummaryCard({
 }) {
   return (
     <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-5">
-      <p className="text-[10px] uppercase tracking-[0.18em] text-white/35">{label}</p>
-      <p className="mt-3 text-lg text-white">{value}</p>
-      {helper ? <p className="mt-2 text-sm text-white/40">{helper}</p> : null}
+      <p className="text-[10px] uppercase tracking-[0.18em] text-foreground/35">{label}</p>
+      <p className="mt-3 text-lg text-foreground">{value}</p>
+      {helper ? <p className="mt-2 text-sm text-foreground/40">{helper}</p> : null}
     </div>
   );
 }
@@ -157,7 +157,7 @@ const columns: SmartDataGridColumn[] = [
     renderCell: (value, row) => (
       <Link
         href={`/pr/${String(row.prId)}`}
-        className="text-amber-400 transition-colors hover:text-amber-300"
+        className="text-app-accent-ink transition-colors hover:text-app-accent-ink"
       >
         {String(value)}
       </Link>
@@ -321,23 +321,23 @@ export function PrListShell({
         />
       </section>
 
-      <section className="rounded-[28px] border border-white/[0.06] bg-[#050505] p-6 shadow-[0_0_0_1px_rgba(255,255,255,0.02)]">
+      <section className="rounded-[28px] border border-white/[0.06] bg-card p-6 shadow-[0_0_0_1px_rgba(255,255,255,0.02)]">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div className="max-w-2xl">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-amber-500/10 ring-1 ring-amber-500/20">
-                <PackageSearch className="h-5 w-5 text-amber-400" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 ring-1 ring-primary/20">
+                <PackageSearch className="h-5 w-5 text-app-accent-ink" />
               </div>
               <div>
-                <p className="text-[11px] uppercase tracking-[0.18em] text-amber-500/70">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-app-accent-ink/70">
                   Purchase Request
                 </p>
-                <h3 className="mt-1 text-lg font-medium text-white">
+                <h3 className="mt-1 text-lg font-medium text-foreground">
                   Intake PR, approval lane, hunting, dan receiving
                 </h3>
               </div>
             </div>
-            <p className="mt-3 text-sm leading-6 text-white/45">
+            <p className="mt-3 text-sm leading-6 text-foreground/45">
               Data PR dibaca dari `sms_purchase.pur_pr_header` dan `pur_pr_items`, dengan scope
               unit/divisi tetap mengikuti session aktif dan assignment user.
             </p>
@@ -350,7 +350,7 @@ export function PrListShell({
                 router.refresh();
               });
             }}
-            className="inline-flex items-center gap-2 rounded-full bg-white/[0.03] px-3 py-1.5 text-[11px] uppercase tracking-[0.16em] text-white/55 ring-1 ring-white/[0.06] hover:text-white/80"
+            className="inline-flex items-center gap-2 rounded-full bg-white/[0.03] px-3 py-1.5 text-[11px] uppercase tracking-[0.16em] text-foreground/55 ring-1 ring-white/[0.06] hover:text-foreground/80"
           >
             <RefreshCcw className="h-3.5 w-3.5" />
             {isPending ? "Refreshing" : "Refresh"}
@@ -359,28 +359,28 @@ export function PrListShell({
 
         <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,0.8fr)]">
           <div className="rounded-3xl border border-white/[0.06] bg-white/[0.025] p-4">
-            <p className="text-[11px] uppercase tracking-[0.18em] text-amber-500/70">
+            <p className="text-[11px] uppercase tracking-[0.18em] text-app-accent-ink/70">
               Critical PR
             </p>
             {criticalRows.length === 0 ? (
-              <p className="mt-3 text-sm text-white/35">Belum ada PR critical di scope saat ini.</p>
+              <p className="mt-3 text-sm text-foreground/35">Belum ada PR critical di scope saat ini.</p>
             ) : (
               <div className="mt-4 space-y-3">
                 {criticalRows.slice(0, 4).map((row) => (
                   <Link
                     key={row.prId}
                     href={`/pr/${row.prId}`}
-                    className="block rounded-2xl border border-red-500/15 bg-red-500/[0.07] px-4 py-3 transition-colors hover:border-red-400/30"
+                    className="block rounded-2xl border border-destructive/15 bg-destructive/[0.07] px-4 py-3 transition-colors hover:border-destructive/30"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <p className="font-mono text-[12px] text-amber-300">{row.prNumber}</p>
-                        <p className="mt-1 text-sm text-white">{row.unitName}</p>
-                        <p className="mt-1 text-xs uppercase tracking-[0.14em] text-white/35">
+                        <p className="font-mono text-[12px] text-app-accent-ink">{row.prNumber}</p>
+                        <p className="mt-1 text-sm text-foreground">{row.unitName}</p>
+                        <p className="mt-1 text-xs uppercase tracking-[0.14em] text-foreground/35">
                           {row.accTracking} · {row.status}
                         </p>
                       </div>
-                      <div className="flex items-center gap-2 text-sm text-red-200">
+                      <div className="flex items-center gap-2 text-sm text-destructive">
                         <AlertTriangle className="h-4 w-4" />
                         {row.riskScore}
                       </div>
@@ -392,7 +392,7 @@ export function PrListShell({
           </div>
 
           <div className="rounded-3xl border border-white/[0.06] bg-white/[0.025] p-4">
-            <p className="text-[11px] uppercase tracking-[0.18em] text-amber-500/70">
+            <p className="text-[11px] uppercase tracking-[0.18em] text-app-accent-ink/70">
               Create PR
             </p>
             <div className="mt-3 grid gap-3">
@@ -400,7 +400,7 @@ export function PrListShell({
                 value={form.carId}
                 onChange={(event) => setForm((current) => ({ ...current, carId: event.target.value }))}
                 disabled={!canCreate}
-                className="h-11 rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 text-sm text-white outline-none focus:border-amber-500/30 disabled:opacity-40"
+                className="h-11 rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 text-sm text-foreground outline-none focus:border-primary/30 disabled:opacity-40"
               >
                 <option value="">Pilih Unit</option>
                 {references.units.map((option) => (
@@ -412,22 +412,22 @@ export function PrListShell({
 
               <div className="grid gap-3 md:grid-cols-2">
                 <div className="flex flex-col gap-1">
-                  <span className="text-[10px] text-white/45 uppercase tracking-wider pl-1 font-medium">Target Date</span>
+                  <span className="text-[10px] text-foreground/45 uppercase tracking-wider pl-1 font-medium">Target Date</span>
                   <input
                     type="date"
                     value={form.targetDate}
                     onChange={(event) => setForm((current) => ({ ...current, targetDate: event.target.value }))}
                     disabled={!canCreate}
-                    className="h-11 rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 text-sm text-white outline-none focus:border-amber-500/30 disabled:opacity-40"
+                    className="h-11 rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 text-sm text-foreground outline-none focus:border-primary/30 disabled:opacity-40"
                   />
                 </div>
                 <div className="flex flex-col gap-1">
-                  <span className="text-[10px] text-white/45 uppercase tracking-wider pl-1 font-medium">Prioritas</span>
+                  <span className="text-[10px] text-foreground/45 uppercase tracking-wider pl-1 font-medium">Prioritas</span>
                   <select
                     value={form.priority}
                     onChange={(event) => setForm((current) => ({ ...current, priority: event.target.value }))}
                     disabled={!canCreate}
-                    className="h-11 rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 text-sm text-white outline-none focus:border-amber-500/30 disabled:opacity-40"
+                    className="h-11 rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 text-sm text-foreground outline-none focus:border-primary/30 disabled:opacity-40"
                   >
                     <option value="NORMAL">NORMAL</option>
                     <option value="URGENT">URGENT</option>
@@ -440,19 +440,19 @@ export function PrListShell({
                 onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))}
                 disabled={!canCreate}
                 placeholder="Catatan PR (Header)"
-                className="min-h-20 rounded-3xl border border-white/[0.06] bg-white/[0.03] px-4 py-3 text-sm text-white outline-none placeholder:text-white/20 focus:border-amber-500/30 disabled:opacity-40"
+                className="min-h-20 rounded-3xl border border-white/[0.06] bg-white/[0.03] px-4 py-3 text-sm text-foreground outline-none placeholder:text-foreground/20 focus:border-primary/30 disabled:opacity-40"
               />
 
               <div className="border-t border-white/[0.06] my-2 pt-3">
                 <div className="flex items-center justify-between mb-3">
-                  <span className="text-xs uppercase tracking-widest text-amber-500/80 font-medium">List Item ({form.items.length})</span>
+                  <span className="text-xs uppercase tracking-widest text-app-accent-ink/80 font-medium">List Item ({form.items.length})</span>
                   <button
                     type="button"
                     onClick={() => setForm((current) => ({
                       ...current,
                       items: [...current.items, { itemName: "", description: "", originType: "LOKAL", qty: "1", uom: "pcs", estimatedPrice: "", photoUrl: "" }]
                     }))}
-                    className="text-xs text-amber-400 hover:text-amber-300 font-semibold transition-colors"
+                    className="text-xs text-app-accent-ink hover:text-app-accent-ink font-semibold transition-colors"
                   >
                     + Tambah Item
                   </button>
@@ -462,7 +462,7 @@ export function PrListShell({
                   {form.items.map((item, index) => (
                     <div key={index} className="relative rounded-2xl border border-white/[0.05] bg-white/[0.015] p-3 space-y-2.5">
                       <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-semibold text-white/50">Item #{index + 1}</span>
+                        <span className="text-[11px] font-semibold text-foreground/50">Item #{index + 1}</span>
                         {form.items.length > 1 && (
                           <button
                             type="button"
@@ -470,7 +470,7 @@ export function PrListShell({
                               ...current,
                               items: current.items.filter((_, idx) => idx !== index)
                             }))}
-                            className="text-[10px] text-red-400 hover:text-red-300 transition-colors font-medium"
+                            className="text-[10px] text-destructive hover:text-destructive transition-colors font-medium"
                           >
                             Hapus
                           </button>
@@ -489,7 +489,7 @@ export function PrListShell({
                         }}
                         disabled={!canCreate}
                         placeholder="Nama barang"
-                        className="w-full h-10 rounded-xl border border-white/[0.06] bg-white/[0.03] px-3 text-xs text-white outline-none placeholder:text-white/20 focus:border-amber-500/30"
+                        className="w-full h-10 rounded-xl border border-white/[0.06] bg-white/[0.03] px-3 text-xs text-foreground outline-none placeholder:text-foreground/20 focus:border-primary/30"
                       />
 
                       <div className="grid gap-2 grid-cols-3">
@@ -504,7 +504,7 @@ export function PrListShell({
                             });
                           }}
                           disabled={!canCreate}
-                          className="h-10 rounded-xl border border-white/[0.06] bg-white/[0.03] px-2 text-xs text-white outline-none focus:border-amber-500/30"
+                          className="h-10 rounded-xl border border-white/[0.06] bg-white/[0.03] px-2 text-xs text-foreground outline-none focus:border-primary/30"
                         >
                           <option value="LOKAL">LOKAL</option>
                           <option value="LN">LN</option>
@@ -521,7 +521,7 @@ export function PrListShell({
                           }}
                           disabled={!canCreate}
                           placeholder="Qty"
-                          className="h-10 rounded-xl border border-white/[0.06] bg-white/[0.03] px-2 text-xs text-white outline-none placeholder:text-white/20 focus:border-amber-500/30"
+                          className="h-10 rounded-xl border border-white/[0.06] bg-white/[0.03] px-2 text-xs text-foreground outline-none placeholder:text-foreground/20 focus:border-primary/30"
                         />
                         <input
                           value={item.uom}
@@ -535,7 +535,7 @@ export function PrListShell({
                           }}
                           disabled={!canCreate}
                           placeholder="UOM"
-                          className="h-10 rounded-xl border border-white/[0.06] bg-white/[0.03] px-2 text-xs text-white outline-none placeholder:text-white/20 focus:border-amber-500/30"
+                          className="h-10 rounded-xl border border-white/[0.06] bg-white/[0.03] px-2 text-xs text-foreground outline-none placeholder:text-foreground/20 focus:border-primary/30"
                         />
                       </div>
 
@@ -551,24 +551,24 @@ export function PrListShell({
                         }}
                         disabled={!canCreate}
                         placeholder="Estimasi harga per item (optional)"
-                        className="w-full h-10 rounded-xl border border-white/[0.06] bg-white/[0.03] px-3 text-xs text-white outline-none placeholder:text-white/20 focus:border-amber-500/30"
+                        className="w-full h-10 rounded-xl border border-white/[0.06] bg-white/[0.03] px-3 text-xs text-foreground outline-none placeholder:text-foreground/20 focus:border-primary/30"
                       />
 
                       <div className="space-y-1.5">
                         {item.isUploading ? (
-                          <div className="flex items-center justify-center w-full h-10 rounded-xl border border-white/[0.06] bg-white/[0.03] px-3 text-xs text-white/50">
-                            <Loader2 className="h-4 w-4 animate-spin text-amber-500 mr-2" />
+                          <div className="flex items-center justify-center w-full h-10 rounded-xl border border-white/[0.06] bg-white/[0.03] px-3 text-xs text-foreground/50">
+                            <Loader2 className="h-4 w-4 animate-spin text-app-accent-ink mr-2" />
                             <span>Mengunggah foto...</span>
                           </div>
                         ) : item.photoUrl ? (
-                          <div className="flex items-center justify-between w-full h-10 rounded-xl border border-amber-500/30 bg-amber-500/5 px-3 text-xs text-white">
+                          <div className="flex items-center justify-between w-full h-10 rounded-xl border border-primary/30 bg-primary/5 px-3 text-xs text-foreground">
                             <div className="flex items-center gap-2 overflow-hidden">
                               <img
                                 src={item.photoUrl}
                                 alt="Item attachment"
                                 className="w-6 h-6 rounded object-cover border border-white/10"
                               />
-                              <span className="truncate text-white/70 max-w-[180px]">
+                              <span className="truncate text-foreground/70 max-w-[180px]">
                                 {item.photoUrl.split("/").pop()}
                               </span>
                             </div>
@@ -581,7 +581,7 @@ export function PrListShell({
                                   return { ...current, items: newItems };
                                 });
                               }}
-                              className="text-white/40 hover:text-white transition-colors"
+                              className="text-foreground/40 hover:text-foreground transition-colors"
                             >
                               <X className="h-4 w-4" />
                             </button>
@@ -600,7 +600,7 @@ export function PrListShell({
                               }}
                               className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
                             />
-                            <div className="flex items-center gap-2 text-white/40 group-hover:text-white/70 transition-colors pointer-events-none">
+                            <div className="flex items-center gap-2 text-foreground/40 group-hover:text-foreground/70 transition-colors pointer-events-none">
                               <UploadCloud className="h-4 w-4" />
                               <span className="text-xs">Upload Foto Item (Optional)</span>
                             </div>
@@ -620,7 +620,7 @@ export function PrListShell({
                         }}
                         disabled={!canCreate}
                         placeholder="Deskripsi item / catatan teknis"
-                        className="w-full min-h-16 rounded-xl border border-white/[0.06] bg-white/[0.03] px-3 py-2 text-xs text-white outline-none placeholder:text-white/20 focus:border-amber-500/30"
+                        className="w-full min-h-16 rounded-xl border border-white/[0.06] bg-white/[0.03] px-3 py-2 text-xs text-foreground outline-none placeholder:text-foreground/20 focus:border-primary/30"
                       />
                     </div>
                   ))}
@@ -628,12 +628,12 @@ export function PrListShell({
               </div>
 
               {message ? (
-                <p className="rounded-2xl border border-emerald-500/15 bg-emerald-500/[0.08] px-3 py-2 text-sm text-emerald-200">
+                <p className="rounded-2xl border border-success/15 bg-success/[0.08] px-3 py-2 text-sm text-success">
                   {message}
                 </p>
               ) : null}
               {error ? (
-                <p className="rounded-2xl border border-red-500/15 bg-red-500/[0.08] px-3 py-2 text-sm text-red-200">
+                <p className="rounded-2xl border border-destructive/15 bg-destructive/[0.08] px-3 py-2 text-sm text-destructive">
                   {error}
                 </p>
               ) : null}
@@ -649,7 +649,7 @@ export function PrListShell({
                 onClick={() => {
                   void handleCreate();
                 }}
-                className="rounded-2xl bg-amber-500 px-4 py-3 text-sm font-semibold text-black transition-colors hover:bg-amber-400 disabled:opacity-40"
+                className="rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary disabled:opacity-40"
               >
                 {isCreating ? "Menyimpan..." : "Buat PR"}
               </button>

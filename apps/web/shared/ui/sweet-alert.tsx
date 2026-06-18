@@ -25,31 +25,31 @@ interface NoticeState {
 function toneStyles(tone: SweetAlertTone) {
   if (tone === "success") {
     return {
-      icon: <CheckCircle2 className="h-5 w-5 text-emerald-700 dark:text-emerald-300" />,
-      ring: "border-emerald-700/20 bg-emerald-50 text-emerald-800 dark:border-emerald-500/25 dark:bg-emerald-500/10 dark:text-emerald-200",
+      icon: <CheckCircle2 className="h-5 w-5 text-success dark:text-success" />,
+      ring: "border-success/20 bg-success/10 text-success dark:border-success/25 dark:bg-success/10 dark:text-success",
       button: "success" as const,
     };
   }
 
   if (tone === "error") {
     return {
-      icon: <XCircle className="h-5 w-5 text-red-700 dark:text-red-300" />,
-      ring: "border-red-600/20 bg-red-50 text-red-800 dark:border-red-500/25 dark:bg-red-500/10 dark:text-red-200",
+      icon: <XCircle className="h-5 w-5 text-destructive dark:text-destructive" />,
+      ring: "border-destructive/20 bg-destructive/10 text-destructive dark:border-destructive/25 dark:bg-destructive/10 dark:text-destructive",
       button: "danger" as const,
     };
   }
 
   if (tone === "warning") {
     return {
-      icon: <AlertTriangle className="h-5 w-5 text-amber-700 dark:text-amber-300" />,
-      ring: "border-amber-600/20 bg-amber-50 text-amber-800 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-100",
+      icon: <AlertTriangle className="h-5 w-5 text-app-accent-ink dark:text-app-accent-ink" />,
+      ring: "border-primary/20 bg-primary/10 text-app-accent-ink dark:border-primary/25 dark:bg-primary/10 dark:text-app-accent-ink",
       button: "primary" as const,
     };
   }
 
   return {
-    icon: <Info className="h-5 w-5 text-sky-700 dark:text-sky-300" />,
-    ring: "border-sky-600/20 bg-sky-50 text-sky-800 dark:border-sky-500/25 dark:bg-sky-500/10 dark:text-sky-100",
+    icon: <Info className="h-5 w-5 text-info dark:text-info" />,
+    ring: "border-info/20 bg-info/10 text-info dark:border-info/25 dark:bg-info/10 dark:text-info",
     button: "default" as const,
   };
 }
@@ -91,9 +91,9 @@ export function useSweetAlert() {
                 <div className="flex items-start gap-3">
                   <div className="mt-0.5">{styles.icon}</div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-gray-950 dark:text-white">{notice.title}</p>
+                    <p className="text-sm font-semibold text-foreground dark:text-foreground">{notice.title}</p>
                     {notice.description ? (
-                      <p className="mt-1 text-[12px] leading-5 text-gray-600 dark:text-white/75">{notice.description}</p>
+                      <p className="mt-1 text-[12px] leading-5 text-muted-foreground dark:text-foreground/75">{notice.description}</p>
                     ) : null}
                   </div>
                 </div>
@@ -104,22 +104,22 @@ export function useSweetAlert() {
       ) : null}
 
       {confirmState ? (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-gray-950/35 p-4 backdrop-blur-[1px] dark:bg-black/80">
-          <div className="w-full max-w-md rounded-[16px] border border-gray-200 bg-white p-5 shadow-2xl dark:border-white/[0.08] dark:bg-[#090909]">
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-foreground/35 p-4 backdrop-blur-[1px] dark:bg-background/80">
+          <div className="w-full max-w-md rounded-[16px] border border-border bg-white p-5 shadow-2xl dark:border-white/[0.08] dark:bg-popover">
             <div className="flex items-start gap-3">
               <div className={`mt-0.5 rounded-full border p-2 ${toneStyles(confirmState.tone).ring}`}>
                 {toneStyles(confirmState.tone).icon}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-[10px] uppercase tracking-[0.16em] text-amber-700 dark:text-amber-500/70">
+                <p className="text-[10px] uppercase tracking-[0.16em] text-app-accent-ink dark:text-app-accent-ink/70">
                   Konfirmasi
                 </p>
-                <h3 className="mt-1 text-base font-semibold text-gray-950 dark:font-medium dark:text-white">{confirmState.title}</h3>
-                <p className="mt-2 text-sm leading-6 text-gray-600 dark:text-white/65">{confirmState.description}</p>
+                <h3 className="mt-1 text-base font-semibold text-foreground dark:font-medium dark:text-foreground">{confirmState.title}</h3>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground dark:text-foreground/65">{confirmState.description}</p>
               </div>
             </div>
 
-            <div className="mt-5 flex justify-end gap-2 border-t border-gray-200 pt-4 dark:border-white/[0.05]">
+            <div className="mt-5 flex justify-end gap-2 border-t border-border pt-4 dark:border-white/[0.05]">
               <ActionButton
                 onClick={() => {
                   confirmState.resolve(false);

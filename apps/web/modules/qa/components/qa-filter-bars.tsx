@@ -37,11 +37,11 @@ export function QaDashboardFilterBar({
   const searchParams = useSearchParams();
 
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-[14px] border border-white/[0.06] bg-[#0b0d10] px-3 py-2">
+    <div className="flex flex-wrap items-center gap-2 rounded-[14px] border border-white/[0.06] bg-card px-3 py-2">
       {title && (
         <>
           <div className="mr-auto px-2">
-            <h1 className="text-sm font-semibold text-white/90">{title}</h1>
+            <h1 className="text-sm font-semibold text-foreground/90">{title}</h1>
           </div>
           <div className="h-4 w-px bg-white/[0.08]" />
         </>
@@ -50,7 +50,7 @@ export function QaDashboardFilterBar({
       <select
         value={divisionId}
         onChange={(event) => updateParams(router, pathname, searchParams, { divisionId: event.target.value })}
-        className="h-8 rounded-lg bg-transparent border border-white/[0.06] px-2 text-[11px] text-white outline-none focus:border-amber-500/30"
+        className="h-8 rounded-lg bg-transparent border border-white/[0.06] px-2 text-[11px] text-foreground outline-none focus:border-primary/30"
       >
         <option value="">Semua divisi</option>
         {references.divisions.map((option) => (
@@ -66,7 +66,7 @@ export function QaDashboardFilterBar({
         type="month"
         value={month}
         onChange={(event) => updateParams(router, pathname, searchParams, { month: event.target.value })}
-        className="h-8 rounded-lg bg-transparent border border-white/[0.06] px-2 text-[11px] text-white outline-none focus:border-amber-500/30 [color-scheme:dark]"
+        className="h-8 rounded-lg bg-transparent border border-white/[0.06] px-2 text-[11px] text-foreground outline-none focus:border-primary/30 [color-scheme:dark]"
       />
 
       <div className="h-4 w-px bg-white/[0.08]" />
@@ -74,7 +74,7 @@ export function QaDashboardFilterBar({
       <button
         type="button"
         onClick={() => router.push(pathname)}
-        className="flex items-center gap-1.5 h-8 rounded-lg bg-white/[0.03] px-2.5 text-[10px] uppercase tracking-wider text-white/55 hover:bg-white/[0.06] hover:text-white transition-colors"
+        className="flex items-center gap-1.5 h-8 rounded-lg bg-white/[0.03] px-2.5 text-[10px] uppercase tracking-wider text-foreground/55 hover:bg-white/[0.06] hover:text-foreground transition-colors"
       >
         <RefreshCcw className="h-3 w-3" />
         Refresh
@@ -101,11 +101,11 @@ export function QaHistoryFilterBar({
   const searchParams = useSearchParams();
 
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-[14px] border border-white/[0.06] bg-[#0b0d10] px-3 py-2">
+    <div className="flex flex-wrap items-center gap-2 rounded-[14px] border border-white/[0.06] bg-card px-3 py-2">
       {title && (
         <>
           <div className="mr-auto px-2">
-            <h1 className="text-sm font-semibold text-white/90">{title}</h1>
+            <h1 className="text-sm font-semibold text-foreground/90">{title}</h1>
           </div>
           <div className="h-4 w-px bg-white/[0.08]" />
         </>
@@ -114,7 +114,7 @@ export function QaHistoryFilterBar({
       <select
         value={divisionId}
         onChange={(event) => updateParams(router, pathname, searchParams, { divisionId: event.target.value })}
-        className="h-8 rounded-lg bg-transparent border border-white/[0.06] px-2 text-[11px] text-white outline-none focus:border-amber-500/30"
+        className="h-8 rounded-lg bg-transparent border border-white/[0.06] px-2 text-[11px] text-foreground outline-none focus:border-primary/30"
       >
         <option value="">Semua divisi</option>
         {references.divisions.map((option) => (
@@ -141,7 +141,7 @@ export function QaHistoryFilterBar({
       <button
         type="button"
         onClick={() => router.push(pathname)}
-        className="flex items-center gap-1.5 h-8 rounded-lg bg-white/[0.03] px-2.5 text-[10px] uppercase tracking-wider text-white/55 hover:bg-white/[0.06] hover:text-white transition-colors"
+        className="flex items-center gap-1.5 h-8 rounded-lg bg-white/[0.03] px-2.5 text-[10px] uppercase tracking-wider text-foreground/55 hover:bg-white/[0.06] hover:text-foreground transition-colors"
       >
         <RefreshCcw className="h-3 w-3" />
         Refresh

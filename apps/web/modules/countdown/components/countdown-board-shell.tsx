@@ -170,11 +170,11 @@ function buildCountdownColumns(
         <div className="space-y-0.5">
           <Link
             href={`/countdown/${String(row.countdownId ?? "")}`}
-            className="text-[12px] font-medium text-white hover:text-amber-300"
+            className="text-[12px] font-medium text-foreground hover:text-app-accent-ink"
           >
             {String(value ?? "-")}
           </Link>
-          <p className="text-[10px] text-white/30">{String(row.carId ?? "-")}</p>
+          <p className="text-[10px] text-foreground/30">{String(row.carId ?? "-")}</p>
         </div>
       ),
     },
@@ -186,7 +186,7 @@ function buildCountdownColumns(
       filterOptions: references.panels,
       renderCell: (value) => (
         <div className="space-y-0.5">
-          <p className="text-[12px] text-white">{String(value ?? "-")}</p>
+          <p className="text-[12px] text-foreground">{String(value ?? "-")}</p>
         </div>
       ),
     },
@@ -233,8 +233,8 @@ function buildCountdownColumns(
         <span className={[
           "inline-flex border px-2 py-0.5 text-[10px] font-mono uppercase tracking-[0.1em]",
           row.isOverdue
-            ? "border-red-500/30 bg-red-500/[0.06] text-red-400"
-            : "border-emerald-500/20 bg-emerald-500/[0.06] text-emerald-400",
+            ? "border-destructive/30 bg-destructive/[0.06] text-destructive"
+            : "border-success/20 bg-success/[0.06] text-success",
         ].join(" ")}>
           {row.isOverdue ? "Overdue" : "On Track"}
         </span>
@@ -245,17 +245,17 @@ function buildCountdownColumns(
       renderCell: (_v, row) => (
         <div className="flex flex-wrap items-center justify-center gap-1">
           <Link href={`/countdown/${String(row.countdownId ?? "")}`}
-            className="border border-amber-500/30 bg-amber-500/[0.06] px-2 py-0.5 text-[10px] font-mono uppercase tracking-[0.1em] text-amber-400 hover:bg-amber-500/[0.12] transition-colors">
+            className="border border-primary/30 bg-primary/[0.06] px-2 py-0.5 text-[10px] font-mono uppercase tracking-[0.1em] text-app-accent-ink hover:bg-primary/[0.12] transition-colors">
             Detail
           </Link>
           {canManage && (
             <>
               <button type="button" onClick={() => onEdit(toBoardRow(row))}
-                className="inline-flex items-center gap-1 border border-white/[0.07] px-2 py-0.5 text-[10px] font-mono uppercase tracking-[0.1em] text-white/55 hover:border-amber-500/30 hover:text-amber-400 transition-colors">
+                className="inline-flex items-center gap-1 border border-white/[0.07] px-2 py-0.5 text-[10px] font-mono uppercase tracking-[0.1em] text-foreground/55 hover:border-primary/30 hover:text-app-accent-ink transition-colors">
                 <Pencil className="h-3 w-3" />Edit
               </button>
               <button type="button" onClick={() => onDelete(toBoardRow(row))}
-                className="inline-flex items-center gap-1 border border-red-500/20 px-2 py-0.5 text-[10px] font-mono uppercase tracking-[0.1em] text-red-400/80 hover:bg-red-500/[0.06] transition-colors">
+                className="inline-flex items-center gap-1 border border-destructive/20 px-2 py-0.5 text-[10px] font-mono uppercase tracking-[0.1em] text-destructive/80 hover:bg-destructive/[0.06] transition-colors">
                 <Trash2 className="h-3 w-3" />Del
               </button>
             </>
@@ -547,29 +547,29 @@ export function CountdownBoardShell({ rows, references, canManage, meta, state }
 
       {/* ── Active Filter Indicator ── */}
       {(activeUnitId || activeDivisionId) ? (
-        <div className="flex flex-wrap items-center gap-2 border border-amber-500/15 bg-amber-500/[0.04] px-3 py-2">
-          <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-amber-500/60">
+        <div className="flex flex-wrap items-center gap-2 border border-primary/15 bg-primary/[0.04] px-3 py-2">
+          <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-app-accent-ink/60">
             Filter aktif:
           </span>
           {activeUnitLabel ? (
-            <span className="border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[10px] font-mono text-white/70">
+            <span className="border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[10px] font-mono text-foreground/70">
               Unit: {activeUnitLabel}
             </span>
           ) : null}
           {activeDivisionLabel ? (
-            <span className="border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[10px] font-mono text-white/70">
+            <span className="border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[10px] font-mono text-foreground/70">
               Divisi: {activeDivisionLabel}
             </span>
           ) : null}
           {!activeUnitId ? (
-            <span className="border border-amber-500/20 bg-amber-500/[0.06] px-2 py-0.5 text-[10px] font-mono text-amber-400">
+            <span className="border border-primary/20 bg-primary/[0.06] px-2 py-0.5 text-[10px] font-mono text-app-accent-ink">
               ⚠ Pilih unit untuk aktifkan download & upload
             </span>
           ) : null}
         </div>
       ) : (
         <div className="flex items-center gap-2 border border-white/[0.04] bg-white/[0.02] px-3 py-2">
-          <span className="text-[10px] font-mono text-white/25">
+          <span className="text-[10px] font-mono text-foreground/25">
             Pilih filter Unit untuk mengaktifkan Download & Upload Excel
           </span>
         </div>
@@ -588,11 +588,11 @@ export function CountdownBoardShell({ rows, references, canManage, meta, state }
 
       {canManage && editorMode ? (
         <div className="fixed inset-0 z-[80] bg-black/60 backdrop-blur-[1px]">
-          <div className="absolute inset-y-0 right-0 w-full max-w-4xl overflow-y-auto border-l border-white/[0.08] bg-[#080a0d] p-4 shadow-2xl">
+          <div className="absolute inset-y-0 right-0 w-full max-w-4xl overflow-y-auto border-l border-white/[0.08] bg-popover p-4 shadow-2xl">
             <div className="mb-4 flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
-                <Pencil className="h-3.5 w-3.5 text-emerald-400" />
-                <p className="text-[12px] font-medium text-white">
+                <Pencil className="h-3.5 w-3.5 text-success" />
+                <p className="text-[12px] font-medium text-foreground">
                   {editorMode === "edit" ? "Edit Jobdesc" : "Tambah Jobdesc"}
                 </p>
               </div>
@@ -615,28 +615,28 @@ export function CountdownBoardShell({ rows, references, canManage, meta, state }
 
       {canManage && uploadOpen ? (
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 px-4 backdrop-blur-[1px]">
-          <div className="w-full max-w-xl border border-white/[0.08] bg-[#080a0d] p-4 shadow-2xl">
+          <div className="w-full max-w-xl border border-white/[0.08] bg-popover p-4 shadow-2xl">
             {/* Header */}
             <div className="mb-4 flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
-                <FileUp className="h-3.5 w-3.5 text-amber-400" />
-                <p className="text-[12px] font-mono text-white">Upload Excel Countdown</p>
+                <FileUp className="h-3.5 w-3.5 text-app-accent-ink" />
+                <p className="text-[12px] font-mono text-foreground">Upload Excel Countdown</p>
               </div>
               <ActionButton onClick={() => setUploadOpen(false)}><X className="h-3 w-3" />Tutup</ActionButton>
             </div>
 
             {/* Unit context — wajib ada */}
             {activeUnitId ? (
-              <div className="mb-3 border border-amber-500/15 bg-amber-500/[0.04] px-3 py-2">
-                <p className="text-[10px] font-mono text-amber-500/70 uppercase tracking-[0.12em]">Upload untuk unit</p>
-                <p className="mt-0.5 text-[12px] font-mono text-white">{activeUnitLabel}</p>
+              <div className="mb-3 border border-primary/15 bg-primary/[0.04] px-3 py-2">
+                <p className="text-[10px] font-mono text-app-accent-ink/70 uppercase tracking-[0.12em]">Upload untuk unit</p>
+                <p className="mt-0.5 text-[12px] font-mono text-foreground">{activeUnitLabel}</p>
                 {activeDivisionLabel ? (
-                  <p className="mt-0.5 text-[10px] font-mono text-white/40">Divisi: {activeDivisionLabel}</p>
+                  <p className="mt-0.5 text-[10px] font-mono text-foreground/40">Divisi: {activeDivisionLabel}</p>
                 ) : null}
               </div>
             ) : (
-              <div className="mb-3 border border-red-500/20 bg-red-500/[0.05] px-3 py-2">
-                <p className="text-[11px] font-mono text-red-400">
+              <div className="mb-3 border border-destructive/20 bg-destructive/[0.05] px-3 py-2">
+                <p className="text-[11px] font-mono text-destructive">
                   ⚠ Filter unit belum dipilih. Tutup modal ini dan pilih filter unit dari grid terlebih dahulu.
                 </p>
               </div>
@@ -648,15 +648,15 @@ export function CountdownBoardShell({ rows, references, canManage, meta, state }
               accept=".xlsx,.xls"
               disabled={!activeUnitId}
               onChange={(e) => setSelectedFile(e.target.files?.[0] ?? null)}
-              className="block w-full border border-white/[0.06] bg-white/[0.03] p-2 text-[11px] font-mono text-white/50 disabled:cursor-not-allowed disabled:opacity-40 file:mr-2 file:border-0 file:bg-amber-500/10 file:px-2 file:py-1 file:text-[10px] file:font-mono file:uppercase file:tracking-wider file:text-amber-300"
+              className="block w-full border border-white/[0.06] bg-white/[0.03] p-2 text-[11px] font-mono text-foreground/50 disabled:cursor-not-allowed disabled:opacity-40 file:mr-2 file:border-0 file:bg-primary/10 file:px-2 file:py-1 file:text-[10px] file:font-mono file:uppercase file:tracking-wider file:text-app-accent-ink"
             />
 
             {/* Import result */}
             {importResult ? (
-              <div className="mt-3 border border-white/[0.05] bg-white/[0.02] px-2.5 py-2 text-[11px] font-mono text-white/60">
+              <div className="mt-3 border border-white/[0.05] bg-white/[0.02] px-2.5 py-2 text-[11px] font-mono text-foreground/60">
                 <p>Inserted: {importResult.inserted} · Updated: {importResult.updated} · Rejected: {importResult.rejected}</p>
                 {importResult.issues.length > 0 ? (
-                  <div className="mt-1.5 space-y-0.5 text-red-400/80">
+                  <div className="mt-1.5 space-y-0.5 text-destructive/80">
                     {importResult.issues.map((issue) => (
                       <p key={`${issue.rowNumber}-${issue.field}`}>
                         Row {issue.rowNumber} · {issue.field} · {issue.message}

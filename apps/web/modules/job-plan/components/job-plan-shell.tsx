@@ -1514,8 +1514,8 @@ export function JobPlanShell({
         const dateMeta = formatTaskDateWithDay(value);
         return (
           <div className="space-y-0.5">
-            <p className="font-mono text-[11px] text-white/80">{dateMeta.dateLabel}</p>
-            <p className="text-[10px] uppercase tracking-[0.12em] text-amber-400/70">
+            <p className="font-mono text-[11px] text-foreground/80">{dateMeta.dateLabel}</p>
+            <p className="text-[10px] uppercase tracking-[0.12em] text-app-accent-ink/70">
               {dateMeta.dayLabel}
             </p>
           </div>
@@ -1541,8 +1541,8 @@ export function JobPlanShell({
       widthClassName: "min-w-[230px]",
       renderCell: (value, row) => (
         <div className="space-y-1">
-          <p className="text-white">{String(value ?? "-")}</p>
-          <p className="text-[11px] text-white/35">{String(row.assignedUserId ?? "-")}</p>
+          <p className="text-foreground">{String(value ?? "-")}</p>
+          <p className="text-[11px] text-foreground/35">{String(row.assignedUserId ?? "-")}</p>
         </div>
       ),
     },
@@ -1560,7 +1560,7 @@ export function JobPlanShell({
       sortKey: "jobName",
       widthClassName: "min-w-[260px]",
       renderCell: (_value, row) => (
-        <span className="font-medium text-amber-300/80">
+        <span className="font-medium text-app-accent-ink/80">
           {String(row.masterJobName ?? row.jobName ?? row.panelName ?? "-")}
         </span>
       ),
@@ -1628,12 +1628,12 @@ export function JobPlanShell({
 
         return (
           <div className="space-y-1 text-right">
-            <p className="font-medium text-white">
+            <p className="font-medium text-foreground">
               {remainingHours !== null
                 ? remainingHours.toFixed(1)
                 : "-"}
             </p>
-            <p className="text-[10px] text-white/35">
+            <p className="text-[10px] text-foreground/35">
               {availablePlanHours !== null
                 ? `${availablePlanHours.toFixed(1)} bisa diplan`
                 : "-"}
@@ -1651,7 +1651,7 @@ export function JobPlanShell({
         const planStart = row.startTime as string | null | undefined;
         const planFinish = row.finishTime as string | null | undefined;
         return (
-          <span className="font-mono text-[11px] text-white/70">
+          <span className="font-mono text-[11px] text-foreground/70">
             {fmtTime(planStart)} — {fmtTime(planFinish)}
           </span>
         );
@@ -1667,17 +1667,17 @@ export function JobPlanShell({
         const breakMins = Number(row.actualBreakMinutes ?? 0);
 
         if (!actualStart && !actualFinish) {
-          return <span className="text-[11px] text-white/20">Belum ada aktual</span>;
+          return <span className="text-[11px] text-foreground/20">Belum ada aktual</span>;
         }
 
         return (
           <div className="flex flex-col gap-1 text-[11px]">
-            <span className="font-mono text-white/80">
+            <span className="font-mono text-foreground/80">
               {fmtTime(actualStart)} — {fmtTime(actualFinish)}
             </span>
             {breakMins > 0 ? (
-              <span className="text-white/45">
-                Istirahat: <span className="font-mono text-amber-400/80">{breakMins}m</span>
+              <span className="text-foreground/45">
+                Istirahat: <span className="font-mono text-app-accent-ink/80">{breakMins}m</span>
               </span>
             ) : null}
           </div>
@@ -1698,14 +1698,14 @@ export function JobPlanShell({
         const planStatus = row.status as string | null | undefined;
         if (actualStatus === "DONE") {
           return (
-            <span className="inline-flex items-center gap-1 border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.1em] text-amber-400">
+            <span className="inline-flex items-center gap-1 border border-primary/30 bg-primary/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.1em] text-app-accent-ink">
               Sudah Dikerjakan
             </span>
           );
         }
         // default: render plan status badge
         return (
-          <span className="inline-flex items-center gap-1 border border-white/5 bg-[#111114] px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.1em] text-white/50">
+          <span className="inline-flex items-center gap-1 border border-white/5 bg-card px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.1em] text-foreground/50">
             {humanizeCodeLabel(planStatus)}
           </span>
         );
@@ -1764,10 +1764,10 @@ export function JobPlanShell({
     return (
       <>
         <tr>
-          <td colSpan={colSpan} className="border-b border-white/5 bg-[#0a0a0c] px-3 py-2">
+          <td colSpan={colSpan} className="border-b border-white/5 bg-background px-3 py-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
-                <p className="text-[11px] font-mono text-white/70">
+                <p className="text-[11px] font-mono text-foreground/70">
                   Tambah job {quickCreateMode === "overtime" ? "lembur" : "normal"}
                 </p>
               </div>
@@ -1807,8 +1807,8 @@ export function JobPlanShell({
           const countdownProgress = selectedCountdown?.progressPercent ?? null;
 
           return (
-            <tr key={row.rowId} className="align-top bg-[#0a0a0c]">
-              <td className="sticky left-0 z-20 border-b border-white/5 bg-[#0a0a0c] px-3 py-2">
+            <tr key={row.rowId} className="align-top bg-background">
+              <td className="sticky left-0 z-20 border-b border-white/5 bg-background px-3 py-2">
                 <input
                   type="checkbox"
                   checked={selectedQuickCreateRowIds.has(row.rowId)}
@@ -1823,7 +1823,7 @@ export function JobPlanShell({
                       return nextValue;
                     });
                   }}
-                  className="h-3.5 w-3.5 rounded border-white/20 bg-white/5 accent-amber-500"
+                  className="h-3.5 w-3.5 rounded border-white/20 bg-white/5 accent-primary"
                 />
               </td>
               <td className="border-b border-white/[0.04] p-2 min-w-[170px]">
@@ -1967,13 +1967,13 @@ export function JobPlanShell({
                     }))}
                 />
               </td>
-              <td className="border-b border-white/[0.04] px-3 py-2 min-w-[120px] text-right text-[11px] text-white/55">
+              <td className="border-b border-white/[0.04] px-3 py-2 min-w-[120px] text-right text-[11px] text-foreground/55">
                 {targetTotalHours !== null ? formatDurationHHMM(targetTotalHours) : "-"}
               </td>
-              <td className="border-b border-white/[0.04] px-3 py-2 min-w-[90px] text-right text-[11px] text-white/55">
+              <td className="border-b border-white/[0.04] px-3 py-2 min-w-[90px] text-right text-[11px] text-foreground/55">
                 {countdownProgress !== null ? countdownProgress.toFixed(0) : 0}
               </td>
-              <td className="border-b border-white/[0.04] px-3 py-2 min-w-[120px] text-right text-[11px] text-white/55">
+              <td className="border-b border-white/[0.04] px-3 py-2 min-w-[120px] text-right text-[11px] text-foreground/55">
                 {remainingWorkHours !== null ? formatDurationHHMM(remainingWorkHours) : "-"}
               </td>
               <td className="border-b border-white/[0.04] p-2 min-w-[150px]">
@@ -2000,16 +2000,16 @@ export function JobPlanShell({
                   />
                 </div>
                 {preview.length > 1 ? (
-                  <p className="mt-1 text-[10px] text-white/35">
+                  <p className="mt-1 text-[10px] text-foreground/35">
                     Split {fmtTime(preview[0]?.finishTime)} lalu lanjut lembur
                   </p>
                 ) : null}
               </td>
-              <td className="border-b border-white/[0.04] px-3 py-2 min-w-[120px] text-[11px] text-white/30">
+              <td className="border-b border-white/[0.04] px-3 py-2 min-w-[120px] text-[11px] text-foreground/30">
                 Belum ada aktual
               </td>
               <td className="border-b border-white/[0.04] px-3 py-2 min-w-[110px] text-center">
-                <span className="inline-flex border border-white/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.12em] text-white/55">
+                <span className="inline-flex border border-white/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.12em] text-foreground/55">
                   Baru
                 </span>
               </td>
@@ -2088,7 +2088,7 @@ export function JobPlanShell({
   function renderPanelCell(row: WorkspaceRowState) {
     if (isWorkspaceNonTechnical) {
       return (
-        <div className="flex h-[38px] items-center rounded-md border border-white/5 bg-[#111114] px-3 text-[12px] text-white/35">
+        <div className="flex h-[38px] items-center rounded-md border border-white/5 bg-card px-3 text-[12px] text-foreground/35">
           Tanpa Countdown
         </div>
       );
@@ -2256,8 +2256,8 @@ export function JobPlanShell({
                 className={[
                   "px-4 py-2 text-[10px] font-mono uppercase tracking-[0.12em] border-b-2 transition-colors",
                   state.window === "daily"
-                    ? "border-amber-500 text-amber-500"
-                    : "border-transparent text-white/40 hover:text-white/70",
+                    ? "border-primary text-app-accent-ink"
+                    : "border-transparent text-foreground/40 hover:text-foreground/70",
                 ].join(" ")}
               >
                 Harian
@@ -2268,8 +2268,8 @@ export function JobPlanShell({
                 className={[
                   "px-4 py-2 text-[10px] font-mono uppercase tracking-[0.12em] border-b-2 transition-colors",
                   state.window === "weekly"
-                    ? "border-amber-500 text-amber-500"
-                    : "border-transparent text-white/40 hover:text-white/70",
+                    ? "border-primary text-app-accent-ink"
+                    : "border-transparent text-foreground/40 hover:text-foreground/70",
                 ].join(" ")}
               >
                 Mingguan
@@ -2326,37 +2326,37 @@ export function JobPlanShell({
                 <ChevronDown className="h-3 w-3" />
               </ActionButton>
               {addMenuOpen ? (
-                <div className="absolute right-0 top-10 z-40 min-w-40 border border-white/10 bg-[#0a0a0c] py-1">
+                <div className="absolute right-0 top-10 z-40 min-w-40 border border-white/10 bg-background py-1">
                   <button
                     type="button"
                     onClick={() => openQuickCreate("normal")}
-                    className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[10px] font-mono text-white/70 transition-colors hover:bg-white/[0.02] hover:text-white"
+                    className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[10px] font-mono text-foreground/70 transition-colors hover:bg-white/[0.02] hover:text-foreground"
                   >
-                    <Plus className="h-3.5 w-3.5 text-amber-400" />
+                    <Plus className="h-3.5 w-3.5 text-app-accent-ink" />
                     Job Normal
                   </button>
                   <button
                     type="button"
                     onClick={() => openQuickCreate("overtime")}
-                    className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[10px] font-mono text-white/70 transition-colors hover:bg-white/[0.02] hover:text-white"
+                    className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[10px] font-mono text-foreground/70 transition-colors hover:bg-white/[0.02] hover:text-foreground"
                   >
-                    <Plus className="h-3.5 w-3.5 text-red-400" />
+                    <Plus className="h-3.5 w-3.5 text-destructive" />
                     Job Lembur
                   </button>
                   <button
                     type="button"
                     onClick={() => openCreateWorkspace(false)}
-                    className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[10px] font-mono text-white/70 transition-colors hover:bg-white/[0.02] hover:text-white"
+                    className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[10px] font-mono text-foreground/70 transition-colors hover:bg-white/[0.02] hover:text-foreground"
                   >
-                    <Plus className="h-3.5 w-3.5 text-amber-400" />
+                    <Plus className="h-3.5 w-3.5 text-app-accent-ink" />
                     Job Tambahan
                   </button>
                   <button
                     type="button"
                     onClick={() => openCreateWorkspace(true)}
-                    className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[10px] font-mono text-white/70 transition-colors hover:bg-white/[0.02] hover:text-white"
+                    className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[10px] font-mono text-foreground/70 transition-colors hover:bg-white/[0.02] hover:text-foreground"
                   >
-                    <Plus className="h-3.5 w-3.5 text-amber-400" />
+                    <Plus className="h-3.5 w-3.5 text-app-accent-ink" />
                     Tambah Job Non Teknis
                   </button>
                 </div>
@@ -2367,40 +2367,40 @@ export function JobPlanShell({
               <button
                 type="button"
                 onClick={() => setExportOpen((currentValue) => !currentValue)}
-                className="inline-flex items-center gap-1 border border-white/5 bg-[#111114] px-2.5 py-1.5 text-[11px] uppercase tracking-[0.1em] text-white/60 hover:text-white"
+                className="inline-flex items-center gap-1 border border-white/5 bg-card px-2.5 py-1.5 text-[11px] uppercase tracking-[0.1em] text-foreground/60 hover:text-foreground"
               >
                 <Download className="h-3.5 w-3.5" />
                 Unduh
                 <ChevronDown className="h-3.5 w-3.5" />
               </button>
               {exportOpen ? (
-                <div className="absolute right-0 top-9 z-40 min-w-36 border border-white/10 bg-[#0a0a0c] py-1">
+                <div className="absolute right-0 top-9 z-40 min-w-36 border border-white/10 bg-background py-1">
                   <a
                     href={buildExportHref("csv")}
-                    className="flex items-center gap-2 px-3 py-1.5 text-[10px] font-mono text-white/70 transition-colors hover:bg-white/[0.02] hover:text-white"
+                    className="flex items-center gap-2 px-3 py-1.5 text-[10px] font-mono text-foreground/70 transition-colors hover:bg-white/[0.02] hover:text-foreground"
                   >
-                    <Download className="h-3.5 w-3.5 text-amber-400" />
+                    <Download className="h-3.5 w-3.5 text-app-accent-ink" />
                     CSV
                   </a>
                   <a
                     href={buildExportHref("xlsx")}
-                    className="flex items-center gap-2 px-3 py-1.5 text-[10px] font-mono text-white/70 transition-colors hover:bg-white/[0.02] hover:text-white"
+                    className="flex items-center gap-2 px-3 py-1.5 text-[10px] font-mono text-foreground/70 transition-colors hover:bg-white/[0.02] hover:text-foreground"
                   >
-                    <FileSpreadsheet className="h-3.5 w-3.5 text-white/45" />
+                    <FileSpreadsheet className="h-3.5 w-3.5 text-foreground/45" />
                     Excel
                   </a>
                   <a
                     href={buildExportHref("pdf")}
-                    className="flex items-center gap-2 px-3 py-1.5 text-[10px] font-mono text-white/70 transition-colors hover:bg-white/[0.02] hover:text-white"
+                    className="flex items-center gap-2 px-3 py-1.5 text-[10px] font-mono text-foreground/70 transition-colors hover:bg-white/[0.02] hover:text-foreground"
                   >
-                    <FileText className="h-3.5 w-3.5 text-red-400" />
+                    <FileText className="h-3.5 w-3.5 text-destructive" />
                     PDF
                   </a>
                   <a
                     href={buildExportHref("image")}
-                    className="flex items-center gap-2 px-3 py-1.5 text-[10px] font-mono text-white/70 transition-colors hover:bg-white/[0.02] hover:text-white"
+                    className="flex items-center gap-2 px-3 py-1.5 text-[10px] font-mono text-foreground/70 transition-colors hover:bg-white/[0.02] hover:text-foreground"
                   >
-                    <FileImage className="h-3.5 w-3.5 text-white/45" />
+                    <FileImage className="h-3.5 w-3.5 text-foreground/45" />
                     Gambar
                   </a>
                 </div>
@@ -2422,8 +2422,8 @@ export function JobPlanShell({
       {sweetAlert.alertElement}
 
       {selectedKeys.size > 0 ? (
-        <div className="flex flex-wrap items-center justify-between gap-2 border border-white/5 bg-[#111114] px-3 py-2">
-          <p className="text-[11px] text-white/55">{selectedKeys.size} job plan dipilih</p>
+        <div className="flex flex-wrap items-center justify-between gap-2 border border-white/5 bg-card px-3 py-2">
+          <p className="text-[11px] text-foreground/55">{selectedKeys.size} job plan dipilih</p>
           <div className="flex flex-wrap items-center gap-2">
             {selectedKeys.size === 1 && selectedRows[0] && isDraftStatus(selectedRows[0].status) ? (
               <ActionButton onClick={() => openEditEditor(selectedRows[0])}>Edit</ActionButton>
@@ -2471,20 +2471,20 @@ export function JobPlanShell({
 
       {workspaceOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="w-full max-w-5xl border border-white/10 bg-[#111114]">
+          <div className="w-full max-w-5xl border border-white/10 bg-card">
             <div className="flex items-start justify-between gap-3 border-b border-white/5 px-4 py-3">
               <div>
-                <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">
+                <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30">
                   {isWorkspaceNonTechnical ? "Job Free Text / Non Teknis" : "Job Tambahan"}
                 </p>
-                <h3 className="mt-0.5 text-[13px] font-mono text-white/80">
+                <h3 className="mt-0.5 text-[13px] font-mono text-foreground/80">
                   {isWorkspaceNonTechnical ? "Job Non Teknis · Tanpa Countdown" : "Job Tambahan"}
                 </h3>
               </div>
               <button
                 type="button"
                 onClick={closeCreateWorkspace}
-                className="border border-white/10 p-1.5 text-white/40 transition-colors hover:text-white"
+                className="border border-white/10 p-1.5 text-foreground/40 transition-colors hover:text-foreground"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -2572,7 +2572,7 @@ export function JobPlanShell({
                 </div>
                 <div>
                   <FieldLabel>Prioritas</FieldLabel>
-                  <label className="flex h-[38px] items-center gap-2 rounded-md border border-white/5 bg-[#111114] px-3 text-[12px] text-white/70">
+                  <label className="flex h-[38px] items-center gap-2 rounded-md border border-white/5 bg-card px-3 text-[12px] text-foreground/70">
                     <input
                       type="checkbox"
                       checked={workspaceForm.rows[0]?.isPriority ?? false}
@@ -2581,7 +2581,7 @@ export function JobPlanShell({
                           ...currentValue,
                           isPriority: event.target.checked,
                         }))}
-                      className="h-3.5 w-3.5 rounded border-white/20 bg-white/5 accent-amber-500"
+                      className="h-3.5 w-3.5 rounded border-white/20 bg-white/5 accent-primary"
                     />
                     Masukkan ke pekerjaan prioritas
                   </label>
@@ -2591,20 +2591,20 @@ export function JobPlanShell({
               <div className="grid gap-3 md:grid-cols-2">
                 <div>
                   <FieldLabel>Start Time</FieldLabel>
-                  <div className="flex h-[38px] items-center rounded-md border border-white/5 bg-[#111114] px-3 text-[12px] text-amber-300">
+                  <div className="flex h-[38px] items-center rounded-md border border-white/5 bg-card px-3 text-[12px] text-app-accent-ink">
                     {fmtTime(additionalPreview[0]?.startTime)}
                   </div>
                 </div>
                 <div>
                   <FieldLabel>Finish Time</FieldLabel>
-                  <div className="flex h-[38px] items-center rounded-md border border-white/5 bg-[#111114] px-3 text-[12px] text-amber-300">
+                  <div className="flex h-[38px] items-center rounded-md border border-white/5 bg-card px-3 text-[12px] text-app-accent-ink">
                     {fmtTime(additionalPreview[additionalPreview.length - 1]?.finishTime)}
                   </div>
                 </div>
               </div>
 
               {additionalPreview.length > 1 ? (
-                <div className="border border-white/5 bg-[#0a0a0c] px-3 py-2 text-[11px] text-white/55">
+                <div className="border border-white/5 bg-background px-3 py-2 text-[11px] text-foreground/55">
                   Sistem akan memecah tambahan ini menjadi jam normal lalu sisa lembur sesuai hari kerja.
                 </div>
               ) : null}
@@ -2660,21 +2660,21 @@ export function JobPlanShell({
 
       {editorMode === "edit" && activePlan ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="w-full max-w-2xl border border-white/10 bg-[#111114] p-4">
+          <div className="w-full max-w-2xl border border-white/10 bg-card p-4">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">
+                <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30">
                   {isDraftStatus(activePlan.status) ? "Edit Draft Job Plan" : "Detail Job Plan"}
                 </p>
-                <h3 className="mt-0.5 text-[13px] font-mono text-white/80">{activePlan.planId}</h3>
-                <p className="mt-1 text-[11px] text-white/40">
+                <h3 className="mt-0.5 text-[13px] font-mono text-foreground/80">{activePlan.planId}</h3>
+                <p className="mt-1 text-[11px] text-foreground/40">
                   {activePlan.unitName} · {activePlan.divisionName}
                 </p>
               </div>
               <button
                 type="button"
                 onClick={closeEditor}
-                className="border border-white/10 p-1.5 text-white/40 transition-colors hover:text-white"
+                className="border border-white/10 p-1.5 text-foreground/40 transition-colors hover:text-foreground"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -2781,7 +2781,7 @@ export function JobPlanShell({
               </div>
               <div>
                 <FieldLabel>Prioritas</FieldLabel>
-                <label className="flex h-8 items-center gap-2 rounded-md border border-white/5 bg-[#111114] px-2.5 text-[12px] text-white">
+                <label className="flex h-8 items-center gap-2 rounded-md border border-white/5 bg-card px-2.5 text-[12px] text-foreground">
                   <input
                     type="checkbox"
                     checked={editForm.isPriority}
@@ -2790,7 +2790,7 @@ export function JobPlanShell({
                         ...currentValue,
                         isPriority: event.target.checked,
                       }))}
-                    className="h-3.5 w-3.5 rounded border-white/20 bg-white/5 accent-amber-500"
+                    className="h-3.5 w-3.5 rounded border-white/20 bg-white/5 accent-primary"
                   />
                   Tandai prioritas
                 </label>
@@ -2825,10 +2825,10 @@ export function JobPlanShell({
 
       {approvalPlan ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="w-full max-w-sm rounded-md border border-white/5 bg-[#0a0a0c] p-4">
-            <p className="text-[10px] uppercase tracking-wider text-amber-500/70">Approval Job Plan</p>
-            <h3 className="mt-1 text-sm font-medium text-white">{approvalPlan.planId}</h3>
-            <p className="mt-1 text-[11px] text-white/45">
+          <div className="w-full max-w-sm rounded-md border border-white/5 bg-background p-4">
+            <p className="text-[10px] uppercase tracking-wider text-app-accent-ink/70">Approval Job Plan</p>
+            <h3 className="mt-1 text-sm font-medium text-foreground">{approvalPlan.planId}</h3>
+            <p className="mt-1 text-[11px] text-foreground/45">
               {approvalPlan.unitName} · {approvalPlan.assignedUserName}
             </p>
 
@@ -2839,8 +2839,8 @@ export function JobPlanShell({
                 className={[
                   "rounded-md border px-3 py-2 text-[11px] font-medium transition-colors",
                   approvalStatus === "PLAN"
-                    ? "border-amber-500/30 bg-amber-500/10 text-amber-400"
-                    : "border-white/5 bg-[#111114] text-white/55",
+                    ? "border-primary/30 bg-primary/10 text-app-accent-ink"
+                    : "border-white/5 bg-card text-foreground/55",
                 ].join(" ")}
               >
                 Approve
@@ -2851,8 +2851,8 @@ export function JobPlanShell({
                 className={[
                   "rounded-md border px-3 py-2 text-[11px] font-medium transition-colors",
                   approvalStatus === "REJECTED"
-                    ? "border-red-500/30 bg-red-500/10 text-red-300"
-                    : "border-white/5 bg-[#111114] text-white/55",
+                    ? "border-destructive/30 bg-destructive/10 text-destructive"
+                    : "border-white/5 bg-card text-foreground/55",
                 ].join(" ")}
               >
                 Reject

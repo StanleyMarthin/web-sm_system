@@ -45,26 +45,26 @@ export function PlanningStepHeader({
             className={[
               "flex items-center justify-between gap-2 border px-3 py-3 text-left transition-colors",
               active
-                ? "border-amber-500/30 bg-amber-500/[0.08]"
+                ? "border-primary/30 bg-primary/[0.08]"
                 : done
-                  ? "border-emerald-500/25 bg-emerald-500/[0.08] hover:bg-emerald-500/[0.12]"
+                  ? "border-success/25 bg-success/[0.08] hover:bg-success/[0.12]"
                   : reachable && onStepClick
-                    ? "border-gray-200 bg-white hover:bg-gray-50 dark:border-white/[0.06] dark:bg-[#111114] dark:hover:bg-white/[0.03]"
-                    : "border-gray-200 bg-gray-50 opacity-40 cursor-not-allowed dark:border-white/[0.06] dark:bg-[#111114]",
+                    ? "border-border bg-card hover:bg-muted dark:border-border dark:bg-card dark:hover:bg-accent"
+                    : "border-border bg-muted opacity-40 cursor-not-allowed dark:border-border dark:bg-card",
             ].join(" ")}
           >
             <div className="min-w-0">
-              <p className="font-mono text-[9px] uppercase tracking-[0.12em] text-gray-400 dark:text-white/25">
+              <p className="font-mono text-[15px] uppercase tracking-[0.12em] text-muted-foreground dark:text-muted-foreground">
                 Langkah {step.number}
               </p>
               <p
                 className={[
-                  "mt-0.5 truncate text-[11px] font-medium",
+                  "mt-0.5 truncate text-[15px] font-medium",
                   active
-                    ? "text-amber-700 dark:text-amber-300"
+                    ? "text-app-accent-ink dark:text-app-accent-ink"
                     : done
-                      ? "text-emerald-700 dark:text-emerald-300"
-                      : "text-gray-600 dark:text-white/50",
+                      ? "text-success dark:text-success"
+                      : "text-muted-foreground dark:text-muted-foreground",
                 ].join(" ")}
               >
                 {step.label}
@@ -72,12 +72,12 @@ export function PlanningStepHeader({
             </div>
             <div
               className={[
-                "flex h-6 w-6 shrink-0 items-center justify-center border font-mono text-[10px] font-semibold",
+                "flex h-6 w-6 shrink-0 items-center justify-center border font-mono text-[14px] font-semibold",
                 active
-                  ? "border-amber-500/30 text-amber-700 dark:text-amber-300"
+                  ? "border-primary/30 text-app-accent-ink dark:text-app-accent-ink"
                   : done
-                    ? "border-emerald-500/25 text-emerald-700 dark:text-emerald-300"
-                    : "border-gray-300 text-gray-400 dark:border-white/[0.08] dark:text-white/25",
+                    ? "border-success/25 text-success dark:text-success"
+                    : "border-border text-muted-foreground dark:border-border dark:text-muted-foreground",
               ].join(" ")}
             >
               {done ? <CheckCircle2 className="h-3.5 w-3.5" /> : step.number}
