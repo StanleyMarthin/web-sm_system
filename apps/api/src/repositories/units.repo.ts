@@ -400,14 +400,16 @@ function toNullableText(value: string | null | undefined): string | null {
 }
 
 function normalizeUnitPanelInventoryInput<T extends CreateUnitPanelRequest | UpdateUnitPanelRequest>(input: T): T {
-  if (input.defaultLocationType !== "UNIT" || input.defaultStockStatus === "INSTALLED") {
+  const nextStatus =
+    input.defaultLocationType === "UNIT"
+      ? "INSTALLED"
+      : input.defaultLocationType === "GUDANG"
+        ? "IN_STORAGE"
+        : input.defaultStockStatus;
+  if (nextStatus === input.defaultStockStatus) {
     return input;
   }
-
-  return {
-    ...input,
-    defaultStockStatus: "INSTALLED",
-  };
+  return { ...input, defaultStockStatus: nextStatus };
 }
 
 function mapUnitPanelRecord(row: UnitPanelRow): UnitPanelRecord {
@@ -1337,6 +1339,11 @@ export class UnitsRepository {
     const warehouseStockCard = qualifyTable(this.warehouseDb, "wh_stock_card");
     const warehouseTransactions = qualifyTable(this.warehouseDb, "wh_transactions");
     const warehouseLocations = qualifyTable(this.warehouseDb, "wh_storage_locations");
+    const schema = await this.getMasterPanelInventorySchema(pool);
+
+    const statusSelect = schema.hasDefaultStockStatus ? "COALESCE(stock_latest.status, mp.default_stock_status)" : "stock_latest.status";
+    const conditionSelect = schema.hasDefaultConditionType ? "COALESCE(stock_latest.conditionType, mp.default_condition_type)" : "stock_latest.conditionType";
+    const locationSelect = schema.hasDefaultLocationType ? "COALESCE(stock_latest.locationName, stock_latest.locationDetail, mp.default_location_type)" : "COALESCE(stock_latest.locationName, stock_latest.locationDetail)";
 
     const [
       panelRowsResult,
@@ -1361,9 +1368,9 @@ export class UnitsRepository {
               panel_lock.isLocked AS isLocked,
               d.name AS currentDivisionName,
               panel_lock.lockUpdatedAt AS lockUpdatedAt,
-              stock_latest.status AS stockStatus,
-              stock_latest.conditionType AS conditionType,
-              stock_latest.locationName AS locationName,
+              ${statusSelect} AS stockStatus,
+              ${conditionSelect} AS conditionType,
+              ${locationSelect} AS locationName,
               stock_latest.locationDetail AS locationDetail,
               stock_latest.takenByName AS takenByName,
               stock_latest.dateOut AS dateOut,
@@ -1411,6 +1418,7 @@ export class UnitsRepository {
             LEFT JOIN sm_divisi d ON d.id = panel_lock.currentDivisionId
             LEFT JOIN (
               SELECT
+                ranked.partCode,
                 ranked.partName,
                 ranked.status,
                 ranked.conditionType,
@@ -1420,6 +1428,7 @@ export class UnitsRepository {
                 ranked.dateOut
               FROM (
                 SELECT
+                  sc.part_code AS partCode,
                   sc.part_name AS partName,
                   sc.status AS status,
                   sc.condition_type AS conditionType,
@@ -1428,7 +1437,7 @@ export class UnitsRepository {
                   sc.taken_by_name AS takenByName,
                   DATE_FORMAT(sc.date_out, '%Y-%m-%d') AS dateOut,
                   ROW_NUMBER() OVER (
-                    PARTITION BY sc.part_name
+                    PARTITION BY COALESCE(NULLIF(sc.part_code, ''), sc.part_name)
                     ORDER BY COALESCE(sc.updated_at, sc.created_at) DESC
                   ) AS rowNo
                 FROM ${warehouseStockCard} sc
@@ -1437,7 +1446,11 @@ export class UnitsRepository {
               ) ranked
               WHERE ranked.rowNo = 1
             ) stock_latest
-              ON stock_latest.partName = mp.name
+              ON stock_latest.partCode = CONCAT('MP-', mp.id)
+              OR (
+                stock_latest.partCode IS NULL
+                AND stock_latest.partName = mp.name
+              )
             LEFT JOIN sm_jobdesc_countdown cd
               ON cd.car_id = mp.car_id
              AND cd.panel_id = mp.id
@@ -2288,6 +2301,12 @@ export class UnitsRepository {
       return;
     }
 
+    const [entryRows] = await pool.query<Array<RowDataPacket & { nextEntryNo: number }>>(
+      `SELECT COALESCE(MAX(entry_no), 0) + 1 AS nextEntryNo FROM ${stockCardTable} WHERE car_id = ?`,
+      [params.unitId],
+    );
+    const entryNo = Number(entryRows[0]?.nextEntryNo ?? 1);
+
     await pool.execute(
       `
         INSERT INTO ${stockCardTable} (
@@ -2312,7 +2331,7 @@ export class UnitsRepository {
       `,
       [
         randomUUID(),
-        partCode,
+        entryNo,
         params.unitId,
         unitSummary.unitName,
         partCode,

@@ -77,6 +77,10 @@ interface PanelFormState {
   name: string;
   category: string;
   sortOrder: string;
+  qty: string;
+  defaultLocationType: "GUDANG" | "WORKSHOP" | "UNIT";
+  defaultStockStatus: "IN_STORAGE" | "RETRIEVED" | "INSTALLED" | "LOST";
+  defaultConditionType: "BARU" | "RESTORE" | "BEKAS";
   isActive: boolean;
   nodeType: "PANEL" | "PART";
   nodeTypeName: string;
@@ -167,6 +171,39 @@ const EDGE_SCROLL_ZONE = 80;
 const EDGE_SCROLL_SPEED = 10;
 const EDGE_EXPAND_STEP = 300;
 
+const LOCATION_LABEL: Record<PanelFormState["defaultLocationType"], string> = {
+  UNIT: "UNIT",
+  WORKSHOP: "WORKSHOP",
+  GUDANG: "GUDANG",
+};
+
+const STOCK_STATUS_LABEL: Record<PanelFormState["defaultStockStatus"], string> = {
+  INSTALLED: "Terpasang",
+  IN_STORAGE: "Disimpan",
+  RETRIEVED: "Dilepas",
+  LOST: "Hilang",
+};
+
+const CONDITION_LABEL: Record<PanelFormState["defaultConditionType"], string> = {
+  BEKAS: "Bekas",
+  RESTORE: "Restore",
+  BARU: "Baru",
+};
+
+function stockStatusForLocation(
+  locationType: PanelFormState["defaultLocationType"],
+): PanelFormState["defaultStockStatus"] {
+  if (locationType === "UNIT") return "INSTALLED";
+  if (locationType === "GUDANG") return "IN_STORAGE";
+  return "RETRIEVED";
+}
+
+function normalizeInventoryForm(form: PanelFormState): PanelFormState {
+  if (form.defaultLocationType !== "UNIT") return form;
+  if (form.defaultStockStatus === "INSTALLED") return form;
+  return { ...form, defaultStockStatus: "INSTALLED" };
+}
+
 function safeStorage(): Storage | null {
   if (typeof window === 'undefined') return null;
   return window.localStorage;
@@ -238,6 +275,10 @@ function emptyForm(): PanelFormState {
     name: "",
     category: "",
     sortOrder: "0",
+    qty: "1",
+    defaultLocationType: "UNIT",
+    defaultStockStatus: "INSTALLED",
+    defaultConditionType: "BEKAS",
     isActive: true,
     nodeType: "PANEL",
     nodeTypeName: "Panel",
@@ -247,55 +288,72 @@ function emptyForm(): PanelFormState {
 }
 
 function formFromRecord(record: UnitPanelRecord): PanelFormState {
-  return {
+  return normalizeInventoryForm({
     section: record.section,
     name: record.name,
     category: record.category ?? "",
     sortOrder: String(record.sortOrder),
+    qty: String(record.qty ?? 1),
+    defaultLocationType: record.defaultLocationType,
+    defaultStockStatus: record.defaultStockStatus,
+    defaultConditionType: record.defaultConditionType,
     isActive: record.isActive,
     nodeType: record.nodeType,
     nodeTypeName: record.nodeType === "PART" ? "Part" : "Panel",
     parentId: record.parentId === null ? "" : String(record.parentId),
     parentName: "",
-  };
+  });
 }
 
 function formForNode(node: UnitBomNode): PanelFormState {
   const shouldCreatePart = node.panelId !== null || node.nodeType === "PART";
-  return {
+  return normalizeInventoryForm({
     section: node.section ?? "",
     name: "",
     category: node.category ?? "",
     sortOrder: "0",
+    qty: "1",
+    defaultLocationType: "UNIT",
+    defaultStockStatus: "INSTALLED",
+    defaultConditionType: node.conditionType ?? "BEKAS",
     isActive: true,
     nodeType: shouldCreatePart ? "PART" : "PANEL",
     nodeTypeName: shouldCreatePart ? "Part" : "Panel",
     parentId: node.panelId ? String(node.panelId) : "",
     parentName: node.panelId ? node.label : "",
-  };
+  });
 }
 
 function formForChild(parent: UnitPanelRecord): PanelFormState {
-  return {
+  return normalizeInventoryForm({
     section: parent.section,
     name: "",
     category: parent.category ?? "",
     sortOrder: String(parent.children.length + 1),
+    qty: "1",
+    defaultLocationType: parent.defaultLocationType,
+    defaultStockStatus: parent.defaultStockStatus,
+    defaultConditionType: parent.defaultConditionType,
     isActive: true,
     nodeType: "PART",
     nodeTypeName: "Part",
     parentId: String(parent.id),
     parentName: parent.name,
-  };
+  });
 }
 
 function buildPayload(form: PanelFormState): Omit<CreateUnitPanelRequest, "parentId"> & UpdateUnitPanelRequest {
+  const normalizedForm = normalizeInventoryForm(form);
   return {
-    section: form.section.trim(),
-    name: form.name.trim(),
-    category: form.category.trim() || null,
-    sortOrder: Number.parseInt(form.sortOrder || "0", 10) || 0,
-    isActive: form.isActive,
+    section: normalizedForm.section.trim(),
+    name: normalizedForm.name.trim(),
+    category: normalizedForm.category.trim() || null,
+    sortOrder: Number.parseInt(normalizedForm.sortOrder || "0", 10) || 0,
+    qty: Number(normalizedForm.qty) > 0 ? Number(normalizedForm.qty) : 1,
+    defaultLocationType: normalizedForm.defaultLocationType,
+    defaultStockStatus: normalizedForm.defaultStockStatus,
+    defaultConditionType: normalizedForm.defaultConditionType,
+    isActive: normalizedForm.isActive,
   };
 }
 
@@ -362,8 +420,8 @@ function buildPanelNode(record: UnitPanelRecord, bomDetailByPanel: Map<number, U
     logisticStatus: detail?.logisticStatus ?? null,
     logisticReference: detail?.logisticReference ?? null,
     logisticPath: detail?.logisticPath ?? null,
-    stockStatus: detail?.stockStatus ?? null,
-    conditionType: detail?.conditionType ?? null,
+    stockStatus: detail?.stockStatus ?? record.defaultStockStatus,
+    conditionType: detail?.conditionType ?? record.defaultConditionType,
     locationName: detail?.locationName ?? null,
     locationDetail: detail?.locationDetail ?? null,
     takenByName: detail?.takenByName ?? null,
@@ -1645,6 +1703,10 @@ export function BomTrackerTab({
       parentName: value,
       section: panel?.section ?? current.section,
       category: panel?.category ?? current.category,
+      qty: panel ? String(panel.qty ?? 1) : current.qty,
+      defaultLocationType: panel?.defaultLocationType ?? current.defaultLocationType,
+      defaultStockStatus: panel?.defaultStockStatus ?? current.defaultStockStatus,
+      defaultConditionType: panel?.defaultConditionType ?? current.defaultConditionType,
     }));
   }
 
@@ -2028,15 +2090,6 @@ export function BomTrackerTab({
                 : "Tambah Panel";
   const sidePanelTitle = drawerTitle;
 
-  if (!workspace) {
-    return (
-      <section className="border border-white/5 bg-[#111114] px-4 py-3">
-        <p className="text-[11px] uppercase tracking-[0.2em] text-amber-500/70">Katalog Part</p>
-        <h2 className="mt-3 text-xl font-light text-white">Data BOM belum bisa dimuat</h2>
-      </section>
-    );
-  }
-
   function expandAll() {
     const allIds = new Set(getAllNodeIds(panelTrackerTree));
     setExpandedNodeIds(allIds);
@@ -2111,6 +2164,15 @@ export function BomTrackerTab({
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [undoCanvas, selectedNode, nodeById, positionedNodes, toggleNode]);
+
+  if (!workspace) {
+    return (
+      <section className="border border-white/5 bg-[#111114] px-4 py-3">
+        <p className="text-[11px] uppercase tracking-[0.2em] text-amber-500/70">Katalog Part</p>
+        <h2 className="mt-3 text-xl font-light text-white">Data BOM belum bisa dimuat</h2>
+      </section>
+    );
+  }
 
   return (
     <section ref={sectionRef} className={`relative overflow-hidden border border-white/5 bg-[#111114] ${isFullscreen ? "fixed inset-0 z-50" : ""}`}>
@@ -2720,6 +2782,75 @@ export function BomTrackerTab({
                     />
                     <span className="text-[10px] font-mono text-white/50">Aktifkan {form.nodeType === "PART" ? "part" : "panel"} ini</span>
                   </label>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="block space-y-1">
+                      <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">Qty</span>
+                      <input
+                        type="number"
+                        min="0.01"
+                        step="0.01"
+                        value={form.qty}
+                        onChange={(event) => setForm((current) => ({ ...current, qty: event.target.value }))}
+                        className="h-9 w-full border border-white/10 bg-[#111114] px-3 text-[11px] font-mono text-white/70 outline-none transition-colors focus:border-amber-500/40"
+                      />
+                    </label>
+                    <label className="block space-y-1">
+                      <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">Lokasi</span>
+                      <select
+                        value={form.defaultLocationType}
+                        onChange={(event) => {
+                          const defaultLocationType = event.target.value as PanelFormState["defaultLocationType"];
+                          setForm((current) => ({
+                            ...current,
+                            defaultLocationType,
+                            defaultStockStatus: stockStatusForLocation(defaultLocationType),
+                          }));
+                        }}
+                        className="h-9 w-full border border-white/10 bg-[#111114] px-2 text-[10px] font-mono text-white/70 outline-none transition-colors focus:border-amber-500/40 [color-scheme:dark]"
+                      >
+                        <option value="UNIT">{LOCATION_LABEL.UNIT}</option>
+                        <option value="WORKSHOP">{LOCATION_LABEL.WORKSHOP}</option>
+                        <option value="GUDANG">{LOCATION_LABEL.GUDANG}</option>
+                      </select>
+                    </label>
+                    <label className="block space-y-1">
+                      <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">Posisi</span>
+                      <select
+                        value={form.defaultStockStatus}
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            defaultStockStatus: event.target.value as PanelFormState["defaultStockStatus"],
+                          }))
+                        }
+                        disabled={form.defaultLocationType === "UNIT"}
+                        className="h-9 w-full border border-white/10 bg-[#111114] px-2 text-[10px] font-mono text-white/70 outline-none transition-colors focus:border-amber-500/40 disabled:cursor-not-allowed disabled:text-white/40 [color-scheme:dark]"
+                      >
+                        <option value="INSTALLED">{STOCK_STATUS_LABEL.INSTALLED}</option>
+                        <option value="IN_STORAGE">{STOCK_STATUS_LABEL.IN_STORAGE}</option>
+                        <option value="RETRIEVED">{STOCK_STATUS_LABEL.RETRIEVED}</option>
+                        <option value="LOST">{STOCK_STATUS_LABEL.LOST}</option>
+                      </select>
+                    </label>
+                    <label className="block space-y-1">
+                      <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/30">Kondisi Barang</span>
+                      <select
+                        value={form.defaultConditionType}
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            defaultConditionType: event.target.value as PanelFormState["defaultConditionType"],
+                          }))
+                        }
+                        className="h-9 w-full border border-white/10 bg-[#111114] px-2 text-[10px] font-mono text-white/70 outline-none transition-colors focus:border-amber-500/40 [color-scheme:dark]"
+                      >
+                        <option value="BEKAS">{CONDITION_LABEL.BEKAS}</option>
+                        <option value="RESTORE">{CONDITION_LABEL.RESTORE}</option>
+                        <option value="BARU">{CONDITION_LABEL.BARU}</option>
+                      </select>
+                    </label>
+                  </div>
 
                   <div className="flex gap-2 pt-1">
                     <button

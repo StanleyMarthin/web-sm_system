@@ -989,7 +989,7 @@ export function PanelDetailPage({
   }
 
 
-  const location = triage.tone === "good" ? "Gudang" : node.divisionName ?? "Belum ditentukan";
+  const locationDisplay = node.locationName || node.locationDetail || (triage.tone === "good" ? "Gudang" : node.divisionName ?? "Belum ditentukan");
 
   return (
     <div className="space-y-2">
@@ -1010,17 +1010,37 @@ export function PanelDetailPage({
         </div>
 
         <div className="mt-3 flex flex-wrap gap-2">
-          <Badge className={triage.className}>
-            <Archive className="h-3.5 w-3.5" />
-            Kondisi: {triage.label}
-          </Badge>
+          {node.conditionType ? (
+            <Badge className={
+              node.conditionType === "BARU" ? "border-emerald-500/20 bg-emerald-500/[0.04] text-emerald-400" :
+              node.conditionType === "RESTORE" ? "border-amber-500/20 bg-amber-500/[0.04] text-amber-400" :
+              "border-white/15 bg-white/5 text-white/60"
+            }>
+              <Archive className="h-3.5 w-3.5" />
+              Kondisi: {node.conditionType}
+            </Badge>
+          ) : (
+            <Badge className={triage.className}>
+              <Archive className="h-3.5 w-3.5" />
+              Triage: {triage.label}
+            </Badge>
+          )}
+
           <Badge className="border-white/10 text-white/50">
             <MapPin className="h-3.5 w-3.5" />
-            Lokasi: {location}
+            Lokasi: {locationDisplay}
           </Badge>
+
+          {node.stockStatus && (
+            <Badge className="border-white/10 text-white/50">
+              <PackageCheck className="h-3.5 w-3.5" />
+              Posisi: {node.stockStatus}
+            </Badge>
+          )}
+
           <Badge className="border-white/10 text-white/60">
             <Wrench className="h-3.5 w-3.5" />
-            Status: {node.detail?.workStatusLabel ?? workStatusLabel(node)}
+            Status Kerja: {node.detail?.workStatusLabel ?? workStatusLabel(node)}
           </Badge>
         </div>
 
