@@ -598,7 +598,7 @@ function mapActualStatus(status: CreateMonitoringActualRequest["taskStatus"]): "
 async function getDivisionTechnicalReference(
   connection: Pick<Pool, "query">,
   divisionId: number,
-): Promise<DivisionTechnicalRow | null> {
+) {
   const [rows] = (await connection.query(
     `
       SELECT
@@ -613,7 +613,13 @@ async function getDivisionTechnicalReference(
     [divisionId],
   )) as [DivisionTechnicalRow[], unknown];
 
-  return rows[0] ?? null;
+  const row = rows[0];
+  if (!row) return null;
+
+  return {
+    ...row,
+    isTeknis: row.isTeknis === null || row.isTeknis === undefined ? null : Boolean(row.isTeknis),
+  } as any;
 }
 
 async function createManualCountdown(
@@ -1507,7 +1513,7 @@ export class MySqlMonitoringRepository implements MonitoringRepository {
            AND latest.latestCreatedAt = a.created_at
         ) actual ON actual.plandaily_id = p.id
         WHERE ${whereClauses.join(" AND ")}
-        GROUP BY p.assigned_user_id, e.full_name, COALESCE(c.id, cd.id), COALESCE(c.unit_name, cd.section_name, p.jobdescription, cd.id), COALESCE(p.is_overtime, 0)
+        GROUP BY 1, 2, 3, 4, 5
         ORDER BY e.full_name ASC
       `,
       queryParams,
@@ -1559,7 +1565,7 @@ export class MySqlMonitoringRepository implements MonitoringRepository {
           ) latest ON latest.plandaily_id = a.plandaily_id AND latest.latestCreatedAt = a.created_at
         ) actual ON actual.plandaily_id = p.id
         WHERE ${whereClauses.join(" AND ")}
-        GROUP BY COALESCE(c.id, cd.id), COALESCE(c.unit_name, cd.section_name, p.jobdescription, cd.id), c.customer_name
+        GROUP BY 1, 2, 3
       `,
       unitParams,
     )) as [any[], unknown];
@@ -1591,7 +1597,7 @@ export class MySqlMonitoringRepository implements MonitoringRepository {
           ) latest ON latest.plandaily_id = a.plandaily_id AND latest.latestCreatedAt = a.created_at
         ) actual ON actual.plandaily_id = p.id
         WHERE ${whereClauses.join(" AND ")}
-        GROUP BY COALESCE(c.id, cd.id), p.assigned_user_id, e.full_name, d.name, p.task_date, COALESCE(p.is_overtime, 0)
+        GROUP BY 1, 2, 3, 4, 5, 6
       `,
       empParams,
     )) as [any[], unknown];

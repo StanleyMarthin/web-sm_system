@@ -1419,7 +1419,7 @@ export function WarehouseShell({
             ]}
             searchPlaceholder="Cari barang, user, atau unit..."
             emptyMessage="Belum ada transaksi untuk filter saat ini."
-            viewportClassName="max-h-[72vh]"
+            viewportClassName="max-h-[calc(100svh-260px)]"
           />
         </>
       ) : null}
@@ -1483,7 +1483,7 @@ export function WarehouseShell({
             ]}
             searchPlaceholder="Cari part, panel, unit, atau kode..."
             emptyMessage="Belum ada stock card untuk filter saat ini."
-            viewportClassName="max-h-[76vh]"
+            viewportClassName="max-h-[calc(100svh-260px)]"
             filters={[
               { field: "status", label: "Status", options: [
                 { value: "IN_STORAGE", label: "IN_STORAGE" },
@@ -1565,7 +1565,7 @@ export function WarehouseShell({
                 { value: "0", label: "Tidak Aktif" },
               ] },
             ]}
-            viewportClassName="max-h-[76vh]"
+            viewportClassName="max-h-[calc(100svh-260px)]"
           />
         </>
       ) : null}
@@ -1597,7 +1597,7 @@ export function WarehouseShell({
             state={items.state}
             searchPlaceholder="Cari barang atau kode..."
             emptyMessage="Belum ada data barang."
-            viewportClassName="max-h-[76vh]"
+            viewportClassName="max-h-[calc(100svh-260px)]"
           />
         </>
       ) : null}
@@ -1629,7 +1629,7 @@ export function WarehouseShell({
             state={usage.state}
             searchPlaceholder="Cari divisi atau bahan..."
             emptyMessage="Belum ada bahan keluar."
-            viewportClassName="max-h-[76vh]"
+            viewportClassName="max-h-[calc(100svh-260px)]"
           />
         </>
       ) : null}
@@ -1661,7 +1661,7 @@ export function WarehouseShell({
             state={stockOpnames.state}
             searchPlaceholder="Cari nomor opname atau barang..."
             emptyMessage="Belum ada hasil stock opname."
-            viewportClassName="max-h-[76vh]"
+            viewportClassName="max-h-[calc(100svh-260px)]"
           />
         </>
       ) : null}
@@ -1693,7 +1693,7 @@ export function WarehouseShell({
             state={stockAdjustments.state}
             searchPlaceholder="Cari nomor penyesuaian atau barang..."
             emptyMessage="Belum ada penyesuaian stok."
-            viewportClassName="max-h-[76vh]"
+            viewportClassName="max-h-[calc(100svh-260px)]"
           />
         </>
       ) : null}

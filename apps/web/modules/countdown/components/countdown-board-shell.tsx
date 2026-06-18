@@ -683,6 +683,7 @@ export function CountdownBoardShell({ rows, references, canManage, meta, state }
 
       {/* ── Data grid ── */}
       <SmartDataGrid
+        viewportClassName="max-h-[calc(100svh-260px)]"
         title="Countdown Board"
         description="Monitor countdown per unit, divisi, panel, section, dan status kerja."
         columns={columns} rows={rows} meta={meta} state={state}

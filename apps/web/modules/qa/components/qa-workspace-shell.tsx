@@ -182,7 +182,7 @@ export function QaWorkspaceShell({
         sortOptions={sortOptions}
         searchPlaceholder="Cari unit, divisi, jobdesc, atau inspector..."
         emptyMessage="Belum ada data inspeksi QA."
-        viewportClassName="max-h-[72vh]"
+        viewportClassName="max-h-[calc(100svh-260px)]"
         onRowClick={(row) => setSelectedInspectionId(String(row.qcId ?? ""))}
         getRowAriaLabel={(row) => `Buka inspeksi QA ${String(row.unitName ?? "")}`}
       />

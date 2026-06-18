@@ -1728,8 +1728,8 @@ export function JobPlanShell({
   ) {
     const viewportClassName =
       mode === "all"
-        ? "max-h-[clamp(20rem,38vh,30rem)] [&>table]:min-w-[2600px]"
-        : "max-h-[clamp(24rem,58vh,44rem)] [&>table]:min-w-[2600px]";
+        ? "max-h-[clamp(20rem,38svh,30rem)] [&>table]:min-w-[2600px]"
+        : "max-h-[clamp(24rem,58svh,44rem)] [&>table]:min-w-[2600px]";
 
     return (
       <SmartDataGrid

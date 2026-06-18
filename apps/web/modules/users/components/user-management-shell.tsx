@@ -283,6 +283,7 @@ export function UserManagementShell({
       {sweetAlert.alertElement}
 
       <SmartDataGrid
+        viewportClassName="max-h-[calc(100svh-260px)]"
         title="Pengguna"
         description=""
         columns={columns}

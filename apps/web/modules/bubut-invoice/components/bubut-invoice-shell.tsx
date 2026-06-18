@@ -301,7 +301,7 @@ export function BubutInvoiceShell({
         searchPlaceholder="Cari No WOB, unit, operator, panel, atau team..."
         sortOptions={sortOptions}
         emptyMessage="Tidak ada WO Bubut selesai pada filter ini."
-        viewportClassName="max-h-[68vh]"
+        viewportClassName="max-h-[calc(100svh-260px)]"
         rowKeyField="sourceKey"
         onRowClick={(row) => setDetailSourceKey(String(row.sourceKey ?? row.sourceWoId))}
         getRowAriaLabel={(row) => `Buka riwayat pengerjaan ${String(row.sourceWobNo)}`}

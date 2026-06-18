@@ -133,6 +133,7 @@ export function GalleryShell({
   return (
     <div className="space-y-6">
       <SmartDataGrid
+        viewportClassName="max-h-[calc(100svh-260px)]"
         title="Daftar jobdesc"
         description=""
         columns={columns}

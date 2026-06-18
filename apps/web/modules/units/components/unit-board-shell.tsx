@@ -346,13 +346,39 @@ export function UnitBoardShell({ rows, meta, state, user }: UnitBoardShellProps)
         meta={meta}
         state={state}
         searchPlaceholder="Cari unit / customer / KP..."
-        searchMinLength={2}
+        searchMinLength={3}
+        searchSuggestionFields={["unitName", "unitId", "customerName", "plateNumber", "kpName"]}
+        searchSuggestionFormatter={(row) => {
+          const unitName = String(row.unitName ?? "").trim();
+          const unitId = String(row.unitId ?? "").trim();
+          const customerName = String(row.customerName ?? "").trim();
+          const plateNumber = String(row.plateNumber ?? "").trim();
+          const kpName = String(row.kpName ?? "").trim();
+          const title = unitName || unitId;
+          if (!title) {
+            return null;
+          }
+
+          const meta = [
+            unitId ? `ID ${unitId}` : null,
+            customerName || null,
+            plateNumber || null,
+            kpName ? `KP ${kpName}` : null,
+          ].filter(Boolean).join(" · ");
+
+          return {
+            value: unitId || unitName,
+            title,
+            meta: meta || null,
+          };
+        }}
         filters={filters}
         sortOptions={sortOptions}
         savedViews={savedViews}
         emptyMessage="Belum ada unit sesuai query saat ini."
         onRowClick={(row) => router.push(`/units/${String(row.unitId)}`)}
         getRowAriaLabel={(row) => `Buka workspace ${String(row.unitName ?? row.unitId)}`}
+        viewportClassName="max-h-[calc(100svh-260px)]"
         headerActions={canManageUnits ? (
           <button
             type="button"

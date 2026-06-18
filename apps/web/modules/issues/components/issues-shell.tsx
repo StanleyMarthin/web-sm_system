@@ -321,6 +321,7 @@ export function IssuesShell({
       </section>
 
       <SmartDataGrid
+        viewportClassName="max-h-[calc(100svh-260px)]"
         title="Issue Log"
         description="Server-side grid untuk issue QC reject, temuan teknis, hambatan produksi, dan issue manual."
         rows={rows}

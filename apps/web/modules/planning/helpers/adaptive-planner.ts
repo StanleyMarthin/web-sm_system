@@ -8,13 +8,11 @@ interface UnitProgressShape {
   customerName: string | null;
   remainingHours: number;
   riskLevel: RiskLevel;
-  targetDeliveryDate: string | null;
 }
 
 interface DivisionCapacityShape {
   divisionId: number;
   divisionName: string;
-  totalMembers: number;
   activeMembers: number;
   absentMembers: number;
   normalCapacityHours: number;
@@ -283,7 +281,6 @@ export function applyWarrantyImpact(
         divisionName: division.divisionName,
         periodStart,
         periodEnd,
-        totalMembers: division.totalMembers,
         activeMembers: division.activeMembers,
         absentMembers: division.absentMembers,
         normalCapacityHours: division.normalCapacityHours,

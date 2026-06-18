@@ -28,7 +28,7 @@ async function MonitoringEmployeePageContent({ searchParams }: MonitoringEmploye
     fetchMonitoringUnit(cookieHeader, resolvedSearchParams),
     fetchMonitoringToday(cookieHeader, {
       ...resolvedSearchParams,
-      limit: "200",
+      limit: "100",
     }),
   ]);
 

@@ -534,6 +534,7 @@ export function VendorListShell({
       </section>
 
       <SmartDataGrid
+        viewportClassName="max-h-[calc(100svh-260px)]"
         title="Vendor WO List"
         description="Server-side SmartDataGrid untuk monitoring WOV, approval, aging, dan status receive."
         columns={columns}

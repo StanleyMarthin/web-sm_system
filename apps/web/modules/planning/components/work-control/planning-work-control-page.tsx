@@ -45,10 +45,8 @@ function mapToUnitPriorityItems(units: WorkControlUnit[]): UnitPriorityItem[] {
     customerName: unit.customerName ?? null,
     progressPercent: unit.progressPercent,
     riskLevel: unit.riskLevel,
-    remainingJobCount: unit.remainingJobCount,
     remainingHours: unit.remainingHours,
     targetDeliveryDate: unit.targetDeliveryDate,
-    status: unit.status ?? "ACTIVE",
   }));
 }
 
@@ -92,7 +90,6 @@ export function PlanningWorkControlPage({
         .map((cap) => ({
         divisionId: Number(cap.divisionId),
         divisionName: cap.divisionName,
-        totalMembers: cap.totalMembers,
         activeMembers: cap.activeMembers,
         absentMembers: cap.absentMembers,
         normalCapacityHours: cap.normalCapacityHours,

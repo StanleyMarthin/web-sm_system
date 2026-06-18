@@ -5,7 +5,8 @@ import type {
   UnitPanelRecord,
   UpdateUnitPanelRequest,
 } from "@smsystem/contracts/unit-panel";
-import { Boxes, ChevronDown, ChevronRight, Plus, RefreshCw, Search } from "lucide-react";
+import { ArrowUpRight, Boxes, ChevronDown, ChevronRight, Plus, RefreshCw, Search } from "lucide-react";
+import Link from "next/link";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   createUnitPanel,
@@ -233,6 +234,10 @@ function buildPayload(form: PanelFormState): Omit<CreateUnitPanelRequest, "paren
     defaultConditionType: normalizedForm.defaultConditionType,
     isActive: normalizedForm.isActive,
   };
+}
+
+function buildPanelDetailHref(unitId: string, recordId: number): string {
+  return `/units/${unitId}/panels/panel-${recordId}`;
 }
 
 export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPanelManagerProps) {
@@ -521,8 +526,6 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
       return;
     }
 
-    console.log("Submitting updateUnitPanel:", { unitId, panelId: mode.type === "edit" ? mode.record.id : null, payload });
-
     const result =
       mode.type === "edit"
         ? await updateUnitPanel(unitId, mode.record.id, { ...payload, parentId })
@@ -530,8 +533,6 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
             ...payload,
             parentId,
           });
-
-    console.log("Update result:", result);
 
     if (!result.success) {
       setError(result.message);
@@ -719,7 +720,7 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
                 {paginatedRows.map((row) => (
                   <React.Fragment key={row.id}>
                     {/* Panel row */}
-                    <tr className="border-b border-white/[0.04] transition-colors hover:bg-white/[0.015]">
+                    <tr className="group border-b border-white/[0.04] transition-colors hover:bg-white/[0.015]">
                       <td className="align-middle px-4 py-1.5 text-[10px] font-mono text-white/25">
                         {row.category ?? "-"}
                       </td>
@@ -747,6 +748,13 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
                           {/* Panel name + inline badges */}
                           <div className="flex items-center gap-2 flex-wrap min-w-0">
                             <p className="text-[11px] font-mono text-white/80 truncate">{row.name}</p>
+                            <Link
+                              href={buildPanelDetailHref(unitId, row.id)}
+                              className="shrink-0 text-white/10 opacity-0 transition-[color,opacity] group-hover:opacity-100 group-focus-within:opacity-100 hover:text-amber-400 focus-visible:opacity-100"
+                              title="Buka detail workflow"
+                            >
+                              <ArrowUpRight className="h-3.5 w-3.5" />
+                            </Link>
                             {row.countdownUsageCount > 0 && (
                               <span className="shrink-0 border border-amber-500/20 px-1.5 py-0.5 text-[8px] font-mono text-amber-400/60">
                                 {row.countdownUsageCount}cd
@@ -800,13 +808,20 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
 
                     {/* Child part rows */}
                     {expandedPanelIds.has(String(row.id)) && row.children.map((child) => (
-                      <tr key={child.id} className="border-b border-white/[0.025] bg-[#0a0a0c]/30 transition-colors hover:bg-white/[0.01]">
+                      <tr key={child.id} className="group border-b border-white/[0.025] bg-[#0a0a0c]/30 transition-colors hover:bg-white/[0.01]">
                         <td className="align-middle px-4 py-1 text-[9px] font-mono text-white/15">{row.category ?? ""}</td>
                         <td className="align-middle px-4 py-1 text-[9px] font-mono text-white/15">{row.section}</td>
                         <td className="px-4 py-1 align-middle">
                           <div className="flex items-center gap-2" style={{ paddingLeft: "20px" }}>
                             <span className="text-white/15 text-[9px] shrink-0">└</span>
                             <span className="text-[10px] font-mono text-white/50 truncate">{child.name}</span>
+                            <Link
+                              href={buildPanelDetailHref(unitId, child.id)}
+                              className="shrink-0 text-white/10 opacity-0 transition-[color,opacity] group-hover:opacity-100 group-focus-within:opacity-100 hover:text-amber-400 focus-visible:opacity-100"
+                              title="Buka detail workflow"
+                            >
+                              <ArrowUpRight className="h-3 w-3" />
+                            </Link>
                             {child.countdownUsageCount > 0 && (
                               <span className="shrink-0 border border-amber-500/15 px-1 py-0.5 text-[8px] font-mono text-amber-400/40">
                                 {child.countdownUsageCount}cd

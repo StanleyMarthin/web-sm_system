@@ -5,7 +5,7 @@
  * User memilih satu atau beberapa unit yang mau dikejar minggu ini.
  */
 
-import { Search, AlertTriangle, Clock, CheckSquare, Square } from "lucide-react";
+import { Search, AlertTriangle, CheckSquare, Square } from "lucide-react";
 import { useState } from "react";
 import { EmptyRow } from "@/shared/ui/compact";
 import type { RiskLevel } from "@/modules/planning/helpers/planning-calculations";
@@ -17,10 +17,8 @@ export interface UnitPriorityItem {
   customerName: string | null;
   progressPercent: number;
   riskLevel: RiskLevel;
-  remainingJobCount: number;
   remainingHours: number;
   targetDeliveryDate: string | null;
-  status: string;
 }
 
 interface UnitPriorityStepProps {

@@ -9,19 +9,6 @@ export type RiskLevel = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
 
 export type PlanningRecommendation = "SPK" | "SPK_WITH_SPL" | "HOLD" | "REVISE_TARGET";
 
-export interface CapacityInput {
-  normalCapacityHours: number;
-  absenceHours: number;
-  scheduledHours: number;
-}
-
-export interface CapacityResult {
-  normalCapacityHours: number;
-  absenceHours: number;
-  scheduledHours: number;
-  availableCapacityHours: number;
-}
-
 export interface SafeFinishInput {
   /** Jam hasil engine, bukan estimasi mentah/fallback. */
   correctedHours: number;
@@ -47,22 +34,6 @@ export interface SafeFinishResult {
 }
 
 const DAY_NAMES_ID = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
-
-/**
- * Hitung kapasitas real divisi.
- */
-export function calculateCapacity(input: CapacityInput): CapacityResult {
-  const available = Math.max(
-    0,
-    input.normalCapacityHours - input.absenceHours - input.scheduledHours,
-  );
-  return {
-    normalCapacityHours: input.normalCapacityHours,
-    absenceHours: input.absenceHours,
-    scheduledHours: input.scheduledHours,
-    availableCapacityHours: Number(available.toFixed(2)),
-  };
-}
 
 /**
  * Hitung kebutuhan jam lembur (SPL).
@@ -178,12 +149,4 @@ export function formatCapacityStatusLabel(
   if (ratio <= 0.85) return "Aman";
   if (ratio <= 1.0) return "Hampir Penuh";
   return "Overload";
-}
-
-/**
- * Format jam dalam bentuk ringkas: "80 jam" atau "80.5 jam"
- */
-export function formatHoursShort(hours: number): string {
-  const rounded = Number(hours.toFixed(1));
-  return `${rounded} jam`;
 }

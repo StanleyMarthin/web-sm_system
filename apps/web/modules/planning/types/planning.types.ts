@@ -81,7 +81,6 @@ export interface PlanningCapacitySnapshot {
   divisionName: string;
   periodStart: string;
   periodEnd: string;
-  totalMembers: number;
   activeMembers: number;
   absentMembers: number;
   normalCapacityHours: number;
@@ -181,70 +180,4 @@ export interface BomPlanningSnapshot {
   blockedHours: number;
   readyHours: number;
   earliestAvailableDate: Date | null;
-}
-
-export interface MonteCarloConfig {
-  iterations: number;
-  seed?: number;
-}
-
-export interface MonteCarloResult {
-  p50Date: Date;
-  p80Date: Date;
-  p95Date: Date;
-  meanDays: number;
-  stdDev: number;
-  histogram: { bucket: number; frequency: number }[];
-  ranAt: Date;
-}
-
-export interface UtilizationCalibration {
-  divisionId: string;
-  observedPeriods: number;
-  avgActualUtilization: number;
-  suggestedSafeUtilization: number;
-  currentSafeUtilization: number;
-  delta: number;
-  recommendation: "increase" | "decrease" | "keep";
-  lastCalibratedAt: Date;
-}
-
-export interface HistoricalFactor {
-  divisionId: string;
-  jobTypeId: string;
-  sampleSize: number;
-  avgEstimatedHours: number;
-  avgActualHours: number;
-  calibratedFactor: number;
-  defaultFactor: number;
-  confidence: "low" | "medium" | "high";
-  lastCalibratedAt: Date;
-}
-
-export interface WarrantyRatePrediction {
-  divisionId: string;
-  historicalReturnRate: number;
-  avgReworkHours: number;
-  predictedLoadNextPeriod: number;
-  confidence: "low" | "medium" | "high";
-}
-
-export interface PriorityInput {
-  unitId: string;
-  deadlineDaysRemaining: number;
-  deliveryRiskScore: number;
-  blockerCount: number;
-  lockedPanelCount: number;
-  remainingHours: number;
-  incomeMarker: number;
-  historicalDelayRate?: number;
-  customerSlaLevel?: number;
-}
-
-export interface PriorityResult {
-  unitId: string;
-  score: number;
-  rank: 1 | 2 | 3;
-  dominantFactor: string;
-  scoreBreakdown: Record<string, number>;
 }

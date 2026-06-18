@@ -35,6 +35,12 @@ interface SmartDataGridProps {
   state: GridQueryState;
   searchPlaceholder?: string;
   searchMinLength?: number;
+  searchSuggestionFields?: string[];
+  searchSuggestionFormatter?: (row: SmartDataGridRow) => {
+    value: string;
+    title: string;
+    meta?: string | null;
+  } | null;
   filters?: SmartDataGridFilterDefinition[];
   sortOptions?: SmartDataGridSortOption[];
   savedViews?: SmartDataGridSavedView[];
@@ -161,6 +167,8 @@ export function SmartDataGrid({
   title, description, columns, rows, meta, state,
   searchPlaceholder = "Cari data...",
   searchMinLength = 0,
+  searchSuggestionFields = [],
+  searchSuggestionFormatter,
   filters = [], sortOptions = [], savedViews = [],
   exportHref, bulkInsert, onBulkSubmit,
   isBulkSubmitting = false, bulkSubmitLabel = "Simpan Bulk",
@@ -183,7 +191,75 @@ export function SmartDataGrid({
   const [bulkModeOpen, setBulkModeOpen] = useState(false);
   const [bulkInput, setBulkInput] = useState("");
   const [showFilterRow, setShowFilterRow] = useState(false);
+  const [searchInput, setSearchInput] = useState(state.search);
+  const [searchSuggestionsOpen, setSearchSuggestionsOpen] = useState(false);
+  const [activeSearchSuggestionIndex, setActiveSearchSuggestionIndex] = useState(0);
   const deferredBulkInput = useDeferredValue(bulkInput);
+
+  useEffect(() => {
+    setSearchInput(state.search);
+  }, [state.search]);
+
+  useEffect(() => {
+    const nextSearch = searchInput.trim();
+    if (nextSearch === state.search) {
+      return;
+    }
+
+    if (nextSearch.length === 0) {
+      const timeoutId = setTimeout(() => {
+        gridState.setSearch("");
+      }, 200);
+      return () => clearTimeout(timeoutId);
+    }
+
+    if (nextSearch.length < searchMinLength) {
+      return;
+    }
+
+    const timeoutId = setTimeout(() => {
+      gridState.setSearch(nextSearch);
+    }, 250);
+
+    return () => clearTimeout(timeoutId);
+  }, [gridState, searchInput, searchMinLength, state.search]);
+
+  const normalizedSearchInput = searchInput.trim().toLowerCase();
+  const searchSuggestions =
+    normalizedSearchInput.length >= Math.max(1, searchMinLength)
+      ? rows.flatMap((row) => {
+        const matchesSearch = searchSuggestionFields.some((field) => {
+          const rawValue = row[field];
+          if (rawValue === null || rawValue === undefined) {
+            return false;
+          }
+          return String(rawValue).trim().toLowerCase().includes(normalizedSearchInput);
+        });
+
+        if (!matchesSearch) {
+          return [];
+        }
+
+        if (searchSuggestionFormatter) {
+          const formatted = searchSuggestionFormatter(row);
+          return formatted ? [formatted] : [];
+        }
+
+        const primaryField = searchSuggestionFields[0];
+        const primaryValue = primaryField ? row[primaryField] : null;
+        if (primaryValue === null || primaryValue === undefined) {
+          return [];
+        }
+        const text = String(primaryValue).trim();
+        return text
+          ? [{ value: text, title: text, meta: null }]
+          : [];
+      }).filter((item, index, array) => array.findIndex((entry) => entry.value === item.value) === index).slice(0, 8)
+      : [];
+
+  useEffect(() => {
+    setActiveSearchSuggestionIndex(0);
+  }, [normalizedSearchInput, searchSuggestions.length]);
 
   const bulkValidation =
     bulkInsert && deferredBulkInput
@@ -241,20 +317,95 @@ export function SmartDataGrid({
           <form className="relative"
             onSubmit={(e) => {
               e.preventDefault();
-              const fd = new FormData(e.currentTarget);
-              const kw = fd.get("search");
-              const nextSearch = typeof kw === "string" ? kw.trim() : "";
+              const nextSearch = searchInput.trim();
               if (nextSearch && nextSearch.length < searchMinLength) {
                 return;
               }
+              setSearchSuggestionsOpen(false);
               gridState.setSearch(nextSearch);
             }}
           >
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400 dark:text-white/35" />
-            <input key={state.search} name="search" defaultValue={state.search}
+            <input
+              name="search"
+              value={searchInput}
+              onChange={(event) => setSearchInput(event.target.value)}
+              onFocus={() => {
+                if (searchSuggestions.length > 0) {
+                  setSearchSuggestionsOpen(true);
+                }
+              }}
+              onBlur={() => {
+                window.setTimeout(() => setSearchSuggestionsOpen(false), 120);
+              }}
+              onKeyDown={(event) => {
+                if (!searchSuggestionsOpen || searchSuggestions.length === 0) {
+                  if (event.key === "ArrowDown" && searchSuggestions.length > 0) {
+                    event.preventDefault();
+                    setSearchSuggestionsOpen(true);
+                    setActiveSearchSuggestionIndex(0);
+                  }
+                  return;
+                }
+
+                if (event.key === "ArrowDown") {
+                  event.preventDefault();
+                  setActiveSearchSuggestionIndex((current) => (current + 1) % searchSuggestions.length);
+                  return;
+                }
+
+                if (event.key === "ArrowUp") {
+                  event.preventDefault();
+                  setActiveSearchSuggestionIndex((current) => (current - 1 + searchSuggestions.length) % searchSuggestions.length);
+                  return;
+                }
+
+                if (event.key === "Escape") {
+                  setSearchSuggestionsOpen(false);
+                  return;
+                }
+
+                if (event.key === "Enter") {
+                  const activeSuggestion = searchSuggestions[activeSearchSuggestionIndex];
+                  if (activeSuggestion) {
+                    event.preventDefault();
+                    setSearchInput(activeSuggestion.value);
+                    setSearchSuggestionsOpen(false);
+                    gridState.setSearch(activeSuggestion.value);
+                  }
+                }
+              }}
               placeholder={searchPlaceholder}
               className={`${inputCls} w-64 pl-8 pr-3`}
             />
+            {searchSuggestionsOpen && searchSuggestions.length > 0 ? (
+              <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-40 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg dark:border-white/[0.08] dark:bg-[#0d0d10]">
+                {searchSuggestions.map((suggestion, index) => (
+                  <button
+                    key={`${suggestion.value}-${suggestion.title}`}
+                    type="button"
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                      setSearchInput(suggestion.value);
+                      setSearchSuggestionsOpen(false);
+                      gridState.setSearch(suggestion.value);
+                    }}
+                    onMouseEnter={() => setActiveSearchSuggestionIndex(index)}
+                    className={[
+                      "flex w-full flex-col items-start gap-0.5 border-b border-gray-100 px-3 py-2 text-left transition-colors last:border-b-0 dark:border-white/[0.06]",
+                      activeSearchSuggestionIndex === index
+                        ? "bg-amber-50 dark:bg-amber-500/[0.08]"
+                        : "hover:bg-amber-50 dark:hover:bg-amber-500/[0.08]",
+                    ].join(" ")}
+                  >
+                    <span className="text-[12px] font-medium text-gray-900 dark:text-white/85">{suggestion.title}</span>
+                    {suggestion.meta ? (
+                      <span className="text-[10px] font-mono text-gray-500 dark:text-white/40">{suggestion.meta}</span>
+                    ) : null}
+                  </button>
+                ))}
+              </div>
+            ) : null}
           </form>
 
           <button

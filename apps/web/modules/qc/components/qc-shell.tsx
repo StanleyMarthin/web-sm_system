@@ -472,6 +472,7 @@ export function QcShell({
           </div>
 
           <SmartDataGrid
+        viewportClassName="max-h-[calc(100svh-260px)]"
             title={
               activeTab === "ready"
                 ? "Siap QC"

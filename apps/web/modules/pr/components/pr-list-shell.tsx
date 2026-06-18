@@ -659,6 +659,7 @@ export function PrListShell({
       </section>
 
       <SmartDataGrid
+        viewportClassName="max-h-[calc(100svh-260px)]"
         title="PR List"
         description="Server-side SmartDataGrid untuk monitoring header PR lintas approval, hunting, dan receiving."
         columns={columns}

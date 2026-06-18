@@ -322,6 +322,7 @@ export function SpkListShell({
         </div>
 
         <SmartDataGrid
+        viewportClassName="max-h-[calc(100svh-260px)]"
           title="Daftar SPK"
           description="Buka detail untuk melihat rekomendasi jam kerja, menerima target, lalu memulai SPK."
           columns={columns}

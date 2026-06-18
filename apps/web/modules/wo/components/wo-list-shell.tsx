@@ -630,6 +630,7 @@ export function WoListShell({
       </section>
 
       <SmartDataGrid
+        viewportClassName="max-h-[calc(100svh-260px)]"
         title="WO Register"
         description="Server-side register untuk WO lintas divisi, approval status, aging, dan linked countdown."
         columns={columns}

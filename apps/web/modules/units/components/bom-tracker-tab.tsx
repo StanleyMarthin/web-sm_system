@@ -1042,17 +1042,19 @@ function NodeCard({
           </>
         )}
         {detailKey ? (
-          <div
-            className="mt-2 flex cursor-pointer justify-end transition-opacity hover:opacity-80"
+          <button
+            type="button"
+            data-node-actions="true"
+            className="mt-2 flex w-full cursor-pointer justify-end opacity-0 transition-opacity group-hover:opacity-100 hover:opacity-80"
+            onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => {
               e.stopPropagation();
-              if (suppressClickRef.current) return;
               onNavigateToDetail(node);
             }}
             title="Buka detail workflow"
           >
             <ArrowUpRight className="h-3.5 w-3.5 text-white/35" />
-          </div>
+          </button>
         ) : null}
       </button>
       <span

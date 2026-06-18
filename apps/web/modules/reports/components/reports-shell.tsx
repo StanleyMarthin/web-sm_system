@@ -210,6 +210,7 @@ export function ReportsShell({
       </section>
 
       <SmartDataGrid
+        viewportClassName="max-h-[calc(100svh-260px)]"
         title={definition.title}
         description={definition.description}
         columns={mapColumns(definition.columns)}

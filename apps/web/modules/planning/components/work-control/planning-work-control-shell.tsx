@@ -121,7 +121,6 @@ export function PlanningWorkControlShell({
   const [warrantyInputByDivision, setWarrantyInputByDivision] = useState<Record<string, number>>({});
   const [labourOverrideByUnit, setLabourOverrideByUnit] = useState<Record<string, {
     billableHours: number;
-    nonBillableHours: number;
     warrantyHours: number;
   }>>({});
   const [recalculationLogs, setRecalculationLogs] = useState<RecalculationLog[]>([]);
@@ -236,7 +235,6 @@ export function PlanningWorkControlShell({
         customerName: unit.customerName,
         remainingHours: unit.remainingHours,
         riskLevel: unit.riskLevel,
-        targetDeliveryDate: unit.targetDeliveryDate,
       },
       unitBomById[unit.carId] ?? null,
       assessmentOverrides[unit.carId],
@@ -584,7 +582,6 @@ export function PlanningWorkControlShell({
       ...current,
       [input.unitId]: {
         billableHours: input.billableHours,
-        nonBillableHours: input.nonBillableHours,
         warrantyHours: input.warrantyHours,
       },
     }));

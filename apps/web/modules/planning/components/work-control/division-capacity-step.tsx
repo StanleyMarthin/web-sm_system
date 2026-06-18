@@ -16,7 +16,6 @@ import {
 export interface DivisionCapacityData {
   divisionId: number;
   divisionName: string;
-  totalMembers: number;
   activeMembers: number;
   absentMembers: number;
   normalCapacityHours: number;
@@ -201,7 +200,6 @@ function DivisionCapacityCard({
               <div className="space-y-1">
                 {division.absentMemberDetails.map((m, i) => (
                   <div
-                    // eslint-disable-next-line react/no-array-index-key
                     key={i}
                     className="flex items-center justify-between text-[11px]"
                   >

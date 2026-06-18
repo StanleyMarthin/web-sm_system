@@ -397,6 +397,7 @@ export function MonitoringShell({
 
       {/* ── Grid ── */}
       <SmartDataGrid
+        viewportClassName="max-h-[calc(100svh-260px)]"
         title={title}
         description=""
         rows={rows} columns={columns} meta={meta} state={state}
