@@ -1,10 +1,6 @@
 "use client";
 
-import type {
-  CreateUnitPanelRequest,
-  UnitPanelRecord,
-  UpdateUnitPanelRequest,
-} from "@smsystem/contracts/unit-panel";
+import type { UnitPanelRecord } from "@smsystem/contracts/unit-panel";
 import { ArrowUpRight, Boxes, ChevronDown, ChevronRight, Plus, RefreshCw, Search } from "lucide-react";
 import Link from "next/link";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
@@ -14,6 +10,18 @@ import {
   fetchUnitPanels,
   updateUnitPanel,
 } from "@/shared/api/units";
+import {
+  buildPayload,
+  CONDITION_LABEL,
+  emptyForm,
+  formForChild,
+  formFromRecord,
+  LOCATION_LABEL,
+  type PanelFormState,
+  STOCK_STATUS_LABEL,
+  stockStatusForLocation,
+} from "@/modules/units/helpers/unit-panel-form";
+import { SearchableField, type SearchOption } from "./shared/SearchableField";
 
 const PAGE_SIZE = 20;
 const ICON_STROKE_WIDTH = 2.5;
@@ -23,218 +31,10 @@ type FormMode =
   | { type: "edit"; record: UnitPanelRecord }
   | null;
 
-interface PanelFormState {
-  section: string;
-  name: string;
-  category: string;
-  sortOrder: string;
-  qty: string;
-  defaultLocationType: "GUDANG" | "WORKSHOP" | "UNIT";
-  defaultStockStatus: "IN_STORAGE" | "RETRIEVED" | "INSTALLED" | "LOST";
-  defaultConditionType: "BARU" | "RESTORE" | "BEKAS";
-  isActive: boolean;
-  nodeType: "PANEL" | "PART";
-  nodeTypeName: string;
-  parentId: string;
-  parentName: string;
-}
-
 interface MasterPanelManagerProps {
   unitId: string;
   canManage: boolean;
   initialRows?: UnitPanelRecord[];
-}
-
-interface SearchOption {
-  value: string;
-  label?: string;
-}
-
-interface SearchableFieldProps {
-  value: string;
-  options: SearchOption[];
-  onChange: (value: string) => void;
-  onSelect?: (option: SearchOption) => void;
-  placeholder?: string;
-  disabled?: boolean;
-}
-
-const LOCATION_LABEL: Record<PanelFormState["defaultLocationType"], string> = {
-  UNIT: "UNIT",
-  WORKSHOP: "WORKSHOP",
-  GUDANG: "GUDANG",
-};
-
-const STOCK_STATUS_LABEL: Record<PanelFormState["defaultStockStatus"], string> = {
-  INSTALLED: "Terpasang",
-  IN_STORAGE: "Disimpan",
-  RETRIEVED: "Dilepas",
-  LOST: "Hilang",
-};
-
-const CONDITION_LABEL: Record<PanelFormState["defaultConditionType"], string> = {
-  BEKAS: "Bekas",
-  RESTORE: "Restore",
-  BARU: "Baru",
-};
-
-function stockStatusForLocation(
-  locationType: PanelFormState["defaultLocationType"],
-): PanelFormState["defaultStockStatus"] {
-  if (locationType === "UNIT") return "INSTALLED";
-  if (locationType === "GUDANG") return "IN_STORAGE";
-  return "RETRIEVED";
-}
-
-function normalizeInventoryForm(form: PanelFormState): PanelFormState {
-  if (form.defaultLocationType !== "UNIT") return form;
-  if (form.defaultStockStatus === "INSTALLED") return form;
-  return { ...form, defaultStockStatus: "INSTALLED" };
-}
-
-function SearchableField({
-  value,
-  options,
-  onChange,
-  onSelect,
-  placeholder,
-  disabled = false,
-}: SearchableFieldProps) {
-  const [isOpen, setIsOpen] = useState(false);
-  const normalizedValue = value.trim().toLowerCase();
-  const filteredOptions = options.filter(option => {
-    const searchable = `${option.value} ${option.label ?? ""}`.toLowerCase();
-    return !normalizedValue || searchable.includes(normalizedValue);
-  });
-
-  function chooseOption(option: SearchOption) {
-    onChange(option.value);
-    onSelect?.(option);
-    setIsOpen(false);
-  }
-
-  return (
-    <div className="relative">
-      <div className="flex h-8 items-center border border-border bg-card transition-colors focus-within:border-primary/40">
-        <input
-          value={value}
-          disabled={disabled}
-          onFocus={() => setIsOpen(true)}
-          onBlur={() => window.setTimeout(() => setIsOpen(false), 120)}
-          onChange={(event) => {
-            onChange(event.target.value);
-            setIsOpen(true);
-          }}
-          placeholder={placeholder}
-          className="h-full min-w-0 flex-1 bg-transparent px-3 text-[15px] font-mono text-foreground outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-40"
-        />
-        <button
-          type="button"
-          disabled={disabled}
-          onMouseDown={(event) => event.preventDefault()}
-          onClick={() => setIsOpen(open => !open)}
-          className="flex h-full w-8 shrink-0 items-center justify-center text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-35"
-        >
-          <ChevronDown className="h-3 w-3" strokeWidth={ICON_STROKE_WIDTH} />
-        </button>
-      </div>
-
-      {isOpen && !disabled && (
-        <div className="absolute left-0 right-0 top-[calc(100%+4px)] z-30 max-h-44 overflow-auto border border-border bg-card py-1 shadow-xl shadow-black/10 dark:shadow-black/40">
-          {filteredOptions.length > 0 ? (
-            filteredOptions.map(option => (
-              <button
-                key={`${option.value}:${option.label ?? ""}`}
-                type="button"
-                onMouseDown={(event) => {
-                  event.preventDefault();
-                  chooseOption(option);
-                }}
-                className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-[15px] font-mono text-foreground transition-colors hover:bg-primary/[0.07] hover:text-app-accent-ink"
-              >
-                <span className="min-w-0 truncate">{option.value}</span>
-                {option.label && <span className="shrink-0 text-[15px] uppercase tracking-[0.12em] text-muted-foreground">{option.label}</span>}
-              </button>
-            ))
-          ) : (
-            <div className="px-3 py-2 text-[14px] font-mono text-muted-foreground">
-              Tidak ada data cocok. Tekan Simpan untuk memakai teks ini.
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function emptyForm(): PanelFormState {
-  return {
-    section: "",
-    name: "",
-    category: "",
-    sortOrder: "0",
-    qty: "1",
-    defaultLocationType: "UNIT",
-    defaultStockStatus: "INSTALLED",
-    defaultConditionType: "BEKAS",
-    isActive: true,
-    nodeType: "PANEL",
-    nodeTypeName: "Panel",
-    parentId: "",
-    parentName: "",
-  };
-}
-
-function formFromRecord(record: UnitPanelRecord): PanelFormState {
-  return normalizeInventoryForm({
-    section: record.section,
-    name: record.name,
-    category: record.category ?? "",
-    sortOrder: String(record.sortOrder),
-    qty: String(record.qty ?? 1),
-    defaultLocationType: record.defaultLocationType,
-    defaultStockStatus: record.defaultStockStatus,
-    defaultConditionType: record.defaultConditionType,
-    isActive: record.isActive,
-    nodeType: record.nodeType,
-    nodeTypeName: record.nodeType === "PART" ? "Part" : "Panel",
-    parentId: record.parentId === null ? "" : String(record.parentId),
-    parentName: "",
-  });
-}
-
-function formForChild(parent: UnitPanelRecord): PanelFormState {
-  return normalizeInventoryForm({
-    section: parent.section,
-    name: "",
-    category: parent.category ?? "",
-    sortOrder: String(parent.children.length + 1),
-    qty: "1",
-    defaultLocationType: parent.defaultLocationType,
-    defaultStockStatus: parent.defaultStockStatus,
-    defaultConditionType: parent.defaultConditionType,
-    isActive: true,
-    nodeType: "PART",
-    nodeTypeName: "Part",
-    parentId: String(parent.id),
-    parentName: parent.name,
-  });
-}
-
-function buildPayload(form: PanelFormState): Omit<CreateUnitPanelRequest, "parentId"> & UpdateUnitPanelRequest {
-  const normalizedForm = normalizeInventoryForm(form);
-  return {
-    parentId: form.nodeType === "PART" ? (Number.parseInt(form.parentId, 10) || null) : null,
-    section: normalizedForm.section.trim(),
-    name: normalizedForm.name.trim(),
-    category: normalizedForm.category.trim() || null,
-    sortOrder: Number.parseInt(normalizedForm.sortOrder || "0", 10) || 0,
-    qty: Number(normalizedForm.qty) > 0 ? Number(normalizedForm.qty) : 1,
-    defaultLocationType: normalizedForm.defaultLocationType,
-    defaultStockStatus: normalizedForm.defaultStockStatus,
-    defaultConditionType: normalizedForm.defaultConditionType,
-    isActive: normalizedForm.isActive,
-  };
 }
 
 function buildPanelDetailHref(unitId: string, recordId: number): string {
@@ -498,7 +298,7 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
         : form;
 
     const payload = {
-      ...buildPayload(effectiveForm),
+      ...buildPayload(effectiveForm, { includeParentId: true }),
       sortOrder:
         mode.type === "edit"
           ? mode.record.sortOrder
@@ -998,6 +798,10 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
                     options={categoryOptions}
                     onChange={selectCategory}
                     placeholder="Pilih kategori"
+                    heightClassName="h-8"
+                    menuZClassName="z-30"
+                    iconStrokeWidth={ICON_STROKE_WIDTH}
+                    closeOnInputBlurDelay
                   />
                 </label>
               )}
@@ -1018,6 +822,10 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
                     onChange={selectSection}
                     placeholder={form.category ? "Pilih section" : "Pilih kategori dulu"}
                     disabled={mode.type === "create" && mode.sectionMode === "existing" && !form.category}
+                    heightClassName="h-8"
+                    menuZClassName="z-30"
+                    iconStrokeWidth={ICON_STROKE_WIDTH}
+                    closeOnInputBlurDelay
                   />
                 )}
               </label>
@@ -1031,6 +839,10 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
                     onChange={selectParentPanel}
                     placeholder={form.section ? "Pilih panel parent" : "Pilih section dulu"}
                     disabled={!form.section}
+                    heightClassName="h-8"
+                    menuZClassName="z-30"
+                    iconStrokeWidth={ICON_STROKE_WIDTH}
+                    closeOnInputBlurDelay
                   />
                 </label>
               )}
@@ -1065,6 +877,10 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
                     options={categoryOptions}
                     onChange={(category) => setForm(c => ({ ...c, category }))}
                     placeholder="Pilih kategori"
+                    heightClassName="h-8"
+                    menuZClassName="z-30"
+                    iconStrokeWidth={ICON_STROKE_WIDTH}
+                    closeOnInputBlurDelay
                   />
                 </label>
               ) : null}

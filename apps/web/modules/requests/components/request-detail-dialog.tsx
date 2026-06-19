@@ -251,13 +251,13 @@ export function RequestDetailDialog({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-[1px] print:static print:block print:bg-transparent print:p-0 print:backdrop-blur-none">
       {/* Printable Area - Rendered off-screen normally, styled for high-contrast B&W print layout */}
-      <div id="printable-voucher" className="hidden print:block bg-white text-primary-foreground font-sans w-full">
+      <div id="printable-voucher" className="hidden print:block bg-card text-primary-foreground font-sans w-full">
         <div className="p-6 max-w-[210mm] mx-auto flex flex-col">
 
           {/* ── HEADER ── */}
           <div className="flex items-start justify-between border-b-2 border-black pb-4 mb-5">
             {/* Kiri: Info dokumen */}
-            <div className="space-y-1 text-[11px]">
+            <div className="space-y-1 text-[15px]">
               <div className="flex gap-2">
                 <span className="w-32 font-bold uppercase text-muted-foreground">Car Type</span>
                 <span className="font-semibold">: {unitName}</span>
@@ -305,8 +305,8 @@ export function RequestDetailDialog({
                 <img src="/favicon.ico" alt="SM Logo" className="h-14 w-14 object-contain" />
                 <div>
                   <p className="text-[18px] font-black uppercase tracking-tight leading-tight">STANLEY MARTHIN</p>
-                  <p className="text-[13px] font-bold uppercase tracking-wide text-muted-foreground">RESTORATION GARAGE</p>
-                  <p className="text-[9px] text-muted-foreground mt-0.5">JL. Padasaluyu Utara II No. 8 Bandung 40154</p>
+                  <p className="text-[15px] font-bold uppercase tracking-wide text-muted-foreground">RESTORATION GARAGE</p>
+                  <p className="text-[15px] text-muted-foreground mt-0.5">JL. Padasaluyu Utara II No. 8 Bandung 40154</p>
                 </div>
               </div>
               <div className="border-t border-border pt-2">
@@ -314,13 +314,13 @@ export function RequestDetailDialog({
                   {type === "WO" ? "WORK ORDER" : type === "PR" ? "PURCHASE REQUEST" : "VENDOR WORK ORDER"}
                 </p>
                 {type === "PR" && (
-                  <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground mt-0.5">
+                  <p className="text-[15px] font-bold uppercase tracking-widest text-muted-foreground mt-0.5">
                     {printMode === "pr-handover" ? "SERAH TERIMA BARANG" : "BUKTI PENGAJUAN"}
                   </p>
                 )}
-                <p className="font-mono text-[13px] font-bold tracking-wider mt-0.5">{title}</p>
-                <p className="text-[9px] text-muted-foreground mt-0.5">Tanggal Cetak: {new Date().toLocaleString("id-ID")}</p>
-                <p className="text-[9px] text-muted-foreground mt-0.5">Dicetak oleh: {printUserName}</p>
+                <p className="font-mono text-[15px] font-bold tracking-wider mt-0.5">{title}</p>
+                <p className="text-[15px] text-muted-foreground mt-0.5">Tanggal Cetak: {new Date().toLocaleString("id-ID")}</p>
+                <p className="text-[15px] text-muted-foreground mt-0.5">Dicetak oleh: {printUserName}</p>
               </div>
             </div>
           </div>
@@ -646,7 +646,7 @@ export function RequestDetailDialog({
           )}
 
           {/* ── FOOTER ── */}
-          <div className="mt-4 border-t border-border pt-2 flex items-center justify-between text-[8px] text-muted-foreground">
+          <div className="mt-4 border-t border-border pt-2 flex items-center justify-between text-[14px] text-muted-foreground">
             <span>Stanley Marthin Restoration Garage · JL. Padasaluyu Utara II No. 8 Bandung 40154</span>
             <span>Dicetak oleh: {printUserName} · {new Date().toLocaleString("id-ID")}</span>
           </div>
@@ -660,21 +660,21 @@ export function RequestDetailDialog({
         <div className="flex items-start justify-between border-b border-border pb-3">
           <div>
             <div className="flex items-center gap-2">
-              <span className={`border px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] ${type === "WO" ? "border-primary/30 text-app-accent-ink" :
+              <span className={`border px-2 py-0.5 font-mono text-[14px] uppercase tracking-[0.12em] ${type === "WO" ? "border-primary/30 text-app-accent-ink" :
                   type === "PR" ? "border-info/30 text-info" : "border-info/30 text-info"
                 }`}>
                 {type === "WO" ? "Work Order" : type === "PR" ? "Purchase Request" : "Vendor WO"}
               </span>
               {woRecord?.isPriority && (
-                <span className="border border-destructive/30 px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-destructive">
+                <span className="border border-destructive/30 px-2 py-0.5 font-mono text-[14px] uppercase tracking-[0.12em] text-destructive">
                   PRIORITAS TINGGI
                 </span>
               )}
             </div>
-            <h2 className="text-[13px] font-mono text-foreground mt-1.5 flex items-center gap-3">
+            <h2 className="text-[15px] font-mono text-foreground mt-1.5 flex items-center gap-3">
               {title}
             </h2>
-            <p className="text-[11px] font-mono text-muted-foreground mt-1">
+            <p className="text-[15px] font-mono text-muted-foreground mt-1">
               Unit: <span className="text-foreground">{unitName}</span> · Pelanggan: <span className="text-foreground">{customerName}</span>
             </p>
           </div>
@@ -702,14 +702,14 @@ export function RequestDetailDialog({
         <div className="flex border-b border-border mt-5">
           <button
             onClick={() => setActiveTab("detail")}
-            className={`py-2.5 px-4 text-[10px] font-mono uppercase tracking-[0.12em] transition-colors border-b-2 -mb-[1px] ${activeTab === "detail" ? "border-primary text-app-accent-ink" : "border-transparent text-muted-foreground hover:text-foreground"
+            className={`py-2.5 px-4 text-[14px] font-mono uppercase tracking-[0.12em] transition-colors border-b-2 -mb-[1px] ${activeTab === "detail" ? "border-primary text-app-accent-ink" : "border-transparent text-muted-foreground hover:text-foreground"
               }`}
           >
             Rincian & Aksi
           </button>
           <button
             onClick={() => setActiveTab("timeline")}
-            className={`py-2.5 px-4 text-[10px] font-mono uppercase tracking-[0.12em] transition-colors border-b-2 -mb-[1px] ${activeTab === "timeline" ? "border-primary text-app-accent-ink" : "border-transparent text-muted-foreground hover:text-foreground"
+            className={`py-2.5 px-4 text-[14px] font-mono uppercase tracking-[0.12em] transition-colors border-b-2 -mb-[1px] ${activeTab === "timeline" ? "border-primary text-app-accent-ink" : "border-transparent text-muted-foreground hover:text-foreground"
               }`}
           >
             Pelacakan Sesi
@@ -737,42 +737,42 @@ export function RequestDetailDialog({
               {/* Detail fields layout */}
               <div className="grid grid-cols-2 gap-4 text-xs">
                 <div className="space-y-1 border border-border bg-background p-3">
-                  <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Diajukan Oleh</span>
-                  <p className="text-[11px] font-mono text-foreground">
+                  <span className="text-[14px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Diajukan Oleh</span>
+                  <p className="text-[15px] font-mono text-foreground">
                     {woRecord?.fromDivisionName || prRecord?.requestedByName || vendorRecord?.requestedByName}
                   </p>
                 </div>
                 <div className="space-y-1 border border-border bg-background p-3">
-                  <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Divisi Pemilik</span>
-                  <p className="text-[11px] font-mono text-foreground">
+                  <span className="text-[14px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Divisi Pemilik</span>
+                  <p className="text-[15px] font-mono text-foreground">
                     {woRecord?.fromDivisionName || prRecord?.divisionName || vendorRecord?.divisionName}
                   </p>
                 </div>
                 {woRecord && (
                   <>
                     <div className="space-y-1 border border-border bg-background p-3">
-                      <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Tujuan Divisi</span>
-                      <p className="text-[11px] font-mono text-foreground">{woRecord.toDivisionName}</p>
+                      <span className="text-[14px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Tujuan Divisi</span>
+                      <p className="text-[15px] font-mono text-foreground">{woRecord.toDivisionName}</p>
                     </div>
                     <div className="space-y-1 border border-border bg-background p-3">
-                      <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Panel / Sektor</span>
-                      <p className="text-[11px] font-mono text-foreground">{woRecord.panelName || "-"}</p>
+                      <span className="text-[14px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Panel / Sektor</span>
+                      <p className="text-[15px] font-mono text-foreground">{woRecord.panelName || "-"}</p>
                     </div>
                     <div className="space-y-1 border border-border bg-background p-3 col-span-2">
-                      <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Estimasi Waktu</span>
-                      <p className="text-[11px] font-mono text-foreground">{woRecord.estimatedHours || 0} Jam</p>
+                      <span className="text-[14px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Estimasi Waktu</span>
+                      <p className="text-[15px] font-mono text-foreground">{woRecord.estimatedHours || 0} Jam</p>
                     </div>
                   </>
                 )}
                 {vendorRecord && (
                   <>
                     <div className="space-y-1 border border-border bg-background p-3">
-                      <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Nama Vendor</span>
-                      <p className="text-[11px] font-mono text-foreground">{vendorRecord.vendorName}</p>
+                      <span className="text-[14px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Nama Vendor</span>
+                      <p className="text-[15px] font-mono text-foreground">{vendorRecord.vendorName}</p>
                     </div>
                     <div className="space-y-1 border border-border bg-background p-3">
-                      <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Target Pengembalian</span>
-                      <p className="text-[11px] font-mono text-foreground">{vendorRecord.targetDateReturn || "-"}</p>
+                      <span className="text-[14px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Target Pengembalian</span>
+                      <p className="text-[15px] font-mono text-foreground">{vendorRecord.targetDateReturn || "-"}</p>
                     </div>
                   </>
                 )}
@@ -780,16 +780,16 @@ export function RequestDetailDialog({
 
               {/* Notes */}
               <div className="space-y-2 border border-border bg-background p-4">
-                <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-app-accent-ink">
+                <span className="text-[14px] font-mono uppercase tracking-[0.12em] text-app-accent-ink">
                   {type === "WO" ? "Deskripsi Detail Kerja" : "Catatan Permintaan"}
                 </span>
-                <p className="text-[11px] font-mono text-foreground leading-relaxed">{notes}</p>
+                <p className="text-[15px] font-mono text-foreground leading-relaxed">{notes}</p>
               </div>
 
               {/* PR Items list layout */}
               {type === "PR" && prItems.length > 0 ? (
                 <div className="space-y-2.5">
-                  <span className="text-[10px] uppercase font-bold tracking-wider text-app-accent-ink">
+                  <span className="text-[14px] uppercase font-bold tracking-wider text-app-accent-ink">
                     Daftar Item ({prItems.length})
                   </span>
                   <div className="border border-border rounded-2xl bg-muted overflow-hidden divide-y divide-border">
@@ -813,12 +813,12 @@ export function RequestDetailDialog({
                           )}
                           <div className="min-w-0">
                             <p className="font-semibold text-foreground">{it.itemName}</p>
-                            <p className="text-[10px] text-muted-foreground mt-0.5 truncate max-w-[350px]">{it.description || "-"}</p>
+                            <p className="text-[14px] text-muted-foreground mt-0.5 truncate max-w-[350px]">{it.description || "-"}</p>
                           </div>
                         </div>
                         <div className="text-right">
                           <p className="font-medium text-foreground">{it.qty} {it.uom}</p>
-                          <p className="text-[10px] text-app-accent-ink mt-0.5">Rp {Number(it.estimatedPrice || 0).toLocaleString("id-ID")}</p>
+                          <p className="text-[14px] text-app-accent-ink mt-0.5">Rp {Number(it.estimatedPrice || 0).toLocaleString("id-ID")}</p>
                         </div>
                       </div>
                     ))}
@@ -833,7 +833,7 @@ export function RequestDetailDialog({
               {/* WOV Items list layout */}
               {type === "WOV" && wovItems.length > 0 && (
                 <div className="space-y-2.5">
-                  <span className="text-[10px] uppercase font-bold tracking-wider text-info">
+                  <span className="text-[14px] uppercase font-bold tracking-wider text-info">
                     Daftar Pekerjaan Vendor ({wovItems.length})
                   </span>
                   <div className="border border-border rounded-2xl bg-muted overflow-hidden divide-y divide-border">
@@ -842,12 +842,12 @@ export function RequestDetailDialog({
                         <div className="flex gap-3">
                           <div className="min-w-0">
                             <p className="font-semibold text-foreground">{it.itemName}</p>
-                            <p className="text-[10px] text-muted-foreground mt-0.5 truncate max-w-[350px]">Kondisi Keluar: {it.goodsConditionOut || "-"}</p>
+                            <p className="text-[14px] text-muted-foreground mt-0.5 truncate max-w-[350px]">Kondisi Keluar: {it.goodsConditionOut || "-"}</p>
                           </div>
                         </div>
                         <div className="text-right">
                           <p className="font-medium text-foreground">{it.quantity || 1} {it.uom || "pcs"}</p>
-                          <p className="text-[10px] text-info mt-0.5">Rp {Number(it.estimatedCost || 0).toLocaleString("id-ID")}</p>
+                          <p className="text-[14px] text-info mt-0.5">Rp {Number(it.estimatedCost || 0).toLocaleString("id-ID")}</p>
                         </div>
                       </div>
                     ))}
@@ -860,7 +860,7 @@ export function RequestDetailDialog({
                 <button
                   type="button"
                   onClick={openDetailModule}
-                  className="border border-primary/30 bg-primary/[0.04] px-3 py-1.5 text-[10px] font-mono uppercase tracking-[0.12em] text-app-accent-ink transition-colors"
+                  className="border border-primary/30 bg-primary/[0.04] px-3 py-1.5 text-[14px] font-mono uppercase tracking-[0.12em] text-app-accent-ink transition-colors"
                 >
                   Buka Modul {type}
                 </button>
@@ -872,7 +872,7 @@ export function RequestDetailDialog({
                     onClick={handlePrint}
                     disabled={!canPrint}
                     title={!canPrint ? "Dokumen harus disetujui dulu sebelum bisa dicetak" : "Print dokumen"}
-                    className="border border-border px-3 py-1.5 text-[10px] font-mono uppercase text-muted-foreground hover:text-foreground transition-colors disabled:opacity-20 disabled:cursor-not-allowed"
+                    className="border border-border px-3 py-1.5 text-[14px] font-mono uppercase text-muted-foreground hover:text-foreground transition-colors disabled:opacity-20 disabled:cursor-not-allowed"
                   >
                     Print Cetakan
                   </button>
@@ -884,7 +884,7 @@ export function RequestDetailDialog({
                       onClick={handlePrintPrSubmission}
                       disabled={!canPrint}
                       title={!canPrint ? "Dokumen harus disetujui dulu sebelum bisa dicetak" : "Print bukti pengajuan"}
-                      className="border border-border px-3 py-1.5 text-[10px] font-mono uppercase text-muted-foreground hover:text-foreground transition-colors disabled:opacity-20 disabled:cursor-not-allowed"
+                      className="border border-border px-3 py-1.5 text-[14px] font-mono uppercase text-muted-foreground hover:text-foreground transition-colors disabled:opacity-20 disabled:cursor-not-allowed"
                     >
                       Print Pengajuan
                     </button>
@@ -893,7 +893,7 @@ export function RequestDetailDialog({
                       onClick={handlePrintPrHandover}
                       disabled={!canPrint}
                       title={!canPrint ? "Dokumen harus disetujui dulu sebelum bisa dicetak" : "Print serah terima barang"}
-                      className="border border-border px-3 py-1.5 text-[10px] font-mono uppercase text-muted-foreground hover:text-foreground transition-colors disabled:opacity-20 disabled:cursor-not-allowed"
+                      className="border border-border px-3 py-1.5 text-[14px] font-mono uppercase text-muted-foreground hover:text-foreground transition-colors disabled:opacity-20 disabled:cursor-not-allowed"
                     >
                       Print Serah Terima
                     </button>
@@ -905,16 +905,16 @@ export function RequestDetailDialog({
                   <div className="w-full border border-border bg-background p-3">
                     <div className="grid grid-cols-2 gap-2">
                       <label className="space-y-1">
-                        <span className="block text-[9px] font-mono uppercase tracking-[0.12em] text-muted-foreground">PIC</span>
+                        <span className="block text-[15px] font-mono uppercase tracking-[0.12em] text-muted-foreground">PIC</span>
                         <input
                           value={woApprovePicId}
                           onChange={(event) => setWoApprovePicId(event.target.value)}
                           placeholder="ID karyawan PIC"
-                          className="h-8 w-full border border-border bg-background px-2 text-[11px] font-mono text-foreground outline-none focus:border-primary/40"
+                          className="h-10 w-full border border-border bg-background px-2 text-[15px] font-mono text-foreground outline-none focus:border-primary/40"
                         />
                       </label>
                       <label className="space-y-1">
-                        <span className="block text-[9px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Jam Kerja</span>
+                        <span className="block text-[15px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Jam Kerja</span>
                         <input
                           type="number"
                           min={0.25}
@@ -922,7 +922,7 @@ export function RequestDetailDialog({
                           value={woApproveHours}
                           onChange={(event) => setWoApproveHours(event.target.value)}
                           placeholder="Contoh: 6"
-                          className="h-8 w-full border border-border bg-background px-2 text-[11px] font-mono text-foreground outline-none focus:border-primary/40"
+                          className="h-10 w-full border border-border bg-background px-2 text-[15px] font-mono text-foreground outline-none focus:border-primary/40"
                         />
                       </label>
                     </div>
@@ -930,7 +930,7 @@ export function RequestDetailDialog({
                       value={woApproveNotes}
                       onChange={(event) => setWoApproveNotes(event.target.value)}
                       placeholder="Catatan approval jika ada"
-                      className="mt-2 h-8 w-full border border-border bg-background px-2 text-[11px] font-mono text-foreground outline-none focus:border-primary/40"
+                      className="mt-2 h-10 w-full border border-border bg-background px-2 text-[15px] font-mono text-foreground outline-none focus:border-primary/40"
                     />
                   </div>
                 )}
@@ -940,7 +940,7 @@ export function RequestDetailDialog({
                     value={woApproveNotes}
                     onChange={(event) => setWoApproveNotes(event.target.value)}
                     placeholder="Catatan approval jika ada"
-                    className="h-8 min-w-[220px] border border-border bg-background px-2 text-[11px] font-mono text-foreground outline-none focus:border-primary/40"
+                    className="h-10 min-w-[220px] border border-border bg-background px-2 text-[15px] font-mono text-foreground outline-none focus:border-primary/40"
                   />
                 )}
 
@@ -964,7 +964,7 @@ export function RequestDetailDialog({
                         canApproveWoPm ? "WO disetujui PM dan masuk countdown." : "Approval WO diteruskan.",
                       );
                     }}
-                    className="border border-success/30 bg-success/[0.04] text-success px-3 py-1.5 text-[10px] font-mono uppercase disabled:opacity-30"
+                    className="border border-success/30 bg-success/[0.04] text-success px-3 py-1.5 text-[14px] font-mono uppercase disabled:opacity-30"
                   >
                     {canApproveWoPm ? "Approve PM" : canApproveWoKp ? "Approve KP" : canApproveWoAdvisor ? "Approve Advisor" : "Approve KD"}
                   </button>
@@ -976,7 +976,7 @@ export function RequestDetailDialog({
                     type="button"
                     disabled={pending}
                     onClick={() => handleAction(() => markWoDone(id), "Work order berhasil diselesaikan.")}
-                    className="border border-primary/40 bg-primary/[0.06] text-app-accent-ink px-3 py-1.5 text-[10px] font-mono uppercase disabled:opacity-30"
+                    className="border border-primary/40 bg-primary/[0.06] text-app-accent-ink px-3 py-1.5 text-[14px] font-mono uppercase disabled:opacity-30"
                   >
                     Tandai Selesai
                   </button>
@@ -987,7 +987,7 @@ export function RequestDetailDialog({
                   <button
                     type="button"
                     onClick={() => setShowRejectForm(true)}
-                    className="border border-destructive/20 bg-destructive/[0.04] text-destructive px-3 py-1.5 text-[10px] font-mono uppercase"
+                    className="border border-destructive/20 bg-destructive/[0.04] text-destructive px-3 py-1.5 text-[14px] font-mono uppercase"
                   >
                     Tolak WO
                   </button>
@@ -999,7 +999,7 @@ export function RequestDetailDialog({
                     type="button"
                     disabled={pending}
                     onClick={() => handleAction(() => approvePr(id, { notes: "Approved via requests space" }), "PR disetujui.")}
-                    className="border border-success/30 bg-success/[0.04] text-success px-3 py-1.5 text-[10px] font-mono uppercase disabled:opacity-30"
+                    className="border border-success/30 bg-success/[0.04] text-success px-3 py-1.5 text-[14px] font-mono uppercase disabled:opacity-30"
                   >
                     Approve PR
                   </button>
@@ -1009,7 +1009,7 @@ export function RequestDetailDialog({
                   <button
                     type="button"
                     onClick={openDetailModule}
-                    className="border border-info/30 bg-info/[0.04] text-info px-3 py-1.5 text-[10px] font-mono uppercase disabled:opacity-30"
+                    className="border border-info/30 bg-info/[0.04] text-info px-3 py-1.5 text-[14px] font-mono uppercase disabled:opacity-30"
                   >
                     Lanjutkan Order di PR
                   </button>
@@ -1019,7 +1019,7 @@ export function RequestDetailDialog({
                   <button
                     type="button"
                     onClick={openDetailModule}
-                    className="border border-info/30 bg-info/[0.04] text-info px-3 py-1.5 text-[10px] font-mono uppercase disabled:opacity-30"
+                    className="border border-info/30 bg-info/[0.04] text-info px-3 py-1.5 text-[14px] font-mono uppercase disabled:opacity-30"
                   >
                     Lanjutkan Receive di PR
                   </button>
@@ -1031,7 +1031,7 @@ export function RequestDetailDialog({
                     type="button"
                     disabled={pending}
                     onClick={() => handleAction(() => approveVendor(id, { notes: "Approved via requests space" }), "Vendor WO disetujui.")}
-                    className="border border-success/30 bg-success/[0.04] text-success px-3 py-1.5 text-[10px] font-mono uppercase disabled:opacity-30"
+                    className="border border-success/30 bg-success/[0.04] text-success px-3 py-1.5 text-[14px] font-mono uppercase disabled:opacity-30"
                   >
                     Setujui WOV
                   </button>
@@ -1041,7 +1041,7 @@ export function RequestDetailDialog({
                   <button
                     type="button"
                     onClick={openDetailModule}
-                    className="border border-info/30 bg-info/[0.04] text-info px-3 py-1.5 text-[10px] font-mono uppercase disabled:opacity-30"
+                    className="border border-info/30 bg-info/[0.04] text-info px-3 py-1.5 text-[14px] font-mono uppercase disabled:opacity-30"
                   >
                     Lanjutkan Receive di WOV
                   </button>
@@ -1052,18 +1052,18 @@ export function RequestDetailDialog({
               {/* Sub-form Reject */}
               {showRejectForm && (
                 <div className="mt-4 p-4 border border-border bg-background space-y-3">
-                  <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-destructive">Tulis Alasan Penolakan</span>
+                  <span className="text-[14px] font-mono uppercase tracking-[0.12em] text-destructive">Tulis Alasan Penolakan</span>
                   <textarea
                     value={rejectReason}
                     onChange={(e) => setRejectReason(e.target.value)}
                     placeholder="Contoh: Deskripsi kerja kurang detail / Divisi sedang overload..."
-                    className="w-full min-h-20 border border-border bg-background p-3 text-[11px] font-mono text-foreground outline-none focus:border-primary/40 transition-colors placeholder:text-muted-foreground"
+                    className="w-full min-h-24 border border-border bg-background p-3 text-[15px] font-mono text-foreground outline-none focus:border-primary/40 transition-colors placeholder:text-muted-foreground"
                   />
                   <div className="flex gap-2 justify-end">
                     <button
                       type="button"
                       onClick={() => setShowRejectForm(false)}
-                      className="border border-border px-3 py-1.5 text-[10px] font-mono uppercase text-muted-foreground hover:text-foreground"
+                      className="border border-border px-3 py-1.5 text-[14px] font-mono uppercase text-muted-foreground hover:text-foreground"
                     >
                       Batal
                     </button>
@@ -1071,7 +1071,7 @@ export function RequestDetailDialog({
                       type="button"
                       disabled={pending || !rejectReason.trim()}
                       onClick={() => handleAction(() => rejectWo(id, { reason: rejectReason.trim() }), "Work order ditolak.")}
-                      className="border border-destructive/20 bg-destructive/[0.04] text-destructive px-3 py-1.5 text-[10px] font-mono uppercase disabled:opacity-30"
+                      className="border border-destructive/20 bg-destructive/[0.04] text-destructive px-3 py-1.5 text-[14px] font-mono uppercase disabled:opacity-30"
                     >
                       Tolak Permanen
                     </button>
@@ -1081,18 +1081,18 @@ export function RequestDetailDialog({
             </div>
           ) : (
             <div className="space-y-4">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Riwayat Status</span>
+              <span className="text-[14px] font-bold uppercase tracking-wider text-muted-foreground">Riwayat Status</span>
               <div className="space-y-4 relative pl-4 before:absolute before:left-1 before:top-2 before:bottom-2 before:w-0.5 before:bg-border">
                 <div className="relative">
                   <div className="absolute -left-[18px] top-1.5 h-2 w-2 rounded-full border border-background bg-primary shadow" />
                   <p className="text-xs font-semibold text-foreground">Dokumen Dibuat</p>
-                  <p className="text-[10px] text-muted-foreground mt-0.5">Oleh {woRecord?.picName || prRecord?.requestedByName || vendorRecord?.requestedByName} · {woRecord?.createdAt || prRecord?.createdAt || vendorRecord?.createdAt}</p>
+                  <p className="text-[14px] text-muted-foreground mt-0.5">Oleh {woRecord?.picName || prRecord?.requestedByName || vendorRecord?.requestedByName} · {woRecord?.createdAt || prRecord?.createdAt || vendorRecord?.createdAt}</p>
                 </div>
                 {status !== "OPEN" && (
                   <div className="relative">
                     <div className="absolute -left-[18px] top-1.5 h-2 w-2 rounded-full border border-background bg-success shadow" />
                     <p className="text-xs font-semibold text-foreground">Status Saat Ini: <span className="text-success font-bold">{humanizeCodeLabel(status)}</span></p>
-                    <p className="text-[10px] text-muted-foreground mt-0.5">Terakhir dimutasi di sistem</p>
+                    <p className="text-[14px] text-muted-foreground mt-0.5">Terakhir dimutasi di sistem</p>
                   </div>
                 )}
               </div>

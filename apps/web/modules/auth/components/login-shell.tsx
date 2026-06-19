@@ -115,14 +115,14 @@ export function LoginShell() {
   }
 
   return (
-    <div className="min-h-screen bg-black flex flex-col items-center justify-center relative overflow-hidden">
+    <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-[#19191a] text-[#efeff0]">
       <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full bg-primary/[0.03] blur-3xl" />
+        <div className="absolute left-1/2 top-1/2 h-[600px] w-[600px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#fdb360]/[0.05] blur-3xl" />
       </div>
 
       <div className="relative z-10 w-full max-w-sm px-6 sm:px-0">
         <div className="flex flex-col items-center mb-10">
-          <div className="w-20 h-20 rounded-2xl overflow-hidden ring-1 ring-white/10 mb-6 shadow-2xl">
+          <div className="mb-6 h-20 w-20 overflow-hidden rounded-2xl shadow-2xl ring-1 ring-[#4e4e50]">
             <Image
               src="/sm.jpeg"
               alt="Stanley Marthin"
@@ -133,17 +133,17 @@ export function LoginShell() {
             />
           </div>
           <h1
-            className="text-foreground text-xl font-light tracking-[0.3em] uppercase"
+            className="text-xl font-light uppercase tracking-[0.3em] text-[#efeff0]"
             style={SERIF_STYLE}
           >
             Stanley Marthin
           </h1>
           <div className="flex items-center gap-3 mt-2">
-            <span className="w-8 h-px bg-primary/60" />
-            <p className="text-app-accent-ink/80 text-[10px] tracking-[0.25em] uppercase font-medium">
+            <span className="h-px w-8 bg-[#fdb360]/70" />
+            <p className="text-[12px] font-medium uppercase tracking-[0.25em] text-[#fdb360]">
               Classic Restoration Garage
             </p>
-            <span className="w-8 h-px bg-primary/60" />
+            <span className="h-px w-8 bg-[#fdb360]/70" />
           </div>
         </div>
 
@@ -154,52 +154,52 @@ export function LoginShell() {
           <div className="space-y-1.5">
             <label
               htmlFor="employeeId"
-              className="text-[11px] uppercase tracking-[0.15em] text-foreground/50 font-medium"
+              className="text-[12px] font-medium uppercase tracking-[0.15em] text-[#a1a0a5]"
             >
               Employee ID
             </label>
             <div className="relative group">
-              <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground/25 group-focus-within:text-app-accent-ink/70 transition-colors" />
+              <User className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#a1a0a5] transition-colors group-focus-within:text-[#fdb360]" />
               <input
                 id="employeeId"
                 placeholder="SM-00.000"
                 {...register("employeeId")}
-                className="w-full h-11 pl-11 pr-4 bg-white/[0.05] border border-white/[0.08] rounded-lg text-sm text-foreground placeholder:text-foreground/20 outline-none focus:border-primary/40 focus:bg-white/[0.07] transition-all"
+                className="h-11 w-full rounded-lg border border-[#606062] bg-[#2b2b2c] pl-11 pr-4 text-[16px] text-[#efeff0] outline-none transition-colors placeholder:text-[#8e8d91] focus:border-[#fdb360] focus:bg-[#373739] disabled:cursor-not-allowed disabled:text-[#6f6f71]"
               />
             </div>
-            {errors.employeeId && <p className="text-xs text-destructive">{errors.employeeId.message}</p>}
+            {errors.employeeId && <p className="text-[13px] text-[#d16552]">{errors.employeeId.message}</p>}
           </div>
 
           <div className="space-y-1.5">
             <label
               htmlFor="password"
-              className="text-[11px] uppercase tracking-[0.15em] text-foreground/50 font-medium"
+              className="text-[12px] font-medium uppercase tracking-[0.15em] text-[#a1a0a5]"
             >
               Password
             </label>
             <div className="relative group">
-              <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground/25 group-focus-within:text-app-accent-ink/70 transition-colors" />
+              <Lock className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#a1a0a5] transition-colors group-focus-within:text-[#fdb360]" />
               <input
                 id="password"
                 type={showPassword ? "text" : "password"}
                 placeholder="••••••"
                 {...register("password")}
-                className="w-full h-11 pl-11 pr-11 bg-white/[0.05] border border-white/[0.08] rounded-lg text-sm text-foreground placeholder:text-foreground/20 outline-none focus:border-primary/40 focus:bg-white/[0.07] transition-all"
+                className="h-11 w-full rounded-lg border border-[#606062] bg-[#2b2b2c] pl-11 pr-11 text-[16px] text-[#efeff0] outline-none transition-colors placeholder:text-[#8e8d91] focus:border-[#fdb360] focus:bg-[#373739] disabled:cursor-not-allowed disabled:text-[#6f6f71]"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword((prev) => !prev)}
-                className="absolute right-3.5 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center text-foreground/25 hover:text-app-accent-ink/70 transition-colors"
+                className="absolute right-3.5 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center text-[#a1a0a5] transition-colors hover:text-[#fdb360]"
                 tabIndex={-1}
               >
                 {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
-            {errors.password && <p className="text-xs text-destructive">{errors.password.message}</p>}
+            {errors.password && <p className="text-[13px] text-[#d16552]">{errors.password.message}</p>}
           </div>
 
           {error ? (
-            <div className="text-sm text-destructive bg-destructive/10 border border-destructive/20 px-3 py-2 rounded-lg">
+            <div className="rounded-lg border border-[#d16552]/30 bg-[#d16552]/10 px-3 py-2 text-[14px] text-[#d16552]">
               {error}
             </div>
           ) : null}
@@ -207,7 +207,7 @@ export function LoginShell() {
           <button
             type="submit"
             disabled={isSubmitting || retryAfterSeconds > 0}
-            className="w-full h-11 rounded-lg bg-primary hover:bg-primary active:bg-primary text-primary-foreground font-semibold text-sm tracking-wide flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#fdb360] text-[15px] font-semibold tracking-wide text-[#261910] transition-colors hover:bg-[#fda23d] active:bg-[#fc9119] disabled:cursor-not-allowed disabled:bg-[#606062] disabled:text-[#a1a0a5]"
           >
             {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <LogIn className="w-4 h-4" />}
             {isSubmitting
@@ -218,16 +218,16 @@ export function LoginShell() {
           </button>
         </form>
 
-        <p className="text-center text-foreground/15 text-[10px] tracking-[0.15em] uppercase mt-10">
+        <p className="mt-10 text-center text-[11px] uppercase tracking-[0.15em] text-[#8e8d91]">
           &copy; {year} Stanley Marthin Restoration
         </p>
       </div>
 
       {showConfirm ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-[1px]">
-          <div className="bg-card border border-white/10 rounded-xl p-6 max-w-sm w-full shadow-2xl">
-            <h3 className="text-foreground text-lg font-medium mb-3">Konfirmasi Login</h3>
-            <p className="text-foreground/70 text-sm mb-6 leading-relaxed">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#19191a]/90 p-4 backdrop-blur-[1px]">
+          <div className="w-full max-w-sm rounded-xl border border-[#606062] bg-[#2b2b2c] p-6 shadow-2xl">
+            <h3 className="mb-3 text-lg font-medium text-[#efeff0]">Konfirmasi Login</h3>
+            <p className="mb-6 text-[15px] leading-relaxed text-[#a1a0a5]">
               {confirmMessage}
             </p>
             <div className="flex gap-3 justify-end">
@@ -235,7 +235,7 @@ export function LoginShell() {
                 type="button"
                 onClick={() => setShowConfirm(false)}
                 disabled={isSubmitting}
-                className="px-4 py-2 rounded-lg text-foreground/50 hover:text-foreground hover:bg-white/5 transition-colors text-sm font-medium"
+                className="rounded-lg px-4 py-2 text-[14px] font-medium text-[#a1a0a5] transition-colors hover:bg-[#444446] hover:text-[#efeff0] disabled:cursor-not-allowed disabled:text-[#6f6f71]"
               >
                 Batal
               </button>
@@ -243,7 +243,7 @@ export function LoginShell() {
                 type="button"
                 onClick={submitForceLogin}
                 disabled={isSubmitting}
-                className="px-4 py-2 rounded-lg bg-primary hover:bg-primary text-primary-foreground transition-colors text-sm font-semibold"
+                className="rounded-lg bg-[#fdb360] px-4 py-2 text-[14px] font-semibold text-[#261910] transition-colors hover:bg-[#fda23d] disabled:cursor-not-allowed disabled:bg-[#606062] disabled:text-[#a1a0a5]"
               >
                 Login di sini
               </button>

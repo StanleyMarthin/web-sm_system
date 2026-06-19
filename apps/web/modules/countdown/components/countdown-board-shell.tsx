@@ -21,6 +21,7 @@ import type {
 import {
   ActionButton, MetricBar, PageHeader,
 } from "@/shared/ui/compact";
+import { parseHHMMToDecimal } from "@/shared/format/time";
 import { CountdownBoardForm, type CountdownFormValues } from "./forms/countdown-board-form";
 import { Download, FileText, FileUp, Pencil, Plus, RefreshCcw, Trash2, Upload, X } from "lucide-react";
 import Link from "next/link";
@@ -78,14 +79,6 @@ function formatDecimalToHHMM(decimalHours: number): string {
   const h = Math.floor(totalMinutes / 60);
   const m = totalMinutes % 60;
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
-}
-
-function parseHHMMToDecimal(hhmm: string): number {
-  if (!hhmm) return 0;
-  const [hStr, mStr] = hhmm.split(":");
-  const h = parseInt(hStr, 10) || 0;
-  const m = parseInt(mStr, 10) || 0;
-  return h + (m / 60);
 }
 
 function toBoardRow(row: Record<string, SmartDataGridCellValue>): CountdownBoardRow {

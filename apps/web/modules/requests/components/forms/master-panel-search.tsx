@@ -144,8 +144,8 @@ export function SearchSelect({
 
   return (
     <div className="relative">
-      <div className={`flex h-10 items-center border border-border bg-background transition-colors dark:border-white/[0.08] dark:bg-muted ${focusClass(accent)}`}>
-        <Search className="ml-3 h-3.5 w-3.5 shrink-0 text-muted-foreground dark:text-foreground/35" />
+      <div className={`flex h-10 items-center border border-border bg-background transition-colors dark:border-border dark:bg-muted ${focusClass(accent)}`}>
+        <Search className="ml-3 h-3.5 w-3.5 shrink-0 text-muted-foreground dark:text-muted-foreground" />
         <input
           value={value}
           disabled={disabled}
@@ -156,21 +156,21 @@ export function SearchSelect({
             setIsOpen(true);
           }}
           placeholder={isLoading ? "Memuat master panel..." : placeholder}
-          className="h-full min-w-0 flex-1 bg-transparent px-2 text-sm text-foreground outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-45 dark:placeholder:text-foreground/35"
+          className="h-full min-w-0 flex-1 bg-transparent px-2 text-sm text-foreground outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-45 dark:placeholder:text-muted-foreground"
         />
         <button
           type="button"
           disabled={disabled}
           onMouseDown={(event) => event.preventDefault()}
           onClick={() => setIsOpen((open) => !open)}
-          className="flex h-full w-9 shrink-0 items-center justify-center text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 dark:text-foreground/35 dark:hover:text-foreground"
+          className="flex h-full w-9 shrink-0 items-center justify-center text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 dark:text-muted-foreground dark:hover:text-foreground"
         >
           <ChevronDown className="h-3.5 w-3.5" />
         </button>
       </div>
 
       {isOpen && !disabled && (
-        <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-40 max-h-52 overflow-auto border border-border bg-popover py-1 shadow-lg dark:border-white/[0.08] dark:shadow-none">
+        <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-40 max-h-52 overflow-auto border border-border bg-popover py-1 shadow-lg dark:border-border dark:shadow-none">
           {filteredOptions.length > 0 ? (
             filteredOptions.map((option) => (
               <button
@@ -183,14 +183,14 @@ export function SearchSelect({
                 className={`flex w-full items-start gap-3 px-3 py-2.5 text-left text-sm text-foreground transition-colors ${hoverClass(accent)}`}
               >
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[13px] font-medium leading-5 text-foreground">
+                  <span className="block truncate text-[15px] font-medium leading-5 text-foreground">
                     {option.label}
                   </span>
-                  <span className="mt-0.5 block truncate text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
+                  <span className="mt-0.5 block truncate text-[14px] uppercase tracking-[0.08em] text-muted-foreground">
                     {option.detail}
                   </span>
                 </span>
-                <span className="mt-0.5 shrink-0 border border-border px-1.5 py-0.5 text-[9px] font-mono uppercase tracking-[0.08em] text-muted-foreground dark:border-white/10">
+                <span className="mt-0.5 shrink-0 border border-border px-1.5 py-0.5 text-[15px] font-mono uppercase tracking-[0.08em] text-muted-foreground dark:border-border">
                   {option.nodeType === "PART" ? "Part" : "Panel"} · {option.qty}
                 </span>
               </button>
@@ -230,8 +230,8 @@ export function StrictSearchSelect({
 
   return (
     <div className="relative">
-      <div className={`flex h-10 items-center border border-border bg-background transition-colors dark:border-white/[0.08] dark:bg-muted ${focusClass(accent)}`}>
-        <Search className="ml-3 h-3.5 w-3.5 shrink-0 text-muted-foreground dark:text-foreground/35" />
+      <div className={`flex h-10 items-center border border-border bg-background transition-colors dark:border-border dark:bg-muted ${focusClass(accent)}`}>
+        <Search className="ml-3 h-3.5 w-3.5 shrink-0 text-muted-foreground dark:text-muted-foreground" />
         <input
           value={isOpen ? query : selectedOption?.label ?? ""}
           disabled={disabled}
@@ -245,7 +245,7 @@ export function StrictSearchSelect({
             setIsOpen(true);
           }}
           placeholder={isLoading ? "Memuat data..." : placeholder}
-          className="h-full min-w-0 flex-1 bg-transparent px-2 text-sm text-foreground outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-45 dark:placeholder:text-foreground/35"
+          className="h-full min-w-0 flex-1 bg-transparent px-2 text-sm text-foreground outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-45 dark:placeholder:text-muted-foreground"
         />
         <button
           type="button"
@@ -255,14 +255,14 @@ export function StrictSearchSelect({
             setQuery("");
             setIsOpen((open) => !open);
           }}
-          className="flex h-full w-9 shrink-0 items-center justify-center text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 dark:text-foreground/35 dark:hover:text-foreground"
+          className="flex h-full w-9 shrink-0 items-center justify-center text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 dark:text-muted-foreground dark:hover:text-foreground"
         >
           <ChevronDown className="h-3.5 w-3.5" />
         </button>
       </div>
 
       {isOpen && !disabled && (
-        <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-40 max-h-52 overflow-auto border border-border bg-popover py-1 shadow-lg dark:border-white/[0.08] dark:shadow-none">
+        <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-40 max-h-52 overflow-auto border border-border bg-popover py-1 shadow-lg dark:border-border dark:shadow-none">
           {filteredOptions.length > 0 ? (
             filteredOptions.map((option) => (
               <button
@@ -276,7 +276,7 @@ export function StrictSearchSelect({
               >
                 <span className="min-w-0 truncate">{option.label}</span>
                 {option.detail ? (
-                  <span className="shrink-0 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">{option.detail}</span>
+                  <span className="shrink-0 text-[14px] uppercase tracking-[0.12em] text-muted-foreground">{option.detail}</span>
                 ) : null}
               </button>
             ))

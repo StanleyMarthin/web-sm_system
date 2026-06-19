@@ -11,29 +11,55 @@ import type { GalleryPhotoRecord, GalleryPhotoType } from "@smsystem/contracts/g
 import {
   Archive,
   ArrowLeft,
+  Building2,
   Camera,
   CheckCircle2,
-  ChevronDown,
   ClipboardList,
   Download,
   Eye,
   FileText,
   FolderOpen,
+  Lock,
   MapPin,
+  Maximize2,
   PackageCheck,
   PackageSearch,
+  Pencil,
   Plus,
   Save,
   ShoppingCart,
+  Minimize2,
+  Package,
   Trash2,
+  TrendingUp,
   Truck,
   Upload,
   Wrench,
   X,
 } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
+import {
+  addEdge,
+  Background,
+  ConnectionMode,
+  Handle,
+  NodeResizeControl,
+  Position,
+  ReactFlow,
+  ResizeControlVariant,
+  useEdgesState,
+  useNodesState,
+  type Connection,
+  type Edge,
+  type Node,
+  type OnNodeDrag,
+  type NodeMouseHandler,
+  type NodeProps,
+  type ReactFlowInstance,
+} from "@xyflow/react";
+import "@xyflow/react/dist/style.css";
 import { getProxiedImageUrl } from "@/shared/api/config";
 import { GalleryUploadForm, type UploadFormValues } from "@/modules/gallery/components/forms/gallery-upload-form";
 import { GalleryPhotoEditForm, type EditFormValues } from "@/modules/gallery/components/forms/gallery-photo-edit-form";
@@ -44,15 +70,19 @@ import {
   requestGalleryUploadTicket,
   updateGalleryPhoto,
 } from "@/shared/api/gallery";
-import { createCountdownRecord, fetchCountdownBoard } from "@/shared/api/countdown";
+import { fetchCountdownBoard } from "@/shared/api/countdown";
 import {
   fetchWorkflowLayout,
   saveWorkflowLayout,
 } from "@/shared/api/units";
-import { createWo } from "@/shared/api/wo";
-import { createPr } from "@/shared/api/pr";
-import { createVendor } from "@/shared/api/vendor";
 import { fmtDateTime } from "@/shared/format/humanize";
+import { useSweetAlert } from "@/shared/ui/sweet-alert";
+import { WorkflowJobCreateForm } from "@/modules/workflow-job/components/workflow-job-create-form";
+import type {
+  CreatedWorkflowJob,
+  WorkflowCreateType,
+  WorkflowJobCreateContext,
+} from "@/modules/workflow-job/workflow-job-create";
 
 type DrawerTab = "timeline" | "photos" | "documents";
 type TriageTone = "good" | "repair" | "replace" | "unknown";
@@ -412,90 +442,9 @@ function mergeGalleryPhotos(slots: PhotoSlot[], photos: GalleryPhotoRecord[]): P
   });
 }
 
-function JobTypeCombobox({
-  options,
-  selectedValue,
-  searchValue,
-  onSearchChange,
-  onSelect,
-}: {
-  options: WorkflowDivisionOption[];
-  selectedValue: string;
-  searchValue: string;
-  onSearchChange: (value: string) => void;
-  onSelect: (value: string) => void;
-}) {
-  const [isOpen, setIsOpen] = useState(false);
-  const selectedOption = options.find((option) => option.value === selectedValue) ?? null;
-  const inputValue = searchValue || selectedOption?.label || "";
-  const normalizedSearch = normalizeTextToken(searchValue);
-  const filteredOptions = normalizedSearch
-    ? options.filter((option) => normalizeTextToken(option.label).includes(normalizedSearch))
-    : options;
-
-  return (
-    <div className="relative">
-      <div className="flex h-10 items-center border border-border bg-card transition-colors focus-within:border-primary/45">
-        <input
-          value={inputValue}
-          onFocus={() => setIsOpen(true)}
-          onBlur={() => window.setTimeout(() => setIsOpen(false), 120)}
-          onChange={(event) => {
-            const nextValue = event.target.value;
-            onSearchChange(nextValue);
-            if (selectedValue && nextValue !== selectedOption?.label) {
-              onSelect("");
-            }
-            setIsOpen(true);
-          }}
-          placeholder="Cari atau pilih jobdesc"
-          className="h-full min-w-0 flex-1 bg-transparent px-3 text-[15px] text-foreground outline-none placeholder:text-muted-foreground"
-        />
-        <button
-          type="button"
-          onMouseDown={(event) => event.preventDefault()}
-          onClick={() => setIsOpen((current) => !current)}
-          className="flex h-full w-9 shrink-0 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
-          aria-label="Buka pilihan jobdesc"
-        >
-          <ChevronDown className="h-3.5 w-3.5" />
-        </button>
-      </div>
-
-      {isOpen ? (
-        <div className="absolute left-0 right-0 top-[calc(100%+4px)] z-[90] max-h-56 overflow-auto border border-border bg-card py-1 shadow-2xl shadow-black/50">
-          {filteredOptions.length > 0 ? (
-            filteredOptions.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                onMouseDown={(event) => {
-                  event.preventDefault();
-                  onSelect(option.value);
-                  onSearchChange("");
-                  setIsOpen(false);
-                }}
-                className={[
-                  "w-full px-3 py-2 text-left text-[14px] transition-colors hover:bg-primary/[0.08] hover:text-app-accent-ink",
-                  selectedValue === option.value ? "text-app-accent-ink" : "text-foreground",
-                ].join(" ")}
-              >
-                {option.label}
-              </button>
-            ))
-          ) : (
-            <div className="px-3 py-2 text-[15px] text-muted-foreground">Tidak ada hasil</div>
-          )}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
 type WorkflowNodeType = "handover" | "job" | "doc" | "wov";
-type WorkflowCreateType = "COUNTDOWN" | "WO" | "PR" | "WOV";
-
 interface WorkflowNode {
+  [key: string]: unknown;
   id: string;
   type: WorkflowNodeType;
   typeLabel: string;
@@ -511,6 +460,7 @@ interface WorkflowNode {
   progressLabel?: string | null;
   hasPhotos?: boolean;
   hasMaterials?: boolean;
+  isEnd?: boolean;
 }
 
 interface WorkflowDivisionOption {
@@ -524,29 +474,21 @@ interface WorkflowDivisionOption {
   divisionParentId?: number | null;
 }
 
-interface WorkflowCreateFormState {
-  type: WorkflowCreateType;
-  divisionId: string;
-  sectionName: string;
-  jobTypeId: string;
-  title: string;
-  targetHours: string;
-  startDate: string;
-  targetDate: string;
-  qty: string;
-  uom: string;
-  vendorName: string;
-  notes: string;
-  temuanAwal: string;
-  keterangan: string;
-  isPriority: boolean;
-  taskCategory: "MAIN" | "ADDITIONAL" | "WO" | "WOV";
-}
-
 interface WorkflowCountdownReferences {
   divisions: WorkflowDivisionOption[];
   sections: WorkflowDivisionOption[];
   jobTypes: WorkflowDivisionOption[];
+}
+
+interface JobDescEditForm {
+  title: string;
+  meta: string;
+}
+
+function isJobDescMutable(source: WorkflowNode): boolean {
+  const isManuallyCreated = source.id.startsWith("manual-");
+  const isUnstarted = source.status === "plan" || source.status === "open";
+  return isManuallyCreated && isUnstarted;
 }
 
 function buildWorkflowSources(node: UnitBomNode): WorkflowNode[] {
@@ -611,49 +553,6 @@ function buildWorkflowSources(node: UnitBomNode): WorkflowNode[] {
   });
 }
 
-function todayDate() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function parseHHMMToDecimal(value: string): number {
-  if (!value.trim()) return 0;
-  if (!value.includes(":")) {
-    const numeric = Number(value);
-    return Number.isFinite(numeric) ? numeric : Number.NaN;
-  }
-  const [hoursText, minutesText] = value.split(":");
-  const hours = Number.parseInt(hoursText ?? "0", 10);
-  const minutes = Number.parseInt(minutesText ?? "0", 10);
-  if (!Number.isFinite(hours) || !Number.isFinite(minutes) || minutes < 0 || minutes > 59) {
-    return Number.NaN;
-  }
-  return hours + minutes / 60;
-}
-
-function createWorkflowForm(
-  node: UnitBomNode,
-  defaultType: WorkflowCreateType = "COUNTDOWN",
-): WorkflowCreateFormState {
-  return {
-    type: defaultType,
-    divisionId: node.divisionId ? String(node.divisionId) : "",
-    sectionName: node.section ?? node.category ?? node.label ?? "",
-    jobTypeId: "",
-    title: node.label ?? "",
-    targetHours: "01:00",
-    startDate: todayDate(),
-    targetDate: todayDate(),
-    qty: "1",
-    uom: "pcs",
-    vendorName: "",
-    notes: "",
-    temuanAwal: "",
-    keterangan: "",
-    isPriority: false,
-    taskCategory: "ADDITIONAL",
-  };
-}
-
 function normalizeTextToken(value: string): string {
   return value
     .toLowerCase()
@@ -694,10 +593,15 @@ export function PanelDetailPage({
   canSaveWorkflowCanvas,
 }: PanelDetailPageProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const replaceInputRef = useRef<HTMLInputElement | null>(null);
+  const sectionRef = useRef<HTMLDivElement | null>(null);
   const [activeTab, setActiveTab] = useState<DrawerTab>("timeline");
   type PageMode = "detail" | "workflow";
-  const [pageMode, setPageMode] = useState<PageMode>("detail");
+  const [pageMode, setPageMode] = useState<PageMode>(() =>
+    searchParams.get("mode") === "workflow" ? "workflow" : "detail",
+  );
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const workflowScopeId = node.actualId ?? (node.panelId ? `panel-${node.panelId}` : node.nodeId);
   const [workflowOrderIds, setWorkflowOrderIds] = useState<string[]>([]);
   const [galleryState, setGalleryState] = useState<GalleryPhotoState>({
@@ -744,6 +648,46 @@ export function PanelDetailPage({
   );
   const triage = triageMeta(node);
   const canMutatePhotos = canManagePhotos && !galleryState.submittedToLedger;
+
+  useEffect(() => {
+    function handleFullscreenChange() {
+      setIsFullscreen(Boolean(document.fullscreenElement));
+    }
+
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
+  }, []);
+
+  useEffect(() => {
+    setPageMode(searchParams.get("mode") === "workflow" ? "workflow" : "detail");
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (searchParams.get("fullscreen") !== "true") return;
+
+    const timer = window.setTimeout(() => {
+      sectionRef.current?.requestFullscreen?.().catch(() => {
+        setIsFullscreen(true);
+      });
+    }, 100);
+
+    return () => window.clearTimeout(timer);
+  }, [searchParams]);
+
+  function handleFullscreenToggle() {
+    if (!isFullscreen) {
+      sectionRef.current?.requestFullscreen?.().catch(() => {
+        setIsFullscreen(true);
+      });
+      return;
+    }
+
+    if (document.fullscreenElement) {
+      document.exitFullscreen?.().catch(() => {});
+    } else {
+      setIsFullscreen(false);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -992,21 +936,36 @@ export function PanelDetailPage({
   const locationDisplay = node.locationName || node.locationDetail || (triage.tone === "good" ? "Gudang" : node.divisionName ?? "Belum ditentukan");
 
   return (
-    <div className="space-y-2">
+    <>
+    <div
+      ref={sectionRef}
+      className={`space-y-2 bg-background text-foreground ${isFullscreen ? "fixed inset-0 z-50 overflow-y-auto p-2" : ""}`}
+    >
       <div className="border border-border bg-card px-4 py-3">
         <div className="flex items-center justify-between gap-4">
           <div>
             <p className="text-[14px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Rekam Part</p>
-            <h1 className="mt-0.5 text-[15px] font-mono text-foreground/90">{node.label}</h1>
+            <h1 className="mt-0.5 text-[16px] font-mono font-semibold text-foreground">{node.label}</h1>
             <p className="mt-0.5 text-[15px] font-mono text-muted-foreground">{hierarchyLabel(node)}</p>
           </div>
-          <Link
-            href={`/units/${carId}?tab=parts-panels`}
-            className="inline-flex items-center gap-1.5 border border-border px-3 py-1.5 text-[14px] font-mono uppercase tracking-[0.12em] text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            Kembali
-          </Link>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleFullscreenToggle}
+              className="inline-flex items-center gap-1.5 border border-border px-2.5 py-1.5 text-[14px] font-mono uppercase tracking-[0.12em] text-muted-foreground transition-colors hover:text-foreground"
+              aria-label={isFullscreen ? "Keluar fullscreen" : "Masuk fullscreen"}
+              title={isFullscreen ? "Keluar fullscreen" : "Masuk fullscreen"}
+            >
+              {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+            </button>
+            <Link
+              href={`/units/${carId}?tab=parts-panels`}
+              className="inline-flex items-center gap-1.5 border border-border px-3 py-1.5 text-[14px] font-mono uppercase tracking-[0.12em] text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              Kembali
+            </Link>
+          </div>
         </div>
 
         <div className="mt-3 flex flex-wrap gap-2">
@@ -1279,7 +1238,7 @@ export function PanelDetailPage({
                                 }}
                               />
                             ) : (
-                              <p className="line-clamp-2 text-xs text-foreground">
+                              <p className="line-clamp-2 text-[14px] text-foreground">
                                 {photo.caption || "Tidak ada keterangan foto."}
                               </p>
                             )}
@@ -1407,6 +1366,8 @@ export function PanelDetailPage({
             workflowSources={workflowSources}
             allowedCreateTypes={allowedWorkflowCreateTypes}
             canSaveCanvas={canSaveWorkflowCanvas}
+            isFullscreen={isFullscreen}
+            onToggleFullscreen={handleFullscreenToggle}
             onWorkflowOrderChange={setWorkflowOrderIds}
             onNavigateToPhotos={() => {
               setPageMode("detail");
@@ -1420,6 +1381,7 @@ export function PanelDetailPage({
         )}
       </div>
     </div>
+    </>
   );
 }
 
@@ -1429,9 +1391,247 @@ interface WorkflowBuilderProps {
   workflowSources: WorkflowNode[];
   allowedCreateTypes: WorkflowCreateType[];
   canSaveCanvas: boolean;
+  isFullscreen: boolean;
+  onToggleFullscreen: () => void;
   onWorkflowOrderChange: (order: string[]) => void;
   onNavigateToPhotos: () => void;
   onNavigateToDocuments: () => void;
+}
+
+type WorkflowNodeData = WorkflowNode;
+type WorkflowFlowNode = Node<WorkflowNodeData, "workflowNode">;
+type WorkflowFlowEdge = Edge<Record<string, unknown>>;
+
+const workflowNodeStatusClass = {
+  done: "border-success/30 bg-success/[0.05] text-success",
+  progress: "border-primary/35 bg-primary/[0.07] text-app-accent-ink",
+  plan: "border-border bg-muted text-muted-foreground",
+  open: "border-destructive/25 bg-destructive/[0.05] text-destructive",
+} as const;
+
+const workflowNodeAccentClass: Record<WorkflowNodeType, string> = {
+  handover: "border-l-info",
+  job: "border-l-primary",
+  doc: "border-l-destructive",
+  wov: "border-l-info",
+};
+
+function WorkflowCanvasNode({ data, selected }: NodeProps<WorkflowFlowNode>) {
+  const isCountdownNode = (data.sourceLabel ?? data.typeLabel).toUpperCase().includes("COUNTDOWN");
+  const statusLabel = isCountdownNode
+    ? ({
+        done: "Selesai",
+        progress: "Berjalan",
+        plan: "Terjadwal",
+        open: "Terbuka",
+      } as const)[data.status]
+    : data.statusLabel;
+  const sourceTone = {
+    handover: "text-info",
+    job: "text-app-accent-ink",
+    doc: "text-destructive",
+    wov: "text-muted-foreground",
+  }[data.type];
+  const statusTone = {
+    done: "text-success",
+    progress: "text-app-accent-ink",
+    plan: "text-muted-foreground",
+    open: "text-destructive",
+  }[data.status];
+  const statusDot = {
+    done: "bg-success",
+    progress: "bg-primary",
+    plan: "bg-muted-foreground",
+    open: "bg-destructive",
+  }[data.status];
+  const progressText = data.progressLabel ?? data.hourLabel ?? data.badge ?? null;
+  const hasDivision = Boolean(data.divisionLabel);
+  const hasProgress = Boolean(progressText);
+  const hasAssets = data.hasPhotos || data.hasMaterials;
+  const handleClassName = [
+    "!h-2.5 !w-2.5 !border-[1.5px] !border-primary/70 !bg-background !transition-opacity",
+    selected ? "!opacity-100" : "!opacity-0 group-hover:!opacity-100",
+  ].join(" ");
+
+  return (
+    <div className={[
+      "group flex h-full min-w-[280px] flex-col overflow-visible border border-l-4 bg-card shadow-sm transition-colors",
+      workflowNodeAccentClass[data.type],
+      selected ? "border-primary/70 bg-primary/[0.04]" : "border-border hover:border-primary/35",
+    ].join(" ")}>
+      {selected ? (
+        <NodeResizeControl
+          position="bottom-right"
+          variant={ResizeControlVariant.Handle}
+          minWidth={280}
+          minHeight={80}
+          maxWidth={560}
+          maxHeight={320}
+          autoScale={false}
+          className="!h-4 !w-4 !rounded-none !border-0 !bg-transparent !shadow-none ![translate:-100%_-100%]"
+        >
+          <span className="absolute bottom-1 right-1 h-2.5 w-2.5 border-b-2 border-r-2 border-primary/80" />
+        </NodeResizeControl>
+      ) : null}
+      {(["top", "right", "bottom", "left"] as const).map((side) => {
+        const position = {
+          top: Position.Top,
+          right: Position.Right,
+          bottom: Position.Bottom,
+          left: Position.Left,
+        }[side];
+        const offsetClass = {
+          top: "!-top-2",
+          right: "!-right-2",
+          bottom: "!-bottom-2",
+          left: "!-left-2",
+        }[side];
+
+        return (
+          <Fragment key={side}>
+            <Handle id={side} type="target" position={position} className={`${handleClassName} ${offsetClass}`} />
+            <Handle id={side} type="source" position={position} className={`${handleClassName} ${offsetClass}`} />
+          </Fragment>
+        );
+      })}
+      <div className="flex items-center justify-between gap-3 border-b border-border px-3 py-[7px]">
+        <p className={`min-w-0 truncate font-mono text-[10px] uppercase tracking-[0.1em] ${sourceTone}`}>
+          {data.sourceLabel ?? data.typeLabel}
+        </p>
+        <div className={`flex shrink-0 items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.07em] ${statusTone}`}>
+          <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${statusDot}`} />
+          <span className="max-w-[130px] truncate">{statusLabel}</span>
+        </div>
+      </div>
+      <div className="flex-1 px-3 pb-2 pt-2.5">
+        <p className="break-words text-[13px] font-medium leading-snug text-foreground">{data.title}</p>
+        <p className="mt-1 break-words text-[11px] leading-snug text-muted-foreground">{data.meta}</p>
+      </div>
+      {(hasDivision || hasProgress || hasAssets) ? (
+        <div className="flex items-center gap-0 border-t border-border px-3 py-[6px] font-mono text-[10px] leading-none text-muted-foreground">
+          {hasDivision ? (
+            <div className="flex min-w-0 items-center gap-1">
+              <Building2 className="h-3 w-3 shrink-0" />
+              <span className="truncate">{data.divisionLabel}</span>
+            </div>
+          ) : null}
+          {hasDivision && hasProgress ? <span className="mx-2 h-2.5 w-px shrink-0 bg-border" /> : null}
+          {hasProgress ? (
+            <div className="flex min-w-0 items-center gap-1">
+              <TrendingUp className="h-3 w-3 shrink-0" />
+              <span className="truncate">{progressText}</span>
+            </div>
+          ) : null}
+          {(hasDivision || hasProgress) && hasAssets ? <span className="mx-2 h-2.5 w-px shrink-0 bg-border" /> : null}
+          {hasAssets ? (
+            <div className="flex min-w-0 items-center gap-2 text-app-accent-ink">
+              {data.hasPhotos ? (
+                <span className="flex items-center gap-1">
+                  <Camera className="h-3 w-3 shrink-0" />
+                  <span>Foto</span>
+                </span>
+              ) : null}
+              {data.hasMaterials ? (
+                <span className="flex items-center gap-1">
+                  <Package className="h-3 w-3 shrink-0" />
+                  <span>Material</span>
+                </span>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+const workflowNodeTypes = { workflowNode: WorkflowCanvasNode };
+const workflowCanvasGrid = 24;
+type WorkflowAnchorSide = "left" | "right" | "top" | "bottom";
+
+function snapWorkflowCanvasPosition(position: { x: number; y: number }) {
+  return {
+    x: Math.max(24, Math.round(position.x / workflowCanvasGrid) * workflowCanvasGrid),
+    y: Math.max(24, Math.round(position.y / workflowCanvasGrid) * workflowCanvasGrid),
+  };
+}
+
+function normalizeWorkflowAnchorSide(side: string | null | undefined, fallback: WorkflowAnchorSide): WorkflowAnchorSide {
+  return side === "left" || side === "right" || side === "top" || side === "bottom" ? side : fallback;
+}
+
+function createEndWorkflowNode(): WorkflowNode {
+  return {
+    id: "workflow-end",
+    type: "job",
+    typeLabel: "Selesai",
+    title: "Selesai",
+    meta: "Alur kerja selesai",
+    badge: "End",
+    status: "done",
+    statusLabel: "Selesai",
+    isEnd: true,
+  };
+}
+
+function flowNodeFromSource(
+  source: WorkflowNode,
+  index: number,
+  position?: { x: number; y: number },
+  size?: { width?: number; height?: number },
+): WorkflowFlowNode {
+  const snappedPosition = snapWorkflowCanvasPosition(position ?? { x: 360 + (index % 3) * 380, y: 80 + Math.floor(index / 3) * 220 });
+  return {
+    id: source.id,
+    type: "workflowNode",
+    position: snappedPosition,
+    style: { width: size?.width ?? 340 },
+    data: source as WorkflowNodeData,
+  };
+}
+
+function toWorkflowEdge(edge: WorkflowFlowEdge): { id: string; fromId: string; toId: string; fromSide: WorkflowAnchorSide; toSide: WorkflowAnchorSide } {
+  return {
+    id: edge.id,
+    fromId: edge.source,
+    toId: edge.target,
+    fromSide: normalizeWorkflowAnchorSide(edge.sourceHandle, "right"),
+    toSide: normalizeWorkflowAnchorSide(edge.targetHandle, "left"),
+  };
+}
+
+function getOrderedNodeIds(nodes: WorkflowFlowNode[], edges: WorkflowFlowEdge[]) {
+  const nodeIds = new Set(nodes.filter((item) => !item.data.isEnd).map((item) => item.id));
+  const outgoing = new Map<string, string[]>();
+  const incomingCount = new Map<string, number>();
+
+  for (const id of nodeIds) incomingCount.set(id, 0);
+  for (const edge of edges) {
+    if (!nodeIds.has(edge.source) || !nodeIds.has(edge.target)) continue;
+    outgoing.set(edge.source, [...(outgoing.get(edge.source) ?? []), edge.target]);
+    incomingCount.set(edge.target, (incomingCount.get(edge.target) ?? 0) + 1);
+  }
+
+  const byId = new Map(nodes.map((item) => [item.id, item]));
+  const sortByCanvas = (left: string, right: string) => {
+    const a = byId.get(left)?.position ?? { x: 0, y: 0 };
+    const b = byId.get(right)?.position ?? { x: 0, y: 0 };
+    return a.y === b.y ? a.x - b.x : a.y - b.y;
+  };
+  const starts = [...nodeIds].filter((id) => (incomingCount.get(id) ?? 0) === 0).sort(sortByCanvas);
+  const ordered: string[] = [];
+  const visited = new Set<string>();
+
+  function visit(id: string) {
+    if (visited.has(id)) return;
+    visited.add(id);
+    ordered.push(id);
+    for (const next of (outgoing.get(id) ?? []).slice().sort(sortByCanvas)) visit(next);
+  }
+
+  for (const start of starts) visit(start);
+  for (const id of [...nodeIds].filter((item) => !visited.has(item)).sort(sortByCanvas)) visit(id);
+  return ordered;
 }
 
 function WorkflowBuilder({
@@ -1440,649 +1640,267 @@ function WorkflowBuilder({
   workflowSources,
   allowedCreateTypes,
   canSaveCanvas,
+  isFullscreen,
+  onToggleFullscreen,
   onWorkflowOrderChange,
   onNavigateToPhotos,
   onNavigateToDocuments,
 }: WorkflowBuilderProps) {
-  type AnchorSide = "top" | "right" | "bottom" | "left";
-  type FlowCanvasNode = WorkflowNode & { x: number; y: number; width: number; height: number; isEnd?: boolean };
-  type FlowConnection = {
-    id: string;
-    fromId: string;
-    toId: string;
-    fromSide: AnchorSide;
-    toSide: AnchorSide;
-    bendX?: number;
-    bendY?: number;
-  };
-
-  const defaultNodeWidth = 220;
-  const defaultNodeHeight = 86;
-  const minNodeWidth = 160;
-  const minNodeHeight = 72;
-
-  const canvasRef = useRef<HTMLDivElement | null>(null);
-  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const nodeDragRef = useRef<{
-    id: string;
-    startX: number;
-    startY: number;
-    offsetX: number;
-    offsetY: number;
-    moved: boolean;
-    fromSide: AnchorSide;
-  } | null>(null);
-  const nodeResizeRef = useRef<{
-    id: string;
-    startX: number;
-    startY: number;
-    width: number;
-    height: number;
-  } | null>(null);
-  const connectionDragRef = useRef<{ id: string; axis: "x" | "y" } | null>(null);
-  const connectTargetIdRef = useRef<string | null>(null);
-
-  const createEndNode = useCallback((): FlowCanvasNode => {
-    return {
-      id: "workflow-end",
-      type: "job",
-      typeLabel: "Selesai",
-      title: "Selesai",
-      meta: "Alur kerja selesai",
-      badge: "End",
-      status: "done",
-      statusLabel: "Selesai",
-      x: 760,
-      y: 300,
-      width: 180,
-      height: 82,
-      isEnd: true,
-    };
-  }, []);
-
-  const [flowNodes, setFlowNodes] = useState<FlowCanvasNode[]>(() => [createEndNode()]);
-  const [connections, setConnections] = useState<FlowConnection[]>([]);
-  const [selectedFlowNode, setSelectedFlowNode] = useState<FlowCanvasNode | null>(null);
-  const [selectedConnectionId, setSelectedConnectionId] = useState<string | null>(null);
-  const [connectFromId, setConnectFromId] = useState<string | null>(null);
-  const [connectTargetId, setConnectTargetId] = useState<string | null>(null);
-  const [connectPreview, setConnectPreview] = useState<{ fromId: string; fromSide: AnchorSide; x: number; y: number } | null>(null);
-  const [dragFrom, setDragFrom] = useState<"list" | null>(null);
-  const [dragSrcId, setDragSrcId] = useState<string | null>(null);
-  const [printSvg, setPrintSvg] = useState<string>("");
+  const workflowScopeId = node.actualId ?? (node.panelId ? `panel-${node.panelId}` : node.nodeId);
+  const [nodes, setNodes, onNodesChange] = useNodesState<WorkflowFlowNode>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<WorkflowFlowEdge>([]);
+  const [selectedNode, setSelectedNode] = useState<WorkflowNode | null>(null);
   const [localWorkflowSources, setLocalWorkflowSources] = useState<WorkflowNode[]>(workflowSources);
-  const [countdownReferences, setCountdownReferences] = useState<WorkflowCountdownReferences>({
-    divisions: [],
-    sections: [],
-    jobTypes: [],
-  });
+  const [countdownReferences, setCountdownReferences] = useState<WorkflowCountdownReferences>({ divisions: [], sections: [], jobTypes: [] });
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isCreateMinimized, setIsCreateMinimized] = useState(false);
-  const [jobTypeSearch, setJobTypeSearch] = useState("");
-  const defaultCreateType = allowedCreateTypes[0] ?? "COUNTDOWN";
-  const [createForm, setCreateForm] = useState<WorkflowCreateFormState>(() => createWorkflowForm(node, defaultCreateType));
-  const [createError, setCreateError] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
-  const workflowScopeId = node.actualId ?? (node.panelId ? `panel-${node.panelId}` : node.nodeId);
-  const storageKey = `unit-panel-workflow:${node.nodeId}:${node.panelId ?? "panel"}`;
+  const [editingSourceId, setEditingSourceId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<JobDescEditForm | null>(null);
+  const [isSourceListHidden, setIsSourceListHidden] = useState(false);
+  const [dragSourceId, setDragSourceId] = useState<string | null>(null);
+  const [isCanvasDragActive, setIsCanvasDragActive] = useState(false);
+  const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance<WorkflowFlowNode, WorkflowFlowEdge> | null>(null);
+  const { alertElement, confirm } = useSweetAlert();
 
   useEffect(() => {
     setLocalWorkflowSources((current) => {
       const manualSources = current.filter((source) => source.id.startsWith("manual-"));
       const next = [...workflowSources];
       for (const manualSource of manualSources) {
-        if (!next.some((source) => source.id === manualSource.id)) {
-          next.push(manualSource);
-        }
+        if (!next.some((source) => source.id === manualSource.id)) next.push(manualSource);
       }
       return next;
     });
   }, [workflowSources]);
 
   useEffect(() => {
-    setCreateForm(createWorkflowForm(node, defaultCreateType));
-  }, [node, defaultCreateType]);
-
-  useEffect(() => {
     let cancelled = false;
-
-    function applySavedLayout(saved: {
-      nodeLayouts?: Array<Pick<FlowCanvasNode, "id" | "x" | "y" | "width" | "height">>;
-      nodes?: FlowCanvasNode[];
-      connections?: FlowConnection[];
-      order?: string[];
-      sources?: WorkflowNode[];
-    }) {
-      if (Array.isArray(saved.order)) {
-        onWorkflowOrderChange(saved.order);
-      }
-      const layoutNodes = saved.nodeLayouts ?? saved.nodes;
-      if (Array.isArray(layoutNodes)) {
-        const sourceById = new Map(workflowSources.map((source) => [source.id, source]));
-        const mergedNodes = layoutNodes.map((savedNode) => {
-          if (savedNode.id === "workflow-end") {
-            return {
-              ...createEndNode(),
-              x: savedNode.x,
-              y: savedNode.y,
-              width: savedNode.width,
-              height: savedNode.height,
-            };
-          }
-          const timelineIndex = savedNode.id.match(/^timeline-(\d+)-/u)?.[1];
-          const latestSource = sourceById.get(savedNode.id)
-            ?? (timelineIndex ? workflowSources[Number.parseInt(timelineIndex, 10)] : undefined);
-          return latestSource
-            ? {
-                ...latestSource,
-                id: savedNode.id,
-                x: savedNode.x,
-                y: savedNode.y,
-                width: savedNode.width,
-                height: savedNode.height,
-              }
-            : null;
-        }).filter((item): item is FlowCanvasNode => Boolean(item));
-        const hasEnd = mergedNodes.some((item) => item.id === "workflow-end");
-        setFlowNodes(hasEnd ? mergedNodes : [...mergedNodes, createEndNode()]);
-        if (Array.isArray(saved.connections)) {
-          const validNodeIds = new Set(mergedNodes.map((item) => item.id));
-          setConnections(saved.connections.filter((connection) =>
-            validNodeIds.has(connection.fromId) && validNodeIds.has(connection.toId),
-          ));
-        }
-      } else if (Array.isArray(saved.connections)) {
-        setConnections(saved.connections);
-      }
-    }
-
-    function loadLocalFallback() {
-      const saved = window.localStorage.getItem(storageKey);
-      if (!saved) return false;
-
-      try {
-        applySavedLayout(JSON.parse(saved) as {
-          nodeLayouts?: Array<Pick<FlowCanvasNode, "id" | "x" | "y" | "width" | "height">>;
-          nodes?: FlowCanvasNode[];
-          connections?: FlowConnection[];
-        });
-        return true;
-      } catch {
-        window.localStorage.removeItem(storageKey);
-        return false;
-      }
-    }
 
     async function loadSharedLayout() {
       setSaveMessage("Memuat canvas");
       const result = await fetchWorkflowLayout("", carId, workflowScopeId);
       if (cancelled) return;
 
-      if (result.payload?.data.layout) {
-        applySavedLayout(result.payload.data.layout as {
-          nodeLayouts?: Array<Pick<FlowCanvasNode, "id" | "x" | "y" | "width" | "height">>;
-          connections?: FlowConnection[];
-        });
-        setSaveMessage("Canvas shared siap");
-        window.setTimeout(() => setSaveMessage(null), 1200);
-        return;
-      }
+      const sourceById = new Map(workflowSources.map((source) => [source.id, source]));
+      const savedLayout = result.payload?.data.layout as {
+        nodeLayouts?: Array<{ id: string; x: number; y: number; width?: number; height?: number }>;
+        connections?: Array<{ id: string; fromId: string; toId: string; fromSide?: string; toSide?: string }>;
+        order?: string[];
+      } | undefined;
+      const savedPositions = new Map((savedLayout?.nodeLayouts ?? []).map((item) => [item.id, { x: item.x, y: item.y }]));
+      const savedSizes = new Map((savedLayout?.nodeLayouts ?? []).map((item) => [item.id, { width: item.width, height: item.height }]));
+      const savedNodeIds = savedLayout?.nodeLayouts?.map((item) => item.id).filter((id) => id !== "workflow-end") ?? [];
+      const initialSources = savedNodeIds
+        .map((id) => sourceById.get(id))
+        .filter((item): item is WorkflowNode => Boolean(item));
+      const flowNodes = [
+        ...initialSources.map((source, index) => flowNodeFromSource(source, index, savedPositions.get(source.id), savedSizes.get(source.id))),
+        flowNodeFromSource(createEndWorkflowNode(), initialSources.length, savedPositions.get("workflow-end") ?? { x: 900, y: 360 }, savedSizes.get("workflow-end")),
+      ];
+      const validNodeIds = new Set(flowNodes.map((item) => item.id));
+      const flowEdges = (savedLayout?.connections ?? [])
+        .filter((edge) => validNodeIds.has(edge.fromId) && validNodeIds.has(edge.toId))
+        .map((edge) => ({
+          id: edge.id,
+          source: edge.fromId,
+          target: edge.toId,
+          sourceHandle: edge.fromSide ?? "right",
+          targetHandle: edge.toSide ?? "left",
+          type: "smoothstep" as const,
+          animated: true,
+        }));
 
-      if (loadLocalFallback()) {
-        setSaveMessage("Canvas lokal dimuat");
-        window.setTimeout(() => setSaveMessage(null), 1600);
-        return;
-      }
-
-      setSaveMessage(null);
+      setNodes(flowNodes);
+      setEdges(flowEdges);
+      if (savedLayout?.order) onWorkflowOrderChange(savedLayout.order);
+      setSaveMessage(savedLayout ? "Canvas shared siap" : null);
+      if (savedLayout) window.setTimeout(() => setSaveMessage(null), 1200);
     }
 
     void loadSharedLayout();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [carId, createEndNode, onWorkflowOrderChange, workflowScopeId, storageKey, workflowSources]);
+    return () => { cancelled = true; };
+  }, [carId, onWorkflowOrderChange, setEdges, setNodes, workflowScopeId, workflowSources]);
 
   useEffect(() => {
     let cancelled = false;
-
     async function loadDivisions() {
       const response = await fetchCountdownBoard("", { limit: "1" });
       if (cancelled) return;
       const references = response.payload?.references;
       setCountdownReferences({
-        divisions: (references?.divisions ?? []).map((division) => ({
-          value: division.value,
-          label: division.label,
-          parentId: division.parentId,
-          parentName: division.parentName,
-          parentCode: division.parentCode,
-        })),
-        sections: (references?.sections ?? []).map((section) => ({
-          value: section.value,
-          label: section.label,
-        })),
-        jobTypes: (references?.jobTypes ?? []).map((jobType) => ({
-          value: jobType.value,
-          label: jobType.label,
-          divisionId: jobType.divisionId,
-          divisionName: jobType.divisionName,
-          divisionParentId: jobType.divisionParentId,
-        })),
+        divisions: (references?.divisions ?? []).map((division) => ({ value: division.value, label: division.label, parentId: division.parentId, parentName: division.parentName, parentCode: division.parentCode })),
+        sections: (references?.sections ?? []).map((section) => ({ value: section.value, label: section.label })),
+        jobTypes: (references?.jobTypes ?? []).map((jobType) => ({ value: jobType.value, label: jobType.label, divisionId: jobType.divisionId, divisionName: jobType.divisionName, divisionParentId: jobType.divisionParentId })),
       });
     }
-
     void loadDivisions();
-
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, []);
 
-  function handleListDragStart(id: string) {
-    setDragFrom("list");
-    setDragSrcId(id);
+  const usedNodeIds = useMemo(() => new Set(nodes.map((item) => item.id)), [nodes]);
+  const availableSources = localWorkflowSources.filter((source) => !usedNodeIds.has(source.id));
+  const selectedFlowNode = selectedNode ? nodes.find((item) => item.id === selectedNode.id)?.data ?? selectedNode : null;
+  const orderedNodeIds = useMemo(() => getOrderedNodeIds(nodes, edges), [edges, nodes]);
+  const orderedFlowNodes = orderedNodeIds.map((id) => nodes.find((item) => item.id === id)?.data).filter((item): item is WorkflowNode => Boolean(item));
+  const canCreateWorkflowSource = allowedCreateTypes.length > 0;
+  const workflowJobContext = useMemo<WorkflowJobCreateContext>(() => ({
+    carId,
+    panelId: node.panelId,
+    panelName: node.label,
+    sectionName: node.section,
+    panelCategory: node.category,
+    divisionId: node.divisionId ? String(node.divisionId) : null,
+    divisionName: node.divisionName,
+  }), [carId, node.category, node.divisionId, node.divisionName, node.label, node.panelId, node.section]);
+
+  const onConnect = useCallback((connection: Connection) => {
+    setEdges((current) => addEdge({ ...connection, type: "smoothstep", animated: true }, current));
+  }, [setEdges]);
+
+  const handleNodeClick: NodeMouseHandler<WorkflowFlowNode> = useCallback((_event, clickedNode) => {
+    setSelectedNode(clickedNode.data);
+  }, []);
+
+  const handleNodeDragStop: OnNodeDrag<WorkflowFlowNode> = useCallback((_event, draggedNode) => {
+    const snappedPosition = snapWorkflowCanvasPosition(draggedNode.position);
+    setNodes((current) => current.map((item) => item.id === draggedNode.id ? { ...item, position: snappedPosition } : item));
+  }, [setNodes]);
+
+  function addSourceToCanvas(source: WorkflowNode) {
+    if (usedNodeIds.has(source.id)) return;
+    setNodes((current) => [
+      ...current.filter((item) => item.id !== "workflow-end"),
+      flowNodeFromSource(source, current.length),
+      current.find((item) => item.id === "workflow-end") ?? flowNodeFromSource(createEndWorkflowNode(), current.length, { x: 900, y: 360 }),
+    ]);
   }
 
-  function getCanvasPoint(event: React.DragEvent<HTMLDivElement>) {
-    const rect = canvasRef.current?.getBoundingClientRect();
-    if (!rect) return { x: 24, y: 24 };
-    return {
-      x: Math.max(16, Math.round(event.clientX - rect.left - 110)),
-      y: Math.max(16, Math.round(event.clientY - rect.top - 42)),
-    };
+  function addSourceToCanvasAt(source: WorkflowNode, position?: { x: number; y: number }) {
+    if (usedNodeIds.has(source.id)) return;
+    setNodes((current) => [
+      ...current.filter((item) => item.id !== "workflow-end"),
+      flowNodeFromSource(source, current.length, position),
+      current.find((item) => item.id === "workflow-end") ?? flowNodeFromSource(createEndWorkflowNode(), current.length, { x: 900, y: 360 }),
+    ]);
+    setSelectedNode(source);
   }
 
-  function handleCanvasDrop(event: React.DragEvent<HTMLDivElement>) {
+  const handleSourceDragStart = useCallback((event: DragEvent<HTMLDivElement>, sourceId: string) => {
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("application/x-workflow-source", sourceId);
+    setDragSourceId(sourceId);
+  }, []);
+
+  const handleSourceDragEnd = useCallback(() => {
+    setDragSourceId(null);
+    setIsCanvasDragActive(false);
+  }, []);
+
+  const handleCanvasDragOver = useCallback((event: DragEvent<HTMLDivElement>) => {
+    if (!event.dataTransfer.types.includes("application/x-workflow-source")) return;
     event.preventDefault();
-    const point = getCanvasPoint(event);
+    event.dataTransfer.dropEffect = "move";
+    if (!isCanvasDragActive) setIsCanvasDragActive(true);
+  }, [isCanvasDragActive]);
 
-    if (dragFrom === "list" && dragSrcId) {
-      const job = localWorkflowSources.find((j) => j.id === dragSrcId);
-      if (!job || flowNodes.find((n) => n.id === job.id)) return;
-      setFlowNodes((prev) => [...prev, { ...job, x: point.x, y: point.y, width: defaultNodeWidth, height: defaultNodeHeight }]);
-      setDragSrcId(null);
-      setDragFrom(null);
+  const handleCanvasDragLeave = useCallback((event: DragEvent<HTMLDivElement>) => {
+    if (event.currentTarget.contains(event.relatedTarget as globalThis.Node | null)) return;
+    setIsCanvasDragActive(false);
+  }, []);
+
+  const handleCanvasDrop = useCallback((event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const sourceId = event.dataTransfer.getData("application/x-workflow-source") || dragSourceId;
+    const source = localWorkflowSources.find((item) => item.id === sourceId);
+    if (!source) {
+      setIsCanvasDragActive(false);
+      setDragSourceId(null);
       return;
     }
 
-    setDragSrcId(null);
-    setDragFrom(null);
-  }
+    const flowPosition = reactFlowInstance?.screenToFlowPosition({ x: event.clientX, y: event.clientY });
+    const droppedPosition = flowPosition
+      ? snapWorkflowCanvasPosition({ x: flowPosition.x - 140, y: flowPosition.y - 40 })
+      : undefined;
 
-  function clearLongPressTimer() {
-    if (longPressTimerRef.current) {
-      clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = null;
-    }
-  }
-
-  function getCanvasMousePoint(event: React.MouseEvent<HTMLDivElement> | MouseEvent) {
-    const rect = canvasRef.current?.getBoundingClientRect();
-    if (!rect) return { x: 0, y: 0 };
-    return {
-      x: Math.max(0, Math.round(event.clientX - rect.left)),
-      y: Math.max(0, Math.round(event.clientY - rect.top)),
-    };
-  }
-
-  function getAnchorSideAtPoint(flowNode: FlowCanvasNode, point: { x: number; y: number }): AnchorSide {
-    const distances: Array<{ side: AnchorSide; value: number }> = [
-      { side: "left", value: Math.abs(point.x - flowNode.x) },
-      { side: "right", value: Math.abs(point.x - (flowNode.x + flowNode.width)) },
-      { side: "top", value: Math.abs(point.y - flowNode.y) },
-      { side: "bottom", value: Math.abs(point.y - (flowNode.y + flowNode.height)) },
-    ];
-    distances.sort((a, b) => a.value - b.value);
-    return distances[0]?.side ?? "right";
-  }
-
-  function getAnchorPoint(flowNode: FlowCanvasNode, side: AnchorSide) {
-    if (side === "left") return { x: flowNode.x, y: flowNode.y + flowNode.height / 2 };
-    if (side === "right") return { x: flowNode.x + flowNode.width, y: flowNode.y + flowNode.height / 2 };
-    if (side === "top") return { x: flowNode.x + flowNode.width / 2, y: flowNode.y };
-    return { x: flowNode.x + flowNode.width / 2, y: flowNode.y + flowNode.height };
-  }
-
-  function offsetAnchor(point: { x: number; y: number }, side: AnchorSide, amount: number) {
-    if (side === "left") return { x: point.x - amount, y: point.y };
-    if (side === "right") return { x: point.x + amount, y: point.y };
-    if (side === "top") return { x: point.x, y: point.y - amount };
-    return { x: point.x, y: point.y + amount };
-  }
-
-  function buildOrthogonalPath(
-    start: { x: number; y: number },
-    end: { x: number; y: number },
-    fromSide: AnchorSide,
-    toSide: AnchorSide,
-    bend?: number,
-  ) {
-    const exitPoint = offsetAnchor(start, fromSide, 28);
-    const entryPoint = offsetAnchor(end, toSide, 28);
-    const entryCmd = toSide === "left" || toSide === "right"
-      ? `H ${end.x}`
-      : `V ${end.y}`;
-
-    if (fromSide === "left" || fromSide === "right") {
-      const midX = bend ?? Math.round((exitPoint.x + entryPoint.x) / 2);
-      return `M ${start.x} ${start.y} H ${exitPoint.x} H ${midX} V ${entryPoint.y} H ${entryPoint.x} ${entryCmd}`;
-    }
-
-    const midY = bend ?? Math.round((exitPoint.y + entryPoint.y) / 2);
-    return `M ${start.x} ${start.y} V ${exitPoint.y} V ${midY} H ${entryPoint.x} V ${entryPoint.y} ${entryCmd}`;
-  }
-
-  function connectionBendPoint(connection: FlowConnection) {
-    const from = flowNodes.find((flowNode) => flowNode.id === connection.fromId);
-    const to = flowNodes.find((flowNode) => flowNode.id === connection.toId);
-    if (!from || !to) return null;
-    const start = getAnchorPoint(from, connection.fromSide);
-    const end = getAnchorPoint(to, connection.toSide);
-    const exitPoint = offsetAnchor(start, connection.fromSide, 28);
-    const entryPoint = offsetAnchor(end, connection.toSide, 28);
-
-    if (connection.fromSide === "left" || connection.fromSide === "right") {
-      const bendX = connection.bendX ?? Math.round((exitPoint.x + entryPoint.x) / 2);
-      return { x: bendX, y: Math.round((exitPoint.y + entryPoint.y) / 2), axis: "x" as const };
-    }
-
-    const bendY = connection.bendY ?? Math.round((exitPoint.y + entryPoint.y) / 2);
-    return { x: Math.round((exitPoint.x + entryPoint.x) / 2), y: bendY, axis: "y" as const };
-  }
-
-  function createConnection(fromId: string, toId: string, fromSide: AnchorSide, toSide: AnchorSide) {
-    if (fromId === toId) return;
-    const connectionId = `${fromId}:${fromSide}->${toId}:${toSide}`;
-    setConnections((prev) =>
-      prev.some((connection) => connection.id === connectionId)
-        ? prev
-        : [...prev, { id: connectionId, fromId, toId, fromSide, toSide }],
-    );
-    setSelectedConnectionId(connectionId);
-    setSelectedFlowNode(null);
-  }
-
-  function startConnectionFromHandle(flowNode: FlowCanvasNode, fromSide: AnchorSide, event: React.MouseEvent<HTMLElement>) {
-    event.stopPropagation();
-    clearLongPressTimer();
-    nodeDragRef.current = null;
-    const anchorPoint = getAnchorPoint(flowNode, fromSide);
-    setConnectFromId(flowNode.id);
-    setConnectTargetId(null);
-    connectTargetIdRef.current = null;
-    setConnectPreview({ fromId: flowNode.id, fromSide, x: anchorPoint.x, y: anchorPoint.y });
-    setSelectedFlowNode(flowNode);
-    setSelectedConnectionId(null);
-  }
-
-  function handleNodeMouseDown(flowNode: FlowCanvasNode, event: React.MouseEvent<HTMLDivElement>) {
-    if (event.button !== 0) return;
-    clearLongPressTimer();
-    const canvasRect = canvasRef.current?.getBoundingClientRect();
-    if (!canvasRect) return;
-    const startPoint = getCanvasMousePoint(event.nativeEvent);
-
-    nodeDragRef.current = {
-      id: flowNode.id,
-      startX: event.clientX,
-      startY: event.clientY,
-      offsetX: event.clientX - canvasRect.left - flowNode.x,
-      offsetY: event.clientY - canvasRect.top - flowNode.y,
-      moved: false,
-      fromSide: getAnchorSideAtPoint(flowNode, startPoint),
-    };
-
-    longPressTimerRef.current = setTimeout(() => {
-      const fromSide = nodeDragRef.current?.fromSide ?? getAnchorSideAtPoint(flowNode, startPoint);
-      nodeDragRef.current = null;
-      const point = getCanvasMousePoint(event.nativeEvent);
-      setConnectFromId(flowNode.id);
-      setConnectPreview({ fromId: flowNode.id, fromSide, x: point.x, y: point.y });
-      setSelectedFlowNode(flowNode);
-      setSelectedConnectionId(null);
-      longPressTimerRef.current = null;
-    }, 420);
-  }
-
-  function handleCanvasMouseMove(event: React.MouseEvent<HTMLDivElement>) {
-    const activeResize = nodeResizeRef.current;
-    if (activeResize) {
-      const width = Math.max(minNodeWidth, Math.round(activeResize.width + event.clientX - activeResize.startX));
-      const height = Math.max(minNodeHeight, Math.round(activeResize.height + event.clientY - activeResize.startY));
-      setFlowNodes((prev) =>
-        prev.map((flowNode) =>
-          flowNode.id === activeResize.id ? { ...flowNode, width, height } : flowNode,
-        ),
-      );
-      setSelectedFlowNode((current) => current && current.id === activeResize.id ? { ...current, width, height } : current);
-      return;
-    }
-
-    const activeConnectionDrag = connectionDragRef.current;
-    if (activeConnectionDrag) {
-      const point = getCanvasMousePoint(event);
-      setConnections((prev) =>
-        prev.map((connection) =>
-          connection.id === activeConnectionDrag.id
-            ? activeConnectionDrag.axis === "x"
-              ? { ...connection, bendX: point.x }
-              : { ...connection, bendY: point.y }
-            : connection,
-        ),
-      );
-      return;
-    }
-
-    if (connectFromId) {
-      const point = getCanvasMousePoint(event);
-      setConnectPreview((current) => current ? { ...current, x: point.x, y: point.y } : null);
-      return;
-    }
-
-    const activeDrag = nodeDragRef.current;
-    if (!activeDrag) return;
-
-    const deltaX = event.clientX - activeDrag.startX;
-    const deltaY = event.clientY - activeDrag.startY;
-    if (!activeDrag.moved && Math.hypot(deltaX, deltaY) < 5) return;
-
-    clearLongPressTimer();
-    activeDrag.moved = true;
-    const canvasRect = canvasRef.current?.getBoundingClientRect();
-    if (!canvasRect) return;
-    const x = Math.max(16, Math.round(event.clientX - canvasRect.left - activeDrag.offsetX));
-    const y = Math.max(16, Math.round(event.clientY - canvasRect.top - activeDrag.offsetY));
-
-    setFlowNodes((prev) =>
-      prev.map((flowNode) =>
-        flowNode.id === activeDrag.id ? { ...flowNode, x, y } : flowNode,
-      ),
-    );
-    setSelectedFlowNode((current) => current && current.id === activeDrag.id ? { ...current, x, y } : current);
-  }
-
-  function handleCanvasMouseUp() {
-    clearLongPressTimer();
-    connectionDragRef.current = null;
-    nodeResizeRef.current = null;
-
-    if (connectFromId) {
-      const targetId = connectTargetIdRef.current;
-      const targetNode = flowNodes.find((flowNode) => flowNode.id === targetId);
-      if (targetNode && connectPreview) {
-        createConnection(
-          connectFromId,
-          targetNode.id,
-          connectPreview.fromSide,
-          getAnchorSideAtPoint(targetNode, { x: connectPreview.x, y: connectPreview.y }),
-        );
-      }
-      setConnectFromId(null);
-      setConnectPreview(null);
-      setConnectTargetId(null);
-      connectTargetIdRef.current = null;
-      nodeDragRef.current = null;
-      return;
-    }
-
-    const activeDrag = nodeDragRef.current;
-    if (activeDrag && !activeDrag.moved) {
-      const flowNode = flowNodes.find((item) => item.id === activeDrag.id);
-      if (flowNode) {
-        setSelectedFlowNode((current) => current?.id === flowNode.id ? null : flowNode);
-        setSelectedConnectionId(null);
-      }
-    }
-    nodeDragRef.current = null;
-  }
+    addSourceToCanvasAt(source, droppedPosition);
+    setIsCanvasDragActive(false);
+    setDragSourceId(null);
+  }, [addSourceToCanvasAt, dragSourceId, localWorkflowSources, reactFlowInstance]);
 
   function handleRemoveNode(id: string) {
     if (id === "workflow-end") return;
-    setFlowNodes((prev) => prev.filter((flowNode) => flowNode.id !== id));
-    setConnections((prev) => prev.filter((connection) => connection.fromId !== id && connection.toId !== id));
-    if (selectedFlowNode?.id === id) setSelectedFlowNode(null);
-    setSelectedConnectionId((current) => {
-      const selectedConnection = connections.find((connection) => connection.id === current);
-      return selectedConnection && (selectedConnection.fromId === id || selectedConnection.toId === id) ? null : current;
-    });
-    if (connectFromId === id) setConnectFromId(null);
-    if (connectTargetId === id) setConnectTargetId(null);
+    setNodes((current) => current.filter((item) => item.id !== id));
+    setEdges((current) => current.filter((edge) => edge.source !== id && edge.target !== id));
+    if (selectedNode?.id === id) setSelectedNode(null);
+  }
+
+  async function handleDeleteSource(sourceId: string) {
+    const source = localWorkflowSources.find((item) => item.id === sourceId);
+    if (!source || !isJobDescMutable(source)) return;
+    const confirmed = await confirm({ title: "Hapus jobdesc?", description: `Hapus "${source.title}"? Ini juga akan menghapusnya dari canvas.`, tone: "error", confirmLabel: "Hapus", cancelLabel: "Batal" });
+    if (!confirmed) return;
+    setLocalWorkflowSources((current) => current.filter((item) => item.id !== sourceId));
+    handleRemoveNode(sourceId);
+    if (editingSourceId === sourceId) {
+      setEditingSourceId(null);
+      setEditForm(null);
+    }
+  }
+
+  function handleSaveEditSource() {
+    if (!editingSourceId || !editForm) return;
+    const nextTitle = editForm.title.trim();
+    const nextMeta = editForm.meta.trim();
+    const updateSource = (item: WorkflowNode) => item.id === editingSourceId ? { ...item, title: nextTitle || item.title, meta: nextMeta } : item;
+    setLocalWorkflowSources((current) => current.map(updateSource));
+    setNodes((current) => current.map((item) => ({ ...item, data: updateSource(item.data) })));
+    setSelectedNode((current) => current && current.id === editingSourceId ? updateSource(current) : current);
+    setEditingSourceId(null);
+    setEditForm(null);
   }
 
   function handleClearFlow() {
-    setFlowNodes([createEndNode()]);
-    setConnections([]);
-    setSelectedFlowNode(null);
-    setSelectedConnectionId(null);
-    setConnectFromId(null);
-    setConnectTargetId(null);
-    setConnectPreview(null);
-    connectTargetIdRef.current = null;
-  }
-
-  function getOrderedFlowNodes() {
-    const nodes = flowNodes.filter((flowNode) => !flowNode.isEnd);
-    const byId = new Map(nodes.map((flowNode) => [flowNode.id, flowNode]));
-    const outgoing = new Map<string, FlowConnection[]>();
-    const incomingCount = new Map<string, number>();
-
-    for (const nodeItem of nodes) {
-      incomingCount.set(nodeItem.id, 0);
-    }
-
-    for (const connection of connections) {
-      if (!byId.has(connection.fromId) || !byId.has(connection.toId)) continue;
-      outgoing.set(connection.fromId, [...(outgoing.get(connection.fromId) ?? []), connection]);
-      incomingCount.set(connection.toId, (incomingCount.get(connection.toId) ?? 0) + 1);
-    }
-
-    const sortByCanvas = (left: FlowCanvasNode, right: FlowCanvasNode) =>
-      left.y === right.y ? left.x - right.x : left.y - right.y;
-    const starts = nodes
-      .filter((flowNode) => (incomingCount.get(flowNode.id) ?? 0) === 0)
-      .sort(sortByCanvas);
-    const ordered: FlowCanvasNode[] = [];
-    const visited = new Set<string>();
-
-    function visit(flowNode: FlowCanvasNode) {
-      if (visited.has(flowNode.id)) return;
-      visited.add(flowNode.id);
-      ordered.push(flowNode);
-      const nextConnections = (outgoing.get(flowNode.id) ?? [])
-        .map((connection) => byId.get(connection.toId))
-        .filter((item): item is FlowCanvasNode => Boolean(item))
-        .sort(sortByCanvas);
-      for (const nextNode of nextConnections) {
-        visit(nextNode);
-      }
-    }
-
-    for (const start of starts) visit(start);
-    for (const remaining of nodes.filter((flowNode) => !visited.has(flowNode.id)).sort(sortByCanvas)) {
-      visit(remaining);
-    }
-
-    return ordered;
+    setNodes([flowNodeFromSource(createEndWorkflowNode(), 0, { x: 900, y: 360 })]);
+    setEdges([]);
+    setSelectedNode(null);
   }
 
   async function handleSaveCanvas() {
-    const order = getOrderedFlowNodes().map((flowNode) => flowNode.id);
+    const order = getOrderedNodeIds(nodes, edges);
     const layout = {
       version: 2 as const,
-      nodeLayouts: flowNodes.map((flowNode) => ({
-        id: flowNode.id,
-        x: flowNode.x,
-        y: flowNode.y,
-        width: flowNode.width,
-        height: flowNode.height,
+      nodeLayouts: nodes.map((item) => ({
+        id: item.id,
+        x: item.position.x,
+        y: item.position.y,
+        width: item.measured?.width ?? item.width ?? 340,
+        height: item.measured?.height ?? item.height ?? 96,
       })),
-      connections,
+      connections: edges.map(toWorkflowEdge),
       order,
       savedAt: new Date().toISOString(),
     };
-
     setSaveMessage("Menyimpan");
     const result = await saveWorkflowLayout(carId, workflowScopeId, layout);
     if (!result.success) {
-      window.localStorage.setItem(storageKey, JSON.stringify(layout));
-      onWorkflowOrderChange(order);
-      setSaveMessage("Redis gagal - disimpan lokal");
+      setSaveMessage("Canvas gagal disimpan");
       window.setTimeout(() => setSaveMessage(null), 2400);
       return;
     }
-
-    window.localStorage.removeItem(storageKey);
     onWorkflowOrderChange(order);
     setSaveMessage("Canvas shared tersimpan");
     window.setTimeout(() => setSaveMessage(null), 1800);
   }
 
-  function selectedDivision() {
-    const fallbackValue = node.divisionId ? String(node.divisionId) : "";
-    const value = createForm.divisionId || fallbackValue;
-    const option = countdownReferences.divisions.find((item) => item.value === value);
-    return {
-      id: Number(value),
-      name: option?.label ?? node.divisionName ?? "",
-    };
-  }
-
-  function visibleCountdownJobTypes() {
-    const selectedDivisionId = createForm.divisionId;
-    if (!selectedDivisionId) return countdownReferences.jobTypes;
-    const selectedDivisionOption = countdownReferences.divisions.find((division) => division.value === selectedDivisionId);
-    const selectedParentId = selectedDivisionOption?.parentId ?? null;
-    const selectedParentCode = (selectedDivisionOption?.parentCode ?? selectedDivisionOption?.parentName ?? "").trim().toUpperCase();
-    const includeMechanicParent = selectedParentId !== null && selectedParentCode === "MECHANIC";
-    return countdownReferences.jobTypes.filter((jobType) => {
-      if (jobType.divisionId === null || jobType.divisionId === undefined) return true;
-      if (String(jobType.divisionId) === selectedDivisionId) return true;
-      return includeMechanicParent && jobType.divisionId === selectedParentId;
-    });
-  }
-
-  function addCreatedSource(params: {
-    type: WorkflowCreateType;
-    title: string;
-    meta: string;
-    idSuffix: string;
-  }) {
-    const sourceType: WorkflowNodeType =
-      params.type === "PR" ? "doc" : params.type === "WOV" ? "wov" : "job";
+  function addCreatedSource(params: CreatedWorkflowJob) {
+    const sourceType: WorkflowNodeType = params.type === "PR" ? "doc" : params.type === "WOV" ? "wov" : "job";
     const source: WorkflowNode = {
       id: `manual-${params.type.toLowerCase()}-${params.idSuffix}`,
       type: sourceType,
-      typeLabel:
-        params.type === "COUNTDOWN"
-          ? "Countdown"
-          : params.type === "WO"
-          ? "WO"
-          : params.type === "PR"
-          ? "PR Logistik"
-          : "WOV - Vendor",
+      typeLabel: params.type === "COUNTDOWN" ? "Countdown" : params.type === "WO" ? "WO" : params.type === "PR" ? "PR Logistik" : "WOV - Vendor",
       title: params.title,
       meta: params.meta,
       badge: params.type,
@@ -2095,1116 +1913,181 @@ function WorkflowBuilder({
       hasMaterials: params.type === "PR" || params.type === "WOV",
     };
     setLocalWorkflowSources((current) => [source, ...current]);
+    addSourceToCanvas(source);
   }
 
-  async function handleCreateWorkflowJob() {
-    const division = selectedDivision();
-    const divisionId = Number.isFinite(division.id) ? division.id : 0;
-    const title = createForm.title.trim() || node.label;
-    const targetDate = createForm.targetDate || todayDate();
-    const targetHours = parseHHMMToDecimal(createForm.targetHours || "0:00");
-    const qty = Number(createForm.qty || 1);
-
-    setCreateError(null);
-
-    if (!divisionId && createForm.type !== "WOV") {
-      setCreateError("Divisi wajib dipilih.");
-      return;
-    }
-    if (!title.trim()) {
-      setCreateError("Nama pekerjaan wajib diisi.");
-      return;
-    }
-    if (createForm.type === "COUNTDOWN") {
-      if (!createForm.sectionName.trim()) {
-        setCreateError("Section wajib dipilih.");
-        return;
-      }
-      if (!createForm.jobTypeId.trim()) {
-        setCreateError("Jobdesc wajib dipilih dari master jobdesc.");
-        return;
-      }
-      if (!Number.isFinite(targetHours) || targetHours < 0) {
-        setCreateError("Target jam wajib format HHH:MM.");
-        return;
-      }
-    }
-    if (createForm.type === "WOV" && !createForm.vendorName.trim()) {
-      setCreateError("Vendor wajib diisi untuk WOV.");
-      return;
-    }
-
-    setIsCreating(true);
-    try {
-      let result:
-        | Awaited<ReturnType<typeof createCountdownRecord>>
-        | Awaited<ReturnType<typeof createWo>>
-        | Awaited<ReturnType<typeof createPr>>
-        | Awaited<ReturnType<typeof createVendor>>;
-
-      if (createForm.type === "COUNTDOWN") {
-        result = await createCountdownRecord({
-          carId,
-          divisionId,
-          panelId: node.panelId,
-          taskCategory: createForm.taskCategory,
-          sectionName: createForm.sectionName.trim(),
-          jobTypeId: createForm.jobTypeId.trim(),
-          targetHoursInitial: targetHours,
-          startDate: createForm.startDate || null,
-          deadlineDate: targetDate,
-          note: createForm.notes.trim() || null,
-          temuanAwal: createForm.temuanAwal.trim() || null,
-          keterangan: createForm.keterangan.trim() || `Panel: ${node.label}`,
-          status: "PLAN",
-        });
-      } else if (createForm.type === "WO") {
-        const woJobDetail = [`Qty: ${Number.isFinite(qty) && qty > 0 ? qty : 1}`, title]
-          .filter(Boolean)
-          .join("\n");
-        result = await createWo({
-          carId,
-          toDivisionId: divisionId,
-          requestDate: targetDate,
-          isPriority: createForm.isPriority,
-          panelName: node.label,
-          jobDetail: woJobDetail,
-          estimatedHours: null,
-          notes: createForm.notes.trim() || null,
-          items: [{
-            panelName: node.label,
-            sectionName: node.section,
-            panelCategory: node.category,
-            addPanelToMaster: false,
-            jobDetail: woJobDetail,
-            notes: createForm.notes.trim() || null,
-            estimatedHours: null,
-          }],
-        });
-      } else if (createForm.type === "PR") {
-        result = await createPr({
-          carId,
-          divisionName: division.name || null,
-          targetDate,
-          priority: "NORMAL",
-          notes: createForm.notes.trim() || null,
-          items: [{
-            itemName: node.label,
-            description: title,
-            originType: "LOKAL",
-            qty: Number.isFinite(qty) && qty > 0 ? qty : 1,
-            uom: createForm.uom.trim() || "pcs",
-            estimatedPrice: null,
-            photoUrl: null,
-          }],
-        });
-      } else {
-        result = await createVendor({
-          carId,
-          coreId: null,
-          prId: null,
-          vendorId: null,
-          vendorName: createForm.vendorName.trim(),
-          picVendor: null,
-          itemName: node.label,
-          quantity: Number.isFinite(qty) && qty > 0 ? qty : null,
-          uom: createForm.uom.trim() || null,
-          goodsConditionOut: createForm.notes.trim() || null,
-          targetDateReturn: targetDate,
-          estimatedCost: null,
-          remarks: title,
-          items: [{
-            itemName: node.label,
-            quantity: Number.isFinite(qty) && qty > 0 ? qty : null,
-            uom: createForm.uom.trim() || null,
-            goodsConditionOut: createForm.notes.trim() || null,
-            estimatedCost: null,
-          }],
-        });
-      }
-
-      if (!result.success) {
-        setCreateError(result.message);
-        return;
-      }
-
-      const idSuffix =
-        "result" in result && typeof result.result === "object"
-          ? Object.values(result.result as Record<string, unknown>)[0]?.toString() ?? `${Date.now()}`
-          : `${Date.now()}`;
-      addCreatedSource({
-        type: createForm.type,
-        title,
-        meta: `${node.label} - ${division.name || "Divisi mengikuti request"}`,
-        idSuffix,
-      });
-      setIsCreateOpen(false);
-      setIsCreateMinimized(false);
-      setJobTypeSearch("");
-      setCreateForm(createWorkflowForm(node));
-    } catch (error) {
-      setCreateError(error instanceof Error ? error.message : "Sumber job belum bisa dibuat.");
-    } finally {
-      setIsCreating(false);
-    }
+  function handleCreatedWorkflowJob(created: CreatedWorkflowJob) {
+    addCreatedSource(created);
+    setIsCreateOpen(false);
+    setIsCreateMinimized(false);
   }
 
-  function connectionPath(connection: FlowConnection) {
-    const from = flowNodes.find((flowNode) => flowNode.id === connection.fromId);
-    const to = flowNodes.find((flowNode) => flowNode.id === connection.toId);
-    if (!from || !to) return null;
-    return buildOrthogonalPath(
-      getAnchorPoint(from, connection.fromSide),
-      getAnchorPoint(to, connection.toSide),
-      connection.fromSide,
-      connection.toSide,
-      connection.fromSide === "left" || connection.fromSide === "right" ? connection.bendX : connection.bendY,
-    );
-  }
-
-  function previewPath() {
-    if (!connectPreview) return null;
-    const from = flowNodes.find((flowNode) => flowNode.id === connectPreview.fromId);
-    if (!from) return null;
-    return buildOrthogonalPath(
-      getAnchorPoint(from, connectPreview.fromSide),
-      { x: connectPreview.x, y: connectPreview.y },
-      connectPreview.fromSide,
-      getAnchorSideAtPoint(from, { x: connectPreview.x, y: connectPreview.y }),
-    );
-  }
-
-  function handleDeleteSelectedConnection() {
-    if (!selectedConnectionId) return;
-    setConnections((prev) => prev.filter((connection) => connection.id !== selectedConnectionId));
-    setSelectedConnectionId(null);
-  }
-
-  function handleCanvasKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
-    if (event.key !== "Backspace" && event.key !== "Delete") return;
-    if (!selectedConnectionId && !selectedFlowNode) return;
-    event.preventDefault();
-
-    if (selectedConnectionId) {
-      handleDeleteSelectedConnection();
-      return;
-    }
-
-    if (selectedFlowNode && !selectedFlowNode.isEnd) {
-      handleRemoveNode(selectedFlowNode.id);
-    }
-  }
-
-  function escapeXml(value: string) {
-    return value.replace(/&/gu, "&amp;").replace(/</gu, "&lt;").replace(/>/gu, "&gt;").replace(/"/gu, "&quot;");
-  }
-
-  function renderExportSvg() {
-    const nodes = flowNodes.length > 0 ? flowNodes : [createEndNode()];
-    const maxX = Math.max(960, ...nodes.map((item) => item.x + item.width + 80));
-    const maxY = Math.max(680, ...nodes.map((item) => item.y + item.height + 80));
-    const exportColors = {
-      accent: "rgb(253 179 96)",
-      success: "rgb(89 166 115)",
-      info: "rgb(121 161 190)",
-      danger: "rgb(209 101 82)",
-      warning: "rgb(200 157 116)",
-      surface: "rgb(43 43 44)",
-      page: "rgb(25 25 26)",
-      text: "rgb(239 239 240)",
-      muted: "rgb(161 160 165)",
-      grid: "rgb(78 78 80)",
-    };
-    const connectionMarkup = connections
-      .map((connection) => connectionPath(connection))
-      .filter(Boolean)
-      .map((path) => `<path d="${path}" fill="none" stroke="${exportColors.accent}" stroke-width="2" marker-end="url(#arrow)" />`)
-      .join("");
-    const nodeMarkup = nodes
-      .map((item) => {
-        const stroke = item.isEnd ? exportColors.success : item.type === "handover" ? exportColors.info : item.type === "doc" ? exportColors.danger : item.type === "wov" ? exportColors.warning : exportColors.accent;
-        return `
-          <g>
-            <rect x="${item.x}" y="${item.y}" width="${item.width}" height="${item.height}" fill="${exportColors.surface}" stroke="${stroke}" stroke-width="1.5" />
-            <text x="${item.x + 12}" y="${item.y + 22}" fill="${stroke}" font-family="monospace" font-size="10">${escapeXml(item.typeLabel)}</text>
-            <text x="${item.x + 12}" y="${item.y + 42}" fill="${exportColors.text}" font-family="monospace" font-size="13">${escapeXml(item.title.slice(0, 28))}</text>
-            <text x="${item.x + 12}" y="${item.y + 62}" fill="${exportColors.muted}" font-family="monospace" font-size="10">${escapeXml(item.meta.slice(0, 36))}</text>
-          </g>
-        `;
-      })
-      .join("");
-
-    return `
-      <svg xmlns="http://www.w3.org/2000/svg" width="${maxX}" height="${maxY}" viewBox="0 0 ${maxX} ${maxY}">
-        <defs>
-          <marker id="arrow" markerHeight="7" markerWidth="7" orient="auto" refX="6" refY="3.5">
-            <path d="M 0 0 L 7 3.5 L 0 7 z" fill="${exportColors.accent}" />
-          </marker>
-          <pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse">
-            <path d="M 24 0 H 0 V 24" fill="none" stroke="${exportColors.grid}" stroke-width="1" />
-          </pattern>
-        </defs>
-        <rect width="100%" height="100%" fill="${exportColors.page}" />
-        <rect width="100%" height="100%" fill="url(#grid)" opacity="0.65" />
-        ${connectionMarkup}
-        ${nodeMarkup}
-      </svg>
-    `;
-  }
-
-  function handleExportPng() {
-    const svg = renderExportSvg();
-    const blob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const image = new Image();
-    image.onload = () => {
-      const canvas = document.createElement("canvas");
-      canvas.width = image.width;
-      canvas.height = image.height;
-      const context = canvas.getContext("2d");
-      if (!context) return;
-      context.drawImage(image, 0, 0);
-      URL.revokeObjectURL(url);
-      const anchor = document.createElement("a");
-      anchor.href = canvas.toDataURL("image/png");
-      anchor.download = `${node.label.replace(/[^\w-]+/gu, "_") || "workflow"}.png`;
-      anchor.click();
-    };
-    image.src = url;
-  }
-
-  function handlePrintA4() {
-    setPrintSvg(renderExportSvg());
-    window.setTimeout(() => window.print(), 50);
-  }
-
-  const borderAccentClass: Record<WorkflowNodeType, string> = {
-    handover: "border-l-info",
-    job: "border-l-primary",
-    doc: "border-l-destructive",
-    wov: "border-l-info",
-  };
-  const typeColorClass: Record<WorkflowNodeType, string> = {
-    handover: "text-info",
-    job: "text-app-accent-ink",
-    doc: "text-destructive",
-    wov: "text-info",
-  };
-  const statusConfig = {
-    done: "border-success/20 bg-success/[0.04] text-success",
-    progress: "border-primary/30 bg-primary/[0.04] text-app-accent-ink",
-    plan: "border-border text-muted-foreground",
-    open: "border-destructive/20 bg-destructive/[0.04] text-destructive",
-  } as const;
-  const orderedFlowNodes = getOrderedFlowNodes();
-  const canCreateWorkflowSource = allowedCreateTypes.length > 0;
-  const createTypeLabels: Record<WorkflowCreateType, string> = {
-    COUNTDOWN: "Countdown",
-    WO: "WO",
-    PR: "PR",
-    WOV: "WOV",
-  };
-  const countdownJobTypeOptions = visibleCountdownJobTypes();
-  const showJobTypeSearch = countdownJobTypeOptions.length > 3;
+  const borderAccentClass: Record<WorkflowNodeType, string> = { handover: "border-l-info", job: "border-l-primary", doc: "border-l-destructive", wov: "border-l-info" };
+  const typeColorClass: Record<WorkflowNodeType, string> = { handover: "text-info", job: "text-app-accent-ink", doc: "text-destructive", wov: "text-info" };
+  const statusConfig = { done: "border-success/20 bg-success/[0.04] text-success", progress: "border-primary/30 bg-primary/[0.04] text-app-accent-ink", plan: "border-border text-muted-foreground", open: "border-destructive/20 bg-destructive/[0.04] text-destructive" } as const;
 
   return (
     <>
-    <div className="grid min-h-[400px] grid-cols-[200px_1fr] border border-border">
-      <div className="flex flex-col border-r border-border">
-        <div className="flex items-center gap-2 border-b border-border bg-background px-3 py-2">
-          <p className="flex-1 text-[14px] font-mono uppercase tracking-[0.12em] text-muted-foreground">
-            Sumber Job
-            {localWorkflowSources.filter((s) => !flowNodes.find((n) => n.id === s.id)).length > 0 && (
-              <span className="ml-1 opacity-50">
-                ({localWorkflowSources.filter((s) => !flowNodes.find((n) => n.id === s.id)).length})
-              </span>
-            )}
-          </p>
-          {canCreateWorkflowSource ? (
-            <button
-              type="button"
-              onClick={() => {
-                setCreateForm(createWorkflowForm(node, defaultCreateType));
-                setCreateError(null);
-                setJobTypeSearch("");
-                setIsCreateMinimized(false);
-                setIsCreateOpen(true);
-              }}
-              className="flex h-7 w-7 items-center justify-center border border-primary/30 bg-primary/[0.06] text-app-accent-ink transition-colors hover:border-primary/60 hover:bg-primary/[0.12]"
-              title="Tambah sumber job"
-            >
-              <Plus className="h-3.5 w-3.5" />
-            </button>
-          ) : null}
-        </div>
-        <div className="flex-1 space-y-1.5 overflow-y-auto bg-card p-2">
-          {localWorkflowSources.map((src) => {
-            const used = !!flowNodes.find((n) => n.id === src.id);
-            return (
-              <div
-                key={src.id}
-                draggable={!used}
-                onDragStart={() => handleListDragStart(src.id)}
-                className={[
-                  "border border-l-2 px-2.5 py-2 select-none transition-all",
-                  "border-border bg-card",
-                  borderAccentClass[src.type],
-                  used
-                    ? "opacity-25 pointer-events-none"
-                    : "cursor-grab hover:border-primary/25 hover:bg-accent",
-                ].join(" ")}
-              >
-                <p className={`text-[15px] font-mono uppercase tracking-[0.08em] ${typeColorClass[src.type]}`}>
-                  {src.typeLabel}
-                </p>
-                <p className="mt-0.5 text-[15px] leading-snug text-foreground">{src.title}</p>
-                <p className="mt-0.5 text-[15px] text-muted-foreground">{src.meta}</p>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="flex min-w-0 flex-col">
-        <div className="flex items-center gap-2 border-b border-border px-3 py-2">
-          <p className="flex-1 text-[14px] font-mono uppercase tracking-[0.12em] text-muted-foreground">
-            Flow Canvas
-            {flowNodes.filter((item) => !item.isEnd).length > 0 && (
-              <span className="ml-1 opacity-50">- {flowNodes.filter((item) => !item.isEnd).length} step</span>
-            )}
-          </p>
-          <p className="text-[15px] font-mono uppercase tracking-[0.08em] text-muted-foreground">
-            {saveMessage ?? "Tarik titik biru untuk panah"}
-          </p>
-          {selectedConnectionId ? (
-            <button
-              type="button"
-              onClick={handleDeleteSelectedConnection}
-              className="border border-destructive/20 bg-destructive/[0.04] px-2 py-0.5 text-[15px] font-mono uppercase tracking-[0.08em] text-destructive transition-colors hover:border-destructive/35"
-            >
-              Hapus panah
-            </button>
-          ) : null}
-          {canSaveCanvas ? (
-            <button
-              type="button"
-              onClick={handleSaveCanvas}
-              className="inline-flex items-center gap-1 border border-border px-2 py-0.5 text-[15px] font-mono uppercase tracking-[0.08em] text-muted-foreground transition-colors hover:border-success/20 hover:text-success"
-            >
-              <Save className="h-3 w-3" />
-              Save
-            </button>
-          ) : null}
-          <button
-            type="button"
-            onClick={handlePrintA4}
-            className="border border-border px-2 py-0.5 text-[15px] font-mono uppercase tracking-[0.08em] text-muted-foreground transition-colors hover:border-primary/20 hover:text-app-accent-ink"
-          >
-            Print
-          </button>
-          <button
-            type="button"
-            onClick={handleExportPng}
-            className="border border-border px-2 py-0.5 text-[15px] font-mono uppercase tracking-[0.08em] text-muted-foreground transition-colors hover:border-primary/20 hover:text-app-accent-ink"
-          >
-            PNG
-          </button>
-          {(flowNodes.filter((item) => !item.isEnd).length > 0 || connections.length > 0) && (
-            <button
-              type="button"
-              onClick={handleClearFlow}
-              className="border border-border px-2 py-0.5 text-[15px] font-mono uppercase tracking-[0.08em] text-muted-foreground transition-colors hover:border-destructive/20 hover:text-destructive"
-            >
-              Reset
-            </button>
-          )}
-        </div>
-
-        <div className="flex min-h-0 flex-1">
-          <div
-            ref={canvasRef}
-            tabIndex={0}
-            className="relative min-h-[520px] flex-1 overflow-auto bg-background"
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={handleCanvasDrop}
-            onMouseMove={handleCanvasMouseMove}
-            onMouseUp={handleCanvasMouseUp}
-            onMouseLeave={handleCanvasMouseUp}
-            onKeyDown={handleCanvasKeyDown}
-          >
-            <div
-              className="pointer-events-none absolute inset-0 opacity-60"
-              style={{
-                backgroundImage: "linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px)",
-                backgroundSize: "24px 24px",
-              }}
-            />
-            <svg className="absolute left-0 top-0 z-[1] h-[1200px] w-[1600px]">
-              <defs>
-                <marker id="workflow-arrow" markerHeight="7" markerWidth="7" orient="auto" refX="6" refY="3.5">
-                  <path d="M 0 0 L 7 3.5 L 0 7 z" fill="var(--primary)" />
-                </marker>
-              </defs>
-              {connections.map((connection) => {
-                const path = connectionPath(connection);
-                const bendPoint = connectionBendPoint(connection);
-                const selected = selectedConnectionId === connection.id;
-                return path ? (
-                  <g key={connection.id}>
-                    <path
-                      d={path}
-                      fill="none"
-                      stroke="transparent"
-                      strokeLinecap="square"
-                      strokeWidth="14"
-                      className="cursor-pointer"
-                      onMouseDown={(e) => {
-                        e.stopPropagation();
-                        setSelectedConnectionId(connection.id);
-                        setSelectedFlowNode(null);
-                      }}
-                    />
-                    <path
-                      d={path}
-                      fill="none"
-                      markerEnd="url(#workflow-arrow)"
-                      pointerEvents="none"
-                      stroke={selected ? "var(--info)" : "var(--primary)"}
-                      strokeDasharray={selected ? "0" : "4 4"}
-                      strokeWidth={selected ? "2" : "1.5"}
-                    />
-                    {selected && bendPoint ? (
-                      <rect
-                        x={bendPoint.x - 4}
-                        y={bendPoint.y - 4}
-                        width="8"
-                        height="8"
-                        fill="var(--info)"
-                        stroke="var(--card-foreground)"
-                        strokeWidth="1"
-                        className={bendPoint.axis === "x" ? "cursor-ew-resize" : "cursor-ns-resize"}
-                        onMouseDown={(e) => {
-                          e.stopPropagation();
-                          connectionDragRef.current = { id: connection.id, axis: bendPoint.axis };
-                          setSelectedConnectionId(connection.id);
-                          setSelectedFlowNode(null);
-                        }}
-                      />
-                    ) : null}
-                  </g>
-                ) : null;
-              })}
-              {previewPath() ? (
-                <path
-                  d={previewPath() ?? undefined}
-                  fill="none"
-                  markerEnd="url(#workflow-arrow)"
-                  stroke="var(--primary)"
-                  strokeDasharray="4 4"
-                  strokeWidth="1.5"
-                />
-              ) : null}
-            </svg>
-
-            {flowNodes.filter((item) => !item.isEnd).length === 0 ? (
-              <div className="absolute left-4 right-4 top-4 border border-dashed border-border px-4 py-10 text-center text-[14px] font-mono uppercase tracking-[0.08em] text-muted-foreground">
-                Drag job dari kiri ke sini untuk menyusun alur kerja
-              </div>
-            ) : (
-              <div className="pointer-events-none relative z-[2] h-[1200px] w-[1600px]">
-                {flowNodes.map((fn) => {
-                  const isSelected = selectedFlowNode?.id === fn.id;
-                  const isConnectSource = connectFromId === fn.id;
-                  const statusClass = statusConfig[fn.status];
-                  return (
-                    <div
-                      key={fn.id}
-                      onMouseDown={(e) => handleNodeMouseDown(fn, e)}
-                      onMouseEnter={() => {
-                        if (connectFromId && connectFromId !== fn.id) {
-                          connectTargetIdRef.current = fn.id;
-                          setConnectTargetId(fn.id);
-                        }
-                      }}
-                      onMouseLeave={() => {
-                        if (connectTargetIdRef.current === fn.id) {
-                          connectTargetIdRef.current = null;
-                          setConnectTargetId(null);
-                        }
-                      }}
-                      className={[
-                        "group absolute min-h-[86px] w-[220px] border border-l-2 px-3 py-2",
-                        "pointer-events-auto select-none transition-all",
-                        connectFromId ? "cursor-crosshair" : "cursor-grab",
-                        borderAccentClass[fn.type],
-                        fn.isEnd
-                          ? "border-success/35 bg-success/[0.035]"
-                          : isSelected || isConnectSource || connectTargetId === fn.id
-                          ? "border-primary/35 bg-primary/[0.04]"
-                          : "border-border bg-card hover:border-border",
-                      ].join(" ")}
-                      style={{ left: fn.x, top: fn.y, width: fn.width, minHeight: fn.height }}
-                      >
-                      <div
-                        className={[
-                          "absolute inset-0 transition-opacity",
-                          isSelected || isConnectSource || connectTargetId === fn.id
-                            ? "opacity-100"
-                            : "opacity-0 group-hover:opacity-100",
-                        ].join(" ")}
-                      >
-                        <button
-                          type="button"
-                          aria-label="Tarik panah dari atas"
-                          onMouseDown={(e) => startConnectionFromHandle(fn, "top", e)}
-                          className="absolute left-1/2 top-[-5px] h-2.5 w-2.5 -translate-x-1/2 cursor-crosshair border border-info bg-info"
-                        />
-                        <button
-                          type="button"
-                          aria-label="Tarik panah dari bawah"
-                          onMouseDown={(e) => startConnectionFromHandle(fn, "bottom", e)}
-                          className="absolute bottom-[-5px] left-1/2 h-2.5 w-2.5 -translate-x-1/2 cursor-crosshair border border-info bg-info"
-                        />
-                        <button
-                          type="button"
-                          aria-label="Tarik panah dari kiri"
-                          onMouseDown={(e) => startConnectionFromHandle(fn, "left", e)}
-                          className="absolute left-[-5px] top-1/2 h-2.5 w-2.5 -translate-y-1/2 cursor-crosshair border border-info bg-info"
-                        />
-                        <button
-                          type="button"
-                          aria-label="Tarik panah dari kanan"
-                          onMouseDown={(e) => startConnectionFromHandle(fn, "right", e)}
-                          className="absolute right-[-5px] top-1/2 h-2.5 w-2.5 -translate-y-1/2 cursor-crosshair border border-info bg-info"
-                        />
-                        <span className="pointer-events-none absolute left-1/2 top-[-22px] h-3 w-px -translate-x-1/2 bg-info/35" />
-                        <span className="pointer-events-none absolute bottom-[-22px] left-1/2 h-3 w-px -translate-x-1/2 bg-info/35" />
-                        <span className="pointer-events-none absolute left-[-22px] top-1/2 h-px w-3 -translate-y-1/2 bg-info/35" />
-                        <span className="pointer-events-none absolute right-[-22px] top-1/2 h-px w-3 -translate-y-1/2 bg-info/35" />
-                      </div>
-                      <button
-                        type="button"
-                        onMouseDown={(e) => e.stopPropagation()}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleRemoveNode(fn.id);
-                        }}
-                        className={[
-                          "absolute right-2 top-1.5 text-[14px] font-mono transition-colors",
-                          fn.isEnd ? "hidden" : "text-foreground/0 group-hover:text-muted-foreground hover:!text-destructive",
-                        ].join(" ")}
-                      >
-                        x
-                      </button>
-                      <p className={`text-[15px] font-mono uppercase tracking-[0.08em] ${typeColorClass[fn.type]}`}>
-                        {fn.sourceLabel ?? fn.typeLabel}
-                      </p>
-                      <p className="mt-0.5 text-[14px] font-mono leading-snug text-foreground">{fn.title}</p>
-                      <p className="mt-0.5 text-[14px] text-muted-foreground">{fn.divisionLabel ?? fn.meta}</p>
-                      {(fn.hourLabel || fn.progressLabel) ? (
-                        <div className="mt-2 grid grid-cols-2 gap-1 text-[15px] font-mono uppercase tracking-[0.06em] text-muted-foreground">
-                          <span>{fn.hourLabel ?? "Jam -"}</span>
-                          <span>{fn.progressLabel ?? "0%"}</span>
-                        </div>
-                      ) : null}
-                      <div className="mt-2 flex items-center gap-2">
-                        <span className={`border px-1.5 py-0.5 text-[15px] font-mono uppercase tracking-[0.06em] ${statusClass}`}>
-                          {fn.statusLabel}
-                        </span>
-                        {fn.hasPhotos && (
-                          <span className="text-[15px] font-mono text-muted-foreground">- foto</span>
-                        )}
-                      </div>
-                      <span
-                        className="absolute bottom-[-4px] right-[-4px] h-3 w-3 cursor-nwse-resize border border-info bg-info"
-                        onMouseDown={(e) => {
-                          e.stopPropagation();
-                          clearLongPressTimer();
-                          nodeResizeRef.current = {
-                            id: fn.id,
-                            startX: e.clientX,
-                            startY: e.clientY,
-                            width: fn.width,
-                            height: fn.height,
-                          };
-                          setSelectedFlowNode(fn);
-                          setSelectedConnectionId(null);
-                        }}
-                      />
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          {(selectedFlowNode || orderedFlowNodes.length > 0) && (
-            <div className="flex w-[200px] flex-shrink-0 flex-col border-l border-border">
-              <div className="flex items-center justify-between border-b border-border px-3 py-2">
-                <p className="text-[14px] font-mono uppercase tracking-[0.08em] text-muted-foreground">
-                  {selectedFlowNode ? "Detail" : "Urutan Flow"}
-                </p>
-                {selectedFlowNode ? (
-                  <button
-                    type="button"
-                    onClick={() => setSelectedFlowNode(null)}
-                    className="text-[14px] font-mono text-muted-foreground hover:text-foreground"
-                  >
-                    x
-                  </button>
-                ) : null}
-              </div>
-              <div className="flex-1 space-y-4 overflow-y-auto p-3">
-                {selectedFlowNode ? (
-                  <>
-                    <div>
-                      <p className="mb-1 text-[15px] font-mono uppercase tracking-[0.08em] text-muted-foreground">Sumber</p>
-                      <p className="text-[15px] font-mono leading-snug text-foreground">{selectedFlowNode.sourceLabel ?? selectedFlowNode.typeLabel}</p>
-                    </div>
-                    <div>
-                      <p className="mb-1 text-[15px] font-mono uppercase tracking-[0.08em] text-muted-foreground">Master Jobdesc</p>
-                      <p className="text-[15px] font-mono leading-snug text-foreground">{selectedFlowNode.title}</p>
-                      <p className="mt-1 text-[14px] text-muted-foreground">{selectedFlowNode.meta}</p>
-                    </div>
-                    <div>
-                      <p className="mb-1 text-[15px] font-mono uppercase tracking-[0.08em] text-muted-foreground">Divisi</p>
-                      <p className="text-[14px] font-mono text-foreground">{selectedFlowNode.divisionLabel ?? "-"}</p>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <p className="mb-1 text-[15px] font-mono uppercase tracking-[0.08em] text-muted-foreground">Jam</p>
-                        <p className="text-[14px] font-mono text-foreground">{selectedFlowNode.hourLabel ?? "-"}</p>
-                      </div>
-                      <div>
-                        <p className="mb-1 text-[15px] font-mono uppercase tracking-[0.08em] text-muted-foreground">Progress</p>
-                        <p className="text-[14px] font-mono text-foreground">{selectedFlowNode.progressLabel ?? "-"}</p>
-                      </div>
-                    </div>
-                    {selectedFlowNode.detail ? (
-                      <div>
-                        <p className="mb-1 text-[15px] font-mono uppercase tracking-[0.08em] text-muted-foreground">Detail</p>
-                        <p className="text-[14px] leading-relaxed text-muted-foreground">{selectedFlowNode.detail}</p>
-                      </div>
-                    ) : null}
-                    <div>
-                      <p className="mb-1 text-[15px] font-mono uppercase tracking-[0.08em] text-muted-foreground">Status</p>
-                      <span className={`border px-2 py-0.5 text-[15px] font-mono uppercase tracking-[0.06em] ${statusConfig[selectedFlowNode.status]}`}>
-                        {selectedFlowNode.statusLabel}
-                      </span>
-                    </div>
-                    <div>
-                      <p className="mb-1 text-[15px] font-mono uppercase tracking-[0.08em] text-muted-foreground">Bukti Foto</p>
-                      {selectedFlowNode.hasPhotos ? (
-                        <button
-                          type="button"
-                          onClick={onNavigateToPhotos}
-                          className="w-full border border-border px-2 py-1 text-left text-[15px] font-mono uppercase tracking-[0.06em] text-muted-foreground transition-colors hover:border-primary/20 hover:text-app-accent-ink"
-                        >
-                          Lihat Galeri -&gt;
-                        </button>
-                      ) : (
-                        <p className="text-[14px] font-mono text-muted-foreground">Belum ada foto</p>
-                      )}
-                    </div>
-                    <div>
-                      <p className="mb-1 text-[15px] font-mono uppercase tracking-[0.08em] text-muted-foreground">Bahan & Tools</p>
-                      {selectedFlowNode.hasMaterials ? (
-                        <button
-                          type="button"
-                          onClick={onNavigateToDocuments}
-                          className="w-full border border-border px-2 py-1 text-left text-[15px] font-mono uppercase tracking-[0.06em] text-muted-foreground transition-colors hover:border-primary/20 hover:text-app-accent-ink"
-                        >
-                          Lihat Logistik -&gt;
-                        </button>
-                      ) : (
-                        <p className="text-[14px] font-mono text-muted-foreground">Belum ada data</p>
-                      )}
-                    </div>
-                  </>
-                ) : null}
-                {orderedFlowNodes.length > 0 ? (
-                  <div>
-                    <p className="mb-2 text-[15px] font-mono uppercase tracking-[0.08em] text-muted-foreground">Urutan</p>
-                    <div className="space-y-1.5">
-                      {orderedFlowNodes.map((flowNode, index) => (
-                        <button
-                          key={flowNode.id}
-                          type="button"
-                          onClick={() => {
-                            setSelectedFlowNode(flowNode);
-                            setSelectedConnectionId(null);
-                          }}
-                          className="w-full border border-border px-2 py-1.5 text-left transition-colors hover:border-primary/20"
-                        >
-                          <p className="text-[15px] font-mono uppercase tracking-[0.08em] text-muted-foreground">
-                            {String(index + 1).padStart(2, "0")} - {flowNode.sourceLabel ?? flowNode.typeLabel}
-                          </p>
-                          <p className="mt-0.5 line-clamp-2 text-[14px] text-foreground">{flowNode.title}</p>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-              </div>
+      {alertElement}
+      <div className={`grid border border-border bg-card ${isFullscreen ? "h-[calc(100vh-140px)]" : "min-h-[calc(100vh-300px)]"} grid-cols-1 ${isSourceListHidden ? "xl:grid-cols-1" : "xl:grid-cols-[280px_minmax(0,1fr)]"}`}>
+        {!isSourceListHidden ? (
+          <div className="flex min-h-0 flex-col border-b border-border bg-card xl:border-b-0 xl:border-r">
+            <div className="flex items-center gap-2 border-b border-border bg-muted px-3 py-2">
+              <p className="flex-1 text-[14px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Sumber Job ({availableSources.length})</p>
+              <button type="button" onClick={() => setIsSourceListHidden(true)} className="h-9 border border-border bg-card px-3 text-[13px] font-mono uppercase tracking-[0.08em] text-muted-foreground hover:border-primary/35 hover:text-foreground">Hide</button>
             </div>
-          )}
-        </div>
-      </div>
-    </div>
-    {isCreateOpen && isCreateMinimized ? (
-      <div className="fixed bottom-4 right-4 z-[80] w-[min(360px,calc(100vw-32px))] border border-border bg-card shadow-2xl">
-        <div className="flex items-center gap-3 px-3 py-2">
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-[14px] font-mono uppercase tracking-[0.12em] text-app-accent-ink">Tambah Sumber Job</p>
-            <p className="truncate text-[14px] text-foreground">{createForm.title || node.label}</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setIsCreateMinimized(false)}
-            className="border border-border px-3 py-1.5 text-[14px] font-mono uppercase tracking-[0.1em] text-foreground hover:text-foreground"
-          >
-            Buka
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setIsCreateOpen(false);
-              setIsCreateMinimized(false);
-            }}
-            className="flex h-7 w-7 items-center justify-center border border-border text-muted-foreground hover:text-foreground"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
-        </div>
-      </div>
-    ) : isCreateOpen ? (
-      <div className="fixed inset-0 z-[80] flex items-start justify-center overflow-y-auto bg-background/80 dark:bg-black/75 px-3 py-6 backdrop-blur-[2px]">
-        <div className="flex max-h-[calc(100vh-48px)] w-full max-w-3xl flex-col overflow-hidden border border-border bg-card shadow-2xl">
-          <div className="flex shrink-0 items-center justify-between border-b border-border bg-card px-4 py-3">
-            <div>
-              <p className="text-[15px] font-mono uppercase tracking-[0.12em] text-app-accent-ink">Tambah Sumber Job</p>
-              <p className="mt-1 text-[15px] text-foreground">{node.label}</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setIsCreateMinimized(true)}
-                className="flex h-8 w-8 items-center justify-center border border-border text-muted-foreground hover:text-foreground"
-                title="Minimize"
-              >
-                <span className="mb-1 text-lg leading-none">-</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsCreateOpen(false);
-                  setIsCreateMinimized(false);
-                }}
-                className="flex h-8 w-8 items-center justify-center border border-border text-muted-foreground hover:text-foreground"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
-
-          <div className="grid flex-1 gap-3 overflow-y-auto px-4 py-4 sm:grid-cols-2">
-            <div className="space-y-1.5 sm:col-span-2">
-              <span className="block text-[15px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Jenis</span>
-              <div className="grid grid-cols-2 gap-1 border border-border bg-card p-1 sm:grid-cols-4">
-                {allowedCreateTypes.map((type) => (
-                  <button
-                    key={type}
-                    type="button"
-                    onClick={() => {
-                      setCreateForm((current) => ({ ...current, type }));
-                      setJobTypeSearch("");
-                    }}
+            <div className="flex-1 space-y-2 overflow-y-auto bg-card p-2">
+              {localWorkflowSources.map((src) => {
+                const used = usedNodeIds.has(src.id);
+                const mutable = isJobDescMutable(src);
+                const isEditing = editingSourceId === src.id;
+                return (
+                  <div
+                    key={src.id}
+                    draggable={!used && !isEditing}
+                    onDragStart={(event) => handleSourceDragStart(event, src.id)}
+                    onDragEnd={handleSourceDragEnd}
                     className={[
-                      "h-9 text-[14px] font-mono uppercase tracking-[0.1em] transition-colors",
-                      createForm.type === type
-                        ? "bg-primary text-primary-foreground"
-                        : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                      "group relative border border-l-2 bg-card transition-all",
+                      borderAccentClass[src.type],
+                      dragSourceId === src.id ? "scale-[0.985] opacity-60" : "",
+                      used && !isEditing ? "bg-muted opacity-70" : "hover:border-primary/35 hover:bg-muted",
+                      !used && !isEditing ? "cursor-grab active:cursor-grabbing" : "",
                     ].join(" ")}
                   >
-                    {createTypeLabels[type]}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <label className="space-y-1.5">
-              <span className="block text-[15px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Divisi</span>
-              <select
-                value={createForm.divisionId}
-                onChange={(event) => {
-                  setCreateForm((current) => ({ ...current, divisionId: event.target.value, jobTypeId: "" }));
-                  setJobTypeSearch("");
-                }}
-                disabled={createForm.type === "WOV"}
-                className="h-10 w-full border border-border bg-card px-3 text-[15px] text-foreground outline-none focus:border-primary/45 disabled:cursor-not-allowed disabled:opacity-45"
-              >
-                <option value="">{node.divisionName ?? "Pilih divisi"}</option>
-                {countdownReferences.divisions.map((division) => (
-                  <option key={division.value} value={division.value}>{division.label}</option>
-                ))}
-              </select>
-            </label>
-            <label className="space-y-1.5">
-              <span className="block text-[15px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Unit</span>
-              <input
-                value={carId}
-                readOnly
-                className="h-10 w-full border border-border bg-muted px-3 text-[15px] text-foreground outline-none"
-              />
-            </label>
-            <label className="space-y-1.5">
-              <span className="block text-[15px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Panel / Part</span>
-              <input
-                value={node.label}
-                readOnly
-                className="h-10 w-full border border-border bg-muted px-3 text-[15px] text-foreground outline-none"
-              />
-            </label>
-            <label className="space-y-1.5 sm:col-span-2">
-              <span className="block text-[15px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Pekerjaan</span>
-              <input
-                value={createForm.title}
-                onChange={(event) => setCreateForm((current) => ({ ...current, title: event.target.value }))}
-                className="h-10 w-full border border-border bg-card px-3 text-[15px] text-foreground outline-none focus:border-primary/45"
-              />
-            </label>
-            {createForm.type === "COUNTDOWN" ? (
-              <>
-                <label className="space-y-1.5">
-                  <span className="block text-[15px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Tipe</span>
-                  <select
-                    value={createForm.taskCategory}
-                    onChange={(event) => setCreateForm((current) => ({ ...current, taskCategory: event.target.value as WorkflowCreateFormState["taskCategory"] }))}
-                    className="h-10 w-full border border-border bg-card px-3 text-[15px] text-foreground outline-none focus:border-primary/45"
-                  >
-                    <option value="MAIN">Main</option>
-                    <option value="ADDITIONAL">Additional</option>
-                  </select>
-                </label>
-                <label className="space-y-1.5">
-                  <span className="block text-[15px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Section</span>
-                  <select
-                    value={createForm.sectionName}
-                    onChange={(event) => setCreateForm((current) => ({ ...current, sectionName: event.target.value }))}
-                    className="h-10 w-full border border-border bg-card px-3 text-[15px] text-foreground outline-none focus:border-primary/45"
-                  >
-                    <option value="">Pilih section</option>
-                    {countdownReferences.sections.map((section) => (
-                      <option key={section.value} value={section.value}>{section.label}</option>
-                    ))}
-                    {node.section && !countdownReferences.sections.some((section) => section.value === node.section) ? (
-                      <option value={node.section}>{node.section}</option>
+                    <button type="button" disabled={used || isEditing} onClick={() => addSourceToCanvas(src)} className={`w-full px-2.5 py-2 text-left ${!used && !isEditing ? "cursor-pointer" : "cursor-default"}`}>
+                      <p className={`pr-12 text-[15px] font-mono uppercase tracking-[0.08em] ${typeColorClass[src.type]}`}>{src.typeLabel}</p>
+                      <p className="mt-0.5 pr-12 text-[15px] leading-snug text-foreground">{src.title}</p>
+                      <p className="mt-0.5 pr-12 text-[15px] text-muted-foreground">{src.meta}</p>
+                    </button>
+                    {mutable && !isEditing ? (
+                      <div className="absolute right-1 top-1 hidden items-center gap-1 group-hover:flex">
+                        <button type="button" onClick={() => { setEditingSourceId(src.id); setEditForm({ title: src.title, meta: src.meta }); }} className="flex h-8 w-8 items-center justify-center border border-border bg-card text-muted-foreground hover:text-foreground" title="Edit jobdesc"><Pencil className="h-3.5 w-3.5" /></button>
+                        <button type="button" onClick={() => { void handleDeleteSource(src.id); }} className="flex h-8 w-8 items-center justify-center border border-border bg-card text-muted-foreground hover:text-destructive" title="Hapus jobdesc"><Trash2 className="h-3.5 w-3.5" /></button>
+                      </div>
                     ) : null}
-                  </select>
-                </label>
-                <label className="space-y-1.5 sm:col-span-2">
-                  <span className="block text-[15px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Jobdesc</span>
-                  {showJobTypeSearch ? (
-                    <JobTypeCombobox
-                      options={countdownJobTypeOptions}
-                      selectedValue={createForm.jobTypeId}
-                      searchValue={jobTypeSearch}
-                      onSearchChange={setJobTypeSearch}
-                      onSelect={(jobTypeId) => setCreateForm((current) => ({ ...current, jobTypeId }))}
-                    />
-                  ) : (
-                    <select
-                      value={createForm.jobTypeId}
-                      onChange={(event) => setCreateForm((current) => ({ ...current, jobTypeId: event.target.value }))}
-                      className="h-10 w-full border border-border bg-card px-3 text-[15px] text-foreground outline-none focus:border-primary/45"
-                    >
-                      <option value="">Pilih jobdesc</option>
-                      {countdownJobTypeOptions.map((jobType) => (
-                        <option key={jobType.value} value={jobType.value}>{jobType.label}</option>
-                      ))}
-                    </select>
-                  )}
-                </label>
-                <label className="space-y-1.5">
-                  <span className="block text-[15px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Target Awal</span>
-                  <input
-                    value={createForm.targetHours}
-                    onChange={(event) => setCreateForm((current) => ({ ...current, targetHours: event.target.value }))}
-                    placeholder="001:00"
-                    className="h-10 w-full border border-border bg-card px-3 text-[15px] text-foreground outline-none focus:border-primary/45"
-                  />
-                </label>
-                <label className="space-y-1.5">
-                  <span className="block text-[15px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Start Date</span>
-                  <input
-                    type="date"
-                    value={createForm.startDate}
-                    onChange={(event) => setCreateForm((current) => ({ ...current, startDate: event.target.value }))}
-                    className="h-10 w-full border border-border bg-card px-3 text-[15px] text-foreground outline-none focus:border-primary/45 dark:[color-scheme:dark]"
-                  />
-                </label>
-                <label className="space-y-1.5 sm:col-span-2">
-                  <span className="block text-[15px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Temuan Awal</span>
-                  <textarea
-                    value={createForm.temuanAwal}
-                    onChange={(event) => setCreateForm((current) => ({ ...current, temuanAwal: event.target.value }))}
-                    rows={2}
-                    className="w-full resize-none border border-border bg-card px-3 py-2 text-[15px] text-foreground outline-none focus:border-primary/45"
-                  />
-                </label>
-                <label className="space-y-1.5 sm:col-span-2">
-                  <span className="block text-[15px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Keterangan</span>
-                  <textarea
-                    value={createForm.keterangan}
-                    onChange={(event) => setCreateForm((current) => ({ ...current, keterangan: event.target.value }))}
-                    rows={2}
-                    className="w-full resize-none border border-border bg-card px-3 py-2 text-[15px] text-foreground outline-none focus:border-primary/45"
-                  />
-                </label>
-              </>
-            ) : null}
-            {createForm.type === "WO" ? (
-              <>
-                <label className="space-y-1.5">
-                  <span className="block text-[15px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Qty</span>
-                  <input
-                    type="number"
-                    min="1"
-                    value={createForm.qty}
-                    onChange={(event) => setCreateForm((current) => ({ ...current, qty: event.target.value }))}
-                    className="h-10 w-full border border-border bg-card px-3 text-[15px] text-foreground outline-none focus:border-primary/45"
-                  />
-                </label>
-                <label className="flex h-10 items-center gap-2 self-end border border-border bg-card px-3 text-[14px] font-semibold text-foreground">
-                  <input
-                    type="checkbox"
-                    checked={createForm.isPriority}
-                    onChange={(event) => setCreateForm((current) => ({ ...current, isPriority: event.target.checked }))}
-                    className="h-4 w-4 accent-primary"
-                  />
-                  Urgent / Prioritas
-                </label>
-              </>
-            ) : null}
-            {(createForm.type === "PR" || createForm.type === "WOV") ? (
-              <>
-                <label className="space-y-1.5">
-                  <span className="block text-[15px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Qty</span>
-                  <input
-                    type="number"
-                    min="1"
-                    step="1"
-                    value={createForm.qty}
-                    onChange={(event) => setCreateForm((current) => ({ ...current, qty: event.target.value }))}
-                    className="h-10 w-full border border-border bg-card px-3 text-[15px] text-foreground outline-none focus:border-primary/45"
-                  />
-                </label>
-                <label className="space-y-1.5">
-                  <span className="block text-[15px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Satuan</span>
-                  <input
-                    value={createForm.uom}
-                    onChange={(event) => setCreateForm((current) => ({ ...current, uom: event.target.value }))}
-                    className="h-10 w-full border border-border bg-card px-3 text-[15px] text-foreground outline-none focus:border-primary/45"
-                  />
-                </label>
-              </>
-            ) : null}
-            {createForm.type === "WOV" ? (
-              <label className="space-y-1.5">
-                <span className="block text-[15px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Vendor</span>
-                <input
-                  value={createForm.vendorName}
-                  onChange={(event) => setCreateForm((current) => ({ ...current, vendorName: event.target.value }))}
-                  className="h-10 w-full border border-border bg-card px-3 text-[15px] text-foreground outline-none focus:border-primary/45"
-                />
-              </label>
-            ) : null}
-            <label className="space-y-1.5">
-              <span className="block text-[15px] font-mono uppercase tracking-[0.12em] text-muted-foreground">
-                {createForm.type === "WOV" ? "Target Kembali" : createForm.type === "WO" ? "Target Selesai" : "Deadline"}
-              </span>
-              <input
-                type="date"
-                value={createForm.targetDate}
-                onChange={(event) => setCreateForm((current) => ({ ...current, targetDate: event.target.value }))}
-                className="h-10 w-full border border-border bg-card px-3 text-[15px] text-foreground outline-none focus:border-primary/45 dark:[color-scheme:dark]"
-              />
-            </label>
-            <label className="space-y-1.5 sm:col-span-2">
-              <span className="block text-[15px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Catatan</span>
-              <textarea
-                value={createForm.notes}
-                onChange={(event) => setCreateForm((current) => ({ ...current, notes: event.target.value }))}
-                rows={2}
-                className="w-full resize-none border border-border bg-card px-3 py-2 text-[15px] text-foreground outline-none focus:border-primary/45"
-              />
-            </label>
+                    {!mutable ? <div className="absolute right-1.5 top-1.5"><Lock className="h-3 w-3 text-muted-foreground/50" /></div> : null}
+                    {isEditing && editForm ? (
+                      <div className="space-y-2 border-t border-border p-2.5">
+                        <input type="text" value={editForm.title} onChange={(event) => setEditForm((current) => current ? { ...current, title: event.target.value } : current)} className="w-full border border-border bg-background px-2 py-1 text-[14px] text-foreground focus:border-primary/50 focus:outline-none" placeholder="Nama pekerjaan" />
+                        <input type="text" value={editForm.meta} onChange={(event) => setEditForm((current) => current ? { ...current, meta: event.target.value } : current)} className="w-full border border-border bg-background px-2 py-1 text-[14px] text-foreground focus:border-primary/50 focus:outline-none" placeholder="Keterangan" />
+                        <div className="flex gap-1.5">
+                          <button type="button" onClick={handleSaveEditSource} className="flex-1 border border-primary/30 bg-primary/10 px-2 py-1 text-[14px] font-mono uppercase tracking-[0.08em] text-app-accent-ink hover:bg-primary/15">Simpan</button>
+                          <button type="button" onClick={() => { setEditingSourceId(null); setEditForm(null); }} className="border border-border px-2 py-1 text-[14px] font-mono uppercase tracking-[0.08em] text-muted-foreground hover:text-foreground">Batal</button>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
+
+        <div className="flex min-w-0 flex-col bg-card">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-muted px-3 py-2">
+            <div className="flex min-w-0 items-center gap-2">
+              {isSourceListHidden ? <button type="button" onClick={() => setIsSourceListHidden(false)} className="h-9 border border-border bg-card px-3 text-[13px] font-mono uppercase tracking-[0.08em] text-muted-foreground hover:border-primary/35 hover:text-foreground">Sumber Job</button> : null}
+              <p className="text-[14px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Workflow Canvas{orderedFlowNodes.length > 0 ? <span className="ml-1 opacity-50">- {orderedFlowNodes.length} step</span> : null}</p>
+              <span className="hidden text-[13px] font-mono text-muted-foreground md:inline">{saveMessage ?? "React Flow"}</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-1">
+              <button type="button" onClick={onToggleFullscreen} className="inline-flex h-9 w-9 items-center justify-center border border-border bg-card text-muted-foreground transition-colors hover:border-primary/35 hover:text-foreground" title={isFullscreen ? "Keluar fullscreen" : "Masuk fullscreen"} aria-label={isFullscreen ? "Keluar fullscreen" : "Masuk fullscreen"}>{isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}</button>
+              {canSaveCanvas ? <button type="button" onClick={handleSaveCanvas} className="inline-flex h-9 items-center gap-1 border border-border bg-card px-3 text-[13px] font-mono uppercase tracking-[0.08em] text-muted-foreground transition-colors hover:border-success/30 hover:text-success"><Save className="h-3.5 w-3.5" />Save Layout</button> : null}
+              {canCreateWorkflowSource ? <button type="button" onClick={() => { setIsCreateMinimized(false); setIsCreateOpen(true); }} className="inline-flex h-9 items-center gap-1.5 border border-primary/30 bg-primary/10 px-3 text-[13px] font-mono uppercase tracking-[0.08em] text-app-accent-ink hover:bg-primary/15"><Plus className="h-3.5 w-3.5" />Tambah</button> : null}
+              {(orderedFlowNodes.length > 0 || edges.length > 0) ? <button type="button" onClick={handleClearFlow} className="h-9 border border-border bg-card px-3 text-[13px] font-mono uppercase tracking-[0.08em] text-muted-foreground transition-colors hover:border-destructive/30 hover:text-destructive">Reset</button> : null}
+            </div>
           </div>
 
-          {createError ? (
-            <div className="mx-4 mb-3 border border-destructive/20 bg-destructive/[0.04] px-3 py-2 text-[15px] text-destructive">
-              {createError}
+          <div className="flex min-h-0 flex-1 flex-col xl:flex-row">
+            <div
+              className={[
+                "relative min-h-[520px] flex-1 bg-background transition-colors",
+                isFullscreen ? "h-[calc(100vh-220px)]" : "",
+                isCanvasDragActive ? "bg-primary/[0.05]" : "",
+              ].join(" ")}
+              onDragOver={handleCanvasDragOver}
+              onDragLeave={handleCanvasDragLeave}
+              onDrop={handleCanvasDrop}
+            >
+              <ReactFlow
+                nodes={nodes}
+                edges={edges}
+                nodeTypes={workflowNodeTypes}
+                connectionMode={ConnectionMode.Loose}
+                defaultEdgeOptions={{ type: "smoothstep", animated: true }}
+                snapToGrid
+                snapGrid={[workflowCanvasGrid, workflowCanvasGrid]}
+                onInit={setReactFlowInstance}
+                onNodesChange={onNodesChange}
+                onEdgesChange={onEdgesChange}
+                onConnect={onConnect}
+                onNodeClick={handleNodeClick}
+                onNodeDragStop={handleNodeDragStop}
+                fitView
+                proOptions={{ hideAttribution: true }}
+                className="[&_.react-flow__edge-path]:!stroke-primary [&_.react-flow__handle]:!bg-primary [&_.react-flow__node-default]:!border-border [&_.react-flow__node-default]:!bg-card [&_.react-flow__node-default]:!text-foreground"
+              >
+                <Background color="var(--border)" gap={24} />
+              </ReactFlow>
+              {orderedFlowNodes.length === 0 ? (
+                <div className="pointer-events-none absolute inset-x-4 bottom-4 z-10 border border-dashed border-border bg-card/90 px-4 py-3 backdrop-blur-sm">
+                  <p className="text-[12px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Canvas kosong</p>
+                  <p className="mt-1 text-[13px] text-foreground">Geser kartu dari Sumber Job ke canvas, lalu hubungkan node sesuai alur kerja.</p>
+                </div>
+              ) : null}
+              {isCanvasDragActive ? (
+                <div className="pointer-events-none absolute inset-4 z-10 border border-dashed border-primary/35 bg-primary/[0.06]" />
+              ) : null}
             </div>
-          ) : null}
 
-          <div className="flex shrink-0 justify-end gap-2 border-t border-border bg-card px-4 py-3">
-            <button
-              type="button"
-              onClick={() => {
-                setIsCreateOpen(false);
-                setIsCreateMinimized(false);
-              }}
-              className="border border-border px-4 py-2 text-[15px] font-mono uppercase tracking-[0.12em] text-foreground hover:text-foreground"
-            >
-              Batal
-            </button>
-            <button
-              type="button"
-              disabled={isCreating}
-              onClick={() => {
-                void handleCreateWorkflowJob();
-              }}
-              className="border border-primary/35 bg-primary px-5 py-2 text-[15px] font-mono uppercase tracking-[0.12em] text-primary-foreground disabled:cursor-not-allowed disabled:opacity-45"
-            >
-              {isCreating ? "Menyimpan..." : "Buat"}
-            </button>
+            {(selectedFlowNode || orderedFlowNodes.length > 0) ? (
+              <div className="flex w-full flex-shrink-0 flex-col border-t border-border bg-card xl:w-[280px] xl:border-l xl:border-t-0">
+                <div className="flex items-center justify-between border-b border-border bg-muted px-3 py-2">
+                  <p className="text-[14px] font-mono uppercase tracking-[0.08em] text-muted-foreground">{selectedFlowNode ? "Detail" : "Urutan Flow"}</p>
+                  {selectedFlowNode ? <button type="button" onClick={() => setSelectedNode(null)} className="text-[14px] font-mono text-muted-foreground hover:text-foreground">x</button> : null}
+                </div>
+                <div className="flex-1 space-y-4 overflow-y-auto p-3">
+                  {selectedFlowNode ? (
+                    <>
+                      <div><p className="mb-1 text-[15px] font-mono uppercase tracking-[0.08em] text-muted-foreground">Sumber</p><p className="text-[15px] font-mono leading-snug text-foreground">{selectedFlowNode.sourceLabel ?? selectedFlowNode.typeLabel}</p></div>
+                      <div><p className="mb-1 text-[15px] font-mono uppercase tracking-[0.08em] text-muted-foreground">Master Jobdesc</p><p className="text-[15px] font-mono leading-snug text-foreground">{selectedFlowNode.title}</p><p className="mt-1 text-[14px] text-muted-foreground">{selectedFlowNode.meta}</p></div>
+                      <div><p className="mb-1 text-[15px] font-mono uppercase tracking-[0.08em] text-muted-foreground">Divisi</p><p className="text-[14px] font-mono text-foreground">{selectedFlowNode.divisionLabel ?? "-"}</p></div>
+                      <div className="grid grid-cols-2 gap-2"><div><p className="mb-1 text-[15px] font-mono uppercase tracking-[0.08em] text-muted-foreground">Jam</p><p className="text-[14px] font-mono text-foreground">{selectedFlowNode.hourLabel ?? "-"}</p></div><div><p className="mb-1 text-[15px] font-mono uppercase tracking-[0.08em] text-muted-foreground">Progress</p><p className="text-[14px] font-mono text-foreground">{selectedFlowNode.progressLabel ?? "-"}</p></div></div>
+                      {selectedFlowNode.detail ? <div><p className="mb-1 text-[15px] font-mono uppercase tracking-[0.08em] text-muted-foreground">Detail</p><p className="text-[14px] leading-relaxed text-muted-foreground">{selectedFlowNode.detail}</p></div> : null}
+                      <div><p className="mb-1 text-[15px] font-mono uppercase tracking-[0.08em] text-muted-foreground">Status</p><span className={`border px-2 py-0.5 text-[15px] font-mono uppercase tracking-[0.06em] ${statusConfig[selectedFlowNode.status]}`}>{selectedFlowNode.statusLabel}</span></div>
+                      <div><p className="mb-1 text-[15px] font-mono uppercase tracking-[0.08em] text-muted-foreground">Bukti Foto</p>{selectedFlowNode.hasPhotos ? <button type="button" onClick={onNavigateToPhotos} className="w-full border border-border px-2 py-1 text-left text-[15px] font-mono uppercase tracking-[0.06em] text-muted-foreground transition-colors hover:border-primary/20 hover:text-app-accent-ink">Lihat Galeri -&gt;</button> : <p className="text-[14px] font-mono text-muted-foreground">Belum ada foto</p>}</div>
+                      <div><p className="mb-1 text-[15px] font-mono uppercase tracking-[0.08em] text-muted-foreground">Bahan & Tools</p>{selectedFlowNode.hasMaterials ? <button type="button" onClick={onNavigateToDocuments} className="w-full border border-border px-2 py-1 text-left text-[15px] font-mono uppercase tracking-[0.06em] text-muted-foreground transition-colors hover:border-primary/20 hover:text-app-accent-ink">Lihat Logistik -&gt;</button> : <p className="text-[14px] font-mono text-muted-foreground">Belum ada data</p>}</div>
+                      {!selectedFlowNode.isEnd ? <button type="button" onClick={() => handleRemoveNode(selectedFlowNode.id)} className="border border-destructive/20 bg-destructive/[0.04] px-2 py-1 text-[13px] font-mono uppercase tracking-[0.08em] text-destructive transition-colors hover:border-destructive/35">Hapus node</button> : null}
+                    </>
+                  ) : null}
+                  {orderedFlowNodes.length > 0 ? <div><p className="mb-2 text-[15px] font-mono uppercase tracking-[0.08em] text-muted-foreground">Urutan</p><div className="space-y-1.5">{orderedFlowNodes.map((flowNode, index) => <button key={flowNode.id} type="button" onClick={() => setSelectedNode(flowNode)} className="w-full border border-border px-2 py-1.5 text-left transition-colors hover:border-primary/20"><p className="text-[15px] font-mono uppercase tracking-[0.08em] text-muted-foreground">{String(index + 1).padStart(2, "0")} - {flowNode.sourceLabel ?? flowNode.typeLabel}</p><p className="mt-0.5 line-clamp-2 text-[14px] text-foreground">{flowNode.title}</p></button>)}</div></div> : null}
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
       </div>
-    ) : null}
-    <div className="workflow-print-root" dangerouslySetInnerHTML={{ __html: printSvg }} />
-    <style>{`
-      .workflow-print-root {
-        display: none;
-      }
-      @media print {
-        @page {
-          size: A4 portrait;
-          margin: 12mm;
-        }
-        body * {
-          visibility: hidden !important;
-        }
-        .workflow-print-root,
-        .workflow-print-root * {
-          visibility: visible !important;
-        }
-        .workflow-print-root {
-          display: block !important;
-          position: fixed;
-          inset: 0;
-          width: 100%;
-          min-height: 100%;
-          background: white;
-          padding: 0;
-        }
-        .workflow-print-root svg {
-          width: 100%;
-          height: auto;
-          max-height: 100vh;
-          display: block;
-        }
-      }
-    `}</style>
+
+      {isCreateOpen && isCreateMinimized ? (
+        <div className="fixed bottom-4 right-4 z-[80] w-[min(360px,calc(100vw-32px))] border border-border bg-card shadow-2xl">
+          <div className="flex items-center gap-3 px-3 py-2">
+            <div className="min-w-0 flex-1"><p className="truncate text-[14px] font-mono uppercase tracking-[0.12em] text-app-accent-ink">Tambah Sumber Job</p><p className="truncate text-[14px] text-foreground">{node.label}</p></div>
+            <button type="button" onClick={() => setIsCreateMinimized(false)} className="border border-border px-3 py-1.5 text-[14px] font-mono uppercase tracking-[0.1em] text-foreground hover:text-foreground">Buka</button>
+            <button type="button" onClick={() => { setIsCreateOpen(false); setIsCreateMinimized(false); }} className="flex h-7 w-7 items-center justify-center border border-border text-muted-foreground hover:text-foreground"><X className="h-3.5 w-3.5" /></button>
+          </div>
+        </div>
+      ) : isCreateOpen ? (
+        <div className="fixed inset-0 z-[80] flex items-start justify-center overflow-y-auto bg-background/90 px-3 py-6 backdrop-blur-[2px] dark:bg-black/75">
+          <div className="flex max-h-[calc(100vh-48px)] w-full max-w-3xl flex-col overflow-hidden border border-border bg-card shadow-2xl">
+            <div className="flex shrink-0 items-center justify-between border-b border-border bg-card px-4 py-3">
+              <div><p className="text-[15px] font-mono uppercase tracking-[0.12em] text-app-accent-ink">Tambah Sumber Job</p><p className="mt-1 text-[15px] text-foreground">{node.label}</p></div>
+              <div className="flex items-center gap-2"><button type="button" onClick={() => setIsCreateMinimized(true)} className="flex h-8 w-8 items-center justify-center border border-border text-muted-foreground hover:text-foreground" title="Minimize"><span className="mb-1 text-lg leading-none">-</span></button><button type="button" onClick={() => { setIsCreateOpen(false); setIsCreateMinimized(false); }} className="flex h-8 w-8 items-center justify-center border border-border text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button></div>
+            </div>
+            <WorkflowJobCreateForm context={workflowJobContext} references={countdownReferences} allowedTypes={allowedCreateTypes} isSaving={isCreating} onSavingChange={setIsCreating} onCancel={() => { setIsCreateOpen(false); setIsCreateMinimized(false); }} onCreated={handleCreatedWorkflowJob} />
+          </div>
+        </div>
+      ) : null}
     </>
   );
 }

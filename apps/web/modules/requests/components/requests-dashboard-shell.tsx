@@ -40,6 +40,110 @@ function uniqueOptions(options: any[]): any[] {
   });
 }
 
+type RequestType = "WO" | "PR" | "WOV";
+
+interface NormalizedRequestRow {
+  type: RequestType;
+  id: string | number;
+  number: string;
+  status: string;
+  carId: string | null;
+  unitName: string | null;
+  dateForFilter: string;
+  divisionNames: string[];
+  toDivisionName: string | null;
+  isPriority: boolean;
+  priority: string | null;
+  estimatedHours: number;
+  totalEstimatedPrice: number;
+  vendorName: string | null;
+  targetDate: string | null;
+  targetDateReturn: string | null;
+  title: string;
+  notes: string | null;
+  remarks: string | null;
+  itemName: string | null;
+  createdAt: string | null;
+  requestDate: string | null;
+}
+
+function normalizeRequestRows(input: { wos: any[]; prs: any[]; wovs: any[] }): NormalizedRequestRow[] {
+  return [
+    ...input.wos.map((w): NormalizedRequestRow => ({
+      type: "WO",
+      id: w.woId,
+      number: w.woNumber,
+      status: w.status,
+      carId: w.carId ?? null,
+      unitName: w.unitName ?? null,
+      dateForFilter: w.requestDate || w.createdAt || "",
+      divisionNames: [w.fromDivisionName, w.toDivisionName].filter(Boolean),
+      toDivisionName: w.toDivisionName ?? null,
+      isPriority: Boolean(w.isPriority),
+      priority: null,
+      estimatedHours: Number(w.estimatedHours || 0),
+      totalEstimatedPrice: 0,
+      vendorName: null,
+      targetDate: null,
+      targetDateReturn: null,
+      title: w.jobDetail,
+      notes: null,
+      remarks: null,
+      itemName: null,
+      createdAt: w.createdAt ?? null,
+      requestDate: w.requestDate ?? null,
+    })),
+    ...input.prs.map((p): NormalizedRequestRow => ({
+      type: "PR",
+      id: p.prId,
+      number: p.prNumber,
+      status: p.status,
+      carId: p.carId ?? null,
+      unitName: p.unitName ?? null,
+      dateForFilter: p.createdAt || "",
+      divisionNames: [p.divisionName].filter(Boolean),
+      toDivisionName: null,
+      isPriority: p.priority === "HIGH",
+      priority: p.priority ?? null,
+      estimatedHours: 0,
+      totalEstimatedPrice: Number(p.totalEstimatedPrice || 0),
+      vendorName: null,
+      targetDate: p.targetDate ?? null,
+      targetDateReturn: null,
+      title: `Permintaan Belanja - ${p.notes || "Tanpa Keterangan"}`,
+      notes: p.notes ?? null,
+      remarks: null,
+      itemName: null,
+      createdAt: p.createdAt ?? null,
+      requestDate: null,
+    })),
+    ...input.wovs.map((v): NormalizedRequestRow => ({
+      type: "WOV",
+      id: v.wovId,
+      number: v.wovNumber,
+      status: v.status,
+      carId: v.carId ?? null,
+      unitName: v.unitName ?? null,
+      dateForFilter: v.createdAt || "",
+      divisionNames: [v.divisionName].filter(Boolean),
+      toDivisionName: null,
+      isPriority: Boolean(v.isPriority || false),
+      priority: null,
+      estimatedHours: 0,
+      totalEstimatedPrice: Number(v.totalEstimatedPrice || 0),
+      vendorName: v.vendorName ?? null,
+      targetDate: null,
+      targetDateReturn: v.targetDateReturn ?? null,
+      title: `Pekerjaan Luar - ${v.remarks || v.itemName}`,
+      notes: null,
+      remarks: v.remarks ?? null,
+      itemName: v.itemName ?? null,
+      createdAt: v.createdAt ?? null,
+      requestDate: null,
+    })),
+  ];
+}
+
 export function RequestsDashboardShell({
   user,
   woPayload,
@@ -67,6 +171,7 @@ export function RequestsDashboardShell({
   const rawWos = woPayload?.data || [];
   const rawPrs = prPayload?.data || [];
   const rawWovs = vendorPayload?.data || [];
+  const allRows = normalizeRequestRows({ wos: rawWos, prs: rawPrs, wovs: rawWovs });
 
   // References
   const unitsList = uniqueOptions([
@@ -78,16 +183,7 @@ export function RequestsDashboardShell({
     ...(woPayload?.references?.divisions || []),
     ...(prPayload?.references?.divisions || []),
     ...(vendorPayload?.references?.divisions || []),
-    ...rawWos.flatMap((w: any) => [
-      w.fromDivisionName ? { value: w.fromDivisionName, label: w.fromDivisionName } : null,
-      w.toDivisionName ? { value: w.toDivisionName, label: w.toDivisionName } : null,
-    ]).filter(Boolean),
-    ...rawPrs.map((p: any) =>
-      p.divisionName ? { value: p.divisionName, label: p.divisionName } : null,
-    ).filter(Boolean),
-    ...rawWovs.map((v: any) =>
-      v.divisionName ? { value: v.divisionName, label: v.divisionName } : null,
-    ).filter(Boolean),
+    ...allRows.flatMap((row) => row.divisionNames.map((division) => ({ value: division, label: division }))),
   ]);
   const hasDateFilter = Boolean(startDate || endDate);
   const terminalStatuses = ["DONE", "CLOSED", "REJECTED", "CANCEL", "CANCELLED", "CANCELED", "ARRIVED", "RECEIVED"];
@@ -101,121 +197,96 @@ export function RequestsDashboardShell({
     return true;
   };
 
-  // Filter datasets dynamically in real time (with case-insensitive division matches)
-  const filteredWos = rawWos.filter((w: any) => {
-    if (activeTab !== "ALL" && activeTab !== "WO") return false;
-    if (filterUnit && w.carId !== filterUnit && w.unitName !== filterUnit) return false;
-    if (filterDivision &&
-      w.fromDivisionName?.toLowerCase() !== filterDivision.toLowerCase() &&
-      w.toDivisionName?.toLowerCase() !== filterDivision.toLowerCase()) return false;
-    if (!matchesDateRange(w.requestDate || w.createdAt)) return false;
+  const filteredRows = allRows.filter((row) => {
+    if (activeTab !== "ALL" && activeTab !== row.type) return false;
+    if (filterUnit && row.carId !== filterUnit && row.unitName !== filterUnit) return false;
+    if (filterDivision && !row.divisionNames.some((division) => division.toLowerCase() === filterDivision.toLowerCase())) return false;
+    if (!matchesDateRange(row.dateForFilter)) return false;
     return true;
   });
 
-  const filteredPrs = rawPrs.filter((p: any) => {
-    if (activeTab !== "ALL" && activeTab !== "PR") return false;
-    if (filterUnit && p.carId !== filterUnit && p.unitName !== filterUnit) return false;
-    if (filterDivision && p.divisionName?.toLowerCase() !== filterDivision.toLowerCase()) return false;
-    if (!matchesDateRange(p.createdAt)) return false;
-    return true;
-  });
+  const activeRows = filteredRows.filter((row) => !terminalStatuses.includes(row.status));
+  const activeWo = activeRows.filter((row) => row.type === "WO");
+  const activePr = activeRows.filter((row) => row.type === "PR");
+  const activeWov = activeRows.filter((row) => row.type === "WOV");
 
-  const filteredWovs = rawWovs.filter((v: any) => {
-    if (activeTab !== "ALL" && activeTab !== "WOV") return false;
-    if (filterUnit && v.carId !== filterUnit && v.unitName !== filterUnit) return false;
-    if (filterDivision && v.divisionName?.toLowerCase() !== filterDivision.toLowerCase()) return false;
-    if (!matchesDateRange(v.createdAt)) return false;
-    return true;
-  });
+  const completedWo = hasDateFilter ? filteredRows.filter((row) => row.type === "WO" && ["DONE", "CLOSED"].includes(row.status)) : [];
+  const completedPr = hasDateFilter ? filteredRows.filter((row) => row.type === "PR" && ["RECEIVED", "ARRIVED"].includes(row.status)) : [];
+  const completedWov = hasDateFilter ? filteredRows.filter((row) => row.type === "WOV" && row.status === "RECEIVED") : [];
 
-  // Calculate Metrics based on filtered data
-  const activeWo = filteredWos.filter((w: any) => !terminalStatuses.includes(w.status));
-  const activePr = filteredPrs.filter((p: any) => !terminalStatuses.includes(p.status));
-  const activeWov = filteredWovs.filter((v: any) => !terminalStatuses.includes(v.status));
+  const urgentWo = activeWo.filter((row) => row.isPriority).length;
+  const urgentPr = activePr.filter((row) => row.priority === "HIGH").length;
 
-  // COMPLETED (Selesai) requests metrics
-  const completedWo = hasDateFilter ? filteredWos.filter((w: any) => ["DONE", "CLOSED"].includes(w.status)) : [];
-  const completedPr = hasDateFilter ? filteredPrs.filter((p: any) => ["RECEIVED", "ARRIVED"].includes(p.status)) : [];
-  const completedWov = hasDateFilter ? filteredWovs.filter((v: any) => ["RECEIVED"].includes(v.status)) : [];
-
-  const totalActiveCount = activeWo.length + activePr.length + activeWov.length;
-
-  const urgentWo = activeWo.filter((w: any) => w.isPriority).length;
-  const urgentPr = activePr.filter((p: any) => p.priority === "HIGH").length;
-  const urgentWov = activeWov.filter((v: any) => v.isPriority || false).length;
-
-  // Estimated values
-  const totalWoHours = activeWo.reduce((acc: number, cur: any) => acc + Number(cur.estimatedHours || 0), 0);
-  const totalPrValue = activePr.reduce((acc: number, cur: any) => acc + Number(cur.totalEstimatedPrice || 0), 0);
-  const totalWovValue = activeWov.reduce((acc: number, cur: any) => acc + Number(cur.totalEstimatedPrice || 0), 0);
+  const totalWoHours = activeWo.reduce((acc, row) => acc + row.estimatedHours, 0);
+  const totalPrValue = activePr.reduce((acc, row) => acc + row.totalEstimatedPrice, 0);
 
   // Status breakdown (includes active and completed items for the visual funnel)
   const statusCounts: Record<string, number> = {};
-  [...filteredWos, ...filteredPrs, ...filteredWovs]
-    .filter((r: any) => hasDateFilter || !terminalStatuses.includes(r.status))
-    .forEach((r: any) => {
-    statusCounts[r.status] = (statusCounts[r.status] || 0) + 1;
+  filteredRows
+    .filter((row) => hasDateFilter || !terminalStatuses.includes(row.status))
+    .forEach((row) => {
+    statusCounts[row.status] = (statusCounts[row.status] || 0) + 1;
   });
 
   // Division load breakdown
   const divisionLoad: Record<string, number> = {};
-  activeWo.forEach((w: any) => {
-    const div = w.toDivisionName || "Lainnya";
+  activeWo.forEach((row) => {
+    const div = row.toDivisionName || "Lainnya";
     divisionLoad[div] = (divisionLoad[div] || 0) + 1;
   });
 
   // Global division load breakdown (Fallback reference so screen is never barren!)
   const globalDivisionLoad: Record<string, number> = {};
-  rawWos
-    .filter((w: any) => !terminalStatuses.includes(w.status))
-    .forEach((w: any) => {
-      const div = w.toDivisionName || "Lainnya";
+  allRows
+    .filter((row) => row.type === "WO" && !terminalStatuses.includes(row.status))
+    .forEach((row) => {
+      const div = row.toDivisionName || "Lainnya";
       globalDivisionLoad[div] = (globalDivisionLoad[div] || 0) + 1;
     });
 
   // Critical items (Target date is close or urgent)
   const criticalItems: any[] = [];
 
-  activeWo.forEach((w: any) => {
-    if (w.isPriority) {
+  activeWo.forEach((row) => {
+    if (row.isPriority) {
       criticalItems.push({
-        id: w.woId,
+        id: row.id,
         type: "WO",
-        number: w.woNumber,
-        unit: w.unitName || "Unit Umum",
-        title: w.jobDetail,
-        info: `Kategori: WO Urgent · Tujuan: ${w.toDivisionName}`,
-        date: w.requestDate,
+        number: row.number,
+        unit: row.unitName || "Unit Umum",
+        title: row.title,
+        info: `Kategori: WO Urgent · Tujuan: ${row.toDivisionName}`,
+        date: row.requestDate,
         isUrgent: true
       });
     }
   });
 
-  activePr.forEach((p: any) => {
-    if (p.priority === "HIGH" || p.targetDate) {
+  activePr.forEach((row) => {
+    if (row.priority === "HIGH" || row.targetDate) {
       criticalItems.push({
-        id: p.prId,
+        id: row.id,
         type: "PR",
-        number: p.prNumber,
-        unit: p.unitName || "Stock/Gudang",
-        title: `Permintaan Belanja - ${p.notes || "Tanpa Keterangan"}`,
-        info: `Target Tiba: ${p.targetDate || "-"} · Nilai: Rp ${Number(p.totalEstimatedPrice).toLocaleString("id-ID")}`,
-        date: p.targetDate || p.createdAt?.split("T")[0],
-        isUrgent: p.priority === "HIGH"
+        number: row.number,
+        unit: row.unitName || "Stock/Gudang",
+        title: row.title,
+        info: `Target Tiba: ${row.targetDate || "-"} · Nilai: Rp ${row.totalEstimatedPrice.toLocaleString("id-ID")}`,
+        date: row.targetDate || row.createdAt?.split("T")[0],
+        isUrgent: row.priority === "HIGH"
       });
     }
   });
 
-  activeWov.forEach((v: any) => {
-    if (v.targetDateReturn) {
+  activeWov.forEach((row) => {
+    if (row.targetDateReturn) {
       criticalItems.push({
-        id: v.wovId,
+        id: row.id,
         type: "WOV",
-        number: v.wovNumber,
-        unit: v.unitName || "Unit Rekanan",
-        title: `Pekerjaan Luar - ${v.remarks || v.itemName}`,
-        info: `Target Kembali: ${v.targetDateReturn} · Vendor: ${v.vendorName}`,
-        date: v.targetDateReturn,
+        number: row.number,
+        unit: row.unitName || "Unit Rekanan",
+        title: row.title,
+        info: `Target Kembali: ${row.targetDateReturn} · Vendor: ${row.vendorName}`,
+        date: row.targetDateReturn,
         isUrgent: false
       });
     }
@@ -223,15 +294,15 @@ export function RequestsDashboardShell({
 
   // Fallback criticals from the whole workshop
   const globalCriticalItems: any[] = [];
-  rawWos.filter((w: any) => w.isPriority && !terminalStatuses.includes(w.status)).forEach((w: any) => {
+  allRows.filter((row) => row.type === "WO" && row.isPriority && !terminalStatuses.includes(row.status)).forEach((row) => {
     globalCriticalItems.push({
-      id: w.woId,
+      id: row.id,
       type: "WO",
-      number: w.woNumber,
-      unit: w.unitName || "Unit Umum",
-      title: w.jobDetail,
-      info: `Global Urgent · Tujuan: ${w.toDivisionName}`,
-      date: w.requestDate,
+      number: row.number,
+      unit: row.unitName || "Unit Umum",
+      title: row.title,
+      info: `Global Urgent · Tujuan: ${row.toDivisionName}`,
+      date: row.requestDate,
       isUrgent: true
     });
   });
@@ -247,41 +318,44 @@ export function RequestsDashboardShell({
     <div className="space-y-0 bg-muted dark:bg-background">
 
       {/* ── FILTER BAR ─────────────────────────────────────────────────── */}
-      <div className="flex items-center gap-2 border-b border-border dark:border-white/5 px-0 py-2">
+      <div className="flex flex-wrap items-end gap-2 border-b border-border bg-card px-3 py-3 shadow-sm">
         <div className="relative">
+          <span className="mb-1 block font-mono text-[12px] uppercase tracking-[0.12em] text-muted-foreground">Jenis</span>
           <select
             value={activeTab}
             onChange={(e) => setActiveTab(e.target.value as "ALL" | "WO" | "PR" | "WOV")}
-            className="h-7 border border-border dark:border-white/10 bg-white dark:bg-card px-2 pr-6 text-[11px] font-mono uppercase tracking-[0.08em] text-foreground dark:text-foreground/60 outline-none focus:border-primary/40 appearance-none cursor-pointer"
+            className="h-10 border border-border bg-background px-3 pr-8 text-[15px] font-mono uppercase tracking-[0.08em] text-foreground outline-none focus:border-primary/50 appearance-none cursor-pointer"
           >
             <option value="ALL">SEMUA JENIS</option>
             <option value="WO">WORK ORDER</option>
             <option value="PR">PURCHASE REQUEST</option>
             <option value="WOV">VENDOR WO</option>
           </select>
-          <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground dark:text-foreground/20 text-[10px]">▾</span>
+          <span className="pointer-events-none absolute bottom-2.5 right-2 text-[14px] text-muted-foreground">▾</span>
         </div>
 
         <div className="relative">
+          <span className="mb-1 block font-mono text-[12px] uppercase tracking-[0.12em] text-muted-foreground">Unit</span>
           <select
             value={filterUnit}
             onChange={(e) => setFilterUnit(e.target.value)}
-            className="h-7 border border-border dark:border-white/10 bg-white dark:bg-card px-2 pr-6 text-[11px] font-mono uppercase tracking-[0.08em] text-foreground dark:text-foreground/60 outline-none focus:border-primary/40 appearance-none cursor-pointer"
+            className="h-10 border border-border bg-background px-3 pr-8 text-[15px] font-mono uppercase tracking-[0.08em] text-foreground outline-none focus:border-primary/50 appearance-none cursor-pointer"
           >
             <option value="">SEMUA UNIT</option>
             {unitsList.map((u: any) => (
               <option key={u.value} value={u.value}>{u.label}</option>
             ))}
           </select>
-          <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground dark:text-foreground/20 text-[10px]">▾</span>
+          <span className="pointer-events-none absolute bottom-2.5 right-2 text-[14px] text-muted-foreground">▾</span>
         </div>
 
         <div className="relative">
+          <span className="mb-1 block font-mono text-[12px] uppercase tracking-[0.12em] text-muted-foreground">Divisi</span>
           <select
             value={filterDivision}
             disabled={isDivisionLeadScope}
             onChange={(e) => setFilterDivision(e.target.value)}
-            className="h-7 border border-border dark:border-white/10 bg-white dark:bg-card px-2 pr-6 text-[11px] font-mono uppercase tracking-[0.08em] text-foreground dark:text-foreground/60 outline-none focus:border-primary/40 appearance-none cursor-pointer disabled:opacity-40"
+            className="h-10 border border-border bg-background px-3 pr-8 text-[15px] font-mono uppercase tracking-[0.08em] text-foreground outline-none focus:border-primary/50 appearance-none cursor-pointer disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
           >
             {isDivisionLeadScope ? (
               <option value={user.divisionName}>{user.divisionName?.toUpperCase()}</option>
@@ -294,23 +368,28 @@ export function RequestsDashboardShell({
               </>
             )}
           </select>
-          <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground dark:text-foreground/20 text-[10px]">▾</span>
+          <span className="pointer-events-none absolute bottom-2.5 right-2 text-[14px] text-muted-foreground">▾</span>
         </div>
 
-        <div className="flex items-center gap-1 ml-auto">
-          <input
-            type="date"
-            value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
-            className="h-7 border border-border dark:border-white/10 bg-white dark:bg-card px-2 text-[11px] font-mono text-foreground dark:text-foreground/60 outline-none focus:border-primary/40 [color-scheme:dark] cursor-pointer"
-          />
-          <span className="text-muted-foreground dark:text-foreground/20 text-[10px] font-mono">—</span>
-          <input
-            type="date"
-            value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
-            className="h-7 border border-border dark:border-white/10 bg-white dark:bg-card px-2 text-[11px] font-mono text-foreground dark:text-foreground/60 outline-none focus:border-primary/40 [color-scheme:dark] cursor-pointer"
-          />
+        <div className="ml-auto flex flex-wrap items-end gap-2">
+          <label className="grid gap-1">
+            <span className="font-mono text-[12px] uppercase tracking-[0.12em] text-muted-foreground">Dari</span>
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="h-10 border border-border bg-background px-3 text-[15px] font-mono text-foreground outline-none focus:border-primary/50 dark:[color-scheme:dark] cursor-pointer"
+            />
+          </label>
+          <label className="grid gap-1">
+            <span className="font-mono text-[12px] uppercase tracking-[0.12em] text-muted-foreground">Sampai</span>
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="h-10 border border-border bg-background px-3 text-[15px] font-mono text-foreground outline-none focus:border-primary/50 dark:[color-scheme:dark] cursor-pointer"
+            />
+          </label>
           {hasActiveFilters && (
             <button
               onClick={() => {
@@ -320,7 +399,7 @@ export function RequestsDashboardShell({
                 if (!isDivisionLeadScope) setFilterDivision("");
               }}
               title="Reset Filters"
-              className="h-7 w-7 flex items-center justify-center border border-border dark:border-white/5 bg-white dark:bg-card text-muted-foreground dark:text-foreground/30 hover:text-foreground dark:text-foreground/70 transition-colors"
+              className="flex h-10 w-10 items-center justify-center border border-border bg-background text-muted-foreground transition-colors hover:border-primary/35 hover:text-foreground"
             >
               <RotateCcw className="h-3 w-3" />
             </button>
@@ -329,51 +408,51 @@ export function RequestsDashboardShell({
       </div>
 
       {/* ── STAT STRIP: WO / PR / WOV ──────────────────────────────────── */}
-      <div className="grid grid-cols-3 border-b border-border dark:border-white/5">
+      <div className="grid grid-cols-3 border-b border-border dark:border-border">
         {/* WO */}
         {(activeTab === "ALL" || activeTab === "WO") && (
-          <div className="flex flex-col justify-center px-5 py-3 h-16 border-r border-border dark:border-white/5 gap-0.5">
+          <div className="flex flex-col justify-center px-5 py-3 h-16 border-r border-border dark:border-border gap-0.5">
             <div className="flex items-baseline gap-2">
               <span className="text-3xl font-mono text-foreground dark:text-foreground leading-none">{activeWo.length}</span>
-              <span className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30 font-mono">WO AKTIF</span>
+              <span className="text-[14px] uppercase tracking-[0.12em] text-muted-foreground dark:text-muted-foreground font-mono">WO AKTIF</span>
             </div>
-            <div className="flex items-center gap-3 text-[10px] font-mono text-muted-foreground dark:text-foreground/25">
+            <div className="flex items-center gap-3 text-[14px] font-mono text-muted-foreground dark:text-muted-foreground">
               <span>
                 Urgent:{" "}
-                <span className={urgentWo > 0 ? "text-app-accent-ink" : "text-muted-foreground dark:text-foreground/30"}>
+                <span className={urgentWo > 0 ? "text-app-accent-ink" : "text-muted-foreground dark:text-muted-foreground"}>
                   {urgentWo}
                 </span>
               </span>
-              <span className="text-foreground/10">·</span>
+              <span className="text-muted-foreground">·</span>
               <span>{totalWoHours} jam est.</span>
             </div>
           </div>
         )}
         {(activeTab !== "ALL" && activeTab !== "WO") && (
-          <div className="h-16 border-r border-border dark:border-white/5" />
+          <div className="h-16 border-r border-border dark:border-border" />
         )}
 
         {/* PR */}
         {(activeTab === "ALL" || activeTab === "PR") && (
-          <div className="flex flex-col justify-center px-5 py-3 h-16 border-r border-border dark:border-white/5 gap-0.5">
+          <div className="flex flex-col justify-center px-5 py-3 h-16 border-r border-border dark:border-border gap-0.5">
             <div className="flex items-baseline gap-2">
               <span className="text-3xl font-mono text-foreground dark:text-foreground leading-none">{activePr.length}</span>
-              <span className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30 font-mono">PR AKTIF</span>
+              <span className="text-[14px] uppercase tracking-[0.12em] text-muted-foreground dark:text-muted-foreground font-mono">PR AKTIF</span>
             </div>
-            <div className="flex items-center gap-3 text-[10px] font-mono text-muted-foreground dark:text-foreground/25">
+            <div className="flex items-center gap-3 text-[14px] font-mono text-muted-foreground dark:text-muted-foreground">
               <span>
                 Urgent:{" "}
-                <span className={urgentPr > 0 ? "text-app-accent-ink" : "text-muted-foreground dark:text-foreground/30"}>
+                <span className={urgentPr > 0 ? "text-app-accent-ink" : "text-muted-foreground dark:text-muted-foreground"}>
                   {urgentPr}
                 </span>
               </span>
-              <span className="text-foreground/10">·</span>
+              <span className="text-muted-foreground">·</span>
               <span className="truncate">Rp {totalPrValue.toLocaleString("id-ID")}</span>
             </div>
           </div>
         )}
         {(activeTab !== "ALL" && activeTab !== "PR") && (
-          <div className="h-16 border-r border-border dark:border-white/5" />
+          <div className="h-16 border-r border-border dark:border-border" />
         )}
 
         {/* WOV */}
@@ -381,16 +460,16 @@ export function RequestsDashboardShell({
           <div className="flex flex-col justify-center px-5 py-3 h-16 gap-0.5">
             <div className="flex items-baseline gap-2">
               <span className="text-3xl font-mono text-foreground dark:text-foreground leading-none">{activeWov.length}</span>
-              <span className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30 font-mono">WOV AKTIF</span>
+              <span className="text-[14px] uppercase tracking-[0.12em] text-muted-foreground dark:text-muted-foreground font-mono">WOV AKTIF</span>
             </div>
-            <div className="flex items-center gap-3 text-[10px] font-mono text-muted-foreground dark:text-foreground/25">
+            <div className="flex items-center gap-3 text-[14px] font-mono text-muted-foreground dark:text-muted-foreground">
               <span>
                 Kembali:{" "}
-                <span className={completedWov.length > 0 ? "text-muted-foreground dark:text-foreground/50" : "text-muted-foreground dark:text-foreground/30"}>
+                <span className={completedWov.length > 0 ? "text-muted-foreground dark:text-muted-foreground" : "text-muted-foreground dark:text-muted-foreground"}>
                   {completedWov.length}
                 </span>
               </span>
-              <span className="text-foreground/10">·</span>
+              <span className="text-muted-foreground">·</span>
               <span>{new Set(activeWov.map((v: any) => v.vendorName)).size} rekanan</span>
             </div>
           </div>
@@ -401,17 +480,17 @@ export function RequestsDashboardShell({
       </div>
 
       {/* ── ALUR STATUS: OPEN → DISTRIBUSI → DIPROSES → SELESAI ─────────── */}
-      <div className="grid grid-cols-4 border-b border-border dark:border-white/5">
-        <div className="flex flex-col justify-center items-center h-12 border-r border-border dark:border-white/5 gap-0.5">
-          <span className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground dark:text-foreground/25 font-mono">OPEN / BARU</span>
+      <div className="grid grid-cols-4 border-b border-border dark:border-border">
+        <div className="flex flex-col justify-center items-center h-12 border-r border-border dark:border-border gap-0.5">
+          <span className="text-[15px] uppercase tracking-[0.14em] text-muted-foreground dark:text-muted-foreground font-mono">OPEN / BARU</span>
           <span className="text-base font-mono font-light text-foreground dark:text-foreground leading-none">{statusCounts["OPEN"] || 0}</span>
         </div>
-        <div className="flex flex-col justify-center items-center h-12 border-r border-border dark:border-white/5 gap-0.5">
-          <span className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground dark:text-foreground/25 font-mono">DISTRIBUSI</span>
+        <div className="flex flex-col justify-center items-center h-12 border-r border-border dark:border-border gap-0.5">
+          <span className="text-[15px] uppercase tracking-[0.14em] text-muted-foreground dark:text-muted-foreground font-mono">DISTRIBUSI</span>
           <span className="text-base font-mono font-light text-app-accent-ink/80 leading-none">{statusCounts["APPROVED"] || 0}</span>
         </div>
-        <div className="flex flex-col justify-center items-center h-12 border-r border-border dark:border-white/5 gap-0.5">
-          <span className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground dark:text-foreground/25 font-mono">DIPROSES</span>
+        <div className="flex flex-col justify-center items-center h-12 border-r border-border dark:border-border gap-0.5">
+          <span className="text-[15px] uppercase tracking-[0.14em] text-muted-foreground dark:text-muted-foreground font-mono">DIPROSES</span>
           <span className="text-base font-mono font-light text-foreground dark:text-foreground leading-none">
             {(statusCounts["SUBMITTED"] || 0) +
               (statusCounts["PROSES_VENDOR"] || 0) +
@@ -421,8 +500,8 @@ export function RequestsDashboardShell({
           </span>
         </div>
         <div className="flex flex-col justify-center items-center h-12 gap-0.5">
-          <span className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground dark:text-foreground/25 font-mono">SELESAI</span>
-          <span className="text-base font-mono font-light text-foreground dark:text-foreground/60 leading-none">
+          <span className="text-[15px] uppercase tracking-[0.14em] text-muted-foreground dark:text-muted-foreground font-mono">SELESAI</span>
+          <span className="text-base font-mono font-light text-foreground dark:text-foreground leading-none">
             {(statusCounts["DONE"] || 0) +
               (statusCounts["RECEIVED"] || 0) +
               (statusCounts["ARRIVED"] || 0)}
@@ -431,19 +510,19 @@ export function RequestsDashboardShell({
       </div>
 
       {/* ── MAIN BODY: TIMELINE + DIVISION LOAD ─────────────────────────── */}
-      <div className="grid lg:grid-cols-12 border-b border-border dark:border-white/5">
+      <div className="grid lg:grid-cols-12 border-b border-border dark:border-border">
 
         {/* Left: Division Load (8 cols) */}
         {(activeTab === "ALL" || activeTab === "WO") && (
-          <div className="lg:col-span-8 border-r border-border dark:border-white/5">
-            <div className="px-5 py-2.5 border-b border-border dark:border-white/5">
-              <span className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30 font-mono">
+          <div className="lg:col-span-8 border-r border-border dark:border-border">
+            <div className="px-5 py-2.5 border-b border-border dark:border-border">
+              <span className="text-[14px] uppercase tracking-[0.12em] text-muted-foreground dark:text-muted-foreground font-mono">
                 DISTRIBUSI BEBAN KERJA ANTAR DIVISI
               </span>
             </div>
             <div className="px-5 py-3 space-y-2.5">
               {Object.keys(divisionLoad).length === 0 ? (
-                <p className="text-[11px] font-mono text-muted-foreground dark:text-foreground/20 py-3">— Tidak ada antrean aktif</p>
+                <p className="text-[15px] font-mono text-muted-foreground dark:text-muted-foreground py-3">— Tidak ada antrean aktif</p>
               ) : (
                 Object.entries(divisionLoad)
                   .sort((a, b) => b[1] - a[1])
@@ -451,11 +530,11 @@ export function RequestsDashboardShell({
                     const percentage = Math.round((count / activeWo.length) * 100);
                     return (
                       <div key={div} className="space-y-1">
-                        <div className="flex items-center justify-between text-[10px] font-mono">
-                          <span className="text-foreground dark:text-foreground/70">{div}</span>
+                        <div className="flex items-center justify-between text-[14px] font-mono">
+                          <span className="text-foreground dark:text-foreground">{div}</span>
                           <span className="text-app-accent-ink">{count} · {percentage}%</span>
                         </div>
-                        <div className="h-px w-full bg-white/[0.03] overflow-hidden">
+                        <div className="h-px w-full bg-muted overflow-hidden">
                           <div
                             className="h-full bg-primary/60 transition-all duration-500"
                             style={{ width: `${percentage}%` }}
@@ -469,43 +548,43 @@ export function RequestsDashboardShell({
           </div>
         )}
         {(activeTab !== "ALL" && activeTab !== "WO") && (
-          <div className="lg:col-span-8 border-r border-border dark:border-white/5" />
+          <div className="lg:col-span-8 border-r border-border dark:border-border" />
         )}
 
         {/* Right: Timeline Kritis (4 cols) */}
         <div className="lg:col-span-4">
-          <div className="px-5 py-2.5 border-b border-border dark:border-white/5 flex items-center justify-between">
-            <span className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30 font-mono">
+          <div className="px-5 py-2.5 border-b border-border dark:border-border flex items-center justify-between">
+            <span className="text-[14px] uppercase tracking-[0.12em] text-muted-foreground dark:text-muted-foreground font-mono">
               TIMELINE KRITIS &amp; TARGET
             </span>
             <AlertTriangle className="h-3 w-3 text-app-accent-ink shrink-0" />
           </div>
           <div className="px-5 py-3 space-y-2 max-h-[260px] overflow-y-auto">
             {displayCriticals.length === 0 ? (
-              <p className="text-[10px] font-mono text-muted-foreground dark:text-foreground/20 py-2">— Tidak ada item kritis</p>
+              <p className="text-[14px] font-mono text-muted-foreground dark:text-muted-foreground py-2">— Tidak ada item kritis</p>
             ) : (
               displayCriticals.map((item) => (
                 <div
                   key={item.id}
                   className={`py-2 px-3 border-l-2 space-y-1 ${
-                    item.isUrgent ? "border-primary/60 bg-primary/[0.03]" : "border-border dark:border-white/10 bg-white/[0.01]"
+                    item.isUrgent ? "border-primary/60 bg-primary/[0.03]" : "border-border dark:border-border bg-muted"
                   }`}
                 >
                   <div className="flex items-center justify-between">
-                    <span className={`text-[8px] font-mono font-extrabold uppercase px-1.5 py-px border ${
+                    <span className={`text-[14px] font-mono font-extrabold uppercase px-1.5 py-px border ${
                       item.type === "WO"
                         ? "border-primary/30 text-app-accent-ink"
                         : item.type === "PR"
-                        ? "border-white/15 text-muted-foreground dark:text-foreground/50"
-                        : "border-border dark:border-white/10 text-muted-foreground dark:text-foreground/40"
+                        ? "border-border text-muted-foreground dark:text-muted-foreground"
+                        : "border-border dark:border-border text-muted-foreground dark:text-muted-foreground"
                     }`}>
                       {item.type}
                     </span>
-                    <span className="text-[9px] text-muted-foreground dark:text-foreground/25 font-mono">{item.number}</span>
+                    <span className="text-[15px] text-muted-foreground dark:text-muted-foreground font-mono">{item.number}</span>
                   </div>
-                  <p className="text-[10px] font-mono text-foreground dark:text-foreground/80 truncate">{item.unit} · {item.title}</p>
-                  <p className="text-[9px] font-mono text-muted-foreground dark:text-foreground/30">{item.info}</p>
-                  <div className="flex items-center gap-1 text-[8px] text-muted-foreground dark:text-foreground/20 font-mono pt-0.5 border-t border-border dark:border-white/5">
+                  <p className="text-[14px] font-mono text-foreground dark:text-foreground truncate">{item.unit} · {item.title}</p>
+                  <p className="text-[15px] font-mono text-muted-foreground dark:text-muted-foreground">{item.info}</p>
+                  <div className="flex items-center gap-1 text-[14px] text-muted-foreground dark:text-muted-foreground font-mono pt-0.5 border-t border-border dark:border-border">
                     <Calendar className="h-2 w-2" />
                     <span>Target: {item.date || "—"}</span>
                   </div>
@@ -518,17 +597,17 @@ export function RequestsDashboardShell({
 
       {/* ── REKAPITULASI STRIP ──────────────────────────────────────────── */}
       <div className="grid grid-cols-3">
-        <div className="flex items-center gap-3 px-5 py-2.5 border-r border-border dark:border-white/5 h-10">
-          <span className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/25 font-mono">WD SELESAI</span>
-          <span className="text-sm font-mono font-light text-foreground dark:text-foreground/70">{completedWo.length}</span>
+        <div className="flex items-center gap-3 px-5 py-2.5 border-r border-border dark:border-border h-10">
+          <span className="text-[14px] uppercase tracking-[0.12em] text-muted-foreground dark:text-muted-foreground font-mono">WD SELESAI</span>
+          <span className="text-sm font-mono font-light text-foreground dark:text-foreground">{completedWo.length}</span>
         </div>
-        <div className="flex items-center gap-3 px-5 py-2.5 border-r border-border dark:border-white/5 h-10">
-          <span className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/25 font-mono">PR TIBA</span>
-          <span className="text-sm font-mono font-light text-foreground dark:text-foreground/70">{completedPr.length}</span>
+        <div className="flex items-center gap-3 px-5 py-2.5 border-r border-border dark:border-border h-10">
+          <span className="text-[14px] uppercase tracking-[0.12em] text-muted-foreground dark:text-muted-foreground font-mono">PR TIBA</span>
+          <span className="text-sm font-mono font-light text-foreground dark:text-foreground">{completedPr.length}</span>
         </div>
         <div className="flex items-center gap-3 px-5 py-2.5 h-10">
-          <span className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/25 font-mono">WOV KEMBALI</span>
-          <span className="text-sm font-mono font-light text-foreground dark:text-foreground/70">{completedWov.length}</span>
+          <span className="text-[14px] uppercase tracking-[0.12em] text-muted-foreground dark:text-muted-foreground font-mono">WOV KEMBALI</span>
+          <span className="text-sm font-mono font-light text-foreground dark:text-foreground">{completedWov.length}</span>
         </div>
       </div>
 
