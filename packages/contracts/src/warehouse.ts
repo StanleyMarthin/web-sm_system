@@ -237,6 +237,7 @@ export const warehouseStockCardRecordSchema = z.object({
   unitName: z.string(),
   partCode: z.string().nullable(),
   panelSection: z.string().nullable(),
+  panelCategory: z.string().nullable().optional(),
   partName: z.string(),
   conditionType: warehouseStockCardConditionTypeSchema,
   qty: z.number(),

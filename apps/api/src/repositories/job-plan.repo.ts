@@ -14,7 +14,10 @@ import type {
   UpdateJobPlanRequest,
   UpdateJobPlanStatusRequest,
 } from "@smsystem/contracts/job-plan";
-import { isNonTechnicalDivisionReference } from "@smsystem/contracts/division";
+import {
+  isNonTechnicalDivisionReference,
+  type DivisionTechnicalReference,
+} from "@smsystem/contracts/division";
 import { buildJobPlanScheduleSegments } from "@smsystem/contracts/job-plan-schedule";
 import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
 import { getMySqlPool } from "@/db/mysql";
@@ -385,7 +388,7 @@ async function resolveInitialSubmittedStatus(
 async function getDivisionTechnicalReference(
   connection: Pick<PoolConnection, "query">,
   divisionId: number,
-): Promise<DivisionTechnicalRow | null> {
+): Promise<DivisionTechnicalReference | null> {
   const [rows] = (await connection.query(
     `
       SELECT
@@ -400,7 +403,15 @@ async function getDivisionTechnicalReference(
     [divisionId],
   )) as [DivisionTechnicalRow[], unknown];
 
-  return rows[0] ?? null;
+  const row = rows[0];
+  if (!row) return null;
+
+  return {
+    value: row.value,
+    label: row.label,
+    code: row.code,
+    isTeknis: row.isTeknis === null || row.isTeknis === undefined ? null : toBoolean(row.isTeknis),
+  };
 }
 
 async function isNonTechnicalDivisionId(
@@ -1079,10 +1090,11 @@ async function resolveWorkspaceCountdown(
   }
 
   if (!row.carId || !row.divisionId || !row.panelId || !row.jobTypeId) {
-    if (await isNonTechnicalDivisionId(connection, row.divisionId ?? null)) {
+    const divisionId = row.divisionId ?? null;
+    if (divisionId !== null && await isNonTechnicalDivisionId(connection, divisionId)) {
       return createNonTechnicalCountdownInTransaction(connection, { actorId: params.employeeId }, {
         carId: row.carId || null,
-        divisionId: row.divisionId,
+        divisionId,
         sectionName: row.jobDescription.trim(),
         jobTypeId: row.jobTypeId || null,
         taskDate: workspaceMeta.taskDate,

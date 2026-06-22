@@ -260,6 +260,9 @@ function createStubMonitoringService(): MonitoringService {
     async listNoSubmit() {
       return [taskRow];
     },
+    async createActual() {
+      throw new Error("Not implemented");
+    },
   };
 }
 

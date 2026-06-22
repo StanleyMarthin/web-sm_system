@@ -4,8 +4,6 @@ import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Loader2, PackagePlus, Trash2 } from "lucide-react";
-import type { CreateWarehouseRequest } from "@smsystem/contracts/warehouse";
-import { useEffect, useState } from "react";
 
 export const requestItemSchema = z.object({
   itemName: z.string().min(1, "Nama barang wajib diisi"),
@@ -30,6 +28,19 @@ export const requestSchema = z.object({
   tempQty: z.string().optional(),
   tempUom: z.string().optional(),
   tempStockCardId: z.string().optional(),
+}).superRefine((value, ctx) => {
+  const hasDraftItem = Boolean(value.tempItemName?.trim());
+  if (value.items.length === 0 && !hasDraftItem) {
+    ctx.addIssue({ code: "custom", path: ["items"], message: "Minimal satu barang wajib diajukan." });
+  }
+
+  if (value.transactionType === "TRANSFER_PART") {
+    const draftNeedsDonor = hasDraftItem && !value.tempStockCardId;
+    const itemNeedsDonor = value.items.some((item) => !item.stockCardId);
+    if (draftNeedsDonor || itemNeedsDonor) {
+      ctx.addIssue({ code: "custom", path: ["tempStockCardId"], message: "Transfer donor wajib memilih stock card." });
+    }
+  }
 });
 
 export type RequestFormValues = z.infer<typeof requestSchema>;
@@ -121,6 +132,7 @@ export function WarehouseRequestForm({
   
   const selectedJob = jobs.find((j) => j.coreId === coreId) ?? null;
   const selectedStockCard = stockCards.find((s) => s.stockCardId === tempStockCardId) ?? null;
+  const itemsError = typeof errors.items?.message === "string" ? errors.items.message : null;
 
   const inputCls =
     "h-9 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-2.5 text-[12px] text-foreground outline-none transition-colors focus:border-primary/30 [color-scheme:dark]";
@@ -130,19 +142,26 @@ export function WarehouseRequestForm({
     color: "var(--card-foreground)",
   } as const;
 
+  const buildDraftItem = () => {
+    const itemName = (watch("tempItemName") ?? "").trim();
+    const qty = (watch("tempQty") ?? "1").trim() || "1";
+    const uom = (watch("tempUom") ?? "PCS").trim() || "PCS";
+    if (!itemName) return null;
+    if (transactionType === "TRANSFER_PART" && !tempStockCardId) return null;
+    return {
+      itemName,
+      qty,
+      uom,
+      stockCardId: tempStockCardId || undefined,
+      itemMasterId: undefined,
+    };
+  };
+
   const handleAddDraft = () => {
-    const itemName = watch("tempItemName") ?? "";
-    const qty = watch("tempQty") ?? "1";
-    const uom = watch("tempUom") ?? "PCS";
+    const draft = buildDraftItem();
     
-    if (itemName.trim().length > 0) {
-      append({
-        itemName,
-        qty,
-        uom,
-        stockCardId: tempStockCardId || undefined,
-        itemMasterId: undefined,
-      });
+    if (draft) {
+      append(draft);
       setValue("tempItemName", "");
       setValue("tempStockCardId", "");
       setValue("tempQty", "1");
@@ -150,16 +169,8 @@ export function WarehouseRequestForm({
   };
 
   const handleFormSubmit = (data: RequestFormValues) => {
-    if (data.items.length === 0 && data.tempItemName?.trim()) {
-      data.items.push({
-        itemName: data.tempItemName,
-        qty: data.tempQty ?? "1",
-        uom: data.tempUom ?? "PCS",
-        stockCardId: data.tempStockCardId || undefined,
-        itemMasterId: undefined,
-      });
-    }
-    onSubmit(data);
+    const draft = buildDraftItem();
+    onSubmit({ ...data, items: draft ? [...data.items, draft] : data.items });
   };
 
   return (
@@ -332,6 +343,7 @@ export function WarehouseRequestForm({
                   </option>
                 ))}
               </select>
+              {errors.tempStockCardId?.message ? <span className="text-xs text-destructive">{errors.tempStockCardId.message}</span> : null}
             </label>
           )}
         </div>
@@ -357,6 +369,7 @@ export function WarehouseRequestForm({
             <PackagePlus className="h-3.5 w-3.5" /> Tambah ke daftar
           </button>
         </div>
+        {itemsError ? <p className="text-xs text-destructive">{itemsError}</p> : null}
 
         {fields.length > 0 && (
           <div className="rounded-[14px] border border-white/[0.06] bg-card">

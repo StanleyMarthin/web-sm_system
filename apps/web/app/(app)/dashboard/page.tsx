@@ -151,6 +151,10 @@ async function DashboardPageContent({ searchParams }: DashboardPageProps) {
     divisionId: getString(sp.divisionId),
     unitId:     getString(sp.unitId),
   };
+  const summaryFilters = {
+    ...filters,
+    date: filters.date === "all" ? undefined : filters.date,
+  };
 
   const qcSearchParams = {
     ...sp,
@@ -164,7 +168,7 @@ async function DashboardPageContent({ searchParams }: DashboardPageProps) {
     { payload, status },
     { user },
   ] = await Promise.all([
-    fetchDashboardSummary(cookieHeader, filters),
+    fetchDashboardSummary(cookieHeader, summaryFilters),
     fetchCurrentUser(cookieHeader),
   ]);
 
@@ -183,7 +187,7 @@ async function DashboardPageContent({ searchParams }: DashboardPageProps) {
 
   const planningPromise = fetchPlanningWorkspaceSummary(cookieHeader, {
     ...sp,
-    ...(filters.date ? { asOfDate: filters.date } : {}),
+    ...(summaryFilters.date ? { asOfDate: summaryFilters.date } : {}),
   });
   const qcQueuePromise = fetchQcQueue(cookieHeader, qcSearchParams);
   const qcReworkPromise = fetchQcRework(cookieHeader, qcSearchParams);

@@ -104,14 +104,15 @@ interface TransactionRow extends RowDataPacket {
 }
 
 interface StockCardRow extends RowDataPacket {
-  stockCardId: string;
-  entryNo: string;
+  stockCardId: string | number;
+  entryNo: string | number | null;
   carId: string | null;
   unitName: string | null;
   partCode: string | null;
   panelSection: string | null;
-  partName: string;
-  conditionType: WarehouseStockCardRecord["conditionType"];
+  panelCategory: string | null;
+  partName: string | null;
+  conditionType: string | null;
   qty: number | null;
   uom: string | null;
   storageLocationId: number | null;
@@ -120,9 +121,9 @@ interface StockCardRow extends RowDataPacket {
   dateIn: string | null;
   dateOut: string | null;
   takenByName: string | null;
-  status: WarehouseStockCardRecord["status"];
+  status: string | null;
   isLabeled: number | boolean | null;
-  itemCategory: WarehouseStockCardRecord["itemCategory"];
+  itemCategory: string | null;
   photoUrls: string | null;
 }
 
@@ -367,16 +368,59 @@ function mapTransactionRow(row: TransactionRow): WarehouseTransactionRecord {
   };
 }
 
+function normalizeStockCardCondition(
+  conditionType: string | null,
+): WarehouseStockCardRecord["conditionType"] {
+  switch (conditionType) {
+    case "BARU":
+    case "RESTORE":
+    case "BEKAS":
+      return conditionType;
+    default:
+      return "BEKAS";
+  }
+}
+
+function normalizeStockCardStatus(status: string | null): WarehouseStockCardRecord["status"] {
+  switch (status) {
+    case "IN_STORAGE":
+    case "RETRIEVED":
+    case "INSTALLED":
+    case "LOST":
+      return status;
+    default:
+      return "IN_STORAGE";
+  }
+}
+
+function normalizeStockCardItemCategory(
+  itemCategory: string | null,
+  partCode: string | null,
+): WarehouseStockCardRecord["itemCategory"] {
+  switch (itemCategory) {
+    case "SPARE_PART":
+    case "BAHAN":
+    case "TOOLS":
+      return itemCategory;
+    default:
+      return partCode?.startsWith("MP-") ? "SPARE_PART" : null;
+  }
+}
+
 function mapStockCardRow(row: StockCardRow): WarehouseStockCardRecord {
+  const stockCardId = String(row.stockCardId);
+  const entryNo = String(row.entryNo ?? stockCardId);
+
   return {
-    stockCardId: row.stockCardId,
-    entryNo: row.entryNo,
+    stockCardId,
+    entryNo,
     carId: row.carId,
     unitName: row.unitName ?? row.carId ?? "-",
     partCode: row.partCode,
     panelSection: row.panelSection,
-    partName: row.partName,
-    conditionType: row.conditionType,
+    panelCategory: row.panelCategory ?? null,
+    partName: row.partName ?? row.partCode ?? entryNo,
+    conditionType: normalizeStockCardCondition(row.conditionType),
     qty: toNumber(row.qty),
     uom: row.uom ?? "-",
     storageLocationId: row.storageLocationId,
@@ -385,9 +429,9 @@ function mapStockCardRow(row: StockCardRow): WarehouseStockCardRecord {
     dateIn: row.dateIn,
     dateOut: row.dateOut,
     takenByName: row.takenByName,
-    status: row.status,
+    status: normalizeStockCardStatus(row.status),
     isLabeled: toBoolean(row.isLabeled),
-    itemCategory: row.itemCategory ?? null,
+    itemCategory: normalizeStockCardItemCategory(row.itemCategory, row.partCode),
     photoUrls: parseJsonStringArray(row.photoUrls),
   };
 }
@@ -774,6 +818,7 @@ export class MySqlWarehouseRepository implements WarehouseRepository {
       assignments: qualifyTable(this.coreDb, "car_project_assignment"),
       countdown: qualifyTable(this.coreDb, "sm_jobdesc_countdown"),
       divisions: qualifyTable(this.coreDb, "sm_divisi"),
+      masterPanels: qualifyTable(this.coreDb, "master_panels"),
     };
   }
 
@@ -1647,6 +1692,7 @@ export class MySqlWarehouseRepository implements WarehouseRepository {
           COALESCE(c.unit_name, sc.car_name, sc.car_id) AS unitName,
           sc.part_code AS partCode,
           sc.panel_section AS panelSection,
+          mp.category AS panelCategory,
           sc.part_name AS partName,
           sc.condition_type AS conditionType,
           sc.qty AS qty,
@@ -1679,6 +1725,7 @@ export class MySqlWarehouseRepository implements WarehouseRepository {
         FROM ${this.tables.stockCard} sc
         LEFT JOIN ${this.tables.storageLocations} sl ON sl.id = sc.storage_location_id
         LEFT JOIN ${this.tables.cars} c ON c.id = sc.car_id
+        LEFT JOIN ${this.tables.masterPanels} mp ON mp.car_id = sc.car_id AND sc.part_code = CONCAT('MP-', mp.id)
         LEFT JOIN ${this.tables.cars} c_scope ON c_scope.id = sc.car_id
         WHERE ${conditions.join(" AND ")}
         ORDER BY COALESCE(c.unit_name, sc.car_name, sc.car_id) ASC, sc.part_name ASC, sc.created_at DESC
@@ -1726,6 +1773,7 @@ export class MySqlWarehouseRepository implements WarehouseRepository {
           COALESCE(c.unit_name, sc.car_name, sc.car_id) AS unitName,
           sc.part_code AS partCode,
           sc.panel_section AS panelSection,
+          mp.category AS panelCategory,
           sc.part_name AS partName,
           sc.condition_type AS conditionType,
           sc.qty AS qty,
@@ -1750,6 +1798,7 @@ export class MySqlWarehouseRepository implements WarehouseRepository {
         JOIN ${this.tables.countdown} jc ON jc.car_id = sc.car_id
         LEFT JOIN ${this.tables.storageLocations} sl ON sl.id = sc.storage_location_id
         LEFT JOIN ${this.tables.cars} c ON c.id = sc.car_id
+        LEFT JOIN ${this.tables.masterPanels} mp ON mp.car_id = sc.car_id AND sc.part_code = CONCAT('MP-', mp.id)
         LEFT JOIN ${this.tables.cars} c_scope ON c_scope.id = jc.car_id
         WHERE ${conditions.join(" AND ")}
         ORDER BY sc.part_name ASC, sc.created_at DESC
@@ -1785,14 +1834,26 @@ export class MySqlWarehouseRepository implements WarehouseRepository {
     for (const filter of params.query.filters) {
       if (filter.field === "itemCategory") {
         conditions.push(
-          `(
-            SELECT m.item_category
-            FROM ${this.tables.itemMaster} m
-            WHERE (m.item_code IS NOT NULL AND m.item_code = sc.part_code)
-               OR m.item_name = sc.part_name
-            ORDER BY m.updated_at DESC
-            LIMIT 1
-          ) = ?`,
+          filter.value === "SPARE_PART"
+            ? `(
+              (
+                SELECT m.item_category
+                FROM ${this.tables.itemMaster} m
+                WHERE (m.item_code IS NOT NULL AND m.item_code = sc.part_code)
+                   OR m.item_name = sc.part_name
+                ORDER BY m.updated_at DESC
+                LIMIT 1
+              ) = ?
+              OR sc.part_code LIKE 'MP-%'
+            )`
+            : `(
+              SELECT m.item_category
+              FROM ${this.tables.itemMaster} m
+              WHERE (m.item_code IS NOT NULL AND m.item_code = sc.part_code)
+                 OR m.item_name = sc.part_name
+              ORDER BY m.updated_at DESC
+              LIMIT 1
+            ) = ?`,
         );
         scopeParams.push(filter.value);
       } else if (filter.field === "status") {
@@ -1824,6 +1885,7 @@ export class MySqlWarehouseRepository implements WarehouseRepository {
         COALESCE(c.unit_name, sc.car_name, sc.car_id) AS unitName,
         sc.part_code AS partCode,
         sc.panel_section AS panelSection,
+        mp.category AS panelCategory,
         sc.part_name AS partName,
         sc.condition_type AS conditionType,
         sc.qty AS qty,
@@ -1848,6 +1910,7 @@ export class MySqlWarehouseRepository implements WarehouseRepository {
       FROM ${this.tables.stockCard} sc
       LEFT JOIN ${this.tables.storageLocations} sl ON sl.id = sc.storage_location_id
       LEFT JOIN ${this.tables.cars} c ON c.id = sc.car_id
+      LEFT JOIN ${this.tables.masterPanels} mp ON mp.car_id = sc.car_id AND sc.part_code = CONCAT('MP-', mp.id)
       ${whereClause}
       ORDER BY ${sortColumn} ${direction}, sc.created_at DESC
       LIMIT ? OFFSET ?
@@ -1897,6 +1960,7 @@ export class MySqlWarehouseRepository implements WarehouseRepository {
           COALESCE(c.unit_name, sc.car_name, sc.car_id) AS unitName,
           sc.part_code AS partCode,
           sc.panel_section AS panelSection,
+          mp.category AS panelCategory,
           sc.part_name AS partName,
           sc.condition_type AS conditionType,
           sc.qty AS qty,
@@ -1921,6 +1985,7 @@ export class MySqlWarehouseRepository implements WarehouseRepository {
         FROM ${this.tables.stockCard} sc
         LEFT JOIN ${this.tables.storageLocations} sl ON sl.id = sc.storage_location_id
         LEFT JOIN ${this.tables.cars} c ON c.id = sc.car_id
+        LEFT JOIN ${this.tables.masterPanels} mp ON mp.car_id = sc.car_id AND sc.part_code = CONCAT('MP-', mp.id)
         WHERE ${conditions.join(" AND ")}
         LIMIT 1
       `,

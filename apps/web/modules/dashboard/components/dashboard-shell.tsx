@@ -82,7 +82,6 @@ type UnitDeadlineProgress = {
   actualHours: number;
   targetHours: number;
   progressPct: number;
-  points: number[];
   jobCount: number;
 };
 
@@ -220,6 +219,28 @@ function daysRemaining(targetDate: string | null, asOfDate?: string) {
   } catch {
     return null;
   }
+}
+
+function deadlineMargin(days: number | null) {
+  if (days == null) {
+    return { label: "Belum pasti", detail: "Tanggal belum ada", compact: "Belum pasti", tone: "neutral" as const };
+  }
+
+  if (days <= 0) {
+    return {
+      label: "Non margin",
+      detail: days < 0 ? `${Math.abs(days)} hari lewat` : "Deadline hari ini",
+      compact: days < 0 ? `Non margin +${Math.abs(days)}h` : "Non margin",
+      tone: "danger" as const,
+    };
+  }
+
+  return {
+    label: "Margin",
+    detail: `${days} hari tersisa`,
+    compact: `Margin ${days}h`,
+    tone: days <= 3 ? ("warn" as const) : ("neutral" as const),
+  };
 }
 
 function getQcFailRows(qcQueue: QcQueueRecord[], qcRework: QcQueueRecord[]) {
@@ -450,7 +471,6 @@ function getUnitDeadlineProgress(rows: JobPlanRecord[]) {
     actualHours: number;
     targetHours: number;
     jobCount: number;
-    byDate: Map<string, { actual: number; target: number }>;
   };
 
   const map = new Map<string, Accum>();
@@ -464,7 +484,6 @@ function getUnitDeadlineProgress(rows: JobPlanRecord[]) {
       actualHours: 0,
       targetHours: 0,
       jobCount: 0,
-      byDate: new Map(),
     };
     map.set(key, created);
     return created;
@@ -475,95 +494,26 @@ function getUnitDeadlineProgress(rows: JobPlanRecord[]) {
     if (keys.length === 0) continue;
 
     const actualHours = getJobPlanActualHours(row);
-    const taskDate = row.taskDate.split("T")[0] ?? row.taskDate;
-
     for (const key of keys) {
       const target = ensure(key, row.unitName);
       target.actualHours += actualHours;
       target.targetHours += row.targetHours;
       target.jobCount += 1;
-
-      const existingDate = target.byDate.get(taskDate) ?? { actual: 0, target: 0 };
-      existingDate.actual += actualHours;
-      existingDate.target += row.targetHours;
-      target.byDate.set(taskDate, existingDate);
     }
   }
 
   const result = new Map<string, UnitDeadlineProgress>();
 
   for (const [key, item] of map.entries()) {
-    const sortedDates = [...item.byDate.entries()].sort(([left], [right]) => left.localeCompare(right));
-    let actualSum = 0;
-    let targetSum = 0;
-    const points = sortedDates.map(([, value]) => {
-      actualSum += value.actual;
-      targetSum += value.target;
-      return clampPct(targetSum > 0 ? (actualSum / targetSum) * 100 : 0);
-    });
-
     result.set(key, {
       actualHours: item.actualHours,
       targetHours: item.targetHours,
       progressPct: clampPct(item.targetHours > 0 ? (item.actualHours / item.targetHours) * 100 : 0),
-      points: points.length > 1 ? points : [0, points[0] ?? 0],
       jobCount: item.jobCount,
     });
   }
 
   return result;
-}
-
-function ProgressSparkline({
-  points,
-  tone,
-}: {
-  points: number[];
-  tone: "neutral" | "warn" | "danger";
-}) {
-  const safePoints = points.length > 1 ? points : [0, points[0] ?? 0];
-  const width = 96;
-  const height = 30;
-  const maxIndex = Math.max(1, safePoints.length - 1);
-  const path = safePoints
-    .map((point, index) => {
-      const x = (index / maxIndex) * width;
-      const y = height - (clampPct(point) / 100) * height;
-      return `${x.toFixed(1)},${y.toFixed(1)}`;
-    })
-    .join(" ");
-
-  const className =
-    tone === "danger"
-      ? "text-destructive"
-      : tone === "warn"
-        ? "text-app-accent-ink"
-        : "text-success";
-
-  return (
-    <svg
-      viewBox={`0 0 ${width} ${height}`}
-      role="img"
-      aria-label="Tren progress unit"
-      className={`h-[30px] w-24 shrink-0 overflow-visible ${className}`}
-    >
-      <line x1="0" y1={height - 0.5} x2={width} y2={height - 0.5} className="stroke-border" strokeWidth="1" />
-      <polyline
-        points={path}
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <circle
-        cx={width}
-        cy={height - (clampPct(safePoints[safePoints.length - 1] ?? 0) / 100) * height}
-        r="3"
-        fill="currentColor"
-      />
-    </svg>
-  );
 }
 
 function Card({
@@ -773,6 +723,7 @@ function InteractiveCalendar({
           }
 
           const scheduledUnits = unitsByDate.get(cell.dateStr) ?? [];
+          const margin = scheduledUnits.length > 0 ? deadlineMargin(daysRemaining(cell.dateStr, asOfDate)) : null;
           const dayState = getCalendarDayState({
             dateStr: cell.dateStr,
             selectedDate,
@@ -794,6 +745,19 @@ function InteractiveCalendar({
               </span>
               {scheduledUnits.length > 0 ? (
                 <span className="mt-1 flex min-w-0 flex-col gap-0.5">
+                  {margin ? (
+                    <span
+                      className={`mb-0.5 self-start border px-1.5 py-0.5 font-mono text-[10px] uppercase leading-none ${
+                        margin.tone === "danger"
+                          ? "border-destructive/30 bg-destructive/15 text-destructive"
+                          : margin.tone === "warn"
+                            ? "border-primary/30 bg-primary/15 text-app-accent-ink"
+                            : "border-border bg-muted text-muted-foreground"
+                      }`}
+                    >
+                      {margin.compact}
+                    </span>
+                  ) : null}
                   {scheduledUnits.slice(0, 3).map((unit) => (
                     <span
                       key={unit.carId}
@@ -1046,17 +1010,12 @@ export function DashboardShell({
         </Card>
 
         <div className="flex flex-col gap-3">
-          <Card className="flex-1">
+          <Card>
             <SectionHeader eyebrow="Prioritas" title="5 Unit Mendekati Deadline" />
             <div className="divide-y divide-border">
               {top5Deadline.length > 0 ? (
                 top5Deadline.map((unit) => {
-                  const tone =
-                    unit.days == null || unit.days > 7
-                      ? "neutral"
-                      : unit.days < 0 || unit.days <= 3
-                        ? "danger"
-                        : "warn";
+                  const margin = deadlineMargin(unit.days);
                   const progress = unitDeadlineProgress.get(unit.carId) ?? unitDeadlineProgress.get(unit.unitName);
                   const progressPct = progress?.progressPct ?? 0;
 
@@ -1070,7 +1029,7 @@ export function DashboardShell({
                         unitId: unit.carId,
                       })}
                       prefetch={false}
-                      className="grid gap-3 px-3 py-3 transition hover:bg-accent sm:grid-cols-[minmax(0,1fr)_auto]"
+                      className="block px-3 py-3 transition hover:bg-accent"
                     >
                       <div className="min-w-0 space-y-2">
                         <div className="flex flex-wrap items-start justify-between gap-2">
@@ -1082,15 +1041,19 @@ export function DashboardShell({
                               Deadline {fmtDate(unit.targetDeliveryDate)}
                             </p>
                           </div>
-                          <InlineBadge tone={tone}>
-                            {unit.days == null
-                              ? "Belum pasti"
-                              : unit.days < 0
-                                ? `+${Math.abs(unit.days)}h lewat`
-                                : unit.days === 0
-                                  ? "Hari ini"
-                                  : `${unit.days}h lagi`}
+                          <InlineBadge tone={margin.tone}>
+                            {margin.label}
                           </InlineBadge>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-1.5 font-mono text-[12px]">
+                          <span className="border border-border bg-muted px-2 py-0.5 text-muted-foreground">
+                            {margin.detail}
+                          </span>
+                          {progress ? (
+                            <span className="border border-border bg-muted px-2 py-0.5 text-muted-foreground">
+                              {fmt(progress.jobCount)} SPK
+                            </span>
+                          ) : null}
                         </div>
                         <div className="space-y-1">
                           <div className="flex items-center justify-between gap-2 font-mono text-[12px] text-muted-foreground">
@@ -1102,9 +1065,9 @@ export function DashboardShell({
                           <div className="h-2 overflow-hidden border border-border bg-muted">
                             <div
                               className={`h-full ${
-                                tone === "danger"
+                                margin.tone === "danger"
                                   ? "bg-destructive"
-                                  : tone === "warn"
+                                  : margin.tone === "warn"
                                     ? "bg-primary"
                                     : "bg-success"
                               }`}
@@ -1117,9 +1080,6 @@ export function DashboardShell({
                             {fmtWorkHours(progress.actualHours)} / {fmtWorkHours(progress.targetHours)} · {fmt(progress.jobCount)} pekerjaan
                           </p>
                         ) : null}
-                      </div>
-                      <div className="flex items-center justify-end">
-                        <ProgressSparkline points={progress?.points ?? [0, 0]} tone={tone} />
                       </div>
                     </Link>
                   );

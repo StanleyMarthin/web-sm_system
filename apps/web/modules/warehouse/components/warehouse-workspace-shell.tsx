@@ -408,7 +408,16 @@ const stockCardColumns: SmartDataGridColumn[] = [
   { key: "panelSection", label: "Panel / Part" },
   { key: "partCode", label: "Kode", kind: "mono" },
   { key: "partName", label: "Barang" },
-  { key: "itemCategory", label: "Kategori", kind: "status" },
+  {
+    key: "panelCategory",
+    label: "Kategori",
+    renderCell: (value, row) => {
+      const label = value ? String(value) : row.itemCategory ? humanizeCodeLabel(row.itemCategory) : "-";
+      return label === "-"
+        ? <span className="text-muted-foreground dark:text-foreground/35">-</span>
+        : <span>{label}</span>;
+    },
+  },
   { key: "qty", label: "Qty", kind: "number", align: "right" },
   { key: "locationLabel", label: "Lokasi", filterKey: "storageLocationId" },
   { key: "status", label: "Status", kind: "status", filterKey: "status", filterOptions: [

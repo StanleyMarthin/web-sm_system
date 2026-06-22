@@ -228,6 +228,9 @@ describe("DefaultPlanningWorkspaceService", () => {
           employees: [],
         };
       },
+      async createActual() {
+        throw new Error("Not implemented");
+      },
     };
 
     const service = new DefaultPlanningWorkspaceService(
