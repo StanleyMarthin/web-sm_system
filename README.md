@@ -1,107 +1,77 @@
-# SM System (Monorepo)
+# SM System
 
-SM System adalah workspace web ERP untuk operasional workshop, dengan pemisahan jelas antara frontend (`apps/web`), API (`apps/api`), dan shared package.
+Monorepo fullstack untuk aplikasi operasional workshop.
 
-## Arsitektur Singkat
+## Stack
+
+- `apps/web`: Next.js frontend.
+- `apps/api`: Bun API backend.
+- `packages/contracts`: schema dan DTO shared.
+- `packages/permissions`: permission code shared.
+- `packages/config`: shared TypeScript config.
+
+## Struktur Utama
 
 ```text
-Browser
--> Next.js Web (`apps/web`)
--> Bun API (`apps/api`)
--> MySQL + Redis + layanan auth (`sm_login`)
+apps/
+  api/      Bun API runtime
+  web/      Next.js web runtime
+packages/
+  config/
+  contracts/
+  permissions/
 ```
 
-## Struktur Path dan Fungsi
+## Setup Lokal
 
-### Root
-
-- `apps/`: aplikasi runtime aktif.
-- `packages/`: kode bersama lintas aplikasi.
-- `progress/`: log progres implementasi per phase + hardening.
-- `SYSTEM_MAP_WEB.md`: peta sistem utama (source-of-truth teknis).
-- `PLAN_REFACTOR_WEBAPP_NEXTJS_BUN_SM_MIS.md`: rencana refactor final.
-- `Dockerfile`, `docker-compose.yml`: jalur container build/run.
-
-### `apps/web` (Next.js App Router)
-
-- `apps/web/app/`: route page/layout.
-- `apps/web/modules/`: UI shell per domain bisnis (units, countdown, spk, wo, pr, vendor, warehouse, reports, dll).
-  - `apps/web/modules/units/components/bom-tracker-tab.tsx`: interactive BOM node canvas untuk Unit Workspace (`Unit -> Category -> Section -> Panel/Part`), termasuk pan/zoom/fullscreen, posisi node tersimpan per unit di `localStorage`, dan CRUD Master Panel kontekstual via sidebar kanan.
-- `apps/web/shared/api/`: client API per modul + parser query/response.
-- `apps/web/shared/auth/`: helper auth/session web.
-- `apps/web/shared/datagrid/`: SmartDataGrid server-side.
-- `apps/web/shared/navigation/`: konfigurasi menu berbasis permission.
-- `apps/web/shared/layouts/`: kerangka layout aplikasi.
-- `apps/web/proxy.ts`: guard request di sisi web.
-
-### `apps/api` (Bun API)
-
-- `apps/api/src/index.ts`: bootstrap server.
-- `apps/api/src/app.ts`: router dispatcher endpoint API.
-- `apps/api/src/routes/`: handler endpoint per modul.
-- `apps/api/src/services/`: business logic per modul.
-- `apps/api/src/repositories/`: query DB + mapping data.
-- `apps/api/src/middleware/`: auth, permission, error, dan guard lain.
-- `apps/api/src/config/env.ts`: parsing/validasi environment API.
-- `apps/api/src/db/`: helper DB + migration SQL.
-- `apps/api/tests/`: test API/service/query.
-
-### Shared Packages
-
-- `packages/contracts/src/`: kontrak schema/DTO (Zod + type inference) lintas web/API.
-- `packages/permissions/src/index.ts`: katalog permission code dan helper permission check.
-- `packages/config/`: baseline konfigurasi TypeScript lintas workspace.
-
-## Menjalankan Project Lokal
-
-1. Install dependency
+1. Install dependency:
 
 ```bash
 npm install
 ```
 
-2. Jalankan helper startup
+2. Buat env lokal dari sample:
 
 ```bash
-./start-dev.sh start local
+cp .env.example .env.local
 ```
 
-Mode `local` adalah jalur yang paling aman untuk testing cepat di mesin ini karena:
-- MySQL memakai socket lokal `/var/run/mysqld/mysqld.sock`
-- Redis dev akan dinyalakan otomatis jika belum ada
-- Web dipaksa ke API lokal, jadi tidak tersambung diam-diam ke endpoint publik lama
+3. Isi value `.env.local` sesuai database, Redis, auth service, dan storage lokal yang dipakai.
 
-URL default helper:
-- Web: `http://127.0.0.1:3103/login`
-- API: `http://127.0.0.1:3203`
-
-Perintah lain:
+4. Jalankan API:
 
 ```bash
-./start-dev.sh status
-./start-dev.sh logs
-./start-dev.sh stop
+npm run dev:api
 ```
 
-Jika perlu memakai data MySQL/Redis VPS untuk debug:
+5. Jalankan web di terminal lain:
 
 ```bash
-./start-dev.sh start tunnel
+npm run dev:web
 ```
 
-Mode `tunnel` akan membuka SSH tunnel ke VPS lalu menjalankan API + web dengan port lokal yang sama.
+Default:
+- Web: `http://localhost:3000`
+- API: sesuai `API_HOST` dan `API_PORT` di `.env.local`
 
-## Quality Check
+## Typecheck
 
 ```bash
-npx tsc --noEmit -p apps/api/tsconfig.json
+npm run typecheck --workspace @smsystem/api
 npx tsc --noEmit -p apps/web/tsconfig.json
-bun test apps/api/tests
 ```
 
-## Guardrail RBAC/EBAC
+## Env
 
-- Tidak boleh hardcode role untuk akses fitur.
-- Akses harus lewat kombinasi permission + scope (`canViewAllUnits`, division/unit scope).
-- Gunakan katalog dari `@smsystem/permissions`.
-- Semua endpoint write action wajib melewati guard permission server-side.
+File env yang boleh dicommit hanya sample tanpa value:
+
+- `.env.example`
+- `.env.local.example`
+
+File env nyata tidak boleh dicommit.
+
+## Catatan Maintainance
+
+- Runtime source ada di `apps/` dan `packages/`.
+- Jangan push file lokal seperti `.env.local`, `node_modules/`, `.next/`, script scratch, test, atau catatan implementasi.
+- Perubahan kontrak API sebaiknya dimulai dari `packages/contracts`, lalu update `apps/api` dan `apps/web`.
