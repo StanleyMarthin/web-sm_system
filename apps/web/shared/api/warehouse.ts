@@ -487,11 +487,13 @@ export async function requestWarehouseStockCardUploadTicket(input: {
   stockCardId: string;
   filename: string;
   contentType: string;
+  size: number;
 }) {
   const params = new URLSearchParams({
     stockCardId: input.stockCardId,
     filename: input.filename,
     contentType: input.contentType,
+    size: String(input.size),
   });
   const response = await fetch(
     `${getApiBaseUrl()}/api/warehouse/stock-card/upload-ticket?${params.toString()}`,

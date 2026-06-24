@@ -25,6 +25,7 @@ import {
   sanitizeWarehouseTransactionsQuery,
 } from "@/services/warehouse/query";
 import { applyDefaultDivisionIdFilter } from "@/services/grid/division-default";
+import { parseUploadContentLength } from "@/security/upload-ticket";
 
 function withShortSharedCache(response: Response): Response {
   response.headers.set("Cache-Control", "s-maxage=60, stale-while-revalidate=300");
@@ -72,6 +73,27 @@ function mapWarehouseError(request: Request, error: unknown): Response {
         "Tipe file upload tidak diizinkan.",
         400,
         "INVALID_UPLOAD_CONTENT_TYPE",
+      );
+    }
+
+    if (
+      error.message === "UPLOAD_SIZE_REQUIRED" ||
+      error.message === "INVALID_UPLOAD_SIZE"
+    ) {
+      return errorResponse(
+        request,
+        "Ukuran file upload tidak valid.",
+        400,
+        error.message,
+      );
+    }
+
+    if (error.message === "UPLOAD_TOO_LARGE") {
+      return errorResponse(
+        request,
+        "Ukuran file maksimal 10MB.",
+        413,
+        "UPLOAD_TOO_LARGE",
       );
     }
 
@@ -747,12 +769,17 @@ export async function handleWarehouseStockCardUploadTicketRoute(
       );
     }
 
+    const contentLength = parseUploadContentLength(
+      url.searchParams.get("size") ?? url.searchParams.get("contentLength"),
+    );
+
     const ticket = await warehouseService.createStockCardUploadTicket(
       sessionResult.session,
       {
         stockCardId,
         filename,
         contentType,
+        contentLength,
       },
     );
 

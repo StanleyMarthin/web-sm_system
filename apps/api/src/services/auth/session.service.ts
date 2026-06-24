@@ -56,8 +56,9 @@ export interface SessionStore {
 }
 
 function getSessionSigningKey(env: ApiEnv): Buffer {
-  const keyMaterial = env.REFRESH_TOKEN_ENCRYPTION_KEY ?? env.DB_PASS;
-  return createHash("sha256").update(`session-cookie:${keyMaterial}`).digest();
+  return createHash("sha256")
+    .update(`session-cookie:${getSessionCryptoKeyMaterial(env)}`)
+    .digest();
 }
 
 function signSessionKey(sessionKey: string, env: ApiEnv): string {
@@ -95,8 +96,24 @@ function createCsrfToken(): string {
   return randomBytes(32).toString("base64url");
 }
 
+function getSessionCryptoKeyMaterial(env: ApiEnv): string {
+  if (env.REFRESH_TOKEN_ENCRYPTION_KEY) {
+    return env.REFRESH_TOKEN_ENCRYPTION_KEY;
+  }
+
+  if (env.NODE_ENV === "production") {
+    throw new Error("REFRESH_TOKEN_ENCRYPTION_KEY_REQUIRED");
+  }
+
+  return "smsystem-dev-refresh-token-key";
+}
+
+export function assertSessionCryptoKeyConfigured(env: ApiEnv): void {
+  getSessionCryptoKeyMaterial(env);
+}
+
 function getRefreshTokenEncryptionKey(env: ApiEnv): Buffer {
-  const keyMaterial = env.REFRESH_TOKEN_ENCRYPTION_KEY ?? env.DB_PASS;
+  const keyMaterial = getSessionCryptoKeyMaterial(env);
   return createHash("sha256").update(keyMaterial).digest();
 }
 
@@ -140,7 +157,9 @@ export class RedisSessionStore implements SessionStore {
   constructor(
     private readonly clientFactory: () => Promise<RedisClientType> = getRedisClient,
     private readonly env: ApiEnv = getApiEnv(),
-  ) {}
+  ) {
+    assertSessionCryptoKeyConfigured(env);
+  }
 
   async createSession(input: CreateSessionInput): Promise<WebSession> {
     const normalizedUser = normalizeReservedAuthUser(input.user);

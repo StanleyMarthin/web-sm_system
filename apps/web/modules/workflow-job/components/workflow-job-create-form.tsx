@@ -178,6 +178,7 @@ export function WorkflowJobCreateForm({
       const ticketResult = await requestPrUploadTicket({
         filename: file.name,
         contentType: file.type,
+        size: file.size,
       });
       if (!ticketResult.success) {
         setError(ticketResult.message || "Gagal mendapatkan upload ticket.");

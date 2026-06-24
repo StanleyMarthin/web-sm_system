@@ -123,6 +123,14 @@ async function getSessionEmployeeId(
   return session?.user.employeeId ?? null;
 }
 
+function getLoginIpRateLimitRule(ip: string): RateLimitRule {
+  return {
+    key: `login-ip:${ip}`,
+    limit: getPositiveIntegerEnv("LOGIN_RATE_LIMIT_MAX", 10),
+    windowSeconds: getPositiveIntegerEnv("LOGIN_RATE_LIMIT_WINDOW_SECONDS", 5 * 60),
+  };
+}
+
 export async function enforceSecurityRateLimit(
   request: Request,
   authService: AuthService,
@@ -131,6 +139,14 @@ export async function enforceSecurityRateLimit(
   const ip = getClientIp(request);
 
   if (request.method === "POST" && url.pathname === "/api/auth/login") {
+    const ipRateLimitResponse = await enforceRateLimit(
+      request,
+      getLoginIpRateLimitRule(ip),
+    );
+    if (ipRateLimitResponse) {
+      return ipRateLimitResponse;
+    }
+
     const employeeId = await getLoginEmployeeId(request);
     const loginBlock = await getLoginAttemptBlock(employeeId);
     if (loginBlock) {

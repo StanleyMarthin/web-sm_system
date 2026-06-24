@@ -763,6 +763,7 @@ export function PanelDetailPage({
       photoType: params.photoType,
       filename: params.file.name,
       contentType: params.file.type || "image/jpeg",
+      size: params.file.size,
     });
 
     if (!ticketResult.success) {

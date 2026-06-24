@@ -18,6 +18,12 @@ import { requireSession } from "@/middleware/auth.middleware";
 import { requirePermission } from "@/middleware/permission.middleware";
 import type { AuthService } from "@/services/auth/auth.service";
 import type { UsersService } from "@/services/users.service";
+import {
+  assertImageMagicBytes,
+  extensionForImageContentType,
+  MAX_IMAGE_UPLOAD_BYTES,
+  normalizeAllowedImageContentType,
+} from "@/security/upload-ticket";
 
 interface UploadTicketEnvelope {
   success?: boolean;
@@ -351,24 +357,38 @@ export async function handleProfileAvatarUploadRoute(
     return errorResponse(request, "File gambar tidak ditemukan", 400, "MISSING_FILE");
   }
 
-  const mimeType = file.type || "image/jpeg";
-  const allowedMimes: Record<string, string> = {
-    "image/jpeg": "jpg",
-    "image/jpg": "jpg",
-    "image/png": "png",
-    "image/webp": "webp",
-  };
-  const extension = allowedMimes[mimeType] ?? "jpg";
+  if (file.size <= 0) {
+    return errorResponse(request, "Ukuran file upload tidak valid.", 400, "INVALID_UPLOAD_SIZE");
+  }
+
+  if (file.size > MAX_IMAGE_UPLOAD_BYTES) {
+    return errorResponse(request, "Ukuran file maksimal 10MB.", 413, "UPLOAD_TOO_LARGE");
+  }
+
+  let mimeType: ReturnType<typeof normalizeAllowedImageContentType>;
+  try {
+    mimeType = normalizeAllowedImageContentType(file.type);
+  } catch {
+    return errorResponse(
+      request,
+      "Tipe file upload tidak diizinkan.",
+      400,
+      "INVALID_UPLOAD_CONTENT_TYPE",
+    );
+  }
+
+  const extension = extensionForImageContentType(mimeType);
   const objectKey = `avatars/${sessionResult.session.employeeId}_${Date.now()}.${extension}`;
 
   try {
     const arrayBuffer = await file.arrayBuffer();
+    assertImageMagicBytes(mimeType, new Uint8Array(arrayBuffer));
     const ticket = await requestTaskUploadTicket(objectKey);
 
     const uploadResponse = await fetch(ticket.uploadUrl, {
       method: "PUT",
       headers: {
-        "Content-Type": "image/jpeg",
+        "Content-Type": mimeType,
       },
       body: new Uint8Array(arrayBuffer),
     });
@@ -392,6 +412,15 @@ export async function handleProfileAvatarUploadRoute(
 
     return successResponse(request, "Foto profil berhasil diupload", { photoUrl: ticket.publicUrl });
   } catch (error) {
+    if (error instanceof Error && error.message === "INVALID_IMAGE_BYTES") {
+      return errorResponse(
+        request,
+        "Isi file tidak sesuai dengan tipe gambar.",
+        400,
+        "INVALID_IMAGE_BYTES",
+      );
+    }
+
     console.error("[profile-avatar] proxy upload error:", error);
     return errorResponse(request, "Gagal menyimpan foto profil", 500, "UPLOAD_FAILED");
   }

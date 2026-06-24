@@ -169,6 +169,7 @@ export function GalleryPhotoDrawer({
       photoType: params.photoType,
       filename: params.file.name,
       contentType: params.file.type || "image/jpeg",
+      size: params.file.size,
     });
 
     if (!ticketResult.success) {

@@ -141,12 +141,14 @@ export async function requestGalleryUploadTicket(input: {
   photoType: GalleryPhotoType;
   filename: string;
   contentType: string;
+  size: number;
 }) {
   const params = new URLSearchParams({
     actualId: input.actualId,
     photoType: input.photoType,
     filename: input.filename,
     contentType: input.contentType,
+    size: String(input.size),
   });
 
   const response = await fetch(`${getApiBaseUrl()}/api/gallery/upload-ticket?${params}`, {

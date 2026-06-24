@@ -75,6 +75,7 @@ export interface GalleryUploadTicketProvider {
   createTicket(input: {
     objectKey: string;
     contentType: string;
+    contentLength: number;
   }): Promise<{
     uploadUrl: string;
     publicUrl: string;
@@ -100,6 +101,7 @@ export interface GalleryService {
       photoType: GalleryPhotoType;
       filename: string;
       contentType: string;
+      contentLength: number;
     },
   ): Promise<{
     uploadUrl: string;
@@ -195,6 +197,7 @@ export class DefaultGalleryService implements GalleryService {
       photoType: GalleryPhotoType;
       filename: string;
       contentType: string;
+      contentLength: number;
     },
   ) {
     const actual = await this.repository.getActualContext({
@@ -228,6 +231,7 @@ export class DefaultGalleryService implements GalleryService {
     const ticket = await this.uploadTicketProvider.createTicket({
       objectKey,
       contentType,
+      contentLength: input.contentLength,
     });
 
     await storeUploadTicket({

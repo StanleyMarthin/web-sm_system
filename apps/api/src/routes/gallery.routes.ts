@@ -12,6 +12,7 @@ import { requirePermission } from "@/middleware/permission.middleware";
 import type { AuthService } from "@/services/auth/auth.service";
 import type { GalleryService } from "@/services/gallery.service";
 import { sanitizeGalleryGridQuery } from "@/services/gallery/query";
+import { parseUploadContentLength } from "@/security/upload-ticket";
 
 async function requireGalleryViewSession(request: Request, authService: AuthService) {
   const sessionResult = await requireSession(request, authService);
@@ -79,6 +80,27 @@ function mapGalleryError(request: Request, error: unknown): Response {
         "Tipe file upload tidak diizinkan.",
         400,
         "INVALID_UPLOAD_CONTENT_TYPE",
+      );
+    }
+
+    if (
+      error.message === "UPLOAD_SIZE_REQUIRED" ||
+      error.message === "INVALID_UPLOAD_SIZE"
+    ) {
+      return errorResponse(
+        request,
+        "Ukuran file upload tidak valid.",
+        400,
+        error.message,
+      );
+    }
+
+    if (error.message === "UPLOAD_TOO_LARGE") {
+      return errorResponse(
+        request,
+        "Ukuran file maksimal 10MB.",
+        413,
+        "UPLOAD_TOO_LARGE",
       );
     }
 
@@ -198,6 +220,10 @@ export async function handleGalleryUploadTicketRoute(
       );
     }
 
+    const contentLength = parseUploadContentLength(
+      url.searchParams.get("size") ?? url.searchParams.get("contentLength"),
+    );
+
     const ticket = await galleryService.createUploadTicket(
       sessionResult.session,
       {
@@ -205,6 +231,7 @@ export async function handleGalleryUploadTicketRoute(
         photoType: parsedPhotoType.data,
         filename,
         contentType,
+        contentLength,
       },
     );
 

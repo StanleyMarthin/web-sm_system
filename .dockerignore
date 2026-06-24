@@ -17,3 +17,6 @@ tmp
 certbot/conf
 certbot/www
 docker-compose.override.yml
+apps/api/alter-master-panels.ts
+apps/api/check-schema.ts
+apps/api/test-db-bun.ts

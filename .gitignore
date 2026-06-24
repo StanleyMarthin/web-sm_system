@@ -1,14 +1,55 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-
-# dependencies
-/node_modules
-/.pnp
+# Dependencies
+node_modules/
+.pnp
 .pnp.*
 .yarn/*
-!.yarn/patches
-!.yarn/plugins
-!.yarn/releases
-!.yarn/versions
+!.yarn/patches/
+!.yarn/plugins/
+!.yarn/releases/
+!.yarn/versions/
+
+# Build output and caches
+.next/
+**/.next/
+out/
+**/out/
+build/
+**/build/
+coverage/
+**/coverage/
+.cache/
+tmp/
+*.tsbuildinfo
+next-env.d.ts
+
+# Tests are local-only in the runtime-source handoff.
+**/*.test.ts
+**/*.test.tsx
+/apps/api/tests/
+
+# Runtime logs and local process state
+*.log
+*.pid
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+!.env.local.example
+# Keep production examples local until all real secrets are replaced by placeholders.
+.env.production.example
+*.pem
+*.key
+*.crt
+*.csr
+*.p12
+*.pfx
+
+# Local editor and AI-agent state
 .vscode/
 .codex/
 .agents/
@@ -17,77 +58,54 @@
 .cursor/
 .continue/
 .hallmark/
-start-dev.sh
-# markdown notes / docs kept local in this workspace
-*.md
-progress/
+.code-review-graph/
 
-# temporary copied projects / local analysis dumps
-.tmp_*/
-
-# local scratch and probe scripts
-/scratch*
-/test-*.*
-/fix_redirects.js
-*.sh
-/apps/api/scratch*
-/apps/api/check-db.ts
-scripts/
-
-# SQL dumps are local; application migrations are source code.
-*.sql
-!/apps/api/db/migrations/*.sql
-
-# testing
-/coverage
-**/coverage/
-
-pakages/
-# next.js
-/.next/
-**/.next/
-/out/
-**/out/
-
-# production
-/build
-
-# misc
-.DS_Store
-*.pem
-*.log
-*.tmp
-*.bak
-*.orig
-*.swp
-*.key
-*.crt
-*.csr
-*.p12
-*.pfx
-*~
+# Local dev/deploy state
+.nvmrc
 .dev/
-.cache/
-tmp/
+.tmp_*/
+progress/
 mysql_data/
 redis_data/
 certbot/
 nginx/
 
-# debug
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.pnpm-debug.log*
+# Local scratch/probe scripts
+/scratch*
+/test-*.*
+/fix_*.js
+/start-dev.sh
+/deploy_vps.sh
+/redeploy_vps.sh
+/scripts/
+/apps/web/scripts/
+/apps/api/alter-master-panels.ts
+/apps/api/check-schema.ts
+/apps/api/scratch*
+/apps/api/check-db.ts
+/apps/api/test-db*.ts
+/apps/api/test_db.ts
+/apps/api/test-json.ts
 
-# env files (can opt-in for committing if needed)
-.env*
+# Local docs, notes, and generated analysis reports
+*.md
+!/README.md
+/MOBILE_*.md
+/PLAN_*.md
+/SECURITY_AUDIT.md
+/SYSTEM_MAP_WEB.md
+/design.md
+/apps/web/modules/planning/IMPL_PROMPT_*.md
+/apps/web/modules/planning/REFACTOR_*.md
 
-# vercel
-.vercel
+# SQL dumps are local; application migrations are source code.
+*.sql
+!/apps/api/db/migrations/*.sql
 
-# typescript
-*.tsbuildinfo
-next-env.d.ts
-# Added by code-review-graph
-.code-review-graph/
+# Misc OS/editor files
+.DS_Store
+*.tmp
+*.bak
+*.orig
+*.swp
+*~

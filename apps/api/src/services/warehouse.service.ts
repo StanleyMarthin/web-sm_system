@@ -112,6 +112,7 @@ export interface WarehouseUploadTicketProvider {
   createTicket(input: {
     objectKey: string;
     contentType: string;
+    contentLength: number;
   }): Promise<{
     uploadUrl: string;
     publicUrl: string;
@@ -214,7 +215,7 @@ export interface WarehouseService {
   ): Promise<WarehouseMutationResult>;
   createStockCardUploadTicket(
     session: WebSession,
-    input: { stockCardId: string; filename: string; contentType: string },
+    input: { stockCardId: string; filename: string; contentType: string; contentLength: number },
   ): Promise<{ uploadUrl: string; publicUrl: string; objectKey: string }>;
   updateStockCardPhotos(
     session: WebSession,
@@ -916,7 +917,7 @@ export class DefaultWarehouseService implements WarehouseService {
 
   async createStockCardUploadTicket(
     session: WebSession,
-    input: { stockCardId: string; filename: string; contentType: string },
+    input: { stockCardId: string; filename: string; contentType: string; contentLength: number },
   ) {
     const stockCard = await this.repository.findStockCardById({
       employeeId: session.user.employeeId,
@@ -941,6 +942,7 @@ export class DefaultWarehouseService implements WarehouseService {
     const ticket = await this.uploadTicketProvider.createTicket({
       objectKey,
       contentType,
+      contentLength: input.contentLength,
     });
 
     await storeUploadTicket({

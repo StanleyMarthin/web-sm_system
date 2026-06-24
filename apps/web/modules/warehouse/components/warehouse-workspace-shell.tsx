@@ -922,6 +922,7 @@ export function WarehouseShell({
       stockCardId: photoTarget.stockCardId,
       filename: file.name,
       contentType: file.type || "image/jpeg",
+      size: file.size,
     });
     if (!ticketResult.success) {
       setIsUploadingPhoto(false);

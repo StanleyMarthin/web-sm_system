@@ -1,7 +1,9 @@
 import { createApiFetchHandler } from "@/app";
 import { getApiEnv } from "@/config/env";
+import { assertSessionCryptoKeyConfigured } from "@/services/auth/session.service";
 
 const env = getApiEnv();
+assertSessionCryptoKeyConfigured(env);
 
 if (typeof Bun === "undefined") {
   throw new Error("Bun runtime is required to start the API server.");

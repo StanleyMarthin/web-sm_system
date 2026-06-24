@@ -22,6 +22,7 @@ import {
   createUploadNonce,
   extensionForImageContentType,
   normalizeAllowedImageContentType,
+  parseUploadContentLength,
   storeUploadTicket,
 } from "@/security/upload-ticket";
 
@@ -65,6 +66,27 @@ function mapPrError(request: Request, error: unknown): Response {
         "Tipe file upload tidak diizinkan.",
         400,
         "INVALID_UPLOAD_CONTENT_TYPE",
+      );
+    }
+
+    if (
+      error.message === "UPLOAD_SIZE_REQUIRED" ||
+      error.message === "INVALID_UPLOAD_SIZE"
+    ) {
+      return errorResponse(
+        request,
+        "Ukuran file upload tidak valid.",
+        400,
+        error.message,
+      );
+    }
+
+    if (error.message === "UPLOAD_TOO_LARGE") {
+      return errorResponse(
+        request,
+        "Ukuran file maksimal 10MB.",
+        413,
+        "UPLOAD_TOO_LARGE",
       );
     }
 
@@ -374,6 +396,10 @@ export async function handlePrUploadTicketRoute(
       return errorResponse(request, "filename wajib diisi.", 400, "MISSING_FILENAME");
     }
 
+    const contentLength = parseUploadContentLength(
+      url.searchParams.get("size") ?? url.searchParams.get("contentLength"),
+    );
+
     const allowedContentType = normalizeAllowedImageContentType(contentType);
     const extension = extensionForImageContentType(allowedContentType);
     const nonce = createUploadNonce();
@@ -384,6 +410,7 @@ export async function handlePrUploadTicketRoute(
     const ticket = await uploadTicketProvider.createTicket({
       objectKey,
       contentType: allowedContentType,
+      contentLength,
     });
     await storeUploadTicket({
       nonce,

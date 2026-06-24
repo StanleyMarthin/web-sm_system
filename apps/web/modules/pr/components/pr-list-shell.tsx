@@ -203,6 +203,7 @@ export function PrListShell({
       const ticketResult = await requestPrUploadTicket({
         filename: file.name,
         contentType: file.type || "image/jpeg",
+        size: file.size,
       });
 
       if (!ticketResult.success) {

@@ -234,10 +234,12 @@ export function cancelPr(prId: string, input: CancelPrRequest) {
 export async function requestPrUploadTicket(input: {
   filename: string;
   contentType: string;
+  size: number;
 }) {
   const params = new URLSearchParams({
     filename: input.filename,
     contentType: input.contentType,
+    size: String(input.size),
   });
 
   const response = await fetch(`${getApiBaseUrl()}/api/pr/upload-ticket?${params}`, {

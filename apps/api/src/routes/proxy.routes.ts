@@ -1,6 +1,9 @@
-import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, GetObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import { getApiEnv } from "@/config/env";
-import { withCors } from "@/http/response";
+import { errorResponse, withCors } from "@/http/response";
+import { requireSession } from "@/middleware/auth.middleware";
+import type { AuthService } from "@/services/auth/auth.service";
+import { MAX_IMAGE_UPLOAD_BYTES } from "@/security/upload-ticket";
 
 function stripTrailingSlash(value: string): string {
   return value.replace(/\/$/u, "");
@@ -8,7 +11,13 @@ function stripTrailingSlash(value: string): string {
 
 export async function handleImageProxyRoute(
   request: Request,
+  authService: AuthService,
 ): Promise<Response> {
+  const sessionResult = await requireSession(request, authService);
+  if ("response" in sessionResult) {
+    return sessionResult.response;
+  }
+
   const urlObj = new URL(request.url);
   const targetUrl = urlObj.searchParams.get("url");
 
@@ -17,7 +26,13 @@ export async function handleImageProxyRoute(
   }
 
   const env = getApiEnv();
-  if (!env.R2_PUBLIC_URL || !env.R2_ENDPOINT_URL || !env.R2_BUCKET_NAME) {
+  if (
+    !env.R2_PUBLIC_URL ||
+    !env.R2_ENDPOINT_URL ||
+    !env.R2_BUCKET_NAME ||
+    !env.R2_ACCESS_KEY_ID ||
+    !env.R2_SECRET_ACCESS_KEY
+  ) {
     return withCors(request, new Response("Storage not configured", { status: 503 }));
   }
 
@@ -64,24 +79,50 @@ export async function handleImageProxyRoute(
   });
 
   try {
+    const head = await s3.send(
+      new HeadObjectCommand({
+        Bucket: env.R2_BUCKET_NAME,
+        Key: objectKey,
+      }),
+    );
+    const rawContentLength = head.ContentLength;
+    if (
+      typeof rawContentLength !== "number" ||
+      !Number.isSafeInteger(rawContentLength) ||
+      rawContentLength <= 0
+    ) {
+      return withCors(request, new Response("Invalid object metadata", { status: 502 }));
+    }
+    const contentLength = rawContentLength;
+    if (contentLength > MAX_IMAGE_UPLOAD_BYTES) {
+      return errorResponse(
+        request,
+        "Ukuran gambar maksimal 10MB.",
+        413,
+        "IMAGE_TOO_LARGE",
+      );
+    }
+
+    const contentType = head.ContentType || "image/jpeg";
+    if (!contentType.toLowerCase().startsWith("image/")) {
+      return withCors(request, new Response("Unsupported media type", { status: 415 }));
+    }
+
     const command = new GetObjectCommand({
       Bucket: env.R2_BUCKET_NAME,
       Key: objectKey,
     });
 
     const res = await s3.send(command);
-    const contentType = res.ContentType || "image/jpeg";
-    if (!contentType.toLowerCase().startsWith("image/")) {
-      return withCors(request, new Response("Unsupported media type", { status: 415 }));
+    const body = res.Body;
+    if (!body || typeof body.transformToWebStream !== "function") {
+      return withCors(request, new Response("Failed to fetch image", { status: 502 }));
     }
 
-    const byteArray = await res.Body!.transformToByteArray();
-    const body = new ArrayBuffer(byteArray.byteLength);
-    new Uint8Array(body).set(byteArray);
-
-    return withCors(request, new Response(body, {
+    return withCors(request, new Response(body.transformToWebStream(), {
       headers: {
         "Content-Type": contentType,
+        "Content-Length": String(contentLength),
         "Cache-Control": "public, max-age=86400",
       },
     }));

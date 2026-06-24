@@ -1,6 +1,7 @@
 import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import type { ApiEnv } from "@/config/env";
+import { MAX_IMAGE_UPLOAD_BYTES } from "@/security/upload-ticket";
 import type { GalleryUploadTicketProvider } from "@/services/gallery.service";
 
 function stripTrailingSlash(value: string): string {
@@ -40,6 +41,7 @@ export class S3GalleryUploadTicketProvider implements GalleryUploadTicketProvide
   async createTicket(input: {
     objectKey: string;
     contentType: string;
+    contentLength: number;
   }): Promise<{
     uploadUrl: string;
     publicUrl: string;
@@ -48,11 +50,18 @@ export class S3GalleryUploadTicketProvider implements GalleryUploadTicketProvide
     if (!this.client || !this.env.R2_BUCKET_NAME || !this.env.R2_PUBLIC_URL) {
       throw new Error("GALLERY_UPLOAD_NOT_CONFIGURED");
     }
+    if (!Number.isSafeInteger(input.contentLength) || input.contentLength <= 0) {
+      throw new Error("INVALID_UPLOAD_SIZE");
+    }
+    if (input.contentLength > MAX_IMAGE_UPLOAD_BYTES) {
+      throw new Error("UPLOAD_TOO_LARGE");
+    }
 
     const command = new PutObjectCommand({
       Bucket: this.env.R2_BUCKET_NAME,
       Key: input.objectKey,
       ContentType: input.contentType,
+      ContentLength: input.contentLength,
     });
 
     const uploadUrl = await getSignedUrl(this.client, command, {

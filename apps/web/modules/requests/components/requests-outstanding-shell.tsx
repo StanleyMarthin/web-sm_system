@@ -305,6 +305,7 @@ export function RequestsOutstandingShell({
       const ticketRes = await requestPrUploadTicket({
         filename: file.name,
         contentType: file.type,
+        size: file.size,
       });
 
       if (!ticketRes.success) {

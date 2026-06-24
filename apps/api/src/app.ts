@@ -591,7 +591,7 @@ export function createApiFetchHandler(dependencies: AppDependencies = {}) {
     }
 
     if (request.method === "GET" && url.pathname === "/api/proxy/image") {
-      return handleImageProxyRoute(request);
+      return handleImageProxyRoute(request, getAuthService());
     }
 
     if (request.method === "GET" && url.pathname === "/api/users") {
