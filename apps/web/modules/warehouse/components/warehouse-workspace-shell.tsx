@@ -2,8 +2,12 @@
 
 import Image from "next/image";
 import type {
+  CreateWarehouseItem,
   CreateWarehouseRequest,
   CreateWarehouseStorageLocation,
+  CreateWarehouseStockCard,
+  UpdateWarehouseItem,
+  UpdateWarehouseStockCard,
   UpdateWarehouseStorageLocation,
   WarehouseDashboardDivisionUsageRecord,
   WarehouseDashboardLateUserRecord,
@@ -16,7 +20,9 @@ import type {
   WarehouseRequestJobOption,
   WarehouseRequestStockCardOption,
   WarehouseStockAdjustmentRecord,
+  WarehouseStockCardPanelReference,
   WarehouseStockCardRecord,
+  WarehouseStockCardUnitReference,
   WarehouseStockOpnameRecord,
   WarehouseStorageLocationRecord,
   WarehouseTab,
@@ -47,15 +53,22 @@ import { CompactDateRangeInput } from "@/shared/ui/compact";
 import { type WarehouseSectionId } from "@/modules/warehouse/config/workspace";
 import {
   approveWarehouseRequest,
+  createWarehouseStockCard,
+  createWarehouseItem,
   createWarehouseRequest,
   createWarehouseStorageLocation,
+  deleteWarehouseStockCard,
+  deleteWarehouseItem,
   fetchWarehouseRequestReferencesClient,
+  fetchWarehouseStockCardReferencesClient,
   fetchWarehouseStorageLocationsClient,
   issueWarehouseRequest,
   readyWarehouseRequest,
   requestWarehouseStockCardUploadTicket,
   returnWarehouseRequest,
   storeWarehouseRequest,
+  updateWarehouseStockCard,
+  updateWarehouseItem,
   updateWarehouseStockCardPhotos,
   updateWarehouseStorageLocation,
   deleteWarehouseStorageLocation,
@@ -65,6 +78,8 @@ import { WarehouseReturnForm, type ReturnFormValues } from "./forms/warehouse-re
 import { WarehouseStoreForm, type StoreFormValues } from "./forms/warehouse-store-form";
 import { WarehouseLocationForm, type LocationFormValues } from "./forms/warehouse-location-form";
 import { WarehouseRequestForm, type RequestFormValues } from "./forms/warehouse-request-form";
+import { WarehouseStockCardForm, type StockCardFormValues } from "./forms/warehouse-stock-card-form";
+import { WarehouseItemForm, type WarehouseItemFormValues } from "./forms/warehouse-item-form";
 import { SmartDataGrid } from "@/shared/datagrid/smart-data-grid";
 import type {
   SmartDataGridColumn,
@@ -137,6 +152,10 @@ interface WarehouseShellProps {
       hasPrev: boolean;
     };
     state: GridQueryState;
+  };
+  stockCardReferences?: {
+    units: WarehouseStockCardUnitReference[];
+    panels: WarehouseStockCardPanelReference[];
   };
   items?: {
     rows: WarehouseItemRecord[];
@@ -216,6 +235,16 @@ interface LocationModalState {
   initialValues: LocationFormValues | null;
 }
 
+interface StockCardModalState {
+  isOpen: boolean;
+  initialValues: StockCardFormValues | null;
+}
+
+interface ItemModalState {
+  isOpen: boolean;
+  initialValues: WarehouseItemFormValues | null;
+}
+
 const darkSelectStyle = {
   backgroundColor: "var(--card)",
   color: "var(--card-foreground)",
@@ -268,6 +297,103 @@ function buildGridFilters(
     { field: "divisionId", label: "Divisi", options: references.divisions },
     { field: "transactionType", label: "Jenis", options: references.transactionTypes },
   ];
+}
+
+function optionalText(value?: string | null): string | null {
+  const nextValue = value?.trim() ?? "";
+  return nextValue ? nextValue : null;
+}
+
+function buildWarehouseItemPayload(
+  data: WarehouseItemFormValues,
+): CreateWarehouseItem {
+  return {
+    itemCode: optionalText(data.itemCode),
+    itemName: data.itemName.trim(),
+    itemCategory: data.itemCategory,
+    uom: optionalText(data.uom),
+    description: optionalText(data.description),
+    isActive: data.isActive,
+  };
+}
+
+function itemToFormValues(row: WarehouseItemRecord): WarehouseItemFormValues {
+  return {
+    itemId: row.itemId,
+    itemCode: row.itemCode ?? "",
+    itemName: row.itemName,
+    itemCategory: row.itemCategory === "TOOLS" ? "TOOLS" : "BAHAN",
+    uom: row.uom ?? "",
+    description: row.description ?? "",
+    isActive: row.isActive,
+  };
+}
+
+function buildStockCardPayload(
+  data: StockCardFormValues,
+  photoUrls: string[],
+): CreateWarehouseStockCard {
+  const partName = optionalText(data.partName);
+  const usesPart = data.usePart;
+  const rootPanelId = data.parentPanelId ? Number(data.parentPanelId) : null;
+  const selectedPartId = data.panelId ? Number(data.panelId) : null;
+
+  return {
+    carId: data.carId.trim(),
+    unitName: null,
+    panelId: selectedPartId ?? (usesPart ? null : rootPanelId),
+    parentPanelId: usesPart ? rootPanelId : null,
+    panelName: optionalText(data.panelName),
+    panelCategory: optionalText(data.panelCategory),
+    partCode: optionalText(data.partCode),
+    panelSection: data.panelSection.trim(),
+    partName: partName ?? data.panelName.trim(),
+    conditionType: data.conditionType,
+    qty: Number(data.qty),
+    uom: data.uom.trim(),
+    storageLocationId: data.storageLocationId ? Number(data.storageLocationId) : null,
+    locationDetail: optionalText(data.locationDetail),
+    dateIn: optionalText(data.dateIn),
+    dateOut: optionalText(data.dateOut),
+    takenByName: null,
+    status: data.status,
+    isLabeled: false,
+    photoUrls,
+  };
+}
+
+function getStockCardPanelId(row: WarehouseStockCardRecord): string {
+  const panelId = row.partCode?.match(/^MP-(\d+)$/u)?.[1] ?? "";
+  return panelId;
+}
+
+function stockCardToFormValues(row: WarehouseStockCardRecord): StockCardFormValues {
+  return {
+    stockCardId: row.stockCardId,
+    carId: row.carId ?? "",
+    panelId: row.masterPanelId ? String(row.masterPanelId) : getStockCardPanelId(row),
+    parentPanelId: row.parentPanelId
+      ? String(row.parentPanelId)
+      : row.masterPanelId
+        ? String(row.masterPanelId)
+        : "",
+    panelName: row.panelName ?? row.partName,
+    panelCategory: row.panelCategory ?? "",
+    partCode: row.partCode ?? "",
+    panelSection: row.panelSection ?? "",
+    usePart: Boolean(row.masterPanelId && row.parentPanelId !== null),
+    partName: row.masterPanelId && row.parentPanelId === null ? "" : row.partName,
+    conditionType: row.conditionType,
+    qty: row.qty,
+    uom: row.uom,
+    storageLocationId: row.storageLocationId ? String(row.storageLocationId) : "",
+    locationDetail: row.locationDetail ?? "",
+    dateIn: row.dateIn ?? "",
+    dateOut: row.dateOut ?? "",
+    takenByName: row.takenByName ?? "",
+    status: row.status,
+    isLabeled: row.isLabeled,
+  };
 }
 
 function SummaryBlock({
@@ -377,6 +503,11 @@ function ModalFrame({
   );
 }
 
+const stockCardStatusOptions = ["IN_STORAGE", "RETRIEVED", "INSTALLED", "LOST"].map((value) => ({
+  value,
+  label: humanizeCodeLabel(value),
+}));
+
 const stockCardColumns: SmartDataGridColumn[] = [
   {
     key: "photoPreview",
@@ -420,12 +551,7 @@ const stockCardColumns: SmartDataGridColumn[] = [
   },
   { key: "qty", label: "Qty", kind: "number", align: "right" },
   { key: "locationLabel", label: "Lokasi", filterKey: "storageLocationId" },
-  { key: "status", label: "Status", kind: "status", filterKey: "status", filterOptions: [
-    { value: "IN_STORAGE", label: "IN_STORAGE" },
-    { value: "RETRIEVED", label: "RETRIEVED" },
-    { value: "INSTALLED", label: "INSTALLED" },
-    { value: "LOST", label: "LOST" },
-  ] },
+  { key: "status", label: "Status", kind: "status", filterKey: "status", filterOptions: stockCardStatusOptions },
 ];
 
 const locationColumns: SmartDataGridColumn[] = [
@@ -493,6 +619,7 @@ export function WarehouseShell({
   requestReferences,
   locationOptions,
   stockCard,
+  stockCardReferences,
   items,
   usage,
   locations,
@@ -524,6 +651,19 @@ export function WarehouseShell({
   const [selectedPhotoUrl, setSelectedPhotoUrl] = useState<string | null>(null);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const photoInputRef = useRef<HTMLInputElement | null>(null);
+  const [stockCardModal, setStockCardModal] = useState<StockCardModalState>({
+    isOpen: false,
+    initialValues: null,
+  });
+  const [stockCardPanelOptions, setStockCardPanelOptions] = useState<WarehouseStockCardPanelReference[]>(
+    stockCardReferences?.panels ?? [],
+  );
+  const [isSavingStockCard, setIsSavingStockCard] = useState(false);
+  const [itemModal, setItemModal] = useState<ItemModalState>({
+    isOpen: false,
+    initialValues: null,
+  });
+  const [isSavingItem, setIsSavingItem] = useState(false);
   const [locationModal, setLocationModal] = useState<LocationModalState>({ isOpen: false, initialValues: null });
   const [isSavingLocation, setIsSavingLocation] = useState(false);
 
@@ -591,6 +731,10 @@ export function WarehouseShell({
     };
   }, [photoTarget]);
 
+  useEffect(() => {
+    setStockCardPanelOptions(stockCardReferences?.panels ?? []);
+  }, [stockCardReferences]);
+
   async function ensureStoreLocationOptions() {
     if (effectiveStoreLocationOptions.length > 0) {
       return effectiveStoreLocationOptions;
@@ -616,6 +760,24 @@ export function WarehouseShell({
     const nextOptions = result.payload.data.filter((row) => row.isActive);
     setStoreLocationOptions(nextOptions);
     return nextOptions;
+  }
+
+  async function loadStockCardPanels(unitId: string) {
+    if (!unitId) {
+      setStockCardPanelOptions([]);
+      return [];
+    }
+
+    const response = await fetchWarehouseStockCardReferencesClient({
+      unitId,
+    });
+    if (!response.payload) {
+      sweetAlert.notifyError("Referensi panel belum terbaca", "Daftar panel unit belum berhasil dimuat.");
+      return [];
+    }
+
+    setStockCardPanelOptions(response.payload.data.panels);
+    return response.payload.data.panels;
   }
 
   async function openStoreModal(input: { transactionId: string; itemName: string }) {
@@ -989,6 +1151,119 @@ export function WarehouseShell({
     router.refresh();
   }
 
+  function openCreateStockCardDialog() {
+    setStockCardModal({ isOpen: true, initialValues: null });
+  }
+
+  function openEditStockCardDialog(row: WarehouseStockCardRecord) {
+    if (row.carId) {
+      void loadStockCardPanels(row.carId);
+    }
+    setStockCardModal({
+      isOpen: true,
+      initialValues: stockCardToFormValues(row),
+    });
+  }
+
+  async function submitStockCard(data: StockCardFormValues) {
+    const currentRow = stockCard?.rows.find((row) => row.stockCardId === data.stockCardId) ?? null;
+    if (data.stockCardId !== null && !currentRow) {
+      sweetAlert.notifyError("Stock card belum tersimpan", "Data stock card sudah berubah. Muat ulang lalu coba lagi.");
+      return;
+    }
+    const payload = buildStockCardPayload(data, currentRow?.photoUrls ?? []);
+    setIsSavingStockCard(true);
+    const result =
+      data.stockCardId === null
+        ? await createWarehouseStockCard(payload)
+        : await updateWarehouseStockCard({
+            stockCardId: data.stockCardId,
+            ...payload,
+          } as UpdateWarehouseStockCard);
+    setIsSavingStockCard(false);
+
+    if (!result.success) {
+      sweetAlert.notifyError("Stock card belum tersimpan", result.message);
+      return;
+    }
+
+    setStockCardModal({ isOpen: false, initialValues: null });
+    sweetAlert.notifySuccess(data.stockCardId === null ? "Stock card ditambahkan" : "Stock card diperbarui");
+    router.refresh();
+  }
+
+  async function handleDeleteStockCard(row: WarehouseStockCardRecord) {
+    const confirmed = await sweetAlert.confirm({
+      title: "Hapus stock card ini?",
+      description: "Stock card yang sudah dipakai transaksi atau opname tidak bisa dihapus.",
+      tone: "warning",
+      confirmLabel: "Hapus",
+    });
+    if (!confirmed) {
+      return;
+    }
+
+    const result = await deleteWarehouseStockCard(row.stockCardId);
+    if (!result.success) {
+      sweetAlert.notifyError("Stock card belum terhapus", result.message);
+      return;
+    }
+
+    sweetAlert.notifySuccess("Stock card dihapus");
+    router.refresh();
+  }
+
+  function openCreateItemDialog() {
+    setItemModal({ isOpen: true, initialValues: null });
+  }
+
+  function openEditItemDialog(row: WarehouseItemRecord) {
+    setItemModal({ isOpen: true, initialValues: itemToFormValues(row) });
+  }
+
+  async function submitItem(data: WarehouseItemFormValues) {
+    const payload = buildWarehouseItemPayload(data);
+    setIsSavingItem(true);
+    const result =
+      data.itemId === null
+        ? await createWarehouseItem(payload)
+        : await updateWarehouseItem({
+            itemId: data.itemId,
+            ...payload,
+          } as UpdateWarehouseItem);
+    setIsSavingItem(false);
+
+    if (!result.success) {
+      sweetAlert.notifyError("Master barang belum tersimpan", result.message);
+      return;
+    }
+
+    setItemModal({ isOpen: false, initialValues: null });
+    sweetAlert.notifySuccess(data.itemId === null ? "Master barang ditambahkan" : "Master barang diperbarui");
+    router.refresh();
+  }
+
+  async function handleDeleteItem(row: WarehouseItemRecord) {
+    const confirmed = await sweetAlert.confirm({
+      title: "Nonaktifkan barang ini?",
+      description: "Data tidak dihapus permanen agar histori transaksi tetap aman.",
+      tone: "warning",
+      confirmLabel: "Nonaktifkan",
+    });
+    if (!confirmed) {
+      return;
+    }
+
+    const result = await deleteWarehouseItem(row.itemId);
+    if (!result.success) {
+      sweetAlert.notifyError("Master barang belum dinonaktifkan", result.message);
+      return;
+    }
+
+    sweetAlert.notifySuccess("Master barang dinonaktifkan");
+    router.refresh();
+  }
+
   function openCreateLocationDialog() {
     setLocationModal({ isOpen: true, initialValues: null });
   }
@@ -1143,6 +1418,108 @@ export function WarehouseShell({
                 Tersimpan kembali
               </button>
             ) : null}
+          </div>
+        );
+      },
+    },
+  ];
+
+  const stockCardRowsWithActions = useMemo(
+    () =>
+      (stockCard?.rows ?? []).map((row) => ({
+        ...row,
+        actions: row.stockCardId,
+      })),
+    [stockCard],
+  );
+
+  const stockCardColumnsWithActions: SmartDataGridColumn[] = [
+    ...stockCardColumns,
+    {
+      key: "actions",
+      label: "Aksi",
+      align: "right",
+      renderCell: (_, row) => {
+        const actualRow = (stockCard?.rows ?? []).find(
+          (item) => item.stockCardId === String(row.stockCardId ?? ""),
+        );
+        if (!actualRow) {
+          return null;
+        }
+
+        return (
+          <div className="flex flex-wrap justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setPhotoTarget(actualRow)}
+              className="border border-border dark:border-white/[0.08] px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground dark:text-foreground/70"
+            >
+              Foto
+            </button>
+            {canManageStockCard ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => openEditStockCardDialog(actualRow)}
+                  className="border border-border dark:border-white/[0.08] px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground dark:text-foreground/70"
+                >
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleDeleteStockCard(actualRow)}
+                  className="border border-destructive/35 px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-destructive"
+                >
+                  Hapus
+                </button>
+              </>
+            ) : null}
+          </div>
+        );
+      },
+    },
+  ];
+
+  const itemRowsWithActions = useMemo(
+    () =>
+      (items?.rows ?? []).map((row) => ({
+        ...row,
+        actions: row.itemId,
+      })),
+    [items],
+  );
+
+  const itemColumnsWithActions: SmartDataGridColumn[] = [
+    ...itemColumns,
+    {
+      key: "actions",
+      label: "Aksi",
+      align: "right",
+      renderCell: (_, row) => {
+        const actualRow = (items?.rows ?? []).find(
+          (item) => item.itemId === String(row.itemId ?? ""),
+        );
+        const editable = actualRow?.itemCategory === "BAHAN" || actualRow?.itemCategory === "TOOLS";
+        if (!actualRow || !canManageStockCard || !editable) {
+          return null;
+        }
+
+        return (
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => openEditItemDialog(actualRow)}
+              className="border border-border dark:border-white/[0.08] px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground dark:text-foreground/70"
+            >
+              Edit
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleDeleteItem(actualRow)}
+              className="border border-destructive/35 px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-destructive"
+            >
+              Nonaktifkan
+            </button>
           </div>
         );
       },
@@ -1468,22 +1845,34 @@ export function WarehouseShell({
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={() => startRefresh(() => router.refresh())}
-                className="inline-flex h-8 items-center gap-2 border border-border dark:border-white/[0.08] bg-transparent px-3 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/55"
-              >
-                <RefreshCcw className="h-3.5 w-3.5" />
-                {isRefreshing ? "Memuat" : "Refresh"}
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                {canManageStockCard ? (
+                  <button
+                    type="button"
+                    onClick={openCreateStockCardDialog}
+                    className="inline-flex h-8 items-center gap-2 border border-primary/40 px-3 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-app-accent-ink transition-colors hover:bg-primary/10"
+                  >
+                    <PackagePlus className="h-3.5 w-3.5" />
+                    Tambah stock
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => startRefresh(() => router.refresh())}
+                  className="inline-flex h-8 items-center gap-2 border border-border dark:border-white/[0.08] bg-transparent px-3 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/55"
+                >
+                  <RefreshCcw className="h-3.5 w-3.5" />
+                  {isRefreshing ? "Memuat" : "Refresh"}
+                </button>
+              </div>
             </div>
           </section>
 
           <SmartDataGrid
             title="Sheet stock"
             description=""
-            columns={stockCardColumns}
-            rows={stockCard.rows as unknown as Array<Record<string, string | number | boolean | null>>}
+            columns={stockCardColumnsWithActions}
+            rows={stockCardRowsWithActions as unknown as Array<Record<string, string | number | boolean | null>>}
             meta={stockCard.meta}
             state={stockCard.state}
             sortOptions={[
@@ -1495,12 +1884,8 @@ export function WarehouseShell({
             emptyMessage="Belum ada stock card untuk filter saat ini."
             viewportClassName="max-h-[calc(100svh-260px)]"
             filters={[
-              { field: "status", label: "Status", options: [
-                { value: "IN_STORAGE", label: "IN_STORAGE" },
-                { value: "RETRIEVED", label: "RETRIEVED" },
-                { value: "INSTALLED", label: "INSTALLED" },
-                { value: "LOST", label: "LOST" },
-              ] },
+              ...(stockCardReferences && stockCardReferences.units.length > 0 ? [{ field: "unitId", label: "Unit", options: stockCardReferences.units }] : []),
+              { field: "status", label: "Status", options: stockCardStatusOptions },
               ...(locationOptions && locationOptions.length > 0 ? [{ field: "storageLocationId", label: "Lokasi", options: locationOptions.map((loc) => ({ value: String(loc.storageLocationId), label: loc.label })) }] : []),
             ]}
             onRowClick={(row) => {
@@ -1588,26 +1973,44 @@ export function WarehouseShell({
                 <p className="text-[10px] uppercase tracking-[0.16em] text-app-accent-ink/80">Gudang</p>
                 <h2 className="mt-1 text-lg font-semibold text-foreground dark:text-foreground">Master barang</h2>
               </div>
-              <button
-                type="button"
-                onClick={() => startRefresh(() => router.refresh())}
-                  className="inline-flex h-8 items-center gap-2 border border-border dark:border-white/[0.08] bg-transparent px-3 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/55"
-              >
-                <RefreshCcw className="h-3.5 w-3.5" />
-                {isRefreshing ? "Memuat" : "Refresh"}
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                {canManageStockCard ? (
+                  <button
+                    type="button"
+                    onClick={openCreateItemDialog}
+                    className="inline-flex h-8 items-center gap-2 border border-primary/40 px-3 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-app-accent-ink transition-colors hover:bg-primary/10"
+                  >
+                    <PackagePlus className="h-3.5 w-3.5" />
+                    Tambah bahan/tools
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => startRefresh(() => router.refresh())}
+                    className="inline-flex h-8 items-center gap-2 border border-border dark:border-white/[0.08] bg-transparent px-3 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/55"
+                >
+                  <RefreshCcw className="h-3.5 w-3.5" />
+                  {isRefreshing ? "Memuat" : "Refresh"}
+                </button>
+              </div>
             </div>
           </section>
           <SmartDataGrid
             title="Master barang"
             description=""
-            columns={itemColumns}
-            rows={items.rows as Array<Record<string, string | number | boolean | null>>}
+            columns={itemColumnsWithActions}
+            rows={itemRowsWithActions as Array<Record<string, string | number | boolean | null>>}
             meta={items.meta}
             state={items.state}
             searchPlaceholder="Cari barang atau kode..."
             emptyMessage="Belum ada data barang."
             viewportClassName="max-h-[calc(100svh-260px)]"
+            filters={[
+              { field: "itemCategory", label: "Kategori", options: [
+                { value: "BAHAN", label: "Bahan" },
+                { value: "TOOLS", label: "Tools" },
+              ] },
+            ]}
           />
         </>
       ) : null}
@@ -1747,6 +2150,36 @@ export function WarehouseShell({
             onSubmit={(data) => {
               void submitStore(data);
             }}
+          />
+        </ModalFrame>
+      ) : null}
+
+      {itemModal.isOpen ? (
+        <ModalFrame
+          title={itemModal.initialValues === null ? "Tambah bahan/tools" : "Edit bahan/tools"}
+          onClose={() => setItemModal({ isOpen: false, initialValues: null })}
+        >
+          <WarehouseItemForm
+            initialValues={itemModal.initialValues}
+            isPending={isSavingItem}
+            onSubmit={(data) => void submitItem(data)}
+          />
+        </ModalFrame>
+      ) : null}
+
+      {stockCardModal.isOpen ? (
+        <ModalFrame
+          title={stockCardModal.initialValues === null ? "Tambah stock card" : "Edit stock card"}
+          onClose={() => setStockCardModal({ isOpen: false, initialValues: null })}
+        >
+          <WarehouseStockCardForm
+            initialValues={stockCardModal.initialValues}
+            units={stockCardReferences?.units ?? []}
+            panels={stockCardPanelOptions}
+            locations={defaultStoreLocationOptions}
+            isPending={isSavingStockCard}
+            onUnitChange={(unitId) => void loadStockCardPanels(unitId)}
+            onSubmit={(data) => void submitStockCard(data)}
           />
         </ModalFrame>
       ) : null}

@@ -276,6 +276,9 @@ import {
   handleWarehouseApproveRoute,
   handleWarehouseIssueRoute,
   handleWarehouseDashboardRoute,
+  handleWarehouseItemCreateRoute,
+  handleWarehouseItemDeleteRoute,
+  handleWarehouseItemUpdateRoute,
   handleWarehouseItemsRoute,
   handleWarehouseMaterialUsageRoute,
   handleWarehousePendingApprovalRoute,
@@ -284,8 +287,12 @@ import {
   handleWarehouseRequestCreateRoute,
   handleWarehouseRequestReferencesRoute,
   handleWarehouseReturnRoute,
+  handleWarehouseStockCardCreateRoute,
+  handleWarehouseStockCardDeleteRoute,
   handleWarehouseStockCardPhotosRoute,
+  handleWarehouseStockCardReferencesRoute,
   handleWarehouseStockCardUploadTicketRoute,
+  handleWarehouseStockCardUpdateRoute,
   handleWarehouseStorageLocationCreateRoute,
   handleWarehouseStorageLocationDeleteRoute,
   handleWarehouseStorageLocationUpdateRoute,
@@ -1265,6 +1272,14 @@ export function createApiFetchHandler(dependencies: AppDependencies = {}) {
       );
     }
 
+    if (request.method === "GET" && url.pathname === "/api/warehouse/stock-card/references") {
+      return handleWarehouseStockCardReferencesRoute(
+        request,
+        getAuthService(),
+        getWarehouseService(),
+      );
+    }
+
     if (request.method === "GET" && url.pathname === "/api/warehouse/stock-card") {
       return handleWarehouseStockCardRoute(
         request,
@@ -1284,6 +1299,32 @@ export function createApiFetchHandler(dependencies: AppDependencies = {}) {
     if (request.method === "GET" && url.pathname === "/api/warehouse/items") {
       return handleWarehouseItemsRoute(
         request,
+        getAuthService(),
+        getWarehouseService(),
+      );
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/warehouse/items") {
+      return handleWarehouseItemCreateRoute(
+        request,
+        getAuthService(),
+        getWarehouseService(),
+      );
+    }
+
+    if (request.method === "PUT" && url.pathname === "/api/warehouse/items") {
+      return handleWarehouseItemUpdateRoute(
+        request,
+        getAuthService(),
+        getWarehouseService(),
+      );
+    }
+
+    const warehouseItemDeleteMatch = url.pathname.match(/^\/api\/warehouse\/items\/([^/]+)$/u);
+    if (request.method === "DELETE" && warehouseItemDeleteMatch) {
+      return handleWarehouseItemDeleteRoute(
+        request,
+        decodeURIComponent(warehouseItemDeleteMatch[1]),
         getAuthService(),
         getWarehouseService(),
       );
@@ -1490,6 +1531,32 @@ export function createApiFetchHandler(dependencies: AppDependencies = {}) {
     if (request.method === "POST" && url.pathname === "/api/warehouse/store") {
       return handleWarehouseStoreRoute(
         request,
+        getAuthService(),
+        getWarehouseService(),
+      );
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/warehouse/stock-card") {
+      return handleWarehouseStockCardCreateRoute(
+        request,
+        getAuthService(),
+        getWarehouseService(),
+      );
+    }
+
+    if (request.method === "PUT" && url.pathname === "/api/warehouse/stock-card") {
+      return handleWarehouseStockCardUpdateRoute(
+        request,
+        getAuthService(),
+        getWarehouseService(),
+      );
+    }
+
+    const warehouseStockCardMatch = url.pathname.match(/^\/api\/warehouse\/stock-card\/([^/]+)$/u);
+    if (request.method === "DELETE" && warehouseStockCardMatch) {
+      return handleWarehouseStockCardDeleteRoute(
+        request,
+        warehouseStockCardMatch[1],
         getAuthService(),
         getWarehouseService(),
       );

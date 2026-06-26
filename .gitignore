@@ -90,17 +90,17 @@ nginx/
 # Local docs, notes, and generated analysis reports
 *.md
 !/README.md
+/SYSTEM_MAP_WEB.md
 /MOBILE_*.md
 /PLAN_*.md
 /SECURITY_AUDIT.md
-/SYSTEM_MAP_WEB.md
 /design.md
 /apps/web/modules/planning/IMPL_PROMPT_*.md
 /apps/web/modules/planning/REFACTOR_*.md
 
 # SQL dumps are local; application migrations are source code.
 *.sql
-!/apps/api/db/migrations/*.sql
+/apps/api/db/migrations/*.sql
 
 # Misc OS/editor files
 .DS_Store

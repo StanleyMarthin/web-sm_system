@@ -1,4 +1,6 @@
 import type {
+  CreateWarehouseItem,
+  CreateWarehouseStockCard,
   CreateWarehouseStockAdjustment,
   CreateWarehouseStockOpname,
   CreateWarehouseStorageLocation,
@@ -10,6 +12,7 @@ import type {
   WarehouseDashboardMaterialOutRecord,
   WarehouseDashboardSummary,
   WarehouseItemCategory,
+  WarehouseItemRecord,
   WarehouseMutationResult,
   WarehouseRequestJobOption,
   WarehouseRequestStockCardOption,
@@ -19,11 +22,14 @@ import type {
   WarehouseReturnRequest,
   WarehouseStoreRequest,
   WarehouseStockAdjustmentMutationResult,
+  WarehouseStockCardRecord,
   WarehouseStockOpnameMutationResult,
   WarehouseStorageLocationRecord,
   WarehouseTransactionQuery,
   WarehouseTransactionRecord,
   WarehouseTransactionsSummary,
+  UpdateWarehouseItem,
+  UpdateWarehouseStockCard,
   UpdateWarehouseStorageLocation,
 } from "@smsystem/contracts/warehouse";
 import { getApiEnv } from "@/config/env";
@@ -153,10 +159,26 @@ export interface WarehouseService {
     session: WebSession,
     query: WarehouseTransactionQuery,
   ): Promise<WarehouseListResult<Awaited<ReturnType<WarehouseRepository["listStockCard"]>>["rows"][number]>>;
+  listStockCardReferences(
+    session: WebSession,
+    query: { unitId: string | null; search: string },
+  ): Promise<Awaited<ReturnType<WarehouseRepository["listStockCardReferences"]>>>;
   listItems(
     session: WebSession,
     query: WarehouseTransactionQuery,
   ): Promise<WarehouseListResult<Awaited<ReturnType<WarehouseRepository["listItems"]>>["rows"][number]>>;
+  createItem(
+    session: WebSession,
+    input: CreateWarehouseItem,
+  ): Promise<WarehouseItemRecord>;
+  updateItem(
+    session: WebSession,
+    input: UpdateWarehouseItem,
+  ): Promise<WarehouseItemRecord>;
+  deleteItem(
+    session: WebSession,
+    itemId: string,
+  ): Promise<WarehouseItemRecord>;
   listMaterialUsage(
     session: WebSession,
     query: WarehouseTransactionQuery,
@@ -189,6 +211,18 @@ export interface WarehouseService {
     session: WebSession,
     input: CreateWarehouseStockAdjustment,
   ): Promise<WarehouseStockAdjustmentMutationResult>;
+  createStockCard(
+    session: WebSession,
+    input: CreateWarehouseStockCard,
+  ): Promise<WarehouseStockCardRecord>;
+  updateStockCard(
+    session: WebSession,
+    input: UpdateWarehouseStockCard,
+  ): Promise<WarehouseStockCardRecord>;
+  deleteStockCard(
+    session: WebSession,
+    stockCardId: string,
+  ): Promise<WarehouseStockCardRecord>;
   approve(
     session: WebSession,
     input: WarehouseApproveRequest,
@@ -372,6 +406,110 @@ export class DefaultWarehouseService implements WarehouseService {
     };
   }
 
+  async listStockCardReferences(
+    session: WebSession,
+    query: { unitId: string | null; search: string },
+  ) {
+    return this.repository.listStockCardReferences({
+      employeeId: session.user.employeeId,
+      scope: session.user.scope,
+      unitId: query.unitId,
+      search: query.search,
+    });
+  }
+
+  private async assertStockCardWriteScope(
+    session: WebSession,
+    input: Pick<CreateWarehouseStockCard, "carId">,
+  ) {
+    const unit = await this.repository.findStockCardUnitById(input.carId);
+    if (!unit) {
+      throw new Error("UNIT_NOT_FOUND");
+    }
+
+    const canAccessCar = await this.repository.canAccessCar({
+      employeeId: session.user.employeeId,
+      scope: session.user.scope,
+      carId: input.carId,
+    });
+    if (!canAccessCar) {
+      throw new Error("WAREHOUSE_SCOPE_DENIED");
+    }
+  }
+
+  async createStockCard(
+    session: WebSession,
+    input: CreateWarehouseStockCard,
+  ) {
+    await this.assertStockCardWriteScope(session, input);
+    const result = await this.repository.createStockCard(input);
+    warehouseTransactionReferenceCache.clear();
+    await this.auditService.log({
+      actorId: session.user.employeeId,
+      actorName: session.user.fullName,
+      action: "warehouse.stock-card.create",
+      module: "warehouse",
+      recordId: result.stockCardId,
+      newValue: result,
+    });
+    return result;
+  }
+
+  async updateStockCard(
+    session: WebSession,
+    input: UpdateWarehouseStockCard,
+  ) {
+    const current = await this.repository.findStockCardById({
+      employeeId: session.user.employeeId,
+      scope: session.user.scope,
+      stockCardId: input.stockCardId,
+    });
+    if (!current) {
+      throw new Error("WAREHOUSE_STOCK_CARD_SCOPE_DENIED");
+    }
+
+    await this.assertStockCardWriteScope(session, input);
+    const result = await this.repository.updateStockCard(input);
+    warehouseTransactionReferenceCache.clear();
+    await this.auditService.log({
+      actorId: session.user.employeeId,
+      actorName: session.user.fullName,
+      action: "warehouse.stock-card.update",
+      module: "warehouse",
+      recordId: input.stockCardId,
+      oldValue: current,
+      newValue: result,
+    });
+    return result;
+  }
+
+  async deleteStockCard(
+    session: WebSession,
+    stockCardId: string,
+  ) {
+    const current = await this.repository.findStockCardById({
+      employeeId: session.user.employeeId,
+      scope: session.user.scope,
+      stockCardId,
+    });
+    if (!current) {
+      throw new Error("WAREHOUSE_STOCK_CARD_SCOPE_DENIED");
+    }
+
+    const result = await this.repository.deleteStockCard(stockCardId);
+    warehouseTransactionReferenceCache.clear();
+    await this.auditService.log({
+      actorId: session.user.employeeId,
+      actorName: session.user.fullName,
+      action: "warehouse.stock-card.delete",
+      module: "warehouse",
+      recordId: stockCardId,
+      oldValue: current,
+      newValue: result,
+    });
+    return result;
+  }
+
   async listItems(session: WebSession, query: WarehouseTransactionQuery) {
     const result = await this.repository.listItems({
       employeeId: session.user.employeeId,
@@ -384,6 +522,45 @@ export class DefaultWarehouseService implements WarehouseService {
       meta: buildMeta(query.page, query.limit, result.total),
       query,
     };
+  }
+
+  async createItem(session: WebSession, input: CreateWarehouseItem) {
+    const result = await this.repository.createItem(input);
+    await this.auditService.log({
+      actorId: session.user.employeeId,
+      actorName: session.user.fullName,
+      action: "warehouse.item.create",
+      module: "warehouse",
+      recordId: result.itemId,
+      newValue: result,
+    });
+    return result;
+  }
+
+  async updateItem(session: WebSession, input: UpdateWarehouseItem) {
+    const result = await this.repository.updateItem(input);
+    await this.auditService.log({
+      actorId: session.user.employeeId,
+      actorName: session.user.fullName,
+      action: "warehouse.item.update",
+      module: "warehouse",
+      recordId: input.itemId,
+      newValue: result,
+    });
+    return result;
+  }
+
+  async deleteItem(session: WebSession, itemId: string) {
+    const result = await this.repository.deactivateItem(itemId);
+    await this.auditService.log({
+      actorId: session.user.employeeId,
+      actorName: session.user.fullName,
+      action: "warehouse.item.delete",
+      module: "warehouse",
+      recordId: itemId,
+      newValue: result,
+    });
+    return result;
   }
 
   async listMaterialUsage(session: WebSession, query: WarehouseTransactionQuery) {

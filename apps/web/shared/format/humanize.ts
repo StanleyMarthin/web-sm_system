@@ -65,7 +65,7 @@ const CODE_LABELS: Record<string, string> = {
   ORANGE: "Waspada",
   RED: "Kritis",
   FIELD: "Lapangan",
-  IN_STORAGE: "Tersimpan",
+  IN_STORAGE: "Di Gudang",
   RETRIEVED: "Sudah Diambil",
   INSTALLED: "Terpasang",
   BARU: "Baru",

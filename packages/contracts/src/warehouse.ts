@@ -235,6 +235,9 @@ export const warehouseStockCardRecordSchema = z.object({
   entryNo: z.string(),
   carId: z.string().nullable(),
   unitName: z.string(),
+  masterPanelId: z.number().int().positive().nullable().optional(),
+  parentPanelId: z.number().int().positive().nullable().optional(),
+  panelName: z.string().nullable().optional(),
   partCode: z.string().nullable(),
   panelSection: z.string().nullable(),
   panelCategory: z.string().nullable().optional(),
@@ -295,6 +298,29 @@ export const warehouseStockCardEnvelopeSchema = z.object({
   query: gridQueryStateSchema,
 });
 
+export const warehouseStockCardUnitReferenceSchema = z.object({
+  value: z.string(),
+  label: z.string(),
+});
+
+export const warehouseStockCardPanelReferenceSchema = z.object({
+  panelId: z.number().int().positive(),
+  parentPanelId: z.number().int().positive().nullable(),
+  partCode: z.string(),
+  section: z.string(),
+  name: z.string(),
+  category: z.string().nullable(),
+});
+
+export const warehouseStockCardReferencesEnvelopeSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+  data: z.object({
+    units: z.array(warehouseStockCardUnitReferenceSchema),
+    panels: z.array(warehouseStockCardPanelReferenceSchema),
+  }),
+});
+
 export const warehouseItemRecordSchema = z.object({
   itemId: z.string(),
   itemCode: z.string().nullable(),
@@ -317,6 +343,27 @@ export const warehouseItemsEnvelopeSchema = z.object({
   data: z.array(warehouseItemRecordSchema),
   meta: gridMetaSchema,
   query: gridQueryStateSchema,
+});
+
+export const warehouseEditableItemCategorySchema = z.enum(["BAHAN", "TOOLS"]);
+
+export const createWarehouseItemSchema = z.object({
+  itemCode: z.string().trim().max(64).nullable().optional().default(null),
+  itemName: z.string().trim().min(1).max(255),
+  itemCategory: warehouseEditableItemCategorySchema,
+  uom: z.string().trim().max(20).nullable().optional().default(null),
+  description: z.string().trim().max(255).nullable().optional().default(null),
+  isActive: z.boolean().optional().default(true),
+});
+
+export const updateWarehouseItemSchema = createWarehouseItemSchema.extend({
+  itemId: z.string().trim().min(1).max(64),
+});
+
+export const warehouseItemMutationEnvelopeSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+  data: warehouseItemRecordSchema,
 });
 
 export const warehouseMaterialUsageRecordSchema = z.object({
@@ -581,6 +628,39 @@ export const warehouseStorageLocationMutationEnvelopeSchema = z.object({
   data: warehouseStorageLocationRecordSchema,
 });
 
+export const createWarehouseStockCardSchema = z.object({
+  carId: z.string().trim().min(1).max(64),
+  unitName: z.string().trim().max(255).nullable().optional().default(null),
+  panelId: z.number().int().positive().nullable().optional().default(null),
+  parentPanelId: z.number().int().positive().nullable().optional().default(null),
+  panelName: z.string().trim().max(255).nullable().optional().default(null),
+  panelCategory: z.string().trim().max(100).nullable().optional().default(null),
+  partCode: z.string().trim().max(64).nullable().optional().default(null),
+  panelSection: z.string().trim().min(1).max(255),
+  partName: z.string().trim().min(1).max(255),
+  conditionType: warehouseStockCardConditionTypeSchema.optional().default("BEKAS"),
+  qty: z.number().min(0).max(100_000),
+  uom: z.string().trim().min(1).max(20),
+  storageLocationId: z.number().int().positive().nullable().optional().default(null),
+  locationDetail: z.string().trim().max(255).nullable().optional().default(null),
+  dateIn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u).nullable().optional().default(null),
+  dateOut: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u).nullable().optional().default(null),
+  takenByName: z.string().trim().max(255).nullable().optional().default(null),
+  status: warehouseStockCardStatusSchema.optional().default("IN_STORAGE"),
+  isLabeled: z.boolean().optional().default(false),
+  photoUrls: z.array(z.string().url()).max(20).optional().default([]),
+});
+
+export const updateWarehouseStockCardSchema = createWarehouseStockCardSchema.extend({
+  stockCardId: z.string().trim().min(1).max(64),
+});
+
+export const warehouseStockCardMutationEnvelopeSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+  data: warehouseStockCardRecordSchema,
+});
+
 export const warehouseStockCardPhotoUpdateSchema = z.object({
   stockCardId: z.string().trim().min(1).max(64),
   photoUrls: z.array(z.string().url()).max(20),
@@ -629,7 +709,11 @@ export type WarehouseStockCardRecord = z.infer<typeof warehouseStockCardRecordSc
 export type WarehouseRequestJobOption = z.infer<typeof warehouseRequestJobOptionSchema>;
 export type WarehouseRequestStockCardOption = z.infer<typeof warehouseRequestStockCardOptionSchema>;
 export type WarehouseRequestEmployeeOption = z.infer<typeof warehouseRequestEmployeeOptionSchema>;
+export type WarehouseStockCardUnitReference = z.infer<typeof warehouseStockCardUnitReferenceSchema>;
+export type WarehouseStockCardPanelReference = z.infer<typeof warehouseStockCardPanelReferenceSchema>;
 export type WarehouseItemRecord = z.infer<typeof warehouseItemRecordSchema>;
+export type CreateWarehouseItem = z.infer<typeof createWarehouseItemSchema>;
+export type UpdateWarehouseItem = z.infer<typeof updateWarehouseItemSchema>;
 export type WarehouseMaterialUsageRecord = z.infer<typeof warehouseMaterialUsageRecordSchema>;
 export type WarehouseStorageLocationRecord = z.infer<typeof warehouseStorageLocationRecordSchema>;
 export type WarehouseStockOpnameRecord = z.infer<typeof warehouseStockOpnameRecordSchema>;
@@ -648,3 +732,5 @@ export type WarehouseStockOpnameMutationResult = z.infer<typeof warehouseStockOp
 export type WarehouseStockAdjustmentMutationResult = z.infer<typeof warehouseStockAdjustmentMutationResultSchema>;
 export type CreateWarehouseStorageLocation = z.infer<typeof createWarehouseStorageLocationSchema>;
 export type UpdateWarehouseStorageLocation = z.infer<typeof updateWarehouseStorageLocationSchema>;
+export type CreateWarehouseStockCard = z.infer<typeof createWarehouseStockCardSchema>;
+export type UpdateWarehouseStockCard = z.infer<typeof updateWarehouseStockCardSchema>;

@@ -1,8 +1,12 @@
 import type {
+  CreateWarehouseItem,
   CreateWarehouseStorageLocation,
+  CreateWarehouseStockCard,
   CreateWarehouseStockAdjustment,
   CreateWarehouseStockOpname,
   CreateWarehouseRequest,
+  UpdateWarehouseStockCard,
+  UpdateWarehouseItem,
   UpdateWarehouseStorageLocation,
   WarehouseStockAdjustmentMutationResult,
   WarehouseStockOpnameMutationResult,
@@ -16,6 +20,7 @@ import type {
 import {
   warehouseDashboardEnvelopeSchema,
   warehouseItemsEnvelopeSchema,
+  warehouseItemMutationEnvelopeSchema,
   warehouseMaterialUsageEnvelopeSchema,
   warehouseMutationEnvelopeSchema,
   warehousePendingApprovalEnvelopeSchema,
@@ -24,6 +29,8 @@ import {
   warehouseStockAdjustmentEnvelopeSchema,
   warehouseStockAdjustmentMutationEnvelopeSchema,
   warehouseStockCardEnvelopeSchema,
+  warehouseStockCardMutationEnvelopeSchema,
+  warehouseStockCardReferencesEnvelopeSchema,
   warehouseStockOpnameEnvelopeSchema,
   warehouseStockOpnameMutationEnvelopeSchema,
   warehouseStorageLocationMutationEnvelopeSchema,
@@ -325,6 +332,65 @@ export async function fetchWarehouseStockCard(
   );
 }
 
+export async function fetchWarehouseStockCardReferences(
+  cookieHeader: string,
+  searchParams: Record<string, string | string[] | undefined> = {},
+) {
+  const queryString = buildWarehouseGridQueryString(searchParams);
+  const suffix = queryString ? `?${queryString}` : "";
+  return fetchGrid(
+    `/api/warehouse/stock-card/references${suffix}`,
+    cookieHeader,
+    warehouseStockCardReferencesEnvelopeSchema,
+  );
+}
+
+export async function fetchWarehouseStockCardReferencesClient(
+  searchParams: Record<string, string | string[] | undefined> = {},
+) {
+  const queryString = buildWarehouseGridQueryString(searchParams);
+  const suffix = queryString ? `?${queryString}` : "";
+  const cacheKey = `stock-card-references:${suffix}`;
+  const cached = getCachedClientResult<
+    ReturnType<typeof warehouseStockCardReferencesEnvelopeSchema.parse>
+  >(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
+  return setCachedClientPromise(
+    cacheKey,
+    (async () => {
+      try {
+        const response = await fetch(
+          `${getApiBaseUrl()}/api/warehouse/stock-card/references${suffix}`,
+          {
+            credentials: "include",
+            cache: "no-store",
+          },
+        );
+
+        if (!response.ok) {
+          return {
+            payload: null,
+            status: response.status,
+          };
+        }
+
+        return {
+          payload: warehouseStockCardReferencesEnvelopeSchema.parse(await response.json()),
+          status: response.status,
+        };
+      } catch {
+        return {
+          payload: null,
+          status: 503,
+        };
+      }
+    })(),
+  );
+}
+
 export async function fetchWarehouseItems(
   cookieHeader: string,
   searchParams: Record<string, string | string[] | undefined>,
@@ -349,6 +415,47 @@ export async function fetchWarehouseMaterialUsage(
     cookieHeader,
     warehouseMaterialUsageEnvelopeSchema,
   );
+}
+
+export function createWarehouseItem(input: CreateWarehouseItem) {
+  return mutateWarehouseTyped(
+    "/api/warehouse/items",
+    "POST",
+    input,
+    warehouseItemMutationEnvelopeSchema,
+  );
+}
+
+export function updateWarehouseItem(input: UpdateWarehouseItem) {
+  return mutateWarehouseTyped(
+    "/api/warehouse/items",
+    "PUT",
+    input,
+    warehouseItemMutationEnvelopeSchema,
+  );
+}
+
+export async function deleteWarehouseItem(itemId: string) {
+  const response = await fetch(
+    `${getApiBaseUrl()}/api/warehouse/items/${encodeURIComponent(itemId)}`,
+    {
+      method: "DELETE",
+      credentials: "include",
+    },
+  );
+
+  if (!response.ok) {
+    return {
+      ...(await parseFailure(response)),
+      success: false as const,
+    };
+  }
+
+  const payload = warehouseItemMutationEnvelopeSchema.parse(await response.json());
+  return {
+    success: true as const,
+    result: payload.data,
+  };
 }
 
 export async function fetchWarehouseStorageLocations(
@@ -527,6 +634,53 @@ export function updateWarehouseStockCardPhotos(input: {
     input,
     warehouseStockCardPhotoMutationEnvelopeSchema,
   );
+}
+
+export function createWarehouseStockCard(input: CreateWarehouseStockCard) {
+  clearWarehouseClientCache("request-references:");
+  clearWarehouseClientCache("stock-card-references:");
+  return mutateWarehouseTyped(
+    "/api/warehouse/stock-card",
+    "POST",
+    input,
+    warehouseStockCardMutationEnvelopeSchema,
+  );
+}
+
+export function updateWarehouseStockCard(input: UpdateWarehouseStockCard) {
+  clearWarehouseClientCache("request-references:");
+  clearWarehouseClientCache("stock-card-references:");
+  return mutateWarehouseTyped(
+    "/api/warehouse/stock-card",
+    "PUT",
+    input,
+    warehouseStockCardMutationEnvelopeSchema,
+  );
+}
+
+export async function deleteWarehouseStockCard(stockCardId: string) {
+  clearWarehouseClientCache("request-references:");
+  clearWarehouseClientCache("stock-card-references:");
+  const response = await fetch(
+    `${getApiBaseUrl()}/api/warehouse/stock-card/${encodeURIComponent(stockCardId)}`,
+    {
+      method: "DELETE",
+      credentials: "include",
+    },
+  );
+
+  if (!response.ok) {
+    return {
+      ...(await parseFailure(response)),
+      success: false as const,
+    };
+  }
+
+  const payload = warehouseStockCardMutationEnvelopeSchema.parse(await response.json());
+  return {
+    success: true as const,
+    result: payload.data,
+  };
 }
 
 export function createWarehouseStorageLocation(input: CreateWarehouseStorageLocation) {

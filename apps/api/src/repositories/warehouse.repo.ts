@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import type { AuthScope } from "@smsystem/contracts/auth";
 import type {
+  CreateWarehouseItem,
+  CreateWarehouseStockCard,
   CreateWarehouseStockAdjustment,
   CreateWarehouseStockOpname,
   CreateWarehouseStorageLocation,
@@ -19,19 +21,23 @@ import type {
   WarehouseRequestTransactionType,
   WarehouseStockAdjustmentMutationResult,
   WarehouseStockAdjustmentRecord,
+  WarehouseStockCardPanelReference,
   WarehouseStockCardRecord,
+  WarehouseStockCardUnitReference,
   WarehouseRequestJobOption,
   WarehouseRequestEmployeeOption,
   WarehouseRequestStockCardOption,
   WarehouseStockOpnameMutationResult,
   WarehouseStockOpnameRecord,
   WarehouseStorageLocationRecord,
+  UpdateWarehouseItem,
   UpdateWarehouseStorageLocation,
   WarehouseTransactionQuery,
   WarehouseTransactionRecord,
   WarehouseTransactionsSummary,
+  UpdateWarehouseStockCard,
 } from "@smsystem/contracts/warehouse";
-import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
+import type { Pool, PoolConnection, ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { getApiEnv } from "@/config/env";
 import { qualifyTable } from "@/db/identifier";
 import { getMySqlPool } from "@/db/mysql";
@@ -63,6 +69,20 @@ interface SummaryRow extends RowDataPacket {
 
 interface OptionRow extends RowDataPacket {
   value: string | number | null;
+  label: string | null;
+}
+
+interface StockCardPanelReferenceRow extends RowDataPacket {
+  panelId: number;
+  parentPanelId?: number | null;
+  partCode: string;
+  section: string;
+  name: string;
+  category: string | null;
+}
+
+interface UnitSummaryRow extends RowDataPacket {
+  value: string;
   label: string | null;
 }
 
@@ -108,6 +128,9 @@ interface StockCardRow extends RowDataPacket {
   entryNo: string | number | null;
   carId: string | null;
   unitName: string | null;
+  masterPanelId?: number | null;
+  parentPanelId?: number | null;
+  panelName?: string | null;
   partCode: string | null;
   panelSection: string | null;
   panelCategory: string | null;
@@ -416,6 +439,9 @@ function mapStockCardRow(row: StockCardRow): WarehouseStockCardRecord {
     entryNo,
     carId: row.carId,
     unitName: row.unitName ?? row.carId ?? "-",
+    masterPanelId: row.masterPanelId == null ? null : Number(row.masterPanelId),
+    parentPanelId: row.parentPanelId == null ? null : Number(row.parentPanelId),
+    panelName: row.panelName ?? null,
     partCode: row.partCode,
     panelSection: row.panelSection,
     panelCategory: row.panelCategory ?? null,
@@ -698,13 +724,26 @@ export interface WarehouseRepository {
     rows: WarehouseStockCardRecord[];
     total: number;
   }>;
+  listStockCardReferences(
+    params: ScopeParams & { unitId: string | null; search: string },
+  ): Promise<{
+    units: WarehouseStockCardUnitReference[];
+    panels: WarehouseStockCardPanelReference[];
+  }>;
+  findStockCardUnitById(carId: string): Promise<WarehouseStockCardUnitReference | null>;
   findStockCardById(
     params: ScopeParams & { stockCardId: string },
   ): Promise<WarehouseStockCardRecord | null>;
+  createStockCard(input: CreateWarehouseStockCard): Promise<WarehouseStockCardRecord>;
+  updateStockCard(input: UpdateWarehouseStockCard): Promise<WarehouseStockCardRecord>;
+  deleteStockCard(stockCardId: string): Promise<WarehouseStockCardRecord>;
   listItems(params: GridListParams): Promise<{
     rows: WarehouseItemRecord[];
     total: number;
   }>;
+  createItem(input: CreateWarehouseItem): Promise<WarehouseItemRecord>;
+  updateItem(input: UpdateWarehouseItem): Promise<WarehouseItemRecord>;
+  deactivateItem(itemId: string): Promise<WarehouseItemRecord>;
   listMaterialUsage(params: GridListParams): Promise<{
     rows: WarehouseMaterialUsageRecord[];
     total: number;
@@ -1413,6 +1452,104 @@ export class MySqlWarehouseRepository implements WarehouseRepository {
     };
   }
 
+  async listStockCardReferences(params: ScopeParams & { unitId: string | null; search: string }) {
+    const unitParams: unknown[] = [];
+    const unitScope = this.buildCarScopeClause(
+      params.scope,
+      params.employeeId,
+      unitParams,
+    );
+    const unitsWhere = unitScope ? `WHERE ${unitScope}` : "";
+    const [unitRows] = await this.pool.query<UnitSummaryRow[]>(
+      `
+        SELECT c.id AS value, COALESCE(c.unit_name, c.id) AS label
+        FROM ${this.tables.cars} c
+        ${unitsWhere}
+        ORDER BY label ASC
+        LIMIT 200
+      `,
+      unitParams,
+    );
+
+    const units = unitRows
+      .filter((row) => row.value)
+      .map((row) => ({
+        value: String(row.value),
+        label: row.label ?? String(row.value),
+      }));
+
+    const selectedUnitId =
+      params.unitId && units.some((unit) => unit.value === params.unitId)
+        ? params.unitId
+        : null;
+    const panelParams: unknown[] = [];
+    const panelConditions = [
+      "mp.car_id = ?",
+      "COALESCE(mp.is_active, 1) = 1",
+    ];
+    if (selectedUnitId) {
+      panelParams.push(selectedUnitId);
+    }
+
+    if (params.search) {
+      const value = `%${params.search}%`;
+      panelConditions.push(
+        "(CAST(mp.id AS CHAR) LIKE ? OR COALESCE(mp.section, '') LIKE ? OR COALESCE(mp.name, '') LIKE ? OR COALESCE(mp.category, '') LIKE ?)",
+      );
+      panelParams.push(value, value, value, value);
+    }
+
+    const [panelRows] = selectedUnitId
+      ? await this.pool.query<StockCardPanelReferenceRow[]>(
+          `
+            SELECT
+              mp.id AS panelId,
+              mp.parent_id AS parentPanelId,
+              CONCAT('MP-', mp.id) AS partCode,
+              mp.section AS section,
+              mp.name AS name,
+              mp.category AS category
+            FROM ${this.tables.masterPanels} mp
+            WHERE ${panelConditions.join(" AND ")}
+            ORDER BY COALESCE(mp.sort_order, 0) ASC, mp.section ASC, mp.name ASC
+            LIMIT 200
+          `,
+          panelParams,
+        )
+      : [[] as StockCardPanelReferenceRow[], undefined];
+
+    return {
+      units,
+      panels: panelRows.map((row) => ({
+        panelId: Number(row.panelId),
+        parentPanelId: row.parentPanelId == null ? null : Number(row.parentPanelId),
+        partCode: row.partCode,
+        section: row.section,
+        name: row.name,
+        category: row.category ?? null,
+      })),
+    };
+  }
+
+  async findStockCardUnitById(carId: string) {
+    const [rows] = await this.pool.query<UnitSummaryRow[]>(
+      `
+        SELECT c.id AS value, COALESCE(c.unit_name, c.id) AS label
+        FROM ${this.tables.cars} c
+        WHERE c.id = ?
+        LIMIT 1
+      `,
+      [carId],
+    );
+    const row = rows[0];
+    return row
+      ? {
+          value: String(row.value),
+          label: row.label ?? String(row.value),
+        }
+      : null;
+  }
+
   async listPendingApproval(params: ScopeParams) {
     const query: WarehouseTransactionQuery = {
       page: 1,
@@ -1690,6 +1827,9 @@ export class MySqlWarehouseRepository implements WarehouseRepository {
           sc.entry_no AS entryNo,
           sc.car_id AS carId,
           COALESCE(c.unit_name, sc.car_name, sc.car_id) AS unitName,
+          mp.id AS masterPanelId,
+          mp.parent_id AS parentPanelId,
+          COALESCE(parent_mp.name, CASE WHEN mp.parent_id IS NULL THEN mp.name ELSE NULL END) AS panelName,
           sc.part_code AS partCode,
           sc.panel_section AS panelSection,
           mp.category AS panelCategory,
@@ -1726,6 +1866,7 @@ export class MySqlWarehouseRepository implements WarehouseRepository {
         LEFT JOIN ${this.tables.storageLocations} sl ON sl.id = sc.storage_location_id
         LEFT JOIN ${this.tables.cars} c ON c.id = sc.car_id
         LEFT JOIN ${this.tables.masterPanels} mp ON mp.car_id = sc.car_id AND sc.part_code = CONCAT('MP-', mp.id)
+        LEFT JOIN ${this.tables.masterPanels} parent_mp ON parent_mp.id = mp.parent_id
         LEFT JOIN ${this.tables.cars} c_scope ON c_scope.id = sc.car_id
         WHERE ${conditions.join(" AND ")}
         ORDER BY COALESCE(c.unit_name, sc.car_name, sc.car_id) ASC, sc.part_name ASC, sc.created_at DESC
@@ -1862,6 +2003,9 @@ export class MySqlWarehouseRepository implements WarehouseRepository {
       } else if (filter.field === "storageLocationId") {
         conditions.push("sc.storage_location_id = ?");
         scopeParams.push(Number.parseInt(filter.value, 10));
+      } else if (filter.field === "unitId") {
+        conditions.push("sc.car_id = ?");
+        scopeParams.push(filter.value);
       }
     }
 
@@ -1883,6 +2027,9 @@ export class MySqlWarehouseRepository implements WarehouseRepository {
         sc.entry_no AS entryNo,
         sc.car_id AS carId,
         COALESCE(c.unit_name, sc.car_name, sc.car_id) AS unitName,
+        mp.id AS masterPanelId,
+        mp.parent_id AS parentPanelId,
+        COALESCE(parent_mp.name, CASE WHEN mp.parent_id IS NULL THEN mp.name ELSE NULL END) AS panelName,
         sc.part_code AS partCode,
         sc.panel_section AS panelSection,
         mp.category AS panelCategory,
@@ -1911,6 +2058,7 @@ export class MySqlWarehouseRepository implements WarehouseRepository {
       LEFT JOIN ${this.tables.storageLocations} sl ON sl.id = sc.storage_location_id
       LEFT JOIN ${this.tables.cars} c ON c.id = sc.car_id
       LEFT JOIN ${this.tables.masterPanels} mp ON mp.car_id = sc.car_id AND sc.part_code = CONCAT('MP-', mp.id)
+      LEFT JOIN ${this.tables.masterPanels} parent_mp ON parent_mp.id = mp.parent_id
       ${whereClause}
       ORDER BY ${sortColumn} ${direction}, sc.created_at DESC
       LIMIT ? OFFSET ?
@@ -1993,6 +2141,154 @@ export class MySqlWarehouseRepository implements WarehouseRepository {
     );
 
     return rows[0] ? mapStockCardRow(rows[0]) : null;
+  }
+
+  async createStockCard(input: CreateWarehouseStockCard) {
+    const stockCardId = randomUUID();
+    const unit = await this.findStockCardUnitById(input.carId);
+    if (!unit) {
+      throw new Error("UNIT_NOT_FOUND");
+    }
+    const panel = await this.resolveStockCardMasterPanel(input);
+    const [entryRows] = await this.pool.query<Array<RowDataPacket & { nextEntryNo: number }>>(
+      `
+        SELECT COALESCE(MAX(entry_no), 0) + 1 AS nextEntryNo
+        FROM ${this.tables.stockCard}
+        WHERE car_id <=> ?
+      `,
+      [input.carId],
+    );
+
+    await this.pool.execute(
+      `
+        INSERT INTO ${this.tables.stockCard} (
+          id,
+          entry_no,
+          car_id,
+          car_name,
+          part_code,
+          panel_section,
+          part_name,
+          condition_type,
+          qty,
+          uom,
+          storage_location_id,
+          location_detail,
+          date_in,
+          date_out,
+          taken_by_name,
+          status,
+          is_labeled,
+          photo_urls,
+          created_at,
+          updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_DATE), ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      `,
+      [
+        stockCardId,
+        Number(entryRows[0]?.nextEntryNo ?? 1),
+        input.carId,
+        unit.label,
+        panel.partCode,
+        panel.section,
+        panel.name,
+        input.conditionType,
+        input.qty,
+        input.uom,
+        input.storageLocationId,
+        input.locationDetail,
+        input.dateIn,
+        input.dateOut,
+        input.takenByName,
+        input.status,
+        input.isLabeled ? 1 : 0,
+        JSON.stringify(input.photoUrls),
+      ],
+    );
+
+    return this.readStockCard(stockCardId);
+  }
+
+  async updateStockCard(input: UpdateWarehouseStockCard) {
+    const unit = await this.findStockCardUnitById(input.carId);
+    if (!unit) {
+      throw new Error("UNIT_NOT_FOUND");
+    }
+    const panel = await this.resolveStockCardMasterPanel(input);
+    await this.pool.execute(
+      `
+        UPDATE ${this.tables.stockCard}
+        SET
+          car_id = ?,
+          car_name = ?,
+          part_code = ?,
+          panel_section = ?,
+          part_name = ?,
+          condition_type = ?,
+          qty = ?,
+          uom = ?,
+          storage_location_id = ?,
+          location_detail = ?,
+          date_in = ?,
+          date_out = ?,
+          taken_by_name = ?,
+          status = ?,
+          is_labeled = ?,
+          photo_urls = ?,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `,
+      [
+        input.carId,
+        unit.label,
+        panel.partCode,
+        panel.section,
+        panel.name,
+        input.conditionType,
+        input.qty,
+        input.uom,
+        input.storageLocationId,
+        input.locationDetail,
+        input.dateIn,
+        input.dateOut,
+        input.takenByName,
+        input.status,
+        input.isLabeled ? 1 : 0,
+        JSON.stringify(input.photoUrls),
+        input.stockCardId,
+      ],
+    );
+
+    return this.readStockCard(input.stockCardId);
+  }
+
+  async deleteStockCard(stockCardId: string) {
+    const current = await this.readStockCard(stockCardId);
+    const [usageRows] = await this.pool.query<CountRow[]>(
+      `
+        SELECT (
+          (SELECT COUNT(*) FROM ${this.tables.transactions} WHERE stock_card_id = ?)
+          + (SELECT COUNT(*) FROM ${this.tables.stockOpnames} WHERE stock_card_id = ?)
+          + (SELECT COUNT(*) FROM ${this.tables.stockAdjustments} WHERE stock_card_id = ?)
+        ) AS total
+      `,
+      [stockCardId, stockCardId, stockCardId],
+    );
+
+    if (toInteger(usageRows[0]?.total) > 0) {
+      throw new Error("WAREHOUSE_STOCK_CARD_IN_USE");
+    }
+
+    await this.pool.execute(
+      `
+        DELETE FROM ${this.tables.stockCard}
+        WHERE id = ?
+        LIMIT 1
+      `,
+      [stockCardId],
+    );
+
+    return current;
   }
 
   async listItems(params: GridListParams) {
@@ -2100,6 +2396,77 @@ export class MySqlWarehouseRepository implements WarehouseRepository {
       rows: rows.map(mapItemRow),
       total: toInteger(countRows[0]?.total),
     };
+  }
+
+  async createItem(input: CreateWarehouseItem) {
+    const itemId = randomUUID();
+    await this.pool.execute(
+      `
+        INSERT INTO ${this.tables.itemMaster} (
+          id,
+          item_code,
+          item_name,
+          item_category,
+          uom,
+          description,
+          is_active,
+          updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      `,
+      [
+        itemId,
+        input.itemCode ?? null,
+        input.itemName,
+        input.itemCategory,
+        input.uom ?? null,
+        input.description ?? null,
+        input.isActive ? 1 : 0,
+      ],
+    );
+
+    return this.readItem(itemId);
+  }
+
+  async updateItem(input: UpdateWarehouseItem) {
+    await this.pool.execute(
+      `
+        UPDATE ${this.tables.itemMaster}
+        SET
+          item_code = ?,
+          item_name = ?,
+          item_category = ?,
+          uom = ?,
+          description = ?,
+          is_active = ?,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `,
+      [
+        input.itemCode ?? null,
+        input.itemName,
+        input.itemCategory,
+        input.uom ?? null,
+        input.description ?? null,
+        input.isActive ? 1 : 0,
+        input.itemId,
+      ],
+    );
+
+    return this.readItem(input.itemId);
+  }
+
+  async deactivateItem(itemId: string) {
+    await this.pool.execute(
+      `
+        UPDATE ${this.tables.itemMaster}
+        SET is_active = 0,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `,
+      [itemId],
+    );
+
+    return this.readItem(itemId);
   }
 
   async listMaterialUsage(params: GridListParams) {
@@ -3091,6 +3458,297 @@ export class MySqlWarehouseRepository implements WarehouseRepository {
       stockCardId: row.stockCardId,
       photoUrls: parseJsonStringArray(row.photoUrls),
     };
+  }
+
+  private async resolveStockCardMasterPanel(input: CreateWarehouseStockCard | UpdateWarehouseStockCard) {
+    const parsedPartCodeId =
+      input.partCode?.match(/^MP-(\d+)$/u)?.[1] ??
+      null;
+    const requestedPanelId = input.panelId ?? (parsedPartCodeId ? Number(parsedPartCodeId) : null);
+
+    if (requestedPanelId) {
+      const [rows] = await this.pool.query<StockCardPanelReferenceRow[]>(
+        `
+          SELECT
+            mp.id AS panelId,
+            CONCAT('MP-', mp.id) AS partCode,
+            mp.section AS section,
+            mp.name AS name,
+            mp.category AS category
+          FROM ${this.tables.masterPanels} mp
+          WHERE mp.id = ?
+            AND mp.car_id = ?
+            AND COALESCE(mp.is_active, 1) = 1
+          LIMIT 1
+        `,
+        [requestedPanelId, input.carId],
+      );
+      const row = rows[0];
+      if (!row) {
+        throw new Error("WAREHOUSE_MASTER_PANEL_NOT_FOUND");
+      }
+
+      return {
+        panelId: Number(row.panelId),
+        partCode: row.partCode,
+        section: row.section,
+        name: row.name,
+      };
+    }
+
+    const section = input.panelSection.trim();
+    const name = input.partName.trim();
+    const parentPanel = await this.resolveStockCardParentPanel(input, section, name);
+    const parentPanelId = parentPanel ? Number(parentPanel.panelId) : null;
+    const [existingRows] = await this.pool.query<StockCardPanelReferenceRow[]>(
+      `
+        SELECT
+          mp.id AS panelId,
+          mp.parent_id AS parentPanelId,
+          CONCAT('MP-', mp.id) AS partCode,
+          mp.section AS section,
+          mp.name AS name,
+          mp.category AS category
+        FROM ${this.tables.masterPanels} mp
+        WHERE mp.car_id = ?
+          AND TRIM(mp.section) = ?
+          AND TRIM(mp.name) = ?
+          AND ((? IS NULL AND mp.parent_id IS NULL) OR mp.parent_id = ?)
+          AND COALESCE(mp.is_active, 1) = 1
+        ORDER BY mp.id ASC
+        LIMIT 1
+      `,
+      [input.carId, section, name, parentPanelId, parentPanelId],
+    );
+    const existing = existingRows[0];
+    if (existing) {
+      return {
+        panelId: Number(existing.panelId),
+        partCode: existing.partCode,
+        section: existing.section,
+        name: existing.name,
+      };
+    }
+
+    const [result] = await this.pool.execute<ResultSetHeader>(
+      `
+        INSERT INTO ${this.tables.masterPanels} (
+          car_id,
+          section,
+          name,
+          category,
+          is_active,
+          parent_id,
+          sort_order,
+          default_division_id,
+          created_by,
+          updated_by
+        ) VALUES (?, ?, ?, ?, 1, ?, 0, NULL, NULL, NULL)
+      `,
+      [input.carId, section, name, parentPanel?.category ?? input.panelCategory ?? null, parentPanelId],
+    );
+    const panelId = Number(result.insertId);
+
+    return {
+      panelId,
+      partCode: `MP-${panelId}`,
+      section,
+      name,
+    };
+  }
+
+  private async resolveStockCardParentPanel(
+    input: CreateWarehouseStockCard | UpdateWarehouseStockCard,
+    section: string,
+    partName: string,
+  ): Promise<StockCardPanelReferenceRow | null> {
+    if (input.parentPanelId) {
+      const [rows] = await this.pool.query<StockCardPanelReferenceRow[]>(
+        `
+          SELECT
+            mp.id AS panelId,
+            mp.parent_id AS parentPanelId,
+            CONCAT('MP-', mp.id) AS partCode,
+            mp.section AS section,
+            mp.name AS name,
+            mp.category AS category
+          FROM ${this.tables.masterPanels} mp
+          WHERE mp.id = ?
+            AND mp.car_id = ?
+            AND mp.parent_id IS NULL
+            AND COALESCE(mp.is_active, 1) = 1
+          LIMIT 1
+        `,
+        [input.parentPanelId, input.carId],
+      );
+      const row = rows[0];
+      if (!row) {
+        throw new Error("WAREHOUSE_MASTER_PANEL_NOT_FOUND");
+      }
+      return row;
+    }
+
+    const panelName = input.panelName?.trim() ?? "";
+    if (!panelName || panelName === partName) {
+      return null;
+    }
+
+    const [existingRows] = await this.pool.query<StockCardPanelReferenceRow[]>(
+      `
+        SELECT
+          mp.id AS panelId,
+          mp.parent_id AS parentPanelId,
+          CONCAT('MP-', mp.id) AS partCode,
+          mp.section AS section,
+          mp.name AS name,
+          mp.category AS category
+        FROM ${this.tables.masterPanels} mp
+        WHERE mp.car_id = ?
+          AND TRIM(mp.section) = ?
+          AND TRIM(mp.name) = ?
+          AND mp.parent_id IS NULL
+          AND COALESCE(mp.is_active, 1) = 1
+        ORDER BY mp.id ASC
+        LIMIT 1
+      `,
+      [input.carId, section, panelName],
+    );
+    const existing = existingRows[0];
+    if (existing) {
+      return existing;
+    }
+
+    const [result] = await this.pool.execute<ResultSetHeader>(
+      `
+        INSERT INTO ${this.tables.masterPanels} (
+          car_id,
+          section,
+          name,
+          category,
+          is_active,
+          parent_id,
+          sort_order,
+          default_division_id,
+          created_by,
+          updated_by
+        ) VALUES (?, ?, ?, ?, 1, NULL, 0, NULL, NULL, NULL)
+      `,
+      [input.carId, section, panelName, input.panelCategory ?? null],
+    );
+    const panelId = Number(result.insertId);
+
+    return {
+      panelId,
+      parentPanelId: null,
+      partCode: `MP-${panelId}`,
+      section,
+      name: panelName,
+      category: input.panelCategory ?? null,
+    } as StockCardPanelReferenceRow;
+  }
+
+  private async readStockCard(stockCardId: string) {
+    const [rows] = await this.pool.query<StockCardRow[]>(
+      `
+        SELECT
+          sc.id AS stockCardId,
+          sc.entry_no AS entryNo,
+          sc.car_id AS carId,
+          COALESCE(c.unit_name, sc.car_name, sc.car_id) AS unitName,
+          sc.part_code AS partCode,
+          sc.panel_section AS panelSection,
+          mp.category AS panelCategory,
+          sc.part_name AS partName,
+          sc.condition_type AS conditionType,
+          sc.qty AS qty,
+          sc.uom AS uom,
+          sc.storage_location_id AS storageLocationId,
+          sl.label AS locationLabel,
+          sc.location_detail AS locationDetail,
+          DATE_FORMAT(sc.date_in, '%Y-%m-%d') AS dateIn,
+          DATE_FORMAT(sc.date_out, '%Y-%m-%d') AS dateOut,
+          sc.taken_by_name AS takenByName,
+          sc.status AS status,
+          sc.is_labeled AS isLabeled,
+          (
+            SELECT m.item_category
+            FROM ${this.tables.itemMaster} m
+            WHERE (m.item_code IS NOT NULL AND m.item_code = sc.part_code)
+               OR m.item_name = sc.part_name
+            ORDER BY m.updated_at DESC
+            LIMIT 1
+          ) AS itemCategory,
+          sc.photo_urls AS photoUrls
+        FROM ${this.tables.stockCard} sc
+        LEFT JOIN ${this.tables.storageLocations} sl ON sl.id = sc.storage_location_id
+        LEFT JOIN ${this.tables.cars} c ON c.id = sc.car_id
+        LEFT JOIN ${this.tables.masterPanels} mp ON mp.car_id = sc.car_id AND sc.part_code = CONCAT('MP-', mp.id)
+        LEFT JOIN ${this.tables.masterPanels} parent_mp ON parent_mp.id = mp.parent_id
+        WHERE sc.id = ?
+        LIMIT 1
+      `,
+      [stockCardId],
+    );
+
+    if (!rows[0]) {
+      throw new Error("WAREHOUSE_STOCK_CARD_NOT_FOUND");
+    }
+
+    return mapStockCardRow(rows[0]);
+  }
+
+  private async readItem(itemId: string) {
+    const [rows] = await this.pool.query<ItemRow[]>(
+      `
+        SELECT
+          m.id AS itemId,
+          m.item_code AS itemCode,
+          m.item_name AS itemName,
+          m.item_category AS itemCategory,
+          m.uom AS uom,
+          m.description AS description,
+          m.is_active AS isActive,
+          (
+            SELECT COUNT(*)
+            FROM ${this.tables.itemAliases} alias_count
+            WHERE alias_count.item_id = m.id
+          ) AS aliasCount,
+          (
+            SELECT mp.price_per_unit
+            FROM ${this.tables.materialPrices} mp
+            WHERE (mp.item_code = m.item_code OR mp.item_name = m.item_name)
+            ORDER BY mp.effective_date DESC, mp.created_at DESC
+            LIMIT 1
+          ) AS latestPrice,
+          (
+            SELECT mp.vendor_name
+            FROM ${this.tables.materialPrices} mp
+            WHERE (mp.item_code = m.item_code OR mp.item_name = m.item_name)
+            ORDER BY mp.effective_date DESC, mp.created_at DESC
+            LIMIT 1
+          ) AS latestVendorName,
+          (
+            SELECT COUNT(*)
+            FROM ${this.tables.materialUsage} mu
+            WHERE mu.item_name = m.item_name
+          ) AS usageCount,
+          (
+            SELECT DATE_FORMAT(MAX(mu.usage_date), '%Y-%m-%d')
+            FROM ${this.tables.materialUsage} mu
+            WHERE mu.item_name = m.item_name
+          ) AS lastUsedAt,
+          DATE_FORMAT(m.updated_at, '%Y-%m-%d %H:%i:%s') AS updatedAt
+        FROM ${this.tables.itemMaster} m
+        WHERE m.id = ?
+        LIMIT 1
+      `,
+      [itemId],
+    );
+    const row = rows[0];
+    if (!row) {
+      throw new Error("WAREHOUSE_ITEM_NOT_FOUND");
+    }
+    return mapItemRow(row);
   }
 
   private async readStorageLocation(storageLocationId: number) {

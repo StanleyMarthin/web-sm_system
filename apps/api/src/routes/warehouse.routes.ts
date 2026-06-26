@@ -1,8 +1,12 @@
 import {
+  createWarehouseStockCardSchema,
   createWarehouseStorageLocationSchema,
   createWarehouseStockAdjustmentSchema,
   createWarehouseStockOpnameSchema,
+  createWarehouseItemSchema,
   createWarehouseRequestSchema,
+  updateWarehouseItemSchema,
+  updateWarehouseStockCardSchema,
   updateWarehouseStorageLocationSchema,
   warehouseApproveRequestSchema,
   warehouseIssueRequestSchema,
@@ -211,6 +215,42 @@ function mapWarehouseError(request: Request, error: unknown): Response {
         "Kartu stok tidak ditemukan.",
         404,
         "WAREHOUSE_STOCK_CARD_NOT_FOUND",
+      );
+    }
+
+    if (error.message === "WAREHOUSE_ITEM_NOT_FOUND") {
+      return errorResponse(
+        request,
+        "Master barang tidak ditemukan.",
+        404,
+        "WAREHOUSE_ITEM_NOT_FOUND",
+      );
+    }
+
+    if (error.message === "UNIT_NOT_FOUND") {
+      return errorResponse(
+        request,
+        "Unit tidak ditemukan.",
+        404,
+        "UNIT_NOT_FOUND",
+      );
+    }
+
+    if (error.message === "WAREHOUSE_MASTER_PANEL_NOT_FOUND") {
+      return errorResponse(
+        request,
+        "Panel/part tidak ditemukan pada unit yang dipilih.",
+        404,
+        "WAREHOUSE_MASTER_PANEL_NOT_FOUND",
+      );
+    }
+
+    if (error.message === "WAREHOUSE_STOCK_CARD_IN_USE") {
+      return errorResponse(
+        request,
+        "Kartu stok sudah dipakai transaksi atau opname, tidak bisa dihapus.",
+        409,
+        "WAREHOUSE_STOCK_CARD_IN_USE",
       );
     }
 
@@ -479,6 +519,43 @@ export function handleWarehouseStockCardRoute(
   );
 }
 
+export async function handleWarehouseStockCardReferencesRoute(
+  request: Request,
+  authService: AuthService,
+  warehouseService: WarehouseService,
+): Promise<Response> {
+  const sessionResult = await requireWarehouseSession(
+    request,
+    authService,
+    permissionCodes.warehouseStockCardView,
+  );
+  if ("response" in sessionResult) {
+    return sessionResult.response;
+  }
+
+  try {
+    const url = new URL(request.url);
+    const unitId = url.searchParams.get("unitId")?.trim() || null;
+    const search = url.searchParams.get("search")?.trim() ?? "";
+    const result = await warehouseService.listStockCardReferences(
+      sessionResult.session,
+      { unitId, search },
+    );
+    return withCors(
+      request,
+      withShortSharedCache(
+        Response.json({
+          success: true,
+          message: "Referensi stock card siap",
+          data: result,
+        }),
+      ),
+    );
+  } catch (error) {
+    return mapWarehouseError(request, error);
+  }
+}
+
 export function handleWarehouseItemsRoute(
   request: Request,
   authService: AuthService,
@@ -491,6 +568,66 @@ export function handleWarehouseItemsRoute(
     "itemName",
     warehouseService.listItems.bind(warehouseService),
   );
+}
+
+export function handleWarehouseItemCreateRoute(
+  request: Request,
+  authService: AuthService,
+  warehouseService: WarehouseService,
+) {
+  return handleWarehouseMutationRoute(
+    request,
+    authService,
+    permissionCodes.warehouseStockCardManage,
+    createWarehouseItemSchema,
+    warehouseService.createItem.bind(warehouseService),
+    "Master barang berhasil ditambahkan.",
+  );
+}
+
+export function handleWarehouseItemUpdateRoute(
+  request: Request,
+  authService: AuthService,
+  warehouseService: WarehouseService,
+) {
+  return handleWarehouseMutationRoute(
+    request,
+    authService,
+    permissionCodes.warehouseStockCardManage,
+    updateWarehouseItemSchema,
+    warehouseService.updateItem.bind(warehouseService),
+    "Master barang berhasil diperbarui.",
+  );
+}
+
+export async function handleWarehouseItemDeleteRoute(
+  request: Request,
+  itemId: string,
+  authService: AuthService,
+  warehouseService: WarehouseService,
+): Promise<Response> {
+  const sessionResult = await requireWarehouseSession(
+    request,
+    authService,
+    permissionCodes.warehouseStockCardManage,
+  );
+  if ("response" in sessionResult) {
+    return sessionResult.response;
+  }
+
+  try {
+    const result = await warehouseService.deleteItem(sessionResult.session, itemId);
+    return withCors(
+      request,
+      Response.json({
+        success: true,
+        message: "Master barang berhasil dinonaktifkan.",
+        data: result,
+      }),
+    );
+  } catch (error) {
+    return mapWarehouseError(request, error);
+  }
 }
 
 export function handleWarehouseMaterialUsageRoute(
@@ -809,6 +946,69 @@ export function handleWarehouseStockCardPhotosRoute(
     warehouseService.updateStockCardPhotos.bind(warehouseService),
     "Foto stock card berhasil diperbarui.",
   );
+}
+
+export function handleWarehouseStockCardCreateRoute(
+  request: Request,
+  authService: AuthService,
+  warehouseService: WarehouseService,
+) {
+  return handleWarehouseMutationRoute(
+    request,
+    authService,
+    permissionCodes.warehouseStockCardManage,
+    createWarehouseStockCardSchema,
+    warehouseService.createStockCard.bind(warehouseService),
+    "Stock card berhasil ditambahkan.",
+  );
+}
+
+export function handleWarehouseStockCardUpdateRoute(
+  request: Request,
+  authService: AuthService,
+  warehouseService: WarehouseService,
+) {
+  return handleWarehouseMutationRoute(
+    request,
+    authService,
+    permissionCodes.warehouseStockCardManage,
+    updateWarehouseStockCardSchema,
+    warehouseService.updateStockCard.bind(warehouseService),
+    "Stock card berhasil diperbarui.",
+  );
+}
+
+export async function handleWarehouseStockCardDeleteRoute(
+  request: Request,
+  stockCardId: string,
+  authService: AuthService,
+  warehouseService: WarehouseService,
+): Promise<Response> {
+  const sessionResult = await requireWarehouseSession(
+    request,
+    authService,
+    permissionCodes.warehouseStockCardManage,
+  );
+  if ("response" in sessionResult) {
+    return sessionResult.response;
+  }
+
+  try {
+    const result = await warehouseService.deleteStockCard(
+      sessionResult.session,
+      stockCardId,
+    );
+    return withCors(
+      request,
+      Response.json({
+        success: true,
+        message: "Stock card berhasil dihapus.",
+        data: result,
+      }),
+    );
+  } catch (error) {
+    return mapWarehouseError(request, error);
+  }
 }
 
 export function handleWarehouseStorageLocationCreateRoute(

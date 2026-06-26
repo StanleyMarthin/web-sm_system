@@ -15,6 +15,7 @@ import {
   fetchWarehousePendingApproval,
   fetchWarehouseRequestReferences,
   fetchWarehouseStockCard,
+  fetchWarehouseStockCardReferences,
   fetchWarehouseStockOpnames,
   fetchWarehouseStorageLocations,
   fetchWarehouseTransactions,
@@ -89,6 +90,18 @@ function normalizeWarehouseItemCategory(
   }
 
   return null;
+}
+
+function getWarehouseFilterValue(
+  searchParams: Record<string, string | string[] | undefined>,
+  field: string,
+) {
+  const filters = Array.isArray(searchParams.filter)
+    ? searchParams.filter
+    : searchParams.filter
+      ? [searchParams.filter]
+      : [];
+  return filters.find((filter) => filter.startsWith(`${field}:eq:`))?.split(":").at(-1) ?? "";
 }
 
 function buildWarehouseDashboardFallback(input: {
@@ -453,10 +466,23 @@ async function WarehousePageContent({ searchParams }: WarehousePageProps) {
   }
 
   if (activeTab === "stock-card") {
-    const { payload, status } = await fetchWarehouseStockCard(
-      cookieHeader,
-      resolvedSearchParams,
-    );
+    const activeUnitId = getWarehouseFilterValue(resolvedSearchParams, "unitId");
+    const [stockCardResponse, stockCardReferencesResponse, locationOptionsResponse] = await Promise.all([
+      fetchWarehouseStockCard(
+        cookieHeader,
+        resolvedSearchParams,
+      ),
+      fetchWarehouseStockCardReferences(cookieHeader, {
+        unitId: activeUnitId || undefined,
+      }),
+      fetchWarehouseStorageLocations(cookieHeader, {
+        page: "1",
+        limit: "100",
+        sortBy: "label",
+        sortDirection: "asc",
+      }),
+    ]);
+    const { payload, status } = stockCardResponse;
 
     if (status === 401) {
       redirect("/login");
@@ -486,6 +512,8 @@ async function WarehousePageContent({ searchParams }: WarehousePageProps) {
           meta: payload.meta,
           state: payload.query,
         }}
+        locationOptions={locationOptionsResponse.payload?.data ?? []}
+        stockCardReferences={stockCardReferencesResponse.payload?.data ?? { units: [], panels: [] }}
       />
     );
   }
