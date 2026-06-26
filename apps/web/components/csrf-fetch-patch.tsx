@@ -114,9 +114,14 @@ export function CsrfFetchPatch() {
 
       const request = nativeFetch(input, requestInit);
       pendingMutations.set(mutationKey, request);
-      void request.finally(() => {
-        pendingMutations.delete(mutationKey);
-      });
+      request.then(
+        () => {
+          pendingMutations.delete(mutationKey);
+        },
+        () => {
+          pendingMutations.delete(mutationKey);
+        },
+      );
 
       return request;
     };
