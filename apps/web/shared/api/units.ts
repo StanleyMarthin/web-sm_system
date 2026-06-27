@@ -16,6 +16,7 @@ import {
   unitPanelCategoryRenameEnvelopeSchema,
   unitPanelCollectionEnvelopeSchema,
   unitPanelDeleteEnvelopeSchema,
+  unitPanelGeneralCollectionEnvelopeSchema,
   unitPanelMutationEnvelopeSchema,
   type CreateUnitPanelRequest,
   type RenameUnitPanelCategoryRequest,
@@ -337,6 +338,32 @@ export async function fetchUnitPanels(cookieHeader: string, unitId: string) {
 
     return {
       payload: unitPanelCollectionEnvelopeSchema.parse(await response.json()),
+      status: response.status,
+    };
+  } catch {
+    return {
+      payload: null,
+      status: 503,
+    };
+  }
+}
+
+export async function fetchUnitPanelGeneralTemplates(cookieHeader: string) {
+  try {
+    const response = await fetch(
+      `${getApiBaseUrl()}/api/units/master-panels/general`,
+      buildServerOrBrowserRequestInit(cookieHeader),
+    );
+
+    if (!response.ok) {
+      return {
+        payload: null,
+        status: response.status,
+      };
+    }
+
+    return {
+      payload: unitPanelGeneralCollectionEnvelopeSchema.parse(await response.json()),
       status: response.status,
     };
   } catch {

@@ -1,6 +1,16 @@
 "use client";
 
 import type {
+  JobPlanDraftRecord,
+  JobPlanGridReference,
+  JobPlanMode,
+  JobPlanWindow,
+} from "@smsystem/contracts/job-plan";
+import {
+  formatDurationHHMM,
+  parseDurationHHMM,
+} from "@smsystem/contracts/job-plan-schedule";
+import type {
   UnitBomDocument,
   UnitBomNode,
   UnitBomPhotoSlot,
@@ -39,7 +49,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent, type ReactNode, type RefObject } from "react";
 import {
   addEdge,
   Background,
@@ -75,6 +85,15 @@ import {
   fetchWorkflowLayout,
   saveWorkflowLayout,
 } from "@/shared/api/units";
+import {
+  fetchJobPlanGrid,
+  saveJobPlanDraft,
+} from "@/shared/api/job-plan";
+import { fetchCountdownDetail } from "@/shared/api/countdown";
+import { fetchWoDetail } from "@/shared/api/wo";
+import { fetchPrDetail } from "@/shared/api/pr";
+import { fetchVendorDetail } from "@/shared/api/vendor";
+import { SearchableField, type SearchOption } from "@/modules/units/components/shared/SearchableField";
 import { fmtDateTime } from "@/shared/format/humanize";
 import { useSweetAlert } from "@/shared/ui/sweet-alert";
 import { WorkflowJobCreateForm } from "@/modules/workflow-job/components/workflow-job-create-form";
@@ -82,7 +101,9 @@ import type {
   CreatedWorkflowJob,
   WorkflowCreateType,
   WorkflowJobCreateContext,
+  WorkflowJobCreateFormState,
 } from "@/modules/workflow-job/workflow-job-create";
+import { createWorkflowJobForm, submitWorkflowJobUpdate, todayDate } from "@/modules/workflow-job/workflow-job-create";
 
 type DrawerTab = "timeline" | "photos" | "documents";
 type TriageTone = "good" | "repair" | "replace" | "unknown";
@@ -97,6 +118,7 @@ interface PanelDetailPageProps {
 }
 
 interface TimelineItem {
+  countdownId?: string | null;
   eventType?: UnitBomTimelineItem["eventType"];
   title: string;
   detail: string;
@@ -171,6 +193,7 @@ function buildTimeline(node: UnitBomNode): TimelineItem[] {
     items.push(
       ...node.detail.timeline.map((item) => {
         const rawItem: TimelineItem = {
+          countdownId: item.countdownId ?? null,
           eventType: item.eventType,
           title: item.title,
           detail: item.description,
@@ -446,6 +469,7 @@ type WorkflowNodeType = "handover" | "job" | "doc" | "wov";
 interface WorkflowNode {
   [key: string]: unknown;
   id: string;
+  countdownId?: string | null;
   type: WorkflowNodeType;
   typeLabel: string;
   title: string;
@@ -461,6 +485,8 @@ interface WorkflowNode {
   hasPhotos?: boolean;
   hasMaterials?: boolean;
   isEnd?: boolean;
+  formSnapshot?: WorkflowJobCreateFormState;
+  onContextMenu?: (node: WorkflowNode, event: MouseEvent<HTMLDivElement>) => void;
 }
 
 interface WorkflowDivisionOption {
@@ -485,10 +511,58 @@ interface JobDescEditForm {
   meta: string;
 }
 
+interface WorkflowContextMenuState {
+  x: number;
+  y: number;
+  flowPosition: { x: number; y: number };
+  node: WorkflowNode | null;
+}
+
+interface JobPlanDraftFormState {
+  assignedUserId: string;
+  taskDate: string;
+  targetHours: string;
+  note: string;
+  isPriority: boolean;
+}
+
 function isJobDescMutable(source: WorkflowNode): boolean {
   const isManuallyCreated = source.id.startsWith("manual-");
   const isUnstarted = source.status === "plan" || source.status === "open";
   return isManuallyCreated && isUnstarted;
+}
+
+function workflowCreateTypeFromNode(source: WorkflowNode): WorkflowCreateType {
+  const label = (source.sourceLabel ?? source.badge ?? "").toUpperCase();
+  if (label.includes("COUNTDOWN")) return "COUNTDOWN";
+  if (label === "WOV" || source.type === "wov") return "WOV";
+  if (label === "PR" || source.type === "doc") return "PR";
+  return "WO";
+}
+
+function buildEditFormFromNode(
+  source: WorkflowNode,
+  context: WorkflowJobCreateContext,
+  type: WorkflowCreateType,
+  divisions: WorkflowDivisionOption[],
+): WorkflowJobCreateFormState {
+  const base = createWorkflowJobForm(context, type);
+  const matchedDivision = source.divisionLabel
+    ? divisions.find((division) => division.label === source.divisionLabel)
+    : null;
+  const hourMatch = source.hourLabel?.match(/(\d+):?(\d{0,2})/);
+  return {
+    ...base,
+    title: source.title || base.title,
+    notes: source.detail && source.detail !== source.title ? source.detail : base.notes,
+    divisionId: matchedDivision?.value ?? base.divisionId,
+    targetHours: hourMatch ? `${hourMatch[1].padStart(3, "0")}:${(hourMatch[2] || "00").padEnd(2, "0")}` : base.targetHours,
+  };
+}
+
+function backendIdFromNode(source: WorkflowNode, type: WorkflowCreateType) {
+  if (type === "COUNTDOWN") return source.countdownId ?? null;
+  return source.id.match(/^manual-[^-]+-(.+)$/)?.[1] ?? null;
 }
 
 function buildWorkflowSources(node: UnitBomNode): WorkflowNode[] {
@@ -498,6 +572,7 @@ function buildWorkflowSources(node: UnitBomNode): WorkflowNode[] {
   const timeline = node.detail?.timeline.length
     ? node.detail.timeline.map((item) => {
         const rawItem: TimelineItem = {
+          countdownId: item.countdownId ?? null,
           eventType: item.eventType,
           title: item.title,
           detail: item.description,
@@ -516,7 +591,7 @@ function buildWorkflowSources(node: UnitBomNode): WorkflowNode[] {
     : node.progressPercent !== null && node.progressPercent !== undefined
     ? `Aktual ${progressLabel}`
     : null;
-  return timeline.map((item, index) => {
+  const timelineSources: WorkflowNode[] = timeline.map((item, index) => {
     const isHandover = item.eventType === "HANDOVER" || item.title.toLowerCase().includes("pendataan");
     const isQc = item.eventType === "QC" || item.title.toLowerCase().includes("pemeriksaan");
     const isVendor = item.title.toLowerCase().includes("vendor") || item.detail.toLowerCase().includes("vendor");
@@ -535,6 +610,7 @@ function buildWorkflowSources(node: UnitBomNode): WorkflowNode[] {
 
     return {
       id: timelineFlowId(item, index),
+      countdownId: item.countdownId ?? null,
       type,
       typeLabel: isHandover ? "Pendataan" : isVendor ? "WOV - Vendor" : sourceLabel.includes("JOBPLAN") ? "Countdown + Job Plan" : "Countdown",
       title: jobTitle,
@@ -551,6 +627,34 @@ function buildWorkflowSources(node: UnitBomNode): WorkflowNode[] {
       hasMaterials: isVendor,
     };
   });
+
+  const hasActiveCountdownSource = node.activeCountdownId
+    ? timelineSources.some((source) => source.countdownId === node.activeCountdownId)
+    : true;
+  if (!hasActiveCountdownSource && node.activeCountdownId) {
+    return [
+      {
+        id: `countdown-${node.activeCountdownId}`,
+        countdownId: node.activeCountdownId,
+        type: "job",
+        typeLabel: "Countdown",
+        title: node.activeJobName ?? node.label,
+        meta: `${node.label}${node.activeTargetHours ? ` (${node.activeTargetHours} jam)` : ""} - Terjadwal`,
+        badge: "COUNTDOWN",
+        status: node.jobStatus === "DONE" ? "done" : node.jobStatus === "PROSES" || node.jobStatus === "QC_READY" ? "progress" : "plan",
+        statusLabel: node.jobStatus ?? "PLAN",
+        detail: `${node.label}${node.activeTargetHours ? ` (${node.activeTargetHours} jam)` : ""} - Terjadwal`,
+        divisionLabel,
+        sourceLabel: "COUNTDOWN",
+        hourLabel: node.activeTargetHours ? `${node.activeTargetHours}j` : countdownHourLabel,
+        progressLabel,
+        hasPhotos: true,
+        hasMaterials: false,
+      },
+      ...timelineSources,
+    ];
+  }
+  return timelineSources;
 }
 
 function normalizeTextToken(value: string): string {
@@ -596,6 +700,7 @@ export function PanelDetailPage({
   const searchParams = useSearchParams();
   const replaceInputRef = useRef<HTMLInputElement | null>(null);
   const sectionRef = useRef<HTMLDivElement | null>(null);
+  const workflowSectionRef = useRef<HTMLDivElement | null>(null);
   const [activeTab, setActiveTab] = useState<DrawerTab>("timeline");
   type PageMode = "detail" | "workflow";
   const [pageMode, setPageMode] = useState<PageMode>(() =>
@@ -666,17 +771,19 @@ export function PanelDetailPage({
     if (searchParams.get("fullscreen") !== "true") return;
 
     const timer = window.setTimeout(() => {
-      sectionRef.current?.requestFullscreen?.().catch(() => {
+      const target = pageMode === "workflow" ? workflowSectionRef.current : sectionRef.current;
+      target?.requestFullscreen?.().catch(() => {
         setIsFullscreen(true);
       });
     }, 100);
 
     return () => window.clearTimeout(timer);
-  }, [searchParams]);
+  }, [pageMode, searchParams]);
 
   function handleFullscreenToggle() {
     if (!isFullscreen) {
-      sectionRef.current?.requestFullscreen?.().catch(() => {
+      const target = pageMode === "workflow" ? workflowSectionRef.current : sectionRef.current;
+      target?.requestFullscreen?.().catch(() => {
         setIsFullscreen(true);
       });
       return;
@@ -940,7 +1047,7 @@ export function PanelDetailPage({
     <>
     <div
       ref={sectionRef}
-      className={`space-y-2 bg-background text-foreground ${isFullscreen ? "fixed inset-0 z-50 overflow-y-auto p-2" : ""}`}
+      className="space-y-2 bg-background text-foreground"
     >
       <div className="border border-border bg-card px-4 py-3">
         <div className="flex items-center justify-between gap-4">
@@ -1368,6 +1475,7 @@ export function PanelDetailPage({
             allowedCreateTypes={allowedWorkflowCreateTypes}
             canSaveCanvas={canSaveWorkflowCanvas}
             isFullscreen={isFullscreen}
+            fullscreenRef={workflowSectionRef}
             onToggleFullscreen={handleFullscreenToggle}
             onWorkflowOrderChange={setWorkflowOrderIds}
             onNavigateToPhotos={() => {
@@ -1393,6 +1501,7 @@ interface WorkflowBuilderProps {
   allowedCreateTypes: WorkflowCreateType[];
   canSaveCanvas: boolean;
   isFullscreen: boolean;
+  fullscreenRef: RefObject<HTMLDivElement | null>;
   onToggleFullscreen: () => void;
   onWorkflowOrderChange: (order: string[]) => void;
   onNavigateToPhotos: () => void;
@@ -1459,7 +1568,13 @@ function WorkflowCanvasNode({ data, selected }: NodeProps<WorkflowFlowNode>) {
       "group flex h-full min-w-[280px] flex-col overflow-visible border border-l-4 bg-card shadow-sm transition-colors",
       workflowNodeAccentClass[data.type],
       selected ? "border-primary/70 bg-primary/[0.04]" : "border-border hover:border-primary/35",
-    ].join(" ")}>
+    ].join(" ")}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        data.onContextMenu?.(data, event);
+      }}
+    >
       {selected ? (
         <NodeResizeControl
           position="bottom-right"
@@ -1642,6 +1757,7 @@ function WorkflowBuilder({
   allowedCreateTypes,
   canSaveCanvas,
   isFullscreen,
+  fullscreenRef,
   onToggleFullscreen,
   onWorkflowOrderChange,
   onNavigateToPhotos,
@@ -1659,10 +1775,30 @@ function WorkflowBuilder({
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [editingSourceId, setEditingSourceId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<JobDescEditForm | null>(null);
+  const [nodeEditTarget, setNodeEditTarget] = useState<WorkflowNode | null>(null);
+  const [nodeEditType, setNodeEditType] = useState<WorkflowCreateType>("COUNTDOWN");
+  const [nodeEditInitialForm, setNodeEditInitialForm] = useState<WorkflowJobCreateFormState | null>(null);
   const [isSourceListHidden, setIsSourceListHidden] = useState(false);
+  const [isFlowPanelHidden, setIsFlowPanelHidden] = useState(false);
   const [dragSourceId, setDragSourceId] = useState<string | null>(null);
   const [isCanvasDragActive, setIsCanvasDragActive] = useState(false);
+  const [contextMenu, setContextMenu] = useState<WorkflowContextMenuState | null>(null);
+  const [createDefaultType, setCreateDefaultType] = useState<WorkflowCreateType>("COUNTDOWN");
+  const [pendingCreatePosition, setPendingCreatePosition] = useState<{ x: number; y: number } | null>(null);
+  const [jobPlanReferences, setJobPlanReferences] = useState<JobPlanGridReference | null>(null);
+  const [jobPlanDraftNode, setJobPlanDraftNode] = useState<WorkflowNode | null>(null);
+  const [jobPlanDraftForm, setJobPlanDraftForm] = useState<JobPlanDraftFormState>(() => ({
+    assignedUserId: "",
+    taskDate: todayDate(),
+    targetHours: "01:00",
+    note: "",
+    isPriority: false,
+  }));
+  const [isSavingNodeEdit, setIsSavingNodeEdit] = useState(false);
+  const [isSavingJobPlanDraft, setIsSavingJobPlanDraft] = useState(false);
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance<WorkflowFlowNode, WorkflowFlowEdge> | null>(null);
+  const canvasContainerRef = useRef<HTMLDivElement | null>(null);
+  const nodeEditRequestRef = useRef(0);
   const { alertElement, confirm } = useSweetAlert();
 
   useEffect(() => {
@@ -1740,6 +1876,23 @@ function WorkflowBuilder({
     return () => { cancelled = true; };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    async function loadJobPlanReferences() {
+      const response = await fetchJobPlanGrid("", {
+        date: todayDate(),
+        dateStart: todayDate(),
+        dateEnd: todayDate(),
+        window: "daily" satisfies JobPlanWindow,
+        limit: "1",
+      }, "normal" satisfies JobPlanMode);
+      if (cancelled) return;
+      setJobPlanReferences(response.payload?.references ?? null);
+    }
+    void loadJobPlanReferences();
+    return () => { cancelled = true; };
+  }, []);
+
   const usedNodeIds = useMemo(() => new Set(nodes.map((item) => item.id)), [nodes]);
   const availableSources = localWorkflowSources.filter((source) => !usedNodeIds.has(source.id));
   const selectedFlowNode = selectedNode ? nodes.find((item) => item.id === selectedNode.id)?.data ?? selectedNode : null;
@@ -1755,6 +1908,49 @@ function WorkflowBuilder({
     divisionId: node.divisionId ? String(node.divisionId) : null,
     divisionName: node.divisionName,
   }), [carId, node.category, node.divisionId, node.divisionName, node.label, node.panelId, node.section]);
+  const jobPlanEmployeeOptions = useMemo(() => {
+    const employees = jobPlanReferences?.employees ?? [];
+    if (!node.divisionId) return employees;
+    return employees.filter((employee) => employee.divisionId === node.divisionId);
+  }, [jobPlanReferences?.employees, node.divisionId]);
+  const jobPlanEmployeeSearchOptions = useMemo<SearchOption[]>(
+    () => jobPlanEmployeeOptions.map((employee) => ({
+      value: employee.value,
+      label: employee.label,
+    })),
+    [jobPlanEmployeeOptions],
+  );
+
+  function getWorkflowNodeMenuPosition(bounds: DOMRect, nodeRect: DOMRect) {
+    const menuWidth = 220;
+    const menuHeight = 180;
+    const gap = 8;
+    const rightX = nodeRect.right - bounds.left + gap;
+    const leftX = nodeRect.left - bounds.left - menuWidth - gap;
+    return {
+      x: Math.max(8, Math.min(rightX + menuWidth <= bounds.width ? rightX : leftX, bounds.width - menuWidth)),
+      y: Math.max(8, Math.min(nodeRect.top - bounds.top, bounds.height - menuHeight)),
+    };
+  }
+
+  const openWorkflowNodeMenu = useCallback((source: WorkflowNode, event: MouseEvent<HTMLDivElement>) => {
+    const bounds = canvasContainerRef.current?.getBoundingClientRect();
+    const clickedNode = nodes.find((item) => item.id === source.id);
+    if (!bounds || !clickedNode) return;
+    const position = getWorkflowNodeMenuPosition(bounds, event.currentTarget.getBoundingClientRect());
+    setSelectedNode(clickedNode.data);
+    setContextMenu({
+      x: position.x,
+      y: position.y,
+      flowPosition: snapWorkflowCanvasPosition(clickedNode.position),
+      node: clickedNode.data,
+    });
+  }, [nodes]);
+
+  const renderedNodes = useMemo(
+    () => nodes.map((item) => ({ ...item, data: { ...item.data, onContextMenu: openWorkflowNodeMenu } })),
+    [nodes, openWorkflowNodeMenu],
+  );
 
   const onConnect = useCallback((connection: Connection) => {
     setEdges((current) => addEdge({ ...connection, type: "smoothstep", animated: true }, current));
@@ -1831,6 +2027,302 @@ function WorkflowBuilder({
     setDragSourceId(null);
   }, [addSourceToCanvasAt, dragSourceId, localWorkflowSources, reactFlowInstance]);
 
+  const handleCanvasContextMenu = useCallback((event: MouseEvent<HTMLDivElement>) => {
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const nodeElement = (event.target as HTMLElement | null)?.closest(".react-flow__node") as HTMLElement | null;
+    if (nodeElement) {
+      event.preventDefault();
+      event.stopPropagation();
+      const nodeId = nodeElement.getAttribute("data-id");
+      const clickedNode = nodeId ? nodes.find((item) => item.id === nodeId) : null;
+      if (!clickedNode) {
+        setContextMenu(null);
+        return;
+      }
+      const position = getWorkflowNodeMenuPosition(bounds, nodeElement.getBoundingClientRect());
+      setSelectedNode(clickedNode.data);
+      setContextMenu({
+        x: position.x,
+        y: position.y,
+        flowPosition: snapWorkflowCanvasPosition(clickedNode.position),
+        node: clickedNode.data,
+      });
+      return;
+    }
+    event.preventDefault();
+    const flowPosition = reactFlowInstance?.screenToFlowPosition({ x: event.clientX, y: event.clientY }) ?? {
+      x: event.clientX - bounds.left,
+      y: event.clientY - bounds.top,
+    };
+    setContextMenu({
+      x: Math.max(8, Math.min(event.clientX - bounds.left, bounds.width - 180)),
+      y: Math.max(8, Math.min(event.clientY - bounds.top, bounds.height - 180)),
+      flowPosition: snapWorkflowCanvasPosition(flowPosition),
+      node: null,
+    });
+  }, [nodes, reactFlowInstance]);
+
+  const handleNodeContextMenu: NodeMouseHandler<WorkflowFlowNode> = useCallback((event, clickedNode) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const bounds = canvasContainerRef.current?.getBoundingClientRect();
+    if (!bounds) return;
+    const nodeElement = (event.target as HTMLElement | null)?.closest(".react-flow__node") as HTMLElement | null;
+    const position = getWorkflowNodeMenuPosition(bounds, nodeElement?.getBoundingClientRect() ?? new DOMRect(event.clientX, event.clientY, 0, 0));
+    setSelectedNode(clickedNode.data);
+    setContextMenu({
+      x: position.x,
+      y: position.y,
+      flowPosition: snapWorkflowCanvasPosition(clickedNode.position),
+      node: clickedNode.data,
+    });
+  }, []);
+
+  function openCreateFromContext(type: WorkflowCreateType) {
+    setCreateDefaultType(type);
+    setPendingCreatePosition(contextMenu?.flowPosition ?? null);
+    setIsCreateMinimized(false);
+    setIsCreateOpen(true);
+    setContextMenu(null);
+  }
+
+  function formFromBackendDetail(source: WorkflowNode, type: WorkflowCreateType, detail: unknown): WorkflowJobCreateFormState {
+    const fallback = source.formSnapshot ?? buildEditFormFromNode(source, workflowJobContext, type, countdownReferences.divisions);
+    if (type === "COUNTDOWN") {
+      const countdown = (detail as { data?: { countdown?: {
+        divisionId?: number | null;
+        sectionName?: string | null;
+        jobTypeId?: string | null;
+        jobTypeName?: string | null;
+        targetHoursInitial?: number | null;
+        startDate?: string | null;
+        deadlineDate?: string | null;
+        note?: string | null;
+        temuanAwal?: string | null;
+        keterangan?: string | null;
+        taskCategory?: "MAIN" | "ADDITIONAL" | "WO" | "WOV" | string | null;
+      } } })?.data?.countdown;
+      if (!countdown) return fallback;
+      return {
+        ...fallback,
+        divisionId: countdown.divisionId ? String(countdown.divisionId) : fallback.divisionId,
+        sectionName: countdown.sectionName ?? fallback.sectionName,
+        jobTypeId: countdown.jobTypeId ?? fallback.jobTypeId,
+        title: countdown.jobTypeName ?? source.title,
+        targetHours: formatDurationHHMM(Number(countdown.targetHoursInitial ?? 1)),
+        startDate: countdown.startDate ?? fallback.startDate,
+        targetDate: countdown.deadlineDate ?? fallback.targetDate,
+        notes: countdown.note ?? "",
+        temuanAwal: countdown.temuanAwal ?? "",
+        keterangan: countdown.keterangan ?? "",
+        taskCategory: countdown.taskCategory === "MAIN" ? "MAIN" : "ADDITIONAL",
+      };
+    }
+    if (type === "WO") {
+      const ticket = (detail as { data?: { ticket?: {
+        toDivisionId?: number | null;
+        requestDate?: string | null;
+        isPriority?: boolean;
+        jobDetail?: string | null;
+        estimatedHours?: number | null;
+        notes?: string | null;
+      } } })?.data?.ticket;
+      if (!ticket) return fallback;
+      return {
+        ...fallback,
+        divisionId: ticket.toDivisionId ? String(ticket.toDivisionId) : fallback.divisionId,
+        title: ticket.jobDetail ?? source.title,
+        targetDate: ticket.requestDate ?? fallback.targetDate,
+        estimatedHours: ticket.estimatedHours != null ? String(ticket.estimatedHours) : "",
+        notes: ticket.notes ?? "",
+        isPriority: Boolean(ticket.isPriority),
+      };
+    }
+    if (type === "PR") {
+      const data = (detail as { data?: { header?: {
+        divisionName?: string | null;
+        targetDate?: string | null;
+        priority?: string | null;
+        notes?: string | null;
+      }; items?: Array<{
+        itemName?: string | null;
+        description?: string | null;
+        qty?: number | null;
+        uom?: string | null;
+        estimatedPrice?: number | null;
+        photoUrl?: string | null;
+      }> } })?.data;
+      const item = data?.items?.[0];
+      const header = data?.header;
+      if (!header) return fallback;
+      return {
+        ...fallback,
+        divisionId: header.divisionName ? (countdownReferences.divisions.find((division) => division.label === header.divisionName)?.value ?? fallback.divisionId) : fallback.divisionId,
+        title: item?.description ?? item?.itemName ?? source.title,
+        targetDate: header.targetDate ?? fallback.targetDate,
+        qty: item?.qty != null ? String(item.qty) : fallback.qty,
+        uom: item?.uom ?? fallback.uom,
+        estimatedPrice: item?.estimatedPrice != null ? String(item.estimatedPrice) : "",
+        photoUrl: item?.photoUrl ?? "",
+        priority: header.priority === "URGENT" ? "URGENT" : "NORMAL",
+        notes: header.notes ?? "",
+      };
+    }
+    const ticket = (detail as { data?: { ticket?: {
+      vendorName?: string | null;
+      targetDateReturn?: string | null;
+      itemName?: string | null;
+      quantity?: number | null;
+      uom?: string | null;
+      goodsConditionOut?: string | null;
+      estimatedCost?: number | null;
+      remarks?: string | null;
+    } } })?.data?.ticket;
+    if (!ticket) return fallback;
+    return {
+      ...fallback,
+      title: ticket.itemName ?? source.title,
+      vendorName: ticket.vendorName ?? "",
+      targetDate: ticket.targetDateReturn ?? fallback.targetDate,
+      qty: ticket.quantity != null ? String(ticket.quantity) : fallback.qty,
+      uom: ticket.uom ?? fallback.uom,
+      goodsConditionOut: ticket.goodsConditionOut ?? "",
+      estimatedCost: ticket.estimatedCost != null ? String(ticket.estimatedCost) : "",
+      notes: ticket.remarks ?? "",
+    };
+  }
+
+  async function openNodeEdit(source: WorkflowNode) {
+    const requestId = nodeEditRequestRef.current + 1;
+    nodeEditRequestRef.current = requestId;
+    const type = workflowCreateTypeFromNode(source);
+    const id = backendIdFromNode(source, type);
+    setNodeEditTarget(source);
+    setNodeEditType(type);
+    setNodeEditInitialForm(source.formSnapshot ?? buildEditFormFromNode(source, workflowJobContext, type, countdownReferences.divisions));
+    setContextMenu(null);
+    if (!id) return;
+    const result =
+      type === "COUNTDOWN" ? await fetchCountdownDetail("", id)
+      : type === "WO" ? await fetchWoDetail("", id)
+      : type === "PR" ? await fetchPrDetail("", id)
+      : await fetchVendorDetail("", id);
+    if (result.payload && nodeEditRequestRef.current === requestId) {
+      setNodeEditInitialForm(formFromBackendDetail(source, type, result.payload));
+    }
+  }
+
+  function applyNodeEdit(source: WorkflowNode, form: WorkflowJobCreateFormState): WorkflowNode {
+    const divisionValue = form.divisionId || workflowJobContext.divisionId || "";
+    const division = countdownReferences.divisions.find((item) => item.value === divisionValue);
+    const divisionLabel = division?.label ?? workflowJobContext.divisionName ?? source.divisionLabel ?? null;
+    const title = form.title.trim() || source.title;
+    const meta = `${node.label} - ${divisionLabel || "Divisi mengikuti request"}`;
+    const detail = [form.keterangan, form.temuanAwal, form.notes].find((value) => value.trim())?.trim() ?? source.detail ?? meta;
+    const hourLabel = form.type === "COUNTDOWN" && form.targetHours ? `${form.targetHours}j` : source.hourLabel;
+
+    return { ...source, title, meta, detail, divisionLabel, hourLabel, formSnapshot: form };
+  }
+
+  async function handleNodeEditSubmit(form: WorkflowJobCreateFormState): Promise<string | null> {
+    if (!nodeEditTarget) return "Node tidak ditemukan";
+    const recordId = form.type === "COUNTDOWN"
+      ? nodeEditTarget.countdownId
+      : nodeEditTarget.id.match(/^manual-[^-]+-(.+)$/)?.[1] ?? null;
+    if (!recordId) return "ID backend node tidak ditemukan";
+    const result = await submitWorkflowJobUpdate({
+      id: recordId,
+      form,
+      context: workflowJobContext,
+      references: countdownReferences,
+    });
+    if (!result.success) return result.message;
+    const updateSource = (item: WorkflowNode) => item.id === nodeEditTarget.id ? applyNodeEdit(item, form) : item;
+    setLocalWorkflowSources((current) => current.map(updateSource));
+    setNodes((current) => current.map((item) => ({ ...item, data: updateSource(item.data) })));
+    setSelectedNode((current) => current && current.id === nodeEditTarget.id ? updateSource(current) : current);
+    setNodeEditTarget(null);
+    setNodeEditInitialForm(null);
+    return null;
+  }
+
+  function isCountdownWorkflowNode(source: WorkflowNode | null) {
+    if (!source || source.isEnd) return false;
+    const label = `${source.sourceLabel ?? ""} ${source.typeLabel ?? ""}`.toUpperCase();
+    return label.includes("COUNTDOWN");
+  }
+
+  function openJobPlanDraft(source: WorkflowNode) {
+    const employees = jobPlanEmployeeOptions;
+    const preferredEmployee = employees.find((employee) => {
+      if (!node.divisionId) return false;
+      return employee.divisionId === node.divisionId;
+    }) ?? employees[0] ?? null;
+    const remainingHours = Number(node.remainingHours ?? 0);
+    setJobPlanDraftNode(source);
+    setJobPlanDraftForm({
+      assignedUserId: preferredEmployee?.value ?? "",
+      taskDate: todayDate(),
+      targetHours: formatDurationHHMM(remainingHours > 0 ? Math.min(remainingHours, 12) : 1),
+      note: source.detail ?? source.meta ?? "",
+      isPriority: false,
+    });
+  }
+
+  async function handleSaveJobPlanDraft() {
+    if (!jobPlanDraftNode) return;
+    const coreId = jobPlanDraftNode.countdownId ?? null;
+    if (!coreId) {
+      setSaveMessage("Countdown id tidak ditemukan");
+      window.setTimeout(() => setSaveMessage(null), 2200);
+      return;
+    }
+    const targetHours = parseDurationHHMM(jobPlanDraftForm.targetHours);
+    if (!jobPlanDraftForm.assignedUserId || !targetHours || targetHours <= 0) {
+      setSaveMessage("PIC dan target jam wajib valid");
+      window.setTimeout(() => setSaveMessage(null), 2200);
+      return;
+    }
+    const assignedUserName = jobPlanReferences?.employees.find((employee) => employee.value === jobPlanDraftForm.assignedUserId)?.label ?? jobPlanDraftForm.assignedUserId;
+    const draft: JobPlanDraftRecord = {
+      draftItemId: `workflow-${coreId}-${Date.now()}`,
+      sourceType: "COUNTDOWN",
+      coreId,
+      carId,
+      unitName: carId,
+      divisionId: node.divisionId,
+      divisionName: node.divisionName,
+      panelId: node.panelId,
+      panelName: node.label,
+      jobTypeId: null,
+      jobName: jobPlanDraftNode.title,
+      assignedUserId: jobPlanDraftForm.assignedUserId,
+      assignedUserName,
+      taskDate: jobPlanDraftForm.taskDate,
+      targetHours,
+      startTime: null,
+      finishTime: null,
+      jobDescription: jobPlanDraftNode.title,
+      note: jobPlanDraftForm.note.trim() || null,
+      isOvertime: false,
+      isPriority: jobPlanDraftForm.isPriority,
+      deadlineDate: node.deadlineDate ?? null,
+      isRework: false,
+    };
+
+    setIsSavingJobPlanDraft(true);
+    const result = await saveJobPlanDraft({ replaceItems: false, items: [draft] });
+    setIsSavingJobPlanDraft(false);
+    if (!result.success) {
+      setSaveMessage(result.message);
+      window.setTimeout(() => setSaveMessage(null), 2600);
+      return;
+    }
+    setJobPlanDraftNode(null);
+    setSaveMessage("Draft job-plan tersimpan");
+    window.setTimeout(() => setSaveMessage(null), 1800);
+  }
+
   function handleRemoveNode(id: string) {
     if (id === "workflow-end") return;
     setNodes((current) => current.filter((item) => item.id !== id));
@@ -1896,10 +2388,11 @@ function WorkflowBuilder({
     window.setTimeout(() => setSaveMessage(null), 1800);
   }
 
-  function addCreatedSource(params: CreatedWorkflowJob) {
+  function addCreatedSource(params: CreatedWorkflowJob, form: WorkflowJobCreateFormState) {
     const sourceType: WorkflowNodeType = params.type === "PR" ? "doc" : params.type === "WOV" ? "wov" : "job";
     const source: WorkflowNode = {
       id: `manual-${params.type.toLowerCase()}-${params.idSuffix}`,
+      countdownId: params.type === "COUNTDOWN" ? params.idSuffix : null,
       type: sourceType,
       typeLabel: params.type === "COUNTDOWN" ? "Countdown" : params.type === "WO" ? "WO" : params.type === "PR" ? "PR Logistik" : "WOV - Vendor",
       title: params.title,
@@ -1912,13 +2405,39 @@ function WorkflowBuilder({
       sourceLabel: params.type === "COUNTDOWN" ? "COUNTDOWN" : params.type,
       hasPhotos: params.type === "COUNTDOWN" || params.type === "WO",
       hasMaterials: params.type === "PR" || params.type === "WOV",
+      formSnapshot: form,
     };
     setLocalWorkflowSources((current) => [source, ...current]);
     addSourceToCanvas(source);
   }
 
-  function handleCreatedWorkflowJob(created: CreatedWorkflowJob) {
-    addCreatedSource(created);
+  function handleCreatedWorkflowJob(created: CreatedWorkflowJob, form: WorkflowJobCreateFormState) {
+    const beforePosition = pendingCreatePosition;
+    if (beforePosition) {
+      const sourceType: WorkflowNodeType = created.type === "PR" ? "doc" : created.type === "WOV" ? "wov" : "job";
+      const source: WorkflowNode = {
+        id: `manual-${created.type.toLowerCase()}-${created.idSuffix}`,
+        countdownId: created.type === "COUNTDOWN" ? created.idSuffix : null,
+        type: sourceType,
+        typeLabel: created.type === "COUNTDOWN" ? "Countdown" : created.type === "WO" ? "WO" : created.type === "PR" ? "PR Logistik" : "WOV - Vendor",
+        title: created.title,
+        meta: created.meta,
+        badge: created.type,
+        status: created.type === "PR" ? "open" : created.type === "WOV" ? "progress" : "plan",
+        statusLabel: created.type === "COUNTDOWN" ? "PLAN" : "Dibuat",
+        detail: created.meta,
+        divisionLabel: created.meta.split(" - ").at(-1) ?? null,
+        sourceLabel: created.type === "COUNTDOWN" ? "COUNTDOWN" : created.type,
+        hasPhotos: created.type === "COUNTDOWN" || created.type === "WO",
+        hasMaterials: created.type === "PR" || created.type === "WOV",
+        formSnapshot: form,
+      };
+      setLocalWorkflowSources((current) => [source, ...current]);
+      addSourceToCanvasAt(source, beforePosition);
+      setPendingCreatePosition(null);
+    } else {
+      addCreatedSource(created, form);
+    }
     setIsCreateOpen(false);
     setIsCreateMinimized(false);
   }
@@ -1930,7 +2449,10 @@ function WorkflowBuilder({
   return (
     <>
       {alertElement}
-      <div className={`grid border border-border bg-card ${isFullscreen ? "h-[calc(100vh-140px)]" : "min-h-[calc(100vh-300px)]"} grid-cols-1 ${isSourceListHidden ? "xl:grid-cols-1" : "xl:grid-cols-[280px_minmax(0,1fr)]"}`}>
+      <div
+        ref={fullscreenRef}
+        className={`grid border border-border bg-card ${isFullscreen ? "fixed inset-0 z-50 h-screen overflow-hidden" : "min-h-[calc(100vh-300px)]"} grid-cols-1 ${isSourceListHidden ? "xl:grid-cols-1" : "xl:grid-cols-[280px_minmax(0,1fr)]"}`}
+      >
         {!isSourceListHidden ? (
           <div className="flex min-h-0 flex-col border-b border-border bg-card xl:border-b-0 xl:border-r">
             <div className="flex items-center gap-2 border-b border-border bg-muted px-3 py-2">
@@ -1989,30 +2511,33 @@ function WorkflowBuilder({
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-muted px-3 py-2">
             <div className="flex min-w-0 items-center gap-2">
               {isSourceListHidden ? <button type="button" onClick={() => setIsSourceListHidden(false)} className="h-9 border border-border bg-card px-3 text-[13px] font-mono uppercase tracking-[0.08em] text-muted-foreground hover:border-primary/35 hover:text-foreground">Sumber Job</button> : null}
+              {isFlowPanelHidden && (selectedFlowNode || orderedFlowNodes.length > 0) ? <button type="button" onClick={() => setIsFlowPanelHidden(false)} className="h-9 border border-border bg-card px-3 text-[13px] font-mono uppercase tracking-[0.08em] text-muted-foreground hover:border-primary/35 hover:text-foreground">Urutan Flow</button> : null}
               <p className="text-[14px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Workflow Canvas{orderedFlowNodes.length > 0 ? <span className="ml-1 opacity-50">- {orderedFlowNodes.length} step</span> : null}</p>
-              <span className="hidden text-[13px] font-mono text-muted-foreground md:inline">{saveMessage ?? "React Flow"}</span>
             </div>
             <div className="flex flex-wrap items-center gap-1">
               <button type="button" onClick={onToggleFullscreen} className="inline-flex h-9 w-9 items-center justify-center border border-border bg-card text-muted-foreground transition-colors hover:border-primary/35 hover:text-foreground" title={isFullscreen ? "Keluar fullscreen" : "Masuk fullscreen"} aria-label={isFullscreen ? "Keluar fullscreen" : "Masuk fullscreen"}>{isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}</button>
               {canSaveCanvas ? <button type="button" onClick={handleSaveCanvas} className="inline-flex h-9 items-center gap-1 border border-border bg-card px-3 text-[13px] font-mono uppercase tracking-[0.08em] text-muted-foreground transition-colors hover:border-success/30 hover:text-success"><Save className="h-3.5 w-3.5" />Save Layout</button> : null}
-              {canCreateWorkflowSource ? <button type="button" onClick={() => { setIsCreateMinimized(false); setIsCreateOpen(true); }} className="inline-flex h-9 items-center gap-1.5 border border-primary/30 bg-primary/10 px-3 text-[13px] font-mono uppercase tracking-[0.08em] text-app-accent-ink hover:bg-primary/15"><Plus className="h-3.5 w-3.5" />Tambah</button> : null}
+              {canCreateWorkflowSource ? <button type="button" onClick={() => { setCreateDefaultType("COUNTDOWN"); setPendingCreatePosition(null); setIsCreateMinimized(false); setIsCreateOpen(true); }} className="inline-flex h-9 items-center gap-1.5 border border-primary/30 bg-primary/10 px-3 text-[13px] font-mono uppercase tracking-[0.08em] text-app-accent-ink hover:bg-primary/15"><Plus className="h-3.5 w-3.5" />Tambah</button> : null}
               {(orderedFlowNodes.length > 0 || edges.length > 0) ? <button type="button" onClick={handleClearFlow} className="h-9 border border-border bg-card px-3 text-[13px] font-mono uppercase tracking-[0.08em] text-muted-foreground transition-colors hover:border-destructive/30 hover:text-destructive">Reset</button> : null}
             </div>
           </div>
 
           <div className="flex min-h-0 flex-1 flex-col xl:flex-row">
             <div
+              ref={canvasContainerRef}
               className={[
                 "relative min-h-[520px] flex-1 bg-background transition-colors",
-                isFullscreen ? "h-[calc(100vh-220px)]" : "",
+                isFullscreen ? "h-full" : "",
                 isCanvasDragActive ? "bg-primary/[0.05]" : "",
               ].join(" ")}
               onDragOver={handleCanvasDragOver}
               onDragLeave={handleCanvasDragLeave}
               onDrop={handleCanvasDrop}
+              onContextMenu={handleCanvasContextMenu}
+              onClick={() => setContextMenu(null)}
             >
               <ReactFlow
-                nodes={nodes}
+                nodes={renderedNodes}
                 edges={edges}
                 nodeTypes={workflowNodeTypes}
                 connectionMode={ConnectionMode.Loose}
@@ -2024,6 +2549,7 @@ function WorkflowBuilder({
                 onEdgesChange={onEdgesChange}
                 onConnect={onConnect}
                 onNodeClick={handleNodeClick}
+                onNodeContextMenu={handleNodeContextMenu}
                 onNodeDragStop={handleNodeDragStop}
                 fitView
                 proOptions={{ hideAttribution: true }}
@@ -2040,13 +2566,53 @@ function WorkflowBuilder({
               {isCanvasDragActive ? (
                 <div className="pointer-events-none absolute inset-4 z-10 border border-dashed border-primary/35 bg-primary/[0.06]" />
               ) : null}
+              {contextMenu ? (
+                <div
+                  className="absolute z-30 min-w-52 border border-border bg-card p-1 shadow-xl"
+                  style={{ left: contextMenu.x, top: contextMenu.y }}
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  {contextMenu.node ? (
+                    <>
+                      <div className="border-b border-border px-3 py-2">
+                        <p className="truncate text-[12px] font-mono uppercase tracking-[0.08em] text-muted-foreground">{contextMenu.node.sourceLabel ?? contextMenu.node.typeLabel}</p>
+                        <p className="truncate text-[13px] text-foreground">{contextMenu.node.title}</p>
+                      </div>
+                      {!contextMenu.node.isEnd ? (
+                        <button type="button" onClick={() => openNodeEdit(contextMenu.node as WorkflowNode)} className="flex w-full items-center px-3 py-2 text-left text-[13px] font-mono uppercase tracking-[0.08em] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">Edit</button>
+                      ) : null}
+                      {isCountdownWorkflowNode(contextMenu.node) ? (
+                        <button type="button" onClick={() => { openJobPlanDraft(contextMenu.node as WorkflowNode); setContextMenu(null); }} className="flex w-full items-center px-3 py-2 text-left text-[13px] font-mono uppercase tracking-[0.08em] text-app-accent-ink transition-colors hover:bg-primary/10">Tambah ke draft job-plan</button>
+                      ) : null}
+                      {!contextMenu.node.isEnd ? (
+                        <button type="button" onClick={() => { handleRemoveNode((contextMenu.node as WorkflowNode).id); setContextMenu(null); }} className="flex w-full items-center px-3 py-2 text-left text-[13px] font-mono uppercase tracking-[0.08em] text-destructive transition-colors hover:bg-destructive/10">Hapus</button>
+                      ) : null}
+                    </>
+                  ) : (
+                    (["COUNTDOWN", "WO", "PR", "WOV"] as WorkflowCreateType[]).map((type) => (
+                      <button
+                        key={type}
+                        type="button"
+                        disabled={!allowedCreateTypes.includes(type)}
+                        onClick={() => openCreateFromContext(type)}
+                        className="flex w-full items-center px-3 py-2 text-left text-[13px] font-mono uppercase tracking-[0.08em] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        Tambah {type === "COUNTDOWN" ? "Countdown" : type}
+                      </button>
+                    ))
+                  )}
+                </div>
+              ) : null}
             </div>
 
-            {(selectedFlowNode || orderedFlowNodes.length > 0) ? (
+            {!isFlowPanelHidden && (selectedFlowNode || orderedFlowNodes.length > 0) ? (
               <div className="flex w-full flex-shrink-0 flex-col border-t border-border bg-card xl:w-[280px] xl:border-l xl:border-t-0">
                 <div className="flex items-center justify-between border-b border-border bg-muted px-3 py-2">
                   <p className="text-[14px] font-mono uppercase tracking-[0.08em] text-muted-foreground">{selectedFlowNode ? "Detail" : "Urutan Flow"}</p>
-                  {selectedFlowNode ? <button type="button" onClick={() => setSelectedNode(null)} className="text-[14px] font-mono text-muted-foreground hover:text-foreground">x</button> : null}
+                  <div className="flex items-center gap-2">
+                    {selectedFlowNode ? <button type="button" onClick={() => setSelectedNode(null)} className="text-[14px] font-mono text-muted-foreground hover:text-foreground">x</button> : null}
+                    <button type="button" onClick={() => setIsFlowPanelHidden(true)} className="h-8 border border-border px-2 text-[12px] font-mono uppercase tracking-[0.08em] text-muted-foreground hover:text-foreground">Hide</button>
+                  </div>
                 </div>
                 <div className="flex-1 space-y-4 overflow-y-auto p-3">
                   {selectedFlowNode ? (
@@ -2057,6 +2623,7 @@ function WorkflowBuilder({
                       <div className="grid grid-cols-2 gap-2"><div><p className="mb-1 text-[15px] font-mono uppercase tracking-[0.08em] text-muted-foreground">Jam</p><p className="text-[14px] font-mono text-foreground">{selectedFlowNode.hourLabel ?? "-"}</p></div><div><p className="mb-1 text-[15px] font-mono uppercase tracking-[0.08em] text-muted-foreground">Progress</p><p className="text-[14px] font-mono text-foreground">{selectedFlowNode.progressLabel ?? "-"}</p></div></div>
                       {selectedFlowNode.detail ? <div><p className="mb-1 text-[15px] font-mono uppercase tracking-[0.08em] text-muted-foreground">Detail</p><p className="text-[14px] leading-relaxed text-muted-foreground">{selectedFlowNode.detail}</p></div> : null}
                       <div><p className="mb-1 text-[15px] font-mono uppercase tracking-[0.08em] text-muted-foreground">Status</p><span className={`border px-2 py-0.5 text-[15px] font-mono uppercase tracking-[0.06em] ${statusConfig[selectedFlowNode.status]}`}>{selectedFlowNode.statusLabel}</span></div>
+                      {isCountdownWorkflowNode(selectedFlowNode) ? <button type="button" onClick={() => openJobPlanDraft(selectedFlowNode)} className="w-full border border-primary/30 bg-primary/10 px-2 py-1.5 text-left text-[13px] font-mono uppercase tracking-[0.08em] text-app-accent-ink transition-colors hover:bg-primary/15">Tambah ke draft job-plan</button> : null}
                       <div><p className="mb-1 text-[15px] font-mono uppercase tracking-[0.08em] text-muted-foreground">Bukti Foto</p>{selectedFlowNode.hasPhotos ? <button type="button" onClick={onNavigateToPhotos} className="w-full border border-border px-2 py-1 text-left text-[15px] font-mono uppercase tracking-[0.06em] text-muted-foreground transition-colors hover:border-primary/20 hover:text-app-accent-ink">Lihat Galeri -&gt;</button> : <p className="text-[14px] font-mono text-muted-foreground">Belum ada foto</p>}</div>
                       <div><p className="mb-1 text-[15px] font-mono uppercase tracking-[0.08em] text-muted-foreground">Bahan & Tools</p>{selectedFlowNode.hasMaterials ? <button type="button" onClick={onNavigateToDocuments} className="w-full border border-border px-2 py-1 text-left text-[15px] font-mono uppercase tracking-[0.06em] text-muted-foreground transition-colors hover:border-primary/20 hover:text-app-accent-ink">Lihat Logistik -&gt;</button> : <p className="text-[14px] font-mono text-muted-foreground">Belum ada data</p>}</div>
                       {!selectedFlowNode.isEnd ? <button type="button" onClick={() => handleRemoveNode(selectedFlowNode.id)} className="border border-destructive/20 bg-destructive/[0.04] px-2 py-1 text-[13px] font-mono uppercase tracking-[0.08em] text-destructive transition-colors hover:border-destructive/35">Hapus node</button> : null}
@@ -2069,6 +2636,83 @@ function WorkflowBuilder({
           </div>
         </div>
       </div>
+
+      {nodeEditTarget && nodeEditInitialForm ? (
+        <div className="fixed inset-0 z-[85] flex items-start justify-center overflow-y-auto bg-background/90 px-3 py-6 backdrop-blur-[2px] dark:bg-black/75">
+          <div className="flex max-h-[calc(100vh-48px)] w-full max-w-3xl flex-col overflow-hidden border border-border bg-card shadow-2xl">
+            <div className="flex shrink-0 items-start justify-between border-b border-border px-4 py-3">
+              <div>
+                <p className="text-[14px] font-mono uppercase tracking-[0.12em] text-app-accent-ink">Edit Sumber Job</p>
+                <p className="mt-1 text-[13px] text-muted-foreground">{nodeEditTarget.sourceLabel ?? nodeEditTarget.typeLabel}</p>
+              </div>
+              <button type="button" onClick={() => { setNodeEditTarget(null); setNodeEditInitialForm(null); }} className="flex h-8 w-8 items-center justify-center border border-border text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>
+            </div>
+            <WorkflowJobCreateForm
+              context={workflowJobContext}
+              references={countdownReferences}
+              allowedTypes={[nodeEditType]}
+              defaultType={nodeEditType}
+              initialForm={nodeEditInitialForm}
+              submitLabel="Simpan"
+              isSaving={isSavingNodeEdit}
+              onSavingChange={setIsSavingNodeEdit}
+              onCancel={() => { setNodeEditTarget(null); setNodeEditInitialForm(null); }}
+              onSubmit={handleNodeEditSubmit}
+            />
+          </div>
+        </div>
+      ) : null}
+
+      {jobPlanDraftNode ? (
+        <div className="fixed inset-0 z-[85] flex items-start justify-center overflow-y-auto bg-background/90 px-3 py-6 backdrop-blur-[2px] dark:bg-black/75">
+          <div className="w-full max-w-lg border border-border bg-card shadow-2xl">
+            <div className="flex items-start justify-between border-b border-border px-4 py-3">
+              <div>
+                <p className="text-[14px] font-mono uppercase tracking-[0.12em] text-app-accent-ink">Draft Job-Plan</p>
+                <p className="mt-1 text-[15px] text-foreground">{jobPlanDraftNode.title}</p>
+                <p className="mt-0.5 text-[13px] text-muted-foreground">{node.label}</p>
+              </div>
+              <button type="button" onClick={() => setJobPlanDraftNode(null)} className="flex h-8 w-8 items-center justify-center border border-border text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>
+            </div>
+            <div className="grid gap-3 p-4">
+              <label className="space-y-1.5">
+                <span className="text-[13px] font-mono uppercase tracking-[0.1em] text-muted-foreground">PIC</span>
+                <SearchableField
+                  value={jobPlanDraftForm.assignedUserId}
+                  options={jobPlanEmployeeSearchOptions}
+                  onChange={(assignedUserId) => setJobPlanDraftForm((current) => ({ ...current, assignedUserId }))}
+                  placeholder={node.divisionName ? `PIC ${node.divisionName}` : "Pilih PIC"}
+                  heightClassName="h-10"
+                  menuZClassName="z-[90]"
+                  maxVisibleOptions={5}
+                />
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="space-y-1.5">
+                  <span className="text-[13px] font-mono uppercase tracking-[0.1em] text-muted-foreground">Tanggal</span>
+                  <input type="date" value={jobPlanDraftForm.taskDate} onChange={(event) => setJobPlanDraftForm((current) => ({ ...current, taskDate: event.target.value }))} className="h-10 w-full border border-border bg-card px-3 text-[14px] text-foreground outline-none focus:border-primary/45" />
+                </label>
+                <label className="space-y-1.5">
+                  <span className="text-[13px] font-mono uppercase tracking-[0.1em] text-muted-foreground">Target Jam</span>
+                  <input value={jobPlanDraftForm.targetHours} onChange={(event) => setJobPlanDraftForm((current) => ({ ...current, targetHours: event.target.value }))} placeholder="01:00" className="h-10 w-full border border-border bg-card px-3 text-[14px] text-foreground outline-none focus:border-primary/45" />
+                </label>
+              </div>
+              <label className="space-y-1.5">
+                <span className="text-[13px] font-mono uppercase tracking-[0.1em] text-muted-foreground">Catatan</span>
+                <textarea value={jobPlanDraftForm.note} onChange={(event) => setJobPlanDraftForm((current) => ({ ...current, note: event.target.value }))} rows={3} className="w-full resize-none border border-border bg-card px-3 py-2 text-[14px] text-foreground outline-none focus:border-primary/45" />
+              </label>
+              <label className="flex items-center gap-2 border border-border px-3 py-2 text-[14px] text-muted-foreground">
+                <input type="checkbox" checked={jobPlanDraftForm.isPriority} onChange={(event) => setJobPlanDraftForm((current) => ({ ...current, isPriority: event.target.checked }))} />
+                Priority
+              </label>
+            </div>
+            <div className="flex justify-end gap-2 border-t border-border px-4 py-3">
+              <button type="button" onClick={() => setJobPlanDraftNode(null)} className="h-9 border border-border px-3 text-[13px] font-mono uppercase tracking-[0.08em] text-muted-foreground hover:text-foreground">Batal</button>
+              <button type="button" disabled={isSavingJobPlanDraft} onClick={() => void handleSaveJobPlanDraft()} className="h-9 border border-primary/30 bg-primary/10 px-3 text-[13px] font-mono uppercase tracking-[0.08em] text-app-accent-ink hover:bg-primary/15 disabled:opacity-50">{isSavingJobPlanDraft ? "Menyimpan..." : "Simpan Draft"}</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {isCreateOpen && isCreateMinimized ? (
         <div className="fixed bottom-4 right-4 z-[80] w-[min(360px,calc(100vw-32px))] border border-border bg-card shadow-2xl">
@@ -2085,7 +2729,7 @@ function WorkflowBuilder({
               <div><p className="text-[15px] font-mono uppercase tracking-[0.12em] text-app-accent-ink">Tambah Sumber Job</p><p className="mt-1 text-[15px] text-foreground">{node.label}</p></div>
               <div className="flex items-center gap-2"><button type="button" onClick={() => setIsCreateMinimized(true)} className="flex h-8 w-8 items-center justify-center border border-border text-muted-foreground hover:text-foreground" title="Minimize"><span className="mb-1 text-lg leading-none">-</span></button><button type="button" onClick={() => { setIsCreateOpen(false); setIsCreateMinimized(false); }} className="flex h-8 w-8 items-center justify-center border border-border text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button></div>
             </div>
-            <WorkflowJobCreateForm context={workflowJobContext} references={countdownReferences} allowedTypes={allowedCreateTypes} isSaving={isCreating} onSavingChange={setIsCreating} onCancel={() => { setIsCreateOpen(false); setIsCreateMinimized(false); }} onCreated={handleCreatedWorkflowJob} />
+            <WorkflowJobCreateForm context={workflowJobContext} references={countdownReferences} allowedTypes={allowedCreateTypes} defaultType={createDefaultType} isSaving={isCreating} onSavingChange={setIsCreating} onCancel={() => { setIsCreateOpen(false); setIsCreateMinimized(false); setPendingCreatePosition(null); }} onCreated={handleCreatedWorkflowJob} />
           </div>
         </div>
       ) : null}

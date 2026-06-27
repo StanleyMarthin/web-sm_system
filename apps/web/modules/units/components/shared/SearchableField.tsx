@@ -6,6 +6,7 @@ import { useState } from "react";
 export interface SearchOption {
   value: string;
   label?: string;
+  dedupeKey?: string;
 }
 
 interface SearchableFieldProps {
@@ -20,6 +21,8 @@ interface SearchableFieldProps {
   iconStrokeWidth?: number;
   closeOnInputBlurDelay?: boolean;
   ariaLabel?: string;
+  maxVisibleOptions?: number;
+  minSearchLength?: number;
 }
 
 export function SearchableField({
@@ -34,13 +37,21 @@ export function SearchableField({
   iconStrokeWidth,
   closeOnInputBlurDelay = false,
   ariaLabel = "Buka pilihan",
+  maxVisibleOptions,
+  minSearchLength = 0,
 }: SearchableFieldProps) {
   const [isOpen, setIsOpen] = useState(false);
   const normalizedValue = value.trim().toLowerCase();
-  const filteredOptions = options.filter((option) => {
-    const searchable = `${option.value} ${option.label ?? ""}`.toLowerCase();
-    return !normalizedValue || searchable.includes(normalizedValue);
-  });
+  const canShowOptions = normalizedValue.length >= minSearchLength;
+  const filteredOptions = canShowOptions
+    ? options.filter((option) => {
+      const searchable = `${option.value} ${option.label ?? ""}`.toLowerCase();
+      return !normalizedValue || searchable.includes(normalizedValue);
+    })
+    : [];
+  const menuStyle = maxVisibleOptions
+    ? { maxHeight: `${maxVisibleOptions * 36 + 8}px` }
+    : undefined;
 
   function chooseOption(option: SearchOption) {
     onChange(option.value);
@@ -82,12 +93,15 @@ export function SearchableField({
         </button>
       </div>
 
-      {isOpen && !disabled ? (
-        <div className={`absolute left-0 right-0 top-[calc(100%+4px)] ${menuZClassName} max-h-44 overflow-auto border border-border bg-card py-1 shadow-xl shadow-black/10 dark:shadow-black/40`}>
+      {isOpen && !disabled && canShowOptions ? (
+        <div
+          className={`absolute left-0 right-0 top-[calc(100%+4px)] ${menuZClassName} ${maxVisibleOptions ? "" : "max-h-44"} overflow-auto border border-border bg-card py-1 shadow-xl shadow-black/10 dark:shadow-black/40`}
+          style={menuStyle}
+        >
           {filteredOptions.length > 0 ? (
             filteredOptions.map((option) => (
               <button
-                key={`${option.value}:${option.label ?? ""}`}
+                key={option.dedupeKey ?? `${option.value}:${option.label ?? ""}`}
                 type="button"
                 onMouseDown={(event) => {
                   event.preventDefault();

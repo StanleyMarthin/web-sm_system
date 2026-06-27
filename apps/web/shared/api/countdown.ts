@@ -97,6 +97,7 @@ export async function fetchCountdownDetail(cookieHeader: string, countdownId: st
             cookie: cookieHeader,
           }
         : undefined,
+      credentials: cookieHeader ? undefined : "include",
       cache: "no-store",
     });
 

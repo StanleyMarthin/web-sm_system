@@ -101,6 +101,7 @@ export async function fetchJobPlanGrid(
             cookie: cookieHeader,
           }
         : undefined,
+      credentials: cookieHeader ? undefined : "include",
       cache: "no-store",
     });
 

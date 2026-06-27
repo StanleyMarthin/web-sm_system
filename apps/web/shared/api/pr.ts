@@ -79,6 +79,7 @@ export async function fetchPrGrid(
             cookie: cookieHeader,
           }
         : undefined,
+      credentials: cookieHeader ? undefined : "include",
       cache: "no-store",
     });
 
@@ -170,6 +171,30 @@ export async function fetchPrDetail(cookieHeader: string, prId: string) {
 export async function createPr(input: CreatePrRequest) {
   const response = await fetch(`${getApiBaseUrl()}/api/pr`, {
     method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(input),
+  });
+
+  if (!response.ok) {
+    return {
+      ...(await parseFailure(response)),
+      success: false as const,
+    };
+  }
+
+  const payload = prMutationEnvelopeSchema.parse(await response.json());
+  return {
+    success: true as const,
+    result: payload.data,
+  };
+}
+
+export async function updatePr(prId: string, input: CreatePrRequest) {
+  const response = await fetch(`${getApiBaseUrl()}/api/pr/${prId}`, {
+    method: "PUT",
     credentials: "include",
     headers: {
       "Content-Type": "application/json",

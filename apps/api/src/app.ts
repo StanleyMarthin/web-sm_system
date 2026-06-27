@@ -56,6 +56,7 @@ import {
   handleUnitDetailRoute,
   handleUnitPanelCategoryRoute,
   handleUnitPanelDetailRoute,
+  handleUnitPanelGeneralRoute,
   handleUnitPanelsRoute,
   handleUnitWorkspaceRoute,
   handleUnitsListRoute,
@@ -127,6 +128,7 @@ import {
   handleWoMyDivisionRoute,
   handleWoPendingApprovalRoute,
   handleWoRejectRoute,
+  handleWoUpdateRoute,
   handleWoUrgentRoute,
 } from "@/routes/wo.routes";
 import {
@@ -143,6 +145,7 @@ import {
   handlePrOrderRoute,
   handlePrReceiveRoute,
   handlePrUploadTicketRoute,
+  handlePrUpdateRoute,
 } from "@/routes/pr.routes";
 import {
   DefaultPrService,
@@ -267,6 +270,7 @@ import {
   handleVendorListRoute,
   handleVendorReceiveRoute,
   handleVendorStatusRoute,
+  handleVendorUpdateRoute,
 } from "@/routes/vendor.routes";
 import {
   DefaultVendorService,
@@ -1791,6 +1795,15 @@ export function createApiFetchHandler(dependencies: AppDependencies = {}) {
     }
 
     const woMatch = url.pathname.match(/^\/api\/wo\/([^/]+)$/);
+    if (woMatch && request.method === "PUT") {
+      return handleWoUpdateRoute(
+        request,
+        woMatch[1],
+        getAuthService(),
+        getWoService(),
+      );
+    }
+
     if (woMatch && request.method === "GET") {
       return handleWoDetailRoute(
         request,
@@ -1821,6 +1834,15 @@ export function createApiFetchHandler(dependencies: AppDependencies = {}) {
     }
 
     const prMatch = url.pathname.match(/^\/api\/pr\/([^/]+)$/);
+    if (prMatch && request.method === "PUT") {
+      return handlePrUpdateRoute(
+        request,
+        prMatch[1],
+        getAuthService(),
+        getPrService(),
+      );
+    }
+
     if (prMatch && request.method === "GET") {
       return handlePrDetailRoute(
         request,
@@ -1871,6 +1893,15 @@ export function createApiFetchHandler(dependencies: AppDependencies = {}) {
     }
 
     const vendorMatch = url.pathname.match(/^\/api\/vendor\/([^/]+)$/);
+    if (vendorMatch && request.method === "PUT") {
+      return handleVendorUpdateRoute(
+        request,
+        vendorMatch[1],
+        getAuthService(),
+        getVendorService(),
+      );
+    }
+
     if (vendorMatch && request.method === "GET") {
       return handleVendorDetailRoute(
         request,
@@ -2190,6 +2221,14 @@ export function createApiFetchHandler(dependencies: AppDependencies = {}) {
       return handleUnitBomRoute(
         request,
         unitId,
+        getAuthService(),
+        getUnitsService(),
+      );
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/units/master-panels/general") {
+      return handleUnitPanelGeneralRoute(
+        request,
         getAuthService(),
         getUnitsService(),
       );

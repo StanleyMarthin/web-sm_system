@@ -219,6 +219,37 @@ export async function handlePrCreateRoute(
   }
 }
 
+export async function handlePrUpdateRoute(
+  request: Request,
+  prId: string,
+  authService: AuthService,
+  prService: PrService,
+): Promise<Response> {
+  const sessionResult = await requirePrSession(request, authService, permissionCodes.prCreate);
+  if ("response" in sessionResult) {
+    return sessionResult.response;
+  }
+
+  const bodyResult = await parseJsonBody(request, createPrRequestSchema);
+  if (!bodyResult.success) {
+    return withCors(request, bodyResult.response);
+  }
+
+  try {
+    const result = await prService.update(sessionResult.session, prId, bodyResult.data);
+    return withCors(
+      request,
+      Response.json({
+        success: true,
+        message: "PR berhasil diperbarui.",
+        data: result,
+      }),
+    );
+  } catch (error) {
+    return mapPrError(request, error);
+  }
+}
+
 export async function handlePrDetailRoute(
   request: Request,
   prId: string,

@@ -361,6 +361,24 @@ export async function handleUnitPanelsRoute(
   }
 }
 
+export async function handleUnitPanelGeneralRoute(
+  request: Request,
+  authService: AuthService,
+  unitsService: UnitsService,
+): Promise<Response> {
+  const sessionResult = await requireUnitPanelManageSession(request, authService);
+  if ("response" in sessionResult) {
+    return sessionResult.response;
+  }
+
+  try {
+    const panels = await unitsService.getGeneralUnitPanels(sessionResult.session);
+    return successResponse(request, "Master panel general ready", panels);
+  } catch (error) {
+    return mapUnitsError(request, error);
+  }
+}
+
 export async function handleUnitPanelDetailRoute(
   request: Request,
   unitId: string,

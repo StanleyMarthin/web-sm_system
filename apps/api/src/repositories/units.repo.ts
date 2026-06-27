@@ -19,6 +19,8 @@ import type {
 } from "@smsystem/contracts/unit-bom";
 import type {
   CreateUnitPanelRequest,
+  UnitPanelGeneralCollection,
+  UnitPanelGeneralRecord,
   UnitPanelCollection,
   UnitPanelRecord,
   UpdateUnitPanelRequest,
@@ -136,6 +138,9 @@ interface BomPanelRow extends RowDataPacket {
   qcLastStatus: "LOLOS" | "TIDAK_LOLOS" | null;
   deadlineDate: string | null;
   countRevisi: number | null;
+  activeCountdownId: string | null;
+  activeJobName: string | null;
+  activeTargetHours: number | null;
   currentDivisionName: string | null;
 }
 
@@ -172,6 +177,7 @@ interface BomVendorRow extends RowDataPacket {
 }
 
 interface BomTimelineRow extends RowDataPacket {
+  countdownId: string;
   panelId: number;
   occurredAt: string | null;
   jobName: string | null;
@@ -194,6 +200,7 @@ interface UnitPanelRow extends RowDataPacket {
   id: number;
   carId: string;
   parentId: number | null;
+  sourceGeneralId: number | null;
   section: string;
   name: string;
   category: string | null;
@@ -210,6 +217,20 @@ interface UnitPanelRow extends RowDataPacket {
   updatedAt: string | null;
 }
 
+interface UnitPanelGeneralRow extends RowDataPacket {
+  id: number;
+  parentId: number | null;
+  section: string;
+  name: string;
+  category: string | null;
+  isActive: number | boolean | null;
+  sortOrder: number | null;
+  defaultDivisionId: number | null;
+  childCount: number | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
 interface MasterPanelInventorySchemaRow extends RowDataPacket {
   columnName: string;
 }
@@ -219,6 +240,7 @@ interface MasterPanelInventorySchema {
   hasDefaultLocationType: boolean;
   hasDefaultStockStatus: boolean;
   hasDefaultConditionType: boolean;
+  hasSourceGeneralId: boolean;
 }
 
 function mapTinyIntBoolean(value: unknown): boolean {
@@ -284,6 +306,9 @@ interface BomFlatPart {
   qcLastStatus: "LOLOS" | "TIDAK_LOLOS" | null;
   deadlineDate: string | null;
   countRevisi: number | null;
+  activeCountdownId: string | null;
+  activeJobName: string | null;
+  activeTargetHours: number | null;
   isLocked: boolean;
   currentDivisionName: string | null;
   detail: UnitBomPartDetail;
@@ -416,6 +441,7 @@ function mapUnitPanelRecord(row: UnitPanelRow): UnitPanelRecord {
   return {
     id: Number(row.id),
     carId: row.carId,
+    sourceGeneralId: row.sourceGeneralId === null ? null : Number(row.sourceGeneralId),
     parentId: row.parentId === null ? null : Number(row.parentId),
     nodeType: row.parentId === null ? "PANEL" : "PART",
     section: row.section,
@@ -434,6 +460,45 @@ function mapUnitPanelRecord(row: UnitPanelRow): UnitPanelRecord {
     updatedAt: row.updatedAt,
     children: [],
   };
+}
+
+function mapUnitPanelGeneralRecord(row: UnitPanelGeneralRow): UnitPanelGeneralRecord {
+  return {
+    id: Number(row.id),
+    parentId: row.parentId === null ? null : Number(row.parentId),
+    nodeType: row.parentId === null ? "PANEL" : "PART",
+    section: row.section,
+    name: row.name,
+    category: toNullableText(row.category),
+    isActive: mapTinyIntBoolean(row.isActive),
+    sortOrder: Number(row.sortOrder ?? 0),
+    defaultDivisionId: row.defaultDivisionId === null ? null : Number(row.defaultDivisionId),
+    childCount: Number(row.childCount ?? 0),
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    children: [],
+  };
+}
+
+function buildUnitPanelGeneralTree(rows: UnitPanelGeneralRow[]): UnitPanelGeneralRecord[] {
+  const recordMap = new Map<number, UnitPanelGeneralRecord>();
+  for (const row of rows) {
+    recordMap.set(Number(row.id), mapUnitPanelGeneralRecord(row));
+  }
+
+  const roots: UnitPanelGeneralRecord[] = [];
+  for (const row of rows) {
+    const record = recordMap.get(Number(row.id));
+    if (!record) continue;
+    if (row.parentId === null) {
+      roots.push(record);
+      continue;
+    }
+    const parent = recordMap.get(Number(row.parentId));
+    if (parent) parent.children.push(record);
+    else roots.push(record);
+  }
+  return roots;
 }
 
 function buildUnitPanelTree(rows: UnitPanelRow[]): UnitPanelRecord[] {
@@ -563,6 +628,7 @@ function buildTimeline(row: BomPanelRow, jobRows: BomTimelineRow[]): UnitBomTime
   const events: UnitBomTimelineItem[] = [];
   if (row.divisionName) {
     events.push({
+      countdownId: null,
       eventType: "HANDOVER",
       title: "Pendataan awal",
       description: `Didata untuk ${row.divisionName}`,
@@ -578,6 +644,7 @@ function buildTimeline(row: BomPanelRow, jobRows: BomTimelineRow[]): UnitBomTime
     const actorName = job.employeeName?.trim() || null;
     const statusLabel = humanizeWorkStatus(job.statusLabel, job.progressPercent);
     events.push({
+      countdownId: job.countdownId,
       eventType: "JOB_PLAN",
       title: job.jobName?.trim() || "Pekerjaan job plan",
       description: `${job.jobDescription?.trim() || "Pekerjaan panel"}${actorName ? ` oleh ${actorName}` : ""}${hourText} - ${statusLabel}`,
@@ -589,6 +656,7 @@ function buildTimeline(row: BomPanelRow, jobRows: BomTimelineRow[]): UnitBomTime
 
   if (Number(row.progressPercent ?? 0) >= 100) {
     events.push({
+      countdownId: null,
       eventType: "QC",
       title: "Pemeriksaan akhir",
       description: "Progress part sudah selesai",
@@ -714,6 +782,9 @@ function buildBomTree(parts: BomFlatPart[]): UnitBomWorkspace["tree"] {
               qcLastStatus: part.qcLastStatus,
               deadlineDate: part.deadlineDate,
               countRevisi: part.countRevisi,
+              activeCountdownId: part.activeCountdownId,
+              activeJobName: part.activeJobName,
+              activeTargetHours: part.activeTargetHours,
               isLocked: part.isLocked,
               currentDivisionName: part.currentDivisionName,
               detail: part.detail,
@@ -905,7 +976,8 @@ export class UnitsRepository {
                 'qty',
                 'default_location_type',
                 'default_stock_status',
-                'default_condition_type'
+                'default_condition_type',
+                'source_general_id'
               )
           `,
         )
@@ -916,6 +988,7 @@ export class UnitsRepository {
             hasDefaultLocationType: columns.has("default_location_type"),
             hasDefaultStockStatus: columns.has("default_stock_status"),
             hasDefaultConditionType: columns.has("default_condition_type"),
+            hasSourceGeneralId: columns.has("source_general_id"),
           };
         });
     }
@@ -1386,6 +1459,17 @@ export class UnitsRepository {
               ) AS qcLastStatus,
               DATE_FORMAT(MIN(cd.deadline_date), '%Y-%m-%d') AS deadlineDate,
               MAX(cd.count_revisi) AS countRevisi,
+              SUBSTRING_INDEX(
+                GROUP_CONCAT(cd.id ORDER BY cd.updated_at DESC SEPARATOR ','),
+                ',',
+                1
+              ) AS activeCountdownId,
+              SUBSTRING_INDEX(
+                GROUP_CONCAT(COALESCE(panel_jt.job_name, cd.section_name, mp.name) ORDER BY cd.updated_at DESC SEPARATOR ','),
+                ',',
+                1
+              ) AS activeJobName,
+              ROUND(MAX(COALESCE(cd.target_hours_revised, cd.target_hours_initial + cd.time_extension_hours, cd.target_hours_initial, 0)), 2) AS activeTargetHours,
               MAX(
                 CASE
                   WHEN COALESCE(cd.status, 'PLAN') = 'DONE' OR COALESCE(cd.actual_progress_percent, 0) >= 100
@@ -1454,6 +1538,7 @@ export class UnitsRepository {
             LEFT JOIN sm_jobdesc_countdown cd
               ON cd.car_id = mp.car_id
              AND cd.panel_id = mp.id
+            LEFT JOIN master_job_types panel_jt ON panel_jt.id = cd.job_type_id
             WHERE mp.car_id = ?
               AND COALESCE(mp.is_active, 1) = 1
             GROUP BY
@@ -1558,6 +1643,7 @@ export class UnitsRepository {
         pool.query<BomTimelineRow[]>(
           `
             SELECT
+              cd.id AS countdownId,
               cd.panel_id AS panelId,
               DATE_FORMAT(COALESCE(a.finish_time, a.start_time, a.created_at, p.task_date, cd.updated_at, cd.start_date, cd.deadline_date), '%Y-%m-%d %H:%i:%s') AS occurredAt,
               COALESCE(mjt.job_name, cd.section_name, 'Job Plan') AS jobName,
@@ -1766,6 +1852,9 @@ export class UnitsRepository {
         qcLastStatus: row.qcLastStatus,
         deadlineDate: row.deadlineDate,
         countRevisi: row.countRevisi === null ? null : Number(row.countRevisi),
+        activeCountdownId: row.activeCountdownId,
+        activeJobName: row.activeJobName,
+        activeTargetHours: row.activeTargetHours === null ? null : Number(row.activeTargetHours),
         isLocked: Number(row.isLocked ?? 0) > 0,
         currentDivisionName: row.currentDivisionName,
         detail: {
@@ -1800,11 +1889,13 @@ export class UnitsRepository {
     const locationSelect = schema.hasDefaultLocationType ? "COALESCE(mp.default_location_type, 'UNIT')" : "'UNIT'";
     const stockStatusSelect = schema.hasDefaultStockStatus ? "COALESCE(mp.default_stock_status, 'INSTALLED')" : "'INSTALLED'";
     const conditionSelect = schema.hasDefaultConditionType ? "COALESCE(mp.default_condition_type, 'BEKAS')" : "'BEKAS'";
+    const sourceGeneralSelect = schema.hasSourceGeneralId ? "mp.source_general_id" : "NULL";
     const inventoryGroupBy = [
       schema.hasQty ? "mp.qty" : null,
       schema.hasDefaultLocationType ? "mp.default_location_type" : null,
       schema.hasDefaultStockStatus ? "mp.default_stock_status" : null,
       schema.hasDefaultConditionType ? "mp.default_condition_type" : null,
+      schema.hasSourceGeneralId ? "mp.source_general_id" : null,
     ].filter(Boolean);
 
     const [rows] = await pool.query<UnitPanelRow[]>(
@@ -1813,6 +1904,7 @@ export class UnitsRepository {
           mp.id,
           mp.car_id AS carId,
           mp.parent_id AS parentId,
+          ${sourceGeneralSelect} AS sourceGeneralId,
           mp.section,
           mp.name,
           mp.category,
@@ -1867,11 +1959,13 @@ export class UnitsRepository {
     const locationSelect = schema.hasDefaultLocationType ? "COALESCE(mp.default_location_type, 'UNIT')" : "'UNIT'";
     const stockStatusSelect = schema.hasDefaultStockStatus ? "COALESCE(mp.default_stock_status, 'INSTALLED')" : "'INSTALLED'";
     const conditionSelect = schema.hasDefaultConditionType ? "COALESCE(mp.default_condition_type, 'BEKAS')" : "'BEKAS'";
+    const sourceGeneralSelect = schema.hasSourceGeneralId ? "mp.source_general_id" : "NULL";
     const inventoryGroupBy = [
       schema.hasQty ? "mp.qty" : null,
       schema.hasDefaultLocationType ? "mp.default_location_type" : null,
       schema.hasDefaultStockStatus ? "mp.default_stock_status" : null,
       schema.hasDefaultConditionType ? "mp.default_condition_type" : null,
+      schema.hasSourceGeneralId ? "mp.source_general_id" : null,
     ].filter(Boolean);
 
     const [rows] = await pool.query<UnitPanelRow[]>(
@@ -1880,6 +1974,7 @@ export class UnitsRepository {
           mp.id,
           mp.car_id AS carId,
           mp.parent_id AS parentId,
+          ${sourceGeneralSelect} AS sourceGeneralId,
           mp.section,
           mp.name,
           mp.category,
@@ -1927,6 +2022,52 @@ export class UnitsRepository {
       unitId: params.unitId,
       tree: buildUnitPanelTree(rows),
     };
+  }
+
+  async findGeneralUnitPanels(params: ScopeParams): Promise<UnitPanelGeneralCollection> {
+    if (!params.scope.canViewAllUnits && !params.scope.canViewAssignedUnits && params.scope.divisionIds.length === 0) {
+      throw new Error("SCOPE_FORBIDDEN");
+    }
+
+    const pool = this.poolFactory();
+    const [rows] = await pool.query<UnitPanelGeneralRow[]>(
+      `
+        SELECT
+          gp.id,
+          gp.parent_id AS parentId,
+          gp.section,
+          gp.name,
+          gp.category,
+          COALESCE(gp.is_active, 1) AS isActive,
+          COALESCE(gp.sort_order, 0) AS sortOrder,
+          gp.default_division_id AS defaultDivisionId,
+          COUNT(DISTINCT child.id) AS childCount,
+          DATE_FORMAT(gp.created_at, '%Y-%m-%d %H:%i:%s') AS createdAt,
+          DATE_FORMAT(gp.updated_at, '%Y-%m-%d %H:%i:%s') AS updatedAt
+        FROM master_panels_general gp
+        LEFT JOIN master_panels_general child ON child.parent_id = gp.id
+        WHERE COALESCE(gp.is_active, 1) = 1
+        GROUP BY
+          gp.id,
+          gp.parent_id,
+          gp.section,
+          gp.name,
+          gp.category,
+          gp.is_active,
+          gp.sort_order,
+          gp.default_division_id,
+          gp.created_at,
+          gp.updated_at
+        ORDER BY
+          COALESCE(gp.parent_id, gp.id) ASC,
+          CASE WHEN gp.parent_id IS NULL THEN 0 ELSE 1 END ASC,
+          COALESCE(gp.sort_order, 0) ASC,
+          gp.section ASC,
+          gp.name ASC
+      `,
+    );
+
+    return { tree: buildUnitPanelGeneralTree(rows) };
   }
 
   private async assertUnitPanelNotDuplicate(
@@ -2015,12 +2156,14 @@ export class UnitsRepository {
       schema.hasDefaultLocationType ? "default_location_type" : null,
       schema.hasDefaultStockStatus ? "default_stock_status" : null,
       schema.hasDefaultConditionType ? "default_condition_type" : null,
+      schema.hasSourceGeneralId ? "source_general_id" : null,
     ].filter(Boolean);
     const inventoryValues = [
       schema.hasQty ? input.qty : undefined,
       schema.hasDefaultLocationType ? input.defaultLocationType : undefined,
       schema.hasDefaultStockStatus ? input.defaultStockStatus : undefined,
       schema.hasDefaultConditionType ? input.defaultConditionType : undefined,
+      schema.hasSourceGeneralId ? input.sourceGeneralId ?? null : undefined,
     ].filter((value) => value !== undefined);
 
     const [result] = await pool.execute<ResultSetHeader>(
@@ -2301,17 +2444,10 @@ export class UnitsRepository {
       return;
     }
 
-    const [entryRows] = await pool.query<Array<RowDataPacket & { nextEntryNo: number }>>(
-      `SELECT COALESCE(MAX(entry_no), 0) + 1 AS nextEntryNo FROM ${stockCardTable} WHERE car_id = ?`,
-      [params.unitId],
-    );
-    const entryNo = Number(entryRows[0]?.nextEntryNo ?? 1);
-
     await pool.execute(
       `
         INSERT INTO ${stockCardTable} (
           id,
-          entry_no,
           car_id,
           car_name,
           part_code,
@@ -2327,11 +2463,10 @@ export class UnitsRepository {
           is_labeled,
           created_at,
           updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, CURRENT_DATE, ?, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, CURRENT_DATE, ?, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       `,
       [
         randomUUID(),
-        entryNo,
         params.unitId,
         unitSummary.unitName,
         partCode,

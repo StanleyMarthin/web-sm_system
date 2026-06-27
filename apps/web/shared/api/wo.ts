@@ -77,6 +77,7 @@ export async function fetchWoGrid(
             cookie: cookieHeader,
           }
         : undefined,
+      credentials: cookieHeader ? undefined : "include",
       cache: "no-store",
     });
 
@@ -167,6 +168,30 @@ export async function fetchWoUrgent(cookieHeader: string) {
 export async function createWo(input: WoCreateRequest) {
   const response = await fetch(`${getApiBaseUrl()}/api/wo`, {
     method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(input),
+  });
+
+  if (!response.ok) {
+    return {
+      ...(await parseFailure(response)),
+      success: false as const,
+    };
+  }
+
+  const payload = woMutationEnvelopeSchema.parse(await response.json());
+  return {
+    success: true as const,
+    result: payload.data,
+  };
+}
+
+export async function updateWo(woId: string, input: WoCreateRequest) {
+  const response = await fetch(`${getApiBaseUrl()}/api/wo/${woId}`, {
+    method: "PUT",
     credentials: "include",
     headers: {
       "Content-Type": "application/json",

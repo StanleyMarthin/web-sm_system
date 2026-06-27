@@ -372,6 +372,7 @@ export interface VendorRepository {
   list(params: VendorListParams): Promise<{ rows: VendorRecord[]; total: number; summary: VendorSummary }>;
   listReferences(params: ScopeParams): Promise<VendorGridReference>;
   create(context: CreateVendorContext, input: CreateVendorRequest): Promise<VendorMutationResult>;
+  update(wovId: string, input: CreateVendorRequest): Promise<VendorMutationResult>;
   findById(params: ScopeParams & { wovId: string }): Promise<{ ticket: VendorRecord } | null>;
   advanceApproval(wovId: string, notes: string | null): Promise<VendorMutationResult>;
   updateStatus(wovId: string, input: VendorStatusUpdateRequest): Promise<VendorMutationResult>;
@@ -645,6 +646,50 @@ export class MySqlVendorRepository implements VendorRepository {
     } finally {
       connection.release();
     }
+  }
+
+  async update(wovId: string, input: CreateVendorRequest): Promise<VendorMutationResult> {
+    const item = input.items?.[0];
+    const pool = this.poolFactory(this.env);
+    const [result] = await pool.execute(
+      `
+        UPDATE ${qualifyTable(this.env.PURCHASE_DB_NAME, "vnd_wo_vendor")}
+        SET car_id = ?,
+            core_id = ?,
+            pr_id = ?,
+            vendor_id = ?,
+            vendor_name = ?,
+            pic_vendor = ?,
+            item_name = ?,
+            quantity = ?,
+            uom = ?,
+            goods_condition_out = ?,
+            target_date_return = ?,
+            estimated_cost = ?,
+            remarks = ?
+        WHERE id = ?
+      `,
+      [
+        input.carId,
+        input.coreId ?? null,
+        input.prId ?? null,
+        input.vendorId ?? null,
+        input.vendorName,
+        input.picVendor ?? null,
+        item?.itemName ?? input.itemName ?? "",
+        item?.quantity ?? input.quantity ?? null,
+        item?.uom ?? input.uom ?? null,
+        item?.goodsConditionOut ?? input.goodsConditionOut ?? null,
+        input.targetDateReturn ?? null,
+        item?.estimatedCost ?? input.estimatedCost ?? null,
+        input.remarks ?? null,
+        wovId,
+      ],
+    );
+    if ("affectedRows" in result && Number(result.affectedRows) === 0) {
+      throw new Error("VENDOR_WO_NOT_FOUND");
+    }
+    return { wovId, accTracking: "PENDING_ADV", status: "OPEN" };
   }
 
   async findById(params: ScopeParams & { wovId: string }): Promise<{ ticket: VendorRecord } | null> {

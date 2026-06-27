@@ -78,6 +78,7 @@ export async function fetchVendorGrid(
             cookie: cookieHeader,
           }
         : undefined,
+      credentials: cookieHeader ? undefined : "include",
       cache: "no-store",
     });
 
@@ -133,6 +134,30 @@ export async function fetchVendorDetail(cookieHeader: string, wovId: string) {
 export async function createVendor(input: CreateVendorRequest) {
   const response = await fetch(`${getApiBaseUrl()}/api/vendor`, {
     method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(input),
+  });
+
+  if (!response.ok) {
+    return {
+      ...(await parseFailure(response)),
+      success: false as const,
+    };
+  }
+
+  const payload = vendorMutationEnvelopeSchema.parse(await response.json());
+  return {
+    success: true as const,
+    result: payload.data,
+  };
+}
+
+export async function updateVendor(wovId: string, input: CreateVendorRequest) {
+  const response = await fetch(`${getApiBaseUrl()}/api/vendor/${wovId}`, {
+    method: "PUT",
     credentials: "include",
     headers: {
       "Content-Type": "application/json",

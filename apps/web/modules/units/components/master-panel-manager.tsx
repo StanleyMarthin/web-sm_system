@@ -1,12 +1,13 @@
 "use client";
 
-import type { UnitPanelRecord } from "@smsystem/contracts/unit-panel";
+import type { UnitPanelGeneralRecord, UnitPanelRecord } from "@smsystem/contracts/unit-panel";
 import { ArrowUpRight, Boxes, ChevronDown, ChevronRight, Plus, RefreshCw, Search } from "lucide-react";
 import Link from "next/link";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   createUnitPanel,
   deleteUnitPanel,
+  fetchUnitPanelGeneralTemplates,
   fetchUnitPanels,
   updateUnitPanel,
 } from "@/shared/api/units";
@@ -26,6 +27,39 @@ import { SearchableField, type SearchOption } from "./shared/SearchableField";
 const PAGE_SIZE = 20;
 const ICON_STROKE_WIDTH = 2.5;
 
+function displayCategory(value: string | null | undefined): string {
+  return value?.trim() || "Lainnya";
+}
+
+function optionKey(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function flattenGeneralPanelRecords(rows: UnitPanelGeneralRecord[]): UnitPanelGeneralRecord[] {
+  const records: UnitPanelGeneralRecord[] = [];
+  for (const row of rows) {
+    records.push(row);
+    records.push(...flattenGeneralPanelRecords(row.children));
+  }
+  return records;
+}
+
+function panelRecordOptionKey(record: Pick<UnitPanelRecord | UnitPanelGeneralRecord, "nodeType" | "category" | "section" | "name">): string {
+  return `${record.nodeType}:${optionKey(displayCategory(record.category))}:${optionKey(record.section)}:${optionKey(record.name)}`;
+}
+
+function mergeOptions(unitOptions: SearchOption[], generalOptions: SearchOption[]): SearchOption[] {
+  const seen = new Set<string>();
+  const merged: SearchOption[] = [];
+  for (const option of [...unitOptions, ...generalOptions]) {
+    const key = option.dedupeKey ?? `${optionKey(option.value)}:${optionKey(option.label ?? "")}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(option);
+  }
+  return merged;
+}
+
 type FormMode =
   | { type: "create"; sectionMode: "existing" | "new" }
   | { type: "edit"; record: UnitPanelRecord }
@@ -43,6 +77,7 @@ function buildPanelDetailHref(unitId: string, recordId: number): string {
 
 export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPanelManagerProps) {
   const [rows, setRows] = useState<UnitPanelRecord[]>(() => initialRows ?? []);
+  const [generalRows, setGeneralRows] = useState<UnitPanelGeneralRecord[]>([]);
   const [isLoading, setIsLoading] = useState(() => initialRows === undefined);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -55,6 +90,21 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
   const [search, setSearch] = useState<string>("");
   const [currentPage, setCurrentPage] = useState(1);
   const [expandedPanelIds, setExpandedPanelIds] = useState<Set<string>>(new Set());
+  const flatGeneralRecords = useMemo(() => flattenGeneralPanelRecords(generalRows), [generalRows]);
+
+  useEffect(() => {
+    if (!canManage) return;
+
+    let cancelled = false;
+    void fetchUnitPanelGeneralTemplates("").then((result) => {
+      if (cancelled) return;
+      setGeneralRows(result.payload?.data.tree ?? []);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [canManage]);
 
   const categories = useMemo(() => {
     const cats = new Set<string>();
@@ -63,6 +113,14 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
     }
     return ["ALL", ...Array.from(cats).sort()];
   }, [rows]);
+
+  const generalCategories = useMemo(() => {
+    const cats = new Set<string>();
+    for (const row of flatGeneralRecords) {
+      cats.add(displayCategory(row.category));
+    }
+    return Array.from(cats).sort();
+  }, [flatGeneralRecords]);
 
   const sections = useMemo(() => {
     const secs = new Set<string>();
@@ -78,9 +136,17 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
     return rows.filter(row => (row.category ?? "") === form.category);
   }, [rows, form.category]);
 
+  const generalRowsInSelectedCategory = useMemo(() => {
+    return flatGeneralRecords.filter(row => displayCategory(row.category) === form.category);
+  }, [flatGeneralRecords, form.category]);
+
   const formSections = useMemo(() => {
     return Array.from(new Set(rowsInSelectedCategory.map(row => row.section))).sort();
   }, [rowsInSelectedCategory]);
+
+  const generalFormSections = useMemo(() => {
+    return Array.from(new Set(generalRowsInSelectedCategory.map(row => row.section))).sort();
+  }, [generalRowsInSelectedCategory]);
 
   const panelsBySelectedSection = useMemo(() => {
     return rows.filter(row =>
@@ -96,8 +162,15 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
 
   const parentPanelValue = selectedParentPanel?.name ?? form.parentName;
   const sectionOptions = useMemo<SearchOption[]>(
-    () => formSections.map(section => ({ value: section })),
-    [formSections],
+    () => mergeOptions(
+      formSections.map(section => ({ value: section, dedupeKey: `${optionKey(form.category)}:${optionKey(section)}` })),
+      generalFormSections.map(section => ({
+        value: section,
+        label: "GENERAL",
+        dedupeKey: `${optionKey(form.category)}:${optionKey(section)}`,
+      })),
+    ),
+    [form.category, formSections, generalFormSections],
   );
   const parentPanelOptions = useMemo<SearchOption[]>(
     () => panelsBySelectedSection.map(panel => ({
@@ -107,11 +180,32 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
     [panelsBySelectedSection],
   );
   const categoryOptions = useMemo<SearchOption[]>(
-    () => categories
-      .filter(category => category !== "ALL")
-      .map(category => ({ value: category })),
-    [categories],
+    () => mergeOptions(
+      categories
+        .filter(category => category !== "ALL")
+        .map(category => ({ value: category, dedupeKey: optionKey(category) })),
+      generalCategories.map(category => ({ value: category, label: "GENERAL", dedupeKey: optionKey(category) })),
+    ),
+    [categories, generalCategories],
   );
+  const nameOptions = useMemo<SearchOption[]>(() => {
+    const unitOptions = rows
+      .flatMap(row => [row, ...row.children])
+      .filter(record => record.nodeType === form.nodeType)
+      .map(record => ({
+        value: record.name,
+        label: [displayCategory(record.category), record.section, "UNIT"].filter(Boolean).join(" > "),
+        dedupeKey: panelRecordOptionKey(record),
+      }));
+    const generalOptions = flatGeneralRecords
+      .filter(record => record.nodeType === form.nodeType)
+      .map(record => ({
+        value: record.name,
+        label: [displayCategory(record.category), record.section, "GENERAL"].filter(Boolean).join(" > "),
+        dedupeKey: panelRecordOptionKey(record),
+      }));
+    return mergeOptions(unitOptions, generalOptions);
+  }, [flatGeneralRecords, form.nodeType, rows]);
 
   const filteredRows = useMemo(() => {
     return rows.filter(row => {
@@ -234,7 +328,15 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
 
     const nextType = normalized === "part" ? "PART" : "PANEL";
     if (nextType === "PANEL") {
-      setForm(c => ({ ...c, nodeType: "PANEL", nodeTypeName: value, parentId: "", parentName: "" }));
+      setForm(c => ({
+        ...c,
+        nodeType: "PANEL",
+        nodeTypeName: value,
+        parentId: "",
+        parentName: "",
+        sourceGeneralId: "",
+        generalTemplateName: "",
+      }));
       return;
     }
 
@@ -244,6 +346,8 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
       nodeTypeName: value,
       parentId: "",
       parentName: "",
+      sourceGeneralId: "",
+      generalTemplateName: "",
     }));
   }
 
@@ -275,6 +379,45 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
       parentName: value,
       section: panel?.section ?? c.section,
       category: panel?.category ?? c.category,
+    }));
+  }
+
+  function selectNameSuggestion(option: SearchOption) {
+    const unitRecords = rows.flatMap(row => [row, ...row.children]);
+    const unitRecord = unitRecords.find(
+      record => record.nodeType === form.nodeType && panelRecordOptionKey(record) === option.dedupeKey,
+    );
+    if (unitRecord) {
+      setForm(c => ({
+        ...c,
+        sourceGeneralId: "",
+        generalTemplateName: "",
+        name: unitRecord.name,
+        category: unitRecord.category ?? "",
+        section: unitRecord.section,
+        qty: String(unitRecord.qty ?? 1),
+        defaultLocationType: unitRecord.defaultLocationType,
+        defaultStockStatus: unitRecord.defaultStockStatus,
+        defaultConditionType: unitRecord.defaultConditionType,
+        parentId: c.nodeType === "PART" ? c.parentId : "",
+        parentName: c.nodeType === "PART" ? c.parentName : "",
+      }));
+      return;
+    }
+
+    const generalRecord = flatGeneralRecords.find(
+      record => record.nodeType === form.nodeType && panelRecordOptionKey(record) === option.dedupeKey,
+    );
+    setForm(c => ({
+      ...c,
+      sourceGeneralId: generalRecord ? String(generalRecord.id) : "",
+      generalTemplateName: generalRecord?.name ?? c.generalTemplateName,
+      name: generalRecord?.name ?? option.value,
+      category: generalRecord?.category ?? c.category,
+      section: generalRecord?.section ?? c.section,
+      sortOrder: generalRecord ? String(generalRecord.sortOrder) : c.sortOrder,
+      parentId: c.nodeType === "PART" ? c.parentId : "",
+      parentName: c.nodeType === "PART" ? c.parentName : "",
     }));
   }
 
@@ -333,6 +476,7 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
         : await createUnitPanel(unitId, {
             ...payload,
             parentId,
+            sourceGeneralId: Number.parseInt(effectiveForm.sourceGeneralId, 10) || null,
           });
 
     if (!result.success) {
@@ -802,6 +946,8 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
                     menuZClassName="z-30"
                     iconStrokeWidth={ICON_STROKE_WIDTH}
                     closeOnInputBlurDelay
+                    maxVisibleOptions={5}
+                    minSearchLength={3}
                   />
                 </label>
               )}
@@ -809,11 +955,17 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
               <label className="block space-y-1">
                 <span className="text-[14px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Section</span>
                 {mode.type === "create" && mode.sectionMode === "new" ? (
-                  <input
+                  <SearchableField
                     value={form.section}
-                    onChange={(e) => setForm(c => ({ ...c, section: e.target.value }))}
+                    options={sectionOptions}
+                    onChange={(section) => setForm(c => ({ ...c, section }))}
                     placeholder="Nama section baru"
-                    className="h-8 w-full border border-border bg-card px-3 text-[15px] font-mono text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-primary/40"
+                    heightClassName="h-8"
+                    menuZClassName="z-30"
+                    iconStrokeWidth={ICON_STROKE_WIDTH}
+                    closeOnInputBlurDelay
+                    maxVisibleOptions={5}
+                    minSearchLength={3}
                   />
                 ) : (
                   <SearchableField
@@ -826,6 +978,8 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
                     menuZClassName="z-30"
                     iconStrokeWidth={ICON_STROKE_WIDTH}
                     closeOnInputBlurDelay
+                    maxVisibleOptions={5}
+                    minSearchLength={3}
                   />
                 )}
               </label>
@@ -843,6 +997,8 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
                     menuZClassName="z-30"
                     iconStrokeWidth={ICON_STROKE_WIDTH}
                     closeOnInputBlurDelay
+                    maxVisibleOptions={5}
+                    minSearchLength={3}
                   />
                 </label>
               )}
@@ -862,10 +1018,19 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
                         ? "Nama Part"
                         : "Nama Panel"}
                   </span>
-                  <input value={form.name}
-                    onChange={(e) => setForm(c => ({ ...c, name: e.target.value }))}
+                  <SearchableField
+                    value={form.name}
+                    options={nameOptions}
+                    onChange={(name) => setForm(c => ({ ...c, name }))}
+                    onSelect={selectNameSuggestion}
                     placeholder={mode.type === "create" && mode.sectionMode === "new" ? "Contoh: Body Depan" : undefined}
-                    className="h-8 w-full border border-border bg-card px-3 text-[15px] font-mono text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-primary/40" />
+                    heightClassName="h-8"
+                    menuZClassName="z-30"
+                    iconStrokeWidth={ICON_STROKE_WIDTH}
+                    closeOnInputBlurDelay
+                    maxVisibleOptions={5}
+                    minSearchLength={3}
+                  />
                 </label>
               </>
 
@@ -881,6 +1046,8 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
                     menuZClassName="z-30"
                     iconStrokeWidth={ICON_STROKE_WIDTH}
                     closeOnInputBlurDelay
+                    maxVisibleOptions={5}
+                    minSearchLength={3}
                   />
                 </label>
               ) : null}

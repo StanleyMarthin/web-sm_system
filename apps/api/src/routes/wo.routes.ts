@@ -342,6 +342,30 @@ export async function handleWoCreateRoute(
   }
 }
 
+export async function handleWoUpdateRoute(
+  request: Request,
+  woId: string,
+  authService: AuthService,
+  woService: WoService,
+): Promise<Response> {
+  const sessionResult = await requireWoCreateSession(request, authService);
+  if ("response" in sessionResult) {
+    return sessionResult.response;
+  }
+
+  const parsedBody = await parseJsonBody(request, woCreateRequestSchema);
+  if (!parsedBody.success) {
+    return parsedBody.response;
+  }
+
+  try {
+    const result = await woService.update(sessionResult.session, woId, parsedBody.data);
+    return successResponse(request, "WO berhasil diperbarui.", { ...result });
+  } catch (error) {
+    return mapWoError(request, error);
+  }
+}
+
 export async function handleWoDetailRoute(
   request: Request,
   woId: string,

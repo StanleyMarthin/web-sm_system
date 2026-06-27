@@ -1,9 +1,9 @@
 "use client";
 
-import { createCountdownRecord } from "@/shared/api/countdown";
-import { createPr } from "@/shared/api/pr";
-import { createVendor } from "@/shared/api/vendor";
-import { createWo } from "@/shared/api/wo";
+import { createCountdownRecord, updateCountdownRecord } from "@/shared/api/countdown";
+import { createPr, updatePr } from "@/shared/api/pr";
+import { createVendor, updateVendor } from "@/shared/api/vendor";
+import { createWo, updateWo } from "@/shared/api/wo";
 import { parseHHMMToDecimal } from "@/shared/format/time";
 
 export type WorkflowCreateType = "COUNTDOWN" | "WO" | "PR" | "WOV";
@@ -241,4 +241,120 @@ export async function submitWorkflowJobCreate(input: {
 
   if (!result.success) return { success: false, message: result.message };
   return { success: true, created: { type: form.type, title, meta, idSuffix: String(result.result.wovId) } };
+}
+
+export async function submitWorkflowJobUpdate(input: {
+  id: string;
+  form: WorkflowJobCreateFormState;
+  context: WorkflowJobCreateContext;
+  references: WorkflowJobCreateReferences;
+}): Promise<{ success: true } | { success: false; message: string }> {
+  const { id, form, context, references } = input;
+  const divisionValue = form.divisionId || context.divisionId || "";
+  const division = references.divisions.find((item) => item.value === divisionValue);
+  const divisionId = Number(divisionValue);
+  const divisionName = division?.label ?? context.divisionName ?? "";
+  const title = form.title.trim() || context.panelName;
+  const targetDate = form.targetDate || todayDate();
+  const qty = Number(form.qty || 1);
+  const normalizedQty = Number.isFinite(qty) && qty > 0 ? qty : 1;
+
+  if (!title.trim()) return { success: false, message: "Nama pekerjaan wajib diisi." };
+  if (!Number.isFinite(divisionId) && form.type !== "WOV") {
+    return { success: false, message: "Divisi wajib dipilih." };
+  }
+
+  if (form.type === "COUNTDOWN") {
+    const targetHoursInitial = parseHHMMToDecimal(form.targetHours || "0:00", true);
+    if (!form.sectionName.trim()) return { success: false, message: "Section wajib dipilih dari master." };
+    if (!form.jobTypeId.trim()) return { success: false, message: "Jobdesc wajib dipilih dari master jobdesc." };
+    if (!Number.isFinite(targetHoursInitial) || targetHoursInitial < 0) {
+      return { success: false, message: "Target jam wajib format HHH:MM." };
+    }
+    const result = await updateCountdownRecord(id, {
+      carId: context.carId,
+      divisionId,
+      panelId: context.panelId ?? null,
+      taskCategory: form.taskCategory,
+      sectionName: form.sectionName.trim(),
+      jobTypeId: form.jobTypeId.trim(),
+      targetHoursInitial,
+      startDate: form.startDate || null,
+      deadlineDate: targetDate,
+      prerequisiteCoreId: "",
+      refWoId: "",
+      note: form.notes.trim() || null,
+      temuanAwal: form.temuanAwal.trim() || null,
+      keterangan: form.keterangan.trim() || `Panel: ${context.panelName}`,
+      status: "PLAN",
+    });
+    return result.success ? { success: true } : { success: false, message: result.message };
+  }
+
+  if (form.type === "WO") {
+    const result = await updateWo(id, {
+      carId: context.carId,
+      toDivisionId: divisionId,
+      requestDate: targetDate,
+      isPriority: form.isPriority,
+      panelName: null,
+      jobDetail: null,
+      estimatedHours: null,
+      notes: null,
+      items: [{
+        jobDetail: title,
+        panelName: context.panelName,
+        sectionName: context.sectionName ?? context.panelName,
+        panelCategory: context.panelCategory ?? null,
+        addPanelToMaster: false,
+        estimatedHours: form.estimatedHours ? Number(form.estimatedHours) : null,
+        notes: form.notes.trim() || null,
+      }],
+    });
+    return result.success ? { success: true } : { success: false, message: result.message };
+  }
+
+  if (form.type === "PR") {
+    const result = await updatePr(id, {
+      carId: context.carId,
+      divisionName: divisionName || null,
+      targetDate: targetDate || null,
+      priority: form.priority || "NORMAL",
+      notes: form.notes.trim() || null,
+      items: [{
+        itemName: context.panelName,
+        description: title,
+        originType: "LOKAL",
+        qty: normalizedQty,
+        uom: form.uom.trim() || "pcs",
+        estimatedPrice: form.estimatedPrice ? Number(form.estimatedPrice) : null,
+        photoUrl: form.photoUrl.trim() || null,
+      }],
+    });
+    return result.success ? { success: true } : { success: false, message: result.message };
+  }
+
+  const result = await updateVendor(id, {
+    carId: context.carId,
+    coreId: null,
+    prId: null,
+    vendorId: null,
+    vendorName: form.vendorName.trim(),
+    picVendor: null,
+    itemName: null,
+    quantity: null,
+    uom: null,
+    goodsConditionOut: null,
+    targetDateReturn: targetDate || null,
+    estimatedCost: null,
+    remarks: form.notes.trim() || null,
+    items: [{
+      itemName: title || context.panelName,
+      quantity: normalizedQty,
+      uom: form.uom.trim() || null,
+      goodsConditionOut: form.goodsConditionOut.trim() || null,
+      estimatedCost: form.estimatedCost ? Number(form.estimatedCost) : null,
+    }],
+  });
+  return result.success ? { success: true } : { success: false, message: result.message };
 }

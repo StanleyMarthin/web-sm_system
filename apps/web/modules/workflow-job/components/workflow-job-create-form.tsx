@@ -19,10 +19,14 @@ interface WorkflowJobCreateFormProps {
   context: WorkflowJobCreateContext;
   references: WorkflowJobCreateReferences;
   allowedTypes: WorkflowCreateType[];
+  defaultType?: WorkflowCreateType;
+  initialForm?: WorkflowJobCreateFormState;
+  submitLabel?: string;
   isSaving: boolean;
   onSavingChange: (isSaving: boolean) => void;
   onCancel: () => void;
-  onCreated: (created: CreatedWorkflowJob) => void;
+  onCreated?: (created: CreatedWorkflowJob, form: WorkflowJobCreateFormState) => void;
+  onSubmit?: (form: WorkflowJobCreateFormState) => Promise<string | null> | string | null;
 }
 
 const createTypeLabels: Record<WorkflowCreateType, string> = {
@@ -71,7 +75,7 @@ function AdaptiveSelect({ value, options, onChange, placeholder, className = "" 
     return !normalizedQuery || haystack.includes(normalizedQuery);
   });
 
-  if (options.length <= 4) {
+  if (options.length <= 3) {
     return (
       <select
         value={value}
@@ -144,13 +148,17 @@ export function WorkflowJobCreateForm({
   context,
   references,
   allowedTypes,
+  defaultType: defaultTypeProp,
+  initialForm,
+  submitLabel = "Buat",
   isSaving,
   onSavingChange,
   onCancel,
   onCreated,
+  onSubmit,
 }: WorkflowJobCreateFormProps) {
-  const defaultType = allowedTypes[0] ?? "COUNTDOWN";
-  const [form, setForm] = useState<WorkflowJobCreateFormState>(() => createWorkflowJobForm(context, defaultType));
+  const defaultType = defaultTypeProp && allowedTypes.includes(defaultTypeProp) ? defaultTypeProp : allowedTypes[0] ?? "COUNTDOWN";
+  const [form, setForm] = useState<WorkflowJobCreateFormState>(() => initialForm ?? createWorkflowJobForm(context, defaultType));
   const [error, setError] = useState<string | null>(null);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const visibleJobTypes = useMemo(
@@ -166,10 +174,10 @@ export function WorkflowJobCreateForm({
   }, [context.sectionName, references.sections]);
 
   useEffect(() => {
-    setForm(createWorkflowJobForm(context, defaultType));
+    setForm(initialForm ?? createWorkflowJobForm(context, defaultType));
     setError(null);
     setIsUploadingPhoto(false);
-  }, [context, defaultType]);
+  }, [context, defaultType, initialForm]);
 
   async function handlePrPhotoUpload(file: File) {
     setError(null);
@@ -205,12 +213,17 @@ export function WorkflowJobCreateForm({
     setError(null);
     onSavingChange(true);
     try {
+      if (onSubmit) {
+        const message = await onSubmit(form);
+        if (message) setError(message);
+        return;
+      }
       const result = await submitWorkflowJobCreate({ form, context, references });
       if (!result.success) {
         setError(result.message);
         return;
       }
-      onCreated(result.created);
+      onCreated?.(result.created, form);
       setForm(createWorkflowJobForm(context, defaultType));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sumber job belum bisa dibuat.");
@@ -560,7 +573,7 @@ export function WorkflowJobCreateForm({
           }}
           className="border border-primary/35 bg-primary px-5 py-2 text-[15px] font-mono uppercase tracking-[0.12em] text-primary-foreground disabled:cursor-not-allowed disabled:opacity-45"
         >
-          {isSaving ? "Menyimpan..." : "Buat"}
+          {isSaving ? "Menyimpan..." : submitLabel}
         </button>
       </div>
     </>

@@ -162,6 +162,41 @@ export async function handleVendorCreateRoute(
   }
 }
 
+export async function handleVendorUpdateRoute(
+  request: Request,
+  wovId: string,
+  authService: AuthService,
+  vendorService: VendorService,
+): Promise<Response> {
+  const sessionResult = await requireVendorSession(
+    request,
+    authService,
+    permissionCodes.vendorCreate,
+  );
+  if ("response" in sessionResult) {
+    return sessionResult.response;
+  }
+
+  const bodyResult = await parseJsonBody(request, createVendorRequestSchema);
+  if (!bodyResult.success) {
+    return withCors(request, bodyResult.response);
+  }
+
+  try {
+    const result = await vendorService.update(sessionResult.session, wovId, bodyResult.data);
+    return withCors(
+      request,
+      Response.json({
+        success: true,
+        message: "Vendor WO berhasil diperbarui.",
+        data: result,
+      }),
+    );
+  } catch (error) {
+    return mapVendorError(request, error);
+  }
+}
+
 export async function handleVendorDetailRoute(
   request: Request,
   wovId: string,

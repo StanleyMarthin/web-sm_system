@@ -86,6 +86,7 @@ export interface WoService {
   listMyDivision(session: WebSession): Promise<WoListResult>;
   listUrgent(session: WebSession): Promise<WoRecord[]>;
   create(session: WebSession, input: WoCreateRequest): Promise<{ woId: string }>;
+  update(session: WebSession, woId: string, input: WoCreateRequest): Promise<{ woId: string }>;
   findDetail(session: WebSession, woId: string): Promise<WoDetailResult | null>;
   approve(session: WebSession, woId: string, input?: WoApproveRequest): Promise<WoMutationResult>;
   reject(session: WebSession, woId: string, reason: string): Promise<WoMutationResult>;
@@ -236,6 +237,23 @@ export class DefaultWoService implements WoService {
       },
     });
 
+    return result;
+  }
+
+  async update(session: WebSession, woId: string, input: WoCreateRequest): Promise<{ woId: string }> {
+    const detail = await this.findDetail(session, woId);
+    if (!detail) throw new Error("WO_NOT_FOUND");
+    const result = await this.repository.update(woId, input);
+    woListCache.clear();
+    await this.auditService.log({
+      actorId: session.user.employeeId,
+      actorName: session.user.fullName,
+      action: "wo.update",
+      module: "wo",
+      recordId: woId,
+      oldValue: detail.ticket,
+      newValue: input,
+    });
     return result;
   }
 

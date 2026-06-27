@@ -472,6 +472,7 @@ export interface WoRepository {
     params: { actorId: string; fromDivisionId: number },
     input: WoCreateRequest,
   ): Promise<{ woId: string }>;
+  update(woId: string, input: WoCreateRequest): Promise<{ woId: string }>;
   findById(params: WoMutationParams): Promise<WoRecord | null>;
   updateStatus(
     woId: string,
@@ -849,6 +850,43 @@ export class MySqlWoRepository implements WoRepository {
     } finally {
       connection.release();
     }
+  }
+
+  async update(woId: string, input: WoCreateRequest): Promise<{ woId: string }> {
+    const item = input.items?.[0];
+    const panelName = item?.panelName?.trim() || input.panelName?.trim() || null;
+    if (!panelName) throw new Error("WO_PANEL_REQUIRED");
+
+    const pool = this.poolFactory();
+    const [result] = await pool.execute(
+      `
+        UPDATE sm_jobdesc_wo
+        SET request_date = ?,
+            car_id = ?,
+            to_div_id = ?,
+            panel_name = ?,
+            job_detail = ?,
+            estimated_hours = ?,
+            is_priority = ?,
+            notes = ?
+        WHERE id = ?
+      `,
+      [
+        input.requestDate,
+        input.carId,
+        input.toDivisionId,
+        panelName,
+        item?.jobDetail ?? input.jobDetail ?? null,
+        item?.estimatedHours ?? input.estimatedHours ?? null,
+        input.isPriority ? 1 : 0,
+        item?.notes ?? input.notes ?? null,
+        woId,
+      ],
+    );
+    if ("affectedRows" in result && Number(result.affectedRows) === 0) {
+      throw new Error("WO_NOT_FOUND");
+    }
+    return { woId };
   }
 
   async findById(params: WoMutationParams): Promise<WoRecord | null> {

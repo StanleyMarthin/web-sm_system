@@ -81,6 +81,7 @@ function buildVendorQueryCacheKey(
 export interface VendorService {
   list(session: WebSession, query: VendorGridQuery): Promise<VendorListResult>;
   create(session: WebSession, input: CreateVendorRequest): Promise<{ wovId: string; accTracking: VendorRecord["accTracking"]; status: VendorRecord["status"] }>;
+  update(session: WebSession, wovId: string, input: CreateVendorRequest): Promise<{ wovId: string; accTracking: VendorRecord["accTracking"]; status: VendorRecord["status"] }>;
   findDetail(session: WebSession, wovId: string): Promise<{ ticket: VendorRecord } | null>;
   approve(session: WebSession, wovId: string, input: ApproveVendorRequest): Promise<{ wovId: string; accTracking: VendorRecord["accTracking"]; status: VendorRecord["status"] }>;
   updateStatus(session: WebSession, wovId: string, input: VendorStatusUpdateRequest): Promise<{ wovId: string; accTracking: VendorRecord["accTracking"]; status: VendorRecord["status"] }>;
@@ -159,6 +160,27 @@ export class DefaultVendorService implements VendorService {
       newValue: input,
     });
 
+    return result;
+  }
+
+  async update(
+    session: WebSession,
+    wovId: string,
+    input: CreateVendorRequest,
+  ): Promise<{ wovId: string; accTracking: VendorRecord["accTracking"]; status: VendorRecord["status"] }> {
+    const detail = await this.findDetail(session, wovId);
+    if (!detail) throw new Error("VENDOR_WO_NOT_FOUND");
+    const result = await this.repository.update(wovId, input);
+    vendorListCache.clear();
+    await this.auditService.log({
+      actorId: session.user.employeeId,
+      actorName: session.user.fullName,
+      action: "vendor.update",
+      module: "vendor",
+      recordId: wovId,
+      oldValue: detail.ticket,
+      newValue: input,
+    });
     return result;
   }
 

@@ -64,6 +64,7 @@ export const unitBomDocumentTypeSchema = z.enum([
 ]);
 
 export const unitBomTimelineItemSchema = z.object({
+  countdownId: z.string().nullable().optional(),
   eventType: unitBomTimelineEventTypeSchema,
   title: z.string(),
   description: z.string(),
@@ -122,6 +123,9 @@ export interface UnitBomNodeShape {
   qcLastStatus?: "LOLOS" | "TIDAK_LOLOS" | null;
   deadlineDate?: string | null;
   countRevisi?: number | null;
+  activeCountdownId?: string | null;
+  activeJobName?: string | null;
+  activeTargetHours?: number | null;
   isLocked?: boolean | null;
   currentDivisionName?: string | null;
   detail?: UnitBomPartDetail | null;
@@ -162,6 +166,9 @@ export const unitBomNodeSchema: z.ZodType<UnitBomNodeShape> = z.lazy(() =>
     qcLastStatus: unitBomQcLastStatusSchema.nullable().optional(),
     deadlineDate: z.string().nullable().optional(),
     countRevisi: z.number().int().nullable().optional(),
+    activeCountdownId: z.string().nullable().optional(),
+    activeJobName: z.string().nullable().optional(),
+    activeTargetHours: z.number().nullable().optional(),
     isLocked: z.boolean().nullable().optional(),
     currentDivisionName: z.string().nullable().optional(),
     detail: unitBomPartDetailSchema.nullable().optional(),

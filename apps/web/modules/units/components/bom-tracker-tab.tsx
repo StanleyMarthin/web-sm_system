@@ -1,7 +1,7 @@
 "use client";
 
 import type { UnitBomNode, UnitBomWorkspace } from "@smsystem/contracts/unit-bom";
-import type { UnitPanelRecord } from "@smsystem/contracts/unit-panel";
+import type { UnitPanelGeneralRecord, UnitPanelRecord } from "@smsystem/contracts/unit-panel";
 import {
   ArrowUpRight,
   Boxes,
@@ -47,6 +47,7 @@ import {
   createUnitPanel,
   deleteUnitPanel,
   fetchUnitBom,
+  fetchUnitPanelGeneralTemplates,
   fetchUnitPanels,
   renameUnitPanelCategory,
   updateUnitPanel,
@@ -231,8 +232,37 @@ function flattenPanelRecords(rows: UnitPanelRecord[]): UnitPanelRecord[] {
   return records;
 }
 
+function flattenGeneralPanelRecords(rows: UnitPanelGeneralRecord[]): UnitPanelGeneralRecord[] {
+  const records: UnitPanelGeneralRecord[] = [];
+  for (const row of rows) {
+    records.push(row);
+    records.push(...flattenGeneralPanelRecords(row.children));
+  }
+  return records;
+}
+
 function displayCategory(value: string | null | undefined): string {
   return value?.trim() || "Lainnya";
+}
+
+function optionKey(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function mergeOptions(unitOptions: SearchOption[], generalOptions: SearchOption[]): SearchOption[] {
+  const seen = new Set<string>();
+  const merged: SearchOption[] = [];
+  for (const option of [...unitOptions, ...generalOptions]) {
+    const key = option.dedupeKey ?? `${optionKey(option.value)}:${optionKey(option.label ?? "")}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(option);
+  }
+  return merged;
+}
+
+function panelRecordOptionKey(record: Pick<UnitPanelRecord | UnitPanelGeneralRecord, "nodeType" | "category" | "section" | "name">): string {
+  return `${record.nodeType}:${optionKey(displayCategory(record.category))}:${optionKey(record.section)}:${optionKey(record.name)}`;
 }
 
 function averageProgress(nodes: UnitBomNode[]): number | null {
@@ -625,7 +655,7 @@ function NodeCard({
     height: number;
   } | null>(null);
   const suppressClickRef = useRef(false);
-  const cardRef = useRef<HTMLButtonElement>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -755,8 +785,10 @@ function NodeCard({
       onPointerUp={handleNodePointerUp}
       onPointerCancel={handleNodePointerUp}
     >
-      <button
+      <div
         ref={cardRef}
+        role="button"
+        tabIndex={0}
         aria-expanded={canExpand ? isExpanded : undefined}
         aria-label={`${node.label}${canExpand ? ` — ${node.children.length} turunan, ${isExpanded ? 'terbuka' : 'tertutup'}` : ''}`}
         // [REFACTOR 4B] Node hover tooltip
@@ -771,9 +803,16 @@ function NodeCard({
         ]
           .filter(Boolean)
           .join('\n')}
-        type="button"
         onClick={() => {
           if (suppressClickRef.current) return;
+        }}
+        onKeyDown={(event) => {
+          if (event.key !== "Enter" && event.key !== " ") return;
+          event.preventDefault();
+          onSelect(node);
+          if (isGroup) {
+            onToggle(node);
+          }
         }}
         className={`min-h-full w-full border bg-card p-3 text-left shadow-lg shadow-black/20 transition-[border-color,background-color,transform] hover:-translate-y-0.5 hover:border-primary/35 hover:bg-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary/70 ${isSelected ? "border-primary/70 bg-primary/[0.08]" : isGroup ? "border-border" : detailKey ? "border-border" : "border-border"
           }`}
@@ -855,7 +894,7 @@ function NodeCard({
             <ArrowUpRight className="h-3.5 w-3.5 text-muted-foreground" />
           </button>
         ) : null}
-      </button>
+      </div>
       <span
         data-node-resize="true"
         className={`absolute bottom-[-4px] right-[-4px] h-3 w-3 cursor-nwse-resize border border-info bg-info transition-opacity ${
@@ -1008,6 +1047,7 @@ export function BomTrackerTab({
   const suppressRootClickRef = useRef(false);
   const [workspace, setWorkspace] = useState<UnitBomWorkspace | null>(bom);
   const [rows, setRows] = useState<UnitPanelRecord[]>([]);
+  const [generalRows, setGeneralRows] = useState<UnitPanelGeneralRecord[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -1183,6 +1223,20 @@ export function BomTrackerTab({
     return true;
   }, [carId]);
 
+  useEffect(() => {
+    if (!canManagePanels) return;
+
+    let cancelled = false;
+    void fetchUnitPanelGeneralTemplates("").then((result) => {
+      if (cancelled) return;
+      setGeneralRows(result.payload?.data.tree ?? []);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [canManagePanels]);
+
   const refreshWorkspace = useCallback(async () => {
     setIsLoading(true);
 
@@ -1231,6 +1285,7 @@ export function BomTrackerTab({
   }, [loadPanels]);
 
   const flatPanelRecords = useMemo(() => flattenPanelRecords(rows), [rows]);
+  const flatGeneralRecords = useMemo(() => flattenGeneralPanelRecords(generalRows), [generalRows]);
   const recordsById = useMemo(() => {
     const map = new Map<number, UnitPanelRecord>();
     for (const record of flatPanelRecords) {
@@ -1290,15 +1345,32 @@ export function BomTrackerTab({
     return Array.from(cats).sort();
   }, [panelTrackerTree, rows]);
 
+  const generalCategories = useMemo(() => {
+    const cats = new Set<string>();
+    for (const row of flatGeneralRecords) {
+      cats.add(displayCategory(row.category));
+    }
+    return Array.from(cats).sort();
+  }, [flatGeneralRecords]);
+
   const rowsInSelectedCategory = useMemo(() => {
     return rows.filter((row) => displayCategory(row.category) === form.category);
   }, [rows, form.category]);
+
+  const generalRowsInSelectedCategory = useMemo(() => {
+    return flatGeneralRecords.filter((row) => displayCategory(row.category) === form.category);
+  }, [flatGeneralRecords, form.category]);
 
   const formSections = useMemo(() => {
     const sections = new Set(rowsInSelectedCategory.map((row) => row.section));
     if (form.section) sections.add(form.section);
     return Array.from(sections).sort();
   }, [rowsInSelectedCategory, form.section]);
+
+  const generalFormSections = useMemo(() => {
+    const sections = new Set(generalRowsInSelectedCategory.map((row) => row.section));
+    return Array.from(sections).sort();
+  }, [generalRowsInSelectedCategory]);
 
   const panelsBySelectedSection = useMemo(() => {
     return rows.filter((row) => displayCategory(row.category) === form.category && row.section === form.section);
@@ -1310,17 +1382,55 @@ export function BomTrackerTab({
   }, [flatPanelRecords, form.parentId]);
 
   const categoryOptions = useMemo<SearchOption[]>(
-    () => categories.map((category) => ({ value: category })),
-    [categories],
+    () => mergeOptions(
+      categories.map((category) => ({ value: category, dedupeKey: optionKey(category) })),
+      generalCategories.map((category) => ({ value: category, label: "GENERAL", dedupeKey: optionKey(category) })),
+    ),
+    [categories, generalCategories],
   );
   const sectionOptions = useMemo<SearchOption[]>(
-    () => formSections.map((section) => ({ value: section })),
-    [formSections],
+    () => mergeOptions(
+      formSections.map((section) => ({ value: section, dedupeKey: `${optionKey(form.category)}:${optionKey(section)}` })),
+      generalFormSections.map((section) => ({
+        value: section,
+        label: "GENERAL",
+        dedupeKey: `${optionKey(form.category)}:${optionKey(section)}`,
+      })),
+    ),
+    [form.category, formSections, generalFormSections],
   );
   const parentPanelOptions = useMemo<SearchOption[]>(
     () => panelsBySelectedSection.map((panel) => ({ value: panel.name, label: panel.category ?? panel.section })),
     [panelsBySelectedSection],
   );
+  const nameOptions = useMemo<SearchOption[]>(() => {
+    const unitOptions = flatPanelRecords
+      .filter((record) => record.nodeType === form.nodeType)
+      .map((record) => ({
+        value: record.name,
+        label: [displayCategory(record.category), record.section, "UNIT"].filter(Boolean).join(" > "),
+        dedupeKey: panelRecordOptionKey(record),
+      }));
+    const generalOptions = flatGeneralRecords
+      .filter((record) => record.nodeType === form.nodeType)
+      .map((record) => ({
+        value: record.name,
+        label: [displayCategory(record.category), record.section, "GENERAL"].filter(Boolean).join(" > "),
+        dedupeKey: panelRecordOptionKey(record),
+      }));
+    return mergeOptions(unitOptions, generalOptions);
+  }, [flatGeneralRecords, flatPanelRecords, form.nodeType]);
+  const generalTemplateOptions = useMemo<SearchOption[]>(() => {
+    const targetType = form.nodeType;
+    const unitKeys = new Set(flatPanelRecords.map((record) => panelRecordOptionKey(record)));
+    return flatGeneralRecords
+      .filter((record) => record.nodeType === targetType)
+      .filter((record) => !unitKeys.has(panelRecordOptionKey(record)))
+      .map((record) => ({
+        value: record.name,
+        label: [displayCategory(record.category), record.section].filter(Boolean).join(" > "),
+      }));
+  }, [flatGeneralRecords, flatPanelRecords, form.nodeType]);
 
   const totalPanelRecords = rows.length;
   const totalPartRecords = useMemo(() => rows.reduce((total, row) => total + row.children.length, 0), [rows]);
@@ -1480,7 +1590,15 @@ export function BomTrackerTab({
 
     const nextType = normalized === "part" ? "PART" : "PANEL";
     if (nextType === "PANEL") {
-      setForm((current) => ({ ...current, nodeType: "PANEL", nodeTypeName: value, parentId: "", parentName: "" }));
+      setForm((current) => ({
+        ...current,
+        nodeType: "PANEL",
+        nodeTypeName: value,
+        parentId: "",
+        parentName: "",
+        sourceGeneralId: "",
+        generalTemplateName: "",
+      }));
       return;
     }
 
@@ -1490,6 +1608,8 @@ export function BomTrackerTab({
       nodeTypeName: value,
       parentId: "",
       parentName: "",
+      sourceGeneralId: "",
+      generalTemplateName: "",
     }));
   }
 
@@ -1525,6 +1645,63 @@ export function BomTrackerTab({
       defaultLocationType: panel?.defaultLocationType ?? current.defaultLocationType,
       defaultStockStatus: panel?.defaultStockStatus ?? current.defaultStockStatus,
       defaultConditionType: panel?.defaultConditionType ?? current.defaultConditionType,
+    }));
+  }
+
+  function selectGeneralTemplate(value: string) {
+    const normalized = value.trim().toLowerCase();
+    const template = flatGeneralRecords.find(
+      (record) => record.nodeType === form.nodeType && record.name.toLowerCase() === normalized,
+    );
+
+    setForm((current) => ({
+      ...current,
+      generalTemplateName: value,
+      sourceGeneralId: template ? String(template.id) : "",
+      name: template?.name ?? current.name,
+      category: template?.category ?? current.category,
+      section: template?.section ?? current.section,
+      sortOrder: template ? String(template.sortOrder) : current.sortOrder,
+      parentId: "",
+      parentName: "",
+    }));
+  }
+
+  function selectNameSuggestion(option: SearchOption) {
+    const unitRecord = flatPanelRecords.find(
+      (record) => record.nodeType === form.nodeType && panelRecordOptionKey(record) === option.dedupeKey,
+    );
+    if (unitRecord) {
+      setForm((current) => ({
+        ...current,
+        sourceGeneralId: "",
+        generalTemplateName: "",
+        name: unitRecord.name,
+        category: unitRecord.category ?? "",
+        section: unitRecord.section,
+        qty: String(unitRecord.qty ?? 1),
+        defaultLocationType: unitRecord.defaultLocationType,
+        defaultStockStatus: unitRecord.defaultStockStatus,
+        defaultConditionType: unitRecord.defaultConditionType,
+        parentId: current.nodeType === "PART" ? current.parentId : "",
+        parentName: current.nodeType === "PART" ? current.parentName : "",
+      }));
+      return;
+    }
+
+    const generalRecord = flatGeneralRecords.find(
+      (record) => record.nodeType === form.nodeType && panelRecordOptionKey(record) === option.dedupeKey,
+    );
+    setForm((current) => ({
+      ...current,
+      sourceGeneralId: generalRecord ? String(generalRecord.id) : "",
+      generalTemplateName: generalRecord?.name ?? current.generalTemplateName,
+      name: generalRecord?.name ?? option.value,
+      category: generalRecord?.category ?? current.category,
+      section: generalRecord?.section ?? current.section,
+      sortOrder: generalRecord ? String(generalRecord.sortOrder) : current.sortOrder,
+      parentId: current.nodeType === "PART" ? current.parentId : "",
+      parentName: current.nodeType === "PART" ? current.parentName : "",
     }));
   }
 
@@ -1658,6 +1835,7 @@ export function BomTrackerTab({
         : await createUnitPanel(carId, {
           parentId,
           ...payload,
+          sourceGeneralId: Number.parseInt(effectiveForm.sourceGeneralId, 10) || null,
         });
 
     if (!result.success) {
@@ -2613,6 +2791,22 @@ export function BomTrackerTab({
                     </div>
                   ) : null}
 
+                  {mode.type === "create" && generalTemplateOptions.length > 0 ? (
+                    <label className="block space-y-1">
+                      <span className="text-[14px] font-mono uppercase tracking-[0.12em] text-muted-foreground">
+                        Template General
+                      </span>
+                      <SearchableField
+                        value={form.generalTemplateName}
+                        options={generalTemplateOptions}
+                        onChange={selectGeneralTemplate}
+                        placeholder={`Ambil dari general ${form.nodeType === "PART" ? "part" : "panel"}`}
+                        maxVisibleOptions={5}
+                        minSearchLength={3}
+                      />
+                    </label>
+                  ) : null}
+
                   <label className="block space-y-1">
                     <span className="text-[14px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Kategori</span>
                     <SearchableField
@@ -2622,17 +2816,21 @@ export function BomTrackerTab({
                         ? selectCategory
                         : (category) => setForm((current) => ({ ...current, category }))}
                       placeholder="Pilih kategori"
+                      maxVisibleOptions={5}
+                      minSearchLength={3}
                     />
                   </label>
 
                   <label className="block space-y-1">
                     <span className="text-[14px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Section</span>
                     {mode.type === "create" && mode.sectionMode === "new" ? (
-                      <input
+                      <SearchableField
                         value={form.section}
-                        onChange={(event) => setForm((current) => ({ ...current, section: event.target.value }))}
+                        options={sectionOptions}
+                        onChange={(section) => setForm((current) => ({ ...current, section }))}
                         placeholder="Nama section baru"
-                        className="h-9 w-full border border-border bg-card px-3 text-[15px] font-mono text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-primary/40"
+                        maxVisibleOptions={5}
+                        minSearchLength={3}
                       />
                     ) : (
                       <SearchableField
@@ -2641,6 +2839,8 @@ export function BomTrackerTab({
                         onChange={selectSection}
                         placeholder={form.category ? "Pilih section" : "Pilih kategori dulu"}
                         disabled={mode.type === "create" && mode.sectionMode === "existing" && !form.category}
+                        maxVisibleOptions={5}
+                        minSearchLength={3}
                       />
                     )}
                   </label>
@@ -2654,6 +2854,8 @@ export function BomTrackerTab({
                         onChange={selectParentPanel}
                         placeholder={form.section ? "Pilih panel parent" : "Pilih section dulu"}
                         disabled={!form.section}
+                        maxVisibleOptions={5}
+                        minSearchLength={3}
                       />
                     </label>
                   ) : null}
@@ -2672,11 +2874,14 @@ export function BomTrackerTab({
                             ? "Nama Part"
                             : "Nama Panel"}
                       </span>
-                      <input
+                      <SearchableField
                         value={form.name}
-                        onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
+                        options={nameOptions}
+                        onChange={(name) => setForm((current) => ({ ...current, name }))}
+                        onSelect={selectNameSuggestion}
                         placeholder={mode.type === "create" && mode.sectionMode === "new" ? "Contoh: Body Depan" : undefined}
-                        className="h-9 w-full border border-border bg-card px-3 text-[15px] font-mono text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-primary/40"
+                        maxVisibleOptions={5}
+                        minSearchLength={3}
                       />
                     </label>
 

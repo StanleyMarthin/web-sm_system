@@ -17,6 +17,7 @@ export const unitPanelConditionTypeSchema = z.enum(["BARU", "RESTORE", "BEKAS"])
 export interface UnitPanelRecordShape {
   id: number;
   carId: string;
+  sourceGeneralId: number | null;
   parentId: number | null;
   nodeType: "PANEL" | "PART";
   section: string;
@@ -40,6 +41,7 @@ export const unitPanelRecordSchema: z.ZodType<UnitPanelRecordShape> = z.lazy(() 
   z.object({
     id: z.number().int().positive(),
     carId: z.string(),
+    sourceGeneralId: z.number().int().positive().nullable(),
     parentId: z.number().int().positive().nullable(),
     nodeType: unitPanelNodeTypeSchema,
     section: z.string(),
@@ -60,12 +62,51 @@ export const unitPanelRecordSchema: z.ZodType<UnitPanelRecordShape> = z.lazy(() 
   }),
 );
 
+export interface UnitPanelGeneralRecordShape {
+  id: number;
+  parentId: number | null;
+  nodeType: "PANEL" | "PART";
+  section: string;
+  name: string;
+  category: string | null;
+  isActive: boolean;
+  sortOrder: number;
+  defaultDivisionId: number | null;
+  childCount: number;
+  createdAt: string | null;
+  updatedAt: string | null;
+  children: UnitPanelGeneralRecordShape[];
+}
+
+export const unitPanelGeneralRecordSchema: z.ZodType<UnitPanelGeneralRecordShape> = z.lazy(() =>
+  z.object({
+    id: z.number().int().positive(),
+    parentId: z.number().int().positive().nullable(),
+    nodeType: unitPanelNodeTypeSchema,
+    section: z.string(),
+    name: z.string(),
+    category: z.string().nullable(),
+    isActive: z.boolean(),
+    sortOrder: z.number().int(),
+    defaultDivisionId: z.number().int().positive().nullable(),
+    childCount: z.number().int().nonnegative(),
+    createdAt: z.string().nullable(),
+    updatedAt: z.string().nullable(),
+    children: z.array(unitPanelGeneralRecordSchema),
+  }),
+);
+
 export const unitPanelCollectionSchema = z.object({
   unitId: z.string(),
   tree: z.array(unitPanelRecordSchema),
 });
 
+export const unitPanelGeneralCollectionSchema = z.object({
+  tree: z.array(unitPanelGeneralRecordSchema),
+});
+
 export const createUnitPanelRequestSchema = z.object({
+  sourceGeneralId: z.number().int().positive().nullable().optional(),
   parentId: z.number().int().positive().nullable().optional().default(null),
   section: z.string().trim().min(1).max(50),
   name: z.string().trim().min(1).max(100),
@@ -102,6 +143,12 @@ export const unitPanelCollectionEnvelopeSchema = z.object({
   data: unitPanelCollectionSchema,
 });
 
+export const unitPanelGeneralCollectionEnvelopeSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+  data: unitPanelGeneralCollectionSchema,
+});
+
 export const unitPanelMutationEnvelopeSchema = z.object({
   success: z.boolean(),
   message: z.string(),
@@ -131,7 +178,9 @@ export type UnitPanelLocationType = z.infer<typeof unitPanelLocationTypeSchema>;
 export type UnitPanelStockStatus = z.infer<typeof unitPanelStockStatusSchema>;
 export type UnitPanelConditionType = z.infer<typeof unitPanelConditionTypeSchema>;
 export type UnitPanelRecord = z.infer<typeof unitPanelRecordSchema>;
+export type UnitPanelGeneralRecord = z.infer<typeof unitPanelGeneralRecordSchema>;
 export type UnitPanelCollection = z.infer<typeof unitPanelCollectionSchema>;
+export type UnitPanelGeneralCollection = z.infer<typeof unitPanelGeneralCollectionSchema>;
 export type CreateUnitPanelRequest = z.infer<typeof createUnitPanelRequestSchema>;
 export type UpdateUnitPanelRequest = z.infer<typeof updateUnitPanelRequestSchema>;
 export type RenameUnitPanelCategoryRequest = z.infer<typeof renameUnitPanelCategoryRequestSchema>;

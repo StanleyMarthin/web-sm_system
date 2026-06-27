@@ -73,6 +73,7 @@ export interface PrService {
   list(session: WebSession, query: PrGridQuery): Promise<PrListResult>;
   listCritical(session: WebSession): Promise<PrRecord[]>;
   create(session: WebSession, input: CreatePrRequest): Promise<{ prId: string; accTracking: PrRecord["accTracking"]; status: PrRecord["status"] }>;
+  update(session: WebSession, prId: string, input: CreatePrRequest): Promise<{ prId: string; accTracking: PrRecord["accTracking"]; status: PrRecord["status"] }>;
   findDetail(session: WebSession, prId: string): Promise<{ header: PrRecord; items: PrItemRecord[] } | null>;
   approve(session: WebSession, prId: string, input: ApprovePrRequest): Promise<{ prId: string; accTracking: PrRecord["accTracking"]; status: PrRecord["status"] }>;
   order(session: WebSession, prId: string, input: OrderPrRequest): Promise<{ prId: string; accTracking: PrRecord["accTracking"]; status: PrRecord["status"] }>;
@@ -163,6 +164,28 @@ export class DefaultPrService implements PrService {
       newValue: input,
     });
 
+    return result;
+  }
+
+  async update(
+    session: WebSession,
+    prId: string,
+    input: CreatePrRequest,
+  ): Promise<{ prId: string; accTracking: PrRecord["accTracking"]; status: PrRecord["status"] }> {
+    const detail = await this.findDetail(session, prId);
+    if (!detail) throw new Error("PR_NOT_FOUND");
+    const result = await this.repository.update(prId, input);
+    prListCache.clear();
+    prCriticalCache.clear();
+    await this.auditService.log({
+      actorId: session.user.employeeId,
+      actorName: session.user.fullName,
+      action: "pr.update",
+      module: "pr",
+      recordId: prId,
+      oldValue: detail,
+      newValue: input,
+    });
     return result;
   }
 

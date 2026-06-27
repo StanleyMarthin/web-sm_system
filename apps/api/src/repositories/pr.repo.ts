@@ -455,6 +455,7 @@ export interface PrRepository {
   listCritical(params: ScopeParams): Promise<PrRecord[]>;
   listReferences(params: ScopeParams): Promise<PrGridReference>;
   create(context: CreatePrContext, input: CreatePrRequest): Promise<PrMutationResult>;
+  update(prId: string, input: CreatePrRequest): Promise<PrMutationResult>;
   findById(
     params: ScopeParams & { prId: string },
   ): Promise<{ header: PrRecord; items: PrItemRecord[] } | null>;
@@ -736,6 +737,58 @@ export class MySqlPrRepository implements PrRepository {
         accTracking: "PENDING_ADV",
         status: "OPEN",
       };
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
+
+  async update(prId: string, input: CreatePrRequest): Promise<PrMutationResult> {
+    const item = input.items[0];
+    const pool = this.poolFactory(this.env);
+    const connection = await pool.getConnection();
+
+    try {
+      await connection.beginTransaction();
+      const [headerResult] = await connection.execute(
+        `
+          UPDATE ${qualifyTable(this.env.PURCHASE_DB_NAME, "pur_pr_header")}
+          SET car_id = ?,
+              division_name = ?,
+              target_date = ?,
+              priority = ?,
+              notes = ?
+          WHERE id = ?
+        `,
+        [input.carId, input.divisionName ?? null, input.targetDate ?? null, input.priority ?? "NORMAL", input.notes ?? null, prId],
+      );
+      if ("affectedRows" in headerResult && Number(headerResult.affectedRows) === 0) {
+        throw new Error("PR_NOT_FOUND");
+      }
+
+      if (item) {
+        await connection.execute(
+          `
+            UPDATE ${qualifyTable(this.env.PURCHASE_DB_NAME, "pur_pr_items")}
+            SET item_name = ?,
+                description = ?,
+                origin_type = ?,
+                qty = ?,
+                uom = ?,
+                estimated_price = ?,
+                photo_url = ?
+            WHERE pr_id = ?
+            ORDER BY item_name ASC, id ASC
+            LIMIT 1
+          `,
+          [item.itemName, item.description ?? null, item.originType, item.qty, item.uom, item.estimatedPrice ?? null, item.photoUrl ?? null, prId],
+        );
+      }
+
+      await connection.commit();
+      return { prId, accTracking: "PENDING_ADV", status: "OPEN" };
     } catch (error) {
       await connection.rollback();
       throw error;

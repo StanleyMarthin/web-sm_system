@@ -15,6 +15,8 @@ export interface PanelFormState {
   defaultStockStatus: "IN_STORAGE" | "RETRIEVED" | "INSTALLED" | "LOST";
   defaultConditionType: "BARU" | "RESTORE" | "BEKAS";
   isActive: boolean;
+  sourceGeneralId: string;
+  generalTemplateName: string;
   nodeType: "PANEL" | "PART";
   nodeTypeName: string;
   parentId: string;
@@ -65,6 +67,8 @@ export function emptyForm(): PanelFormState {
     defaultStockStatus: "INSTALLED",
     defaultConditionType: "BEKAS",
     isActive: true,
+    sourceGeneralId: "",
+    generalTemplateName: "",
     nodeType: "PANEL",
     nodeTypeName: "Panel",
     parentId: "",
@@ -83,6 +87,8 @@ export function formFromRecord(record: UnitPanelRecord): PanelFormState {
     defaultStockStatus: record.defaultStockStatus,
     defaultConditionType: record.defaultConditionType,
     isActive: record.isActive,
+    sourceGeneralId: record.sourceGeneralId === null ? "" : String(record.sourceGeneralId),
+    generalTemplateName: "",
     nodeType: record.nodeType,
     nodeTypeName: record.nodeType === "PART" ? "Part" : "Panel",
     parentId: record.parentId === null ? "" : String(record.parentId),
@@ -101,6 +107,8 @@ export function formForChild(parent: UnitPanelRecord): PanelFormState {
     defaultStockStatus: parent.defaultStockStatus,
     defaultConditionType: parent.defaultConditionType,
     isActive: true,
+    sourceGeneralId: "",
+    generalTemplateName: "",
     nodeType: "PART",
     nodeTypeName: "Part",
     parentId: String(parent.id),
@@ -120,6 +128,8 @@ export function formForNode(node: UnitBomNode): PanelFormState {
     defaultStockStatus: "INSTALLED",
     defaultConditionType: node.conditionType ?? "BEKAS",
     isActive: true,
+    sourceGeneralId: "",
+    generalTemplateName: "",
     nodeType: shouldCreatePart ? "PART" : "PANEL",
     nodeTypeName: shouldCreatePart ? "Part" : "Panel",
     parentId: node.panelId ? String(node.panelId) : "",
