@@ -48,18 +48,6 @@ function panelRecordOptionKey(record: Pick<UnitPanelRecord | UnitPanelGeneralRec
   return `${record.nodeType}:${optionKey(displayCategory(record.category))}:${optionKey(record.section)}:${optionKey(record.name)}`;
 }
 
-function mergeOptions(unitOptions: SearchOption[], generalOptions: SearchOption[]): SearchOption[] {
-  const seen = new Set<string>();
-  const merged: SearchOption[] = [];
-  for (const option of [...unitOptions, ...generalOptions]) {
-    const key = option.dedupeKey ?? `${optionKey(option.value)}:${optionKey(option.label ?? "")}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    merged.push(option);
-  }
-  return merged;
-}
-
 type FormMode =
   | { type: "create"; sectionMode: "existing" | "new" }
   | { type: "edit"; record: UnitPanelRecord }
@@ -84,6 +72,7 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
   const [message, setMessage] = useState<string | null>(null);
   const [mode, setMode] = useState<FormMode>(null);
   const [form, setForm] = useState<PanelFormState>(emptyForm());
+  const [isUsingGeneralTemplate, setIsUsingGeneralTemplate] = useState(false);
 
   const [activeCategory, setActiveCategory] = useState<string>("ALL");
   const [activeSection, setActiveSection] = useState<string>("ALL");
@@ -93,18 +82,24 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
   const flatGeneralRecords = useMemo(() => flattenGeneralPanelRecords(generalRows), [generalRows]);
 
   useEffect(() => {
-    if (!canManage) return;
-
+    if (!canManage || !isUsingGeneralTemplate || mode?.type !== "create") return;
+    const q = form.generalTemplateName.trim();
+    if (q.length < 3) {
+      setGeneralRows([]);
+      return;
+    }
     let cancelled = false;
-    void fetchUnitPanelGeneralTemplates("").then((result) => {
-      if (cancelled) return;
-      setGeneralRows(result.payload?.data.tree ?? []);
-    });
-
+    const timer = window.setTimeout(() => {
+      void fetchUnitPanelGeneralTemplates("", { q, nodeType: form.nodeType, limit: "25" }).then((result) => {
+        if (cancelled) return;
+        setGeneralRows(result.payload?.data.tree ?? []);
+      });
+    }, 180);
     return () => {
       cancelled = true;
+      window.clearTimeout(timer);
     };
-  }, [canManage]);
+  }, [canManage, form.generalTemplateName, form.nodeType, isUsingGeneralTemplate, mode?.type]);
 
   const categories = useMemo(() => {
     const cats = new Set<string>();
@@ -113,14 +108,6 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
     }
     return ["ALL", ...Array.from(cats).sort()];
   }, [rows]);
-
-  const generalCategories = useMemo(() => {
-    const cats = new Set<string>();
-    for (const row of flatGeneralRecords) {
-      cats.add(displayCategory(row.category));
-    }
-    return Array.from(cats).sort();
-  }, [flatGeneralRecords]);
 
   const sections = useMemo(() => {
     const secs = new Set<string>();
@@ -136,17 +123,9 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
     return rows.filter(row => (row.category ?? "") === form.category);
   }, [rows, form.category]);
 
-  const generalRowsInSelectedCategory = useMemo(() => {
-    return flatGeneralRecords.filter(row => displayCategory(row.category) === form.category);
-  }, [flatGeneralRecords, form.category]);
-
   const formSections = useMemo(() => {
     return Array.from(new Set(rowsInSelectedCategory.map(row => row.section))).sort();
   }, [rowsInSelectedCategory]);
-
-  const generalFormSections = useMemo(() => {
-    return Array.from(new Set(generalRowsInSelectedCategory.map(row => row.section))).sort();
-  }, [generalRowsInSelectedCategory]);
 
   const panelsBySelectedSection = useMemo(() => {
     return rows.filter(row =>
@@ -162,15 +141,8 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
 
   const parentPanelValue = selectedParentPanel?.name ?? form.parentName;
   const sectionOptions = useMemo<SearchOption[]>(
-    () => mergeOptions(
-      formSections.map(section => ({ value: section, dedupeKey: `${optionKey(form.category)}:${optionKey(section)}` })),
-      generalFormSections.map(section => ({
-        value: section,
-        label: "GENERAL",
-        dedupeKey: `${optionKey(form.category)}:${optionKey(section)}`,
-      })),
-    ),
-    [form.category, formSections, generalFormSections],
+    () => formSections.map(section => ({ value: section, dedupeKey: `${optionKey(form.category)}:${optionKey(section)}` })),
+    [form.category, formSections],
   );
   const parentPanelOptions = useMemo<SearchOption[]>(
     () => panelsBySelectedSection.map(panel => ({
@@ -180,13 +152,10 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
     [panelsBySelectedSection],
   );
   const categoryOptions = useMemo<SearchOption[]>(
-    () => mergeOptions(
-      categories
-        .filter(category => category !== "ALL")
-        .map(category => ({ value: category, dedupeKey: optionKey(category) })),
-      generalCategories.map(category => ({ value: category, label: "GENERAL", dedupeKey: optionKey(category) })),
-    ),
-    [categories, generalCategories],
+    () => categories
+      .filter(category => category !== "ALL")
+      .map(category => ({ value: category, dedupeKey: optionKey(category) })),
+    [categories],
   );
   const nameOptions = useMemo<SearchOption[]>(() => {
     const unitOptions = rows
@@ -197,14 +166,19 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
         label: [displayCategory(record.category), record.section, "UNIT"].filter(Boolean).join(" > "),
         dedupeKey: panelRecordOptionKey(record),
       }));
-    const generalOptions = flatGeneralRecords
+    return unitOptions;
+  }, [form.nodeType, rows]);
+
+  const generalTemplateOptions = useMemo<SearchOption[]>(() => {
+    const unitKeys = new Set(rows.flatMap(row => [row, ...row.children]).map(record => panelRecordOptionKey(record)));
+    return flatGeneralRecords
       .filter(record => record.nodeType === form.nodeType)
+      .filter(record => !unitKeys.has(panelRecordOptionKey(record)))
       .map(record => ({
         value: record.name,
-        label: [displayCategory(record.category), record.section, "GENERAL"].filter(Boolean).join(" > "),
-        dedupeKey: panelRecordOptionKey(record),
+        label: [displayCategory(record.category), record.section].filter(Boolean).join(" > "),
+        dedupeKey: `general:${record.id}`,
       }));
-    return mergeOptions(unitOptions, generalOptions);
   }, [flatGeneralRecords, form.nodeType, rows]);
 
   const filteredRows = useMemo(() => {
@@ -277,6 +251,7 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
   function openCreateRoot() {
     setMode({ type: "create", sectionMode: rows.length > 0 ? "existing" : "new" });
     setForm(emptyForm());
+    setIsUsingGeneralTemplate(false);
     setMessage(null);
     setError(null);
   }
@@ -284,6 +259,7 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
   function openCreateSection() {
     setMode({ type: "create", sectionMode: "new" });
     setForm(emptyForm());
+    setIsUsingGeneralTemplate(false);
     setMessage(null);
     setError(null);
   }
@@ -291,6 +267,7 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
   function openCreateChild(parent: UnitPanelRecord) {
     setMode({ type: "create", sectionMode: "existing" });
     setForm(formForChild(parent));
+    setIsUsingGeneralTemplate(false);
     setMessage(null);
     setError(null);
   }
@@ -298,6 +275,7 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
   function openEdit(record: UnitPanelRecord) {
     setMode({ type: "edit", record });
     setForm(formFromRecord(record));
+    setIsUsingGeneralTemplate(false);
     setMessage(null);
     setError(null);
   }
@@ -305,6 +283,7 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
   function closeForm() {
     setMode(null);
     setForm(emptyForm());
+    setIsUsingGeneralTemplate(false);
   }
 
   function getNextSortOrder(parentId: number | null, section: string) {
@@ -337,6 +316,7 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
         sourceGeneralId: "",
         generalTemplateName: "",
       }));
+      setIsUsingGeneralTemplate(false);
       return;
     }
 
@@ -349,6 +329,7 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
       sourceGeneralId: "",
       generalTemplateName: "",
     }));
+    setIsUsingGeneralTemplate(false);
   }
 
   function selectCategory(value: string) {
@@ -379,6 +360,29 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
       parentName: value,
       section: panel?.section ?? c.section,
       category: panel?.category ?? c.category,
+    }));
+  }
+
+  function selectGeneralTemplate(value: string) {
+    setForm(c => ({ ...c, generalTemplateName: value, sourceGeneralId: "" }));
+  }
+
+  function selectGeneralTemplateOption(option: SearchOption) {
+    const templateId = option.dedupeKey?.replace(/^general:/, "");
+    const normalized = option.value.trim().toLowerCase();
+    const generalRecord = flatGeneralRecords.find(
+      record => record.nodeType === form.nodeType && (String(record.id) === templateId || record.name.toLowerCase() === normalized),
+    );
+    setForm(c => ({
+      ...c,
+      sourceGeneralId: generalRecord ? String(generalRecord.id) : "",
+      generalTemplateName: option.value,
+      name: generalRecord?.name ?? c.name,
+      category: generalRecord?.category ?? c.category,
+      section: generalRecord?.section ?? c.section,
+      sortOrder: generalRecord ? String(generalRecord.sortOrder) : c.sortOrder,
+      parentId: c.nodeType === "PART" ? c.parentId : "",
+      parentName: c.nodeType === "PART" ? c.parentName : "",
     }));
   }
 
@@ -933,6 +937,40 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
                   </div>
                 </div>
               )}
+
+              {mode.type === "create" ? (
+                <div className="space-y-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsUsingGeneralTemplate((current) => {
+                      const next = !current;
+                      if (!next) setForm((formState) => ({ ...formState, sourceGeneralId: "", generalTemplateName: "" }));
+                      return next;
+                    })}
+                    className={`h-8 w-full border px-3 text-left text-[13px] font-mono uppercase tracking-[0.08em] transition-colors ${isUsingGeneralTemplate ? "border-primary/35 bg-primary/10 text-app-accent-ink" : "border-border bg-card text-muted-foreground hover:border-primary/35 hover:text-foreground"}`}
+                  >
+                    Ambil template general
+                  </button>
+                  {isUsingGeneralTemplate ? (
+                    <label className="block space-y-1">
+                      <span className="text-[14px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Cari Template General</span>
+                      <SearchableField
+                        value={form.generalTemplateName}
+                        options={generalTemplateOptions}
+                        onChange={selectGeneralTemplate}
+                        onSelect={selectGeneralTemplateOption}
+                        placeholder={`Ketik minimal 3 huruf ${form.nodeType === "PART" ? "part" : "panel"}`}
+                        heightClassName="h-8"
+                        menuZClassName="z-30"
+                        iconStrokeWidth={ICON_STROKE_WIDTH}
+                        closeOnInputBlurDelay
+                        maxVisibleOptions={5}
+                        minSearchLength={3}
+                      />
+                    </label>
+                  ) : null}
+                </div>
+              ) : null}
 
               {mode.type === "create" && mode.sectionMode === "existing" && (
                 <label className="block space-y-1">

@@ -372,7 +372,14 @@ export async function handleUnitPanelGeneralRoute(
   }
 
   try {
-    const panels = await unitsService.getGeneralUnitPanels(sessionResult.session);
+    const searchParams = new URL(request.url).searchParams;
+    const nodeType = searchParams.get("nodeType");
+    const limit = Number(searchParams.get("limit") ?? "");
+    const panels = await unitsService.getGeneralUnitPanels(sessionResult.session, {
+      q: searchParams.get("q") ?? undefined,
+      nodeType: nodeType === "PANEL" || nodeType === "PART" ? nodeType : undefined,
+      limit: Number.isFinite(limit) && limit > 0 ? limit : undefined,
+    });
     return successResponse(request, "Master panel general ready", panels);
   } catch (error) {
     return mapUnitsError(request, error);

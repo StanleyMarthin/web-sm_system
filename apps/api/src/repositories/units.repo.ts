@@ -257,6 +257,12 @@ interface ScopeParams {
   scope: AuthScope;
 }
 
+interface GeneralUnitPanelSearchParams extends ScopeParams {
+  q?: string;
+  nodeType?: "PANEL" | "PART";
+  limit?: number;
+}
+
 interface FindUnitsParams extends ScopeParams {
   query: UnitGridQuery;
 }
@@ -2024,12 +2030,23 @@ export class UnitsRepository {
     };
   }
 
-  async findGeneralUnitPanels(params: ScopeParams): Promise<UnitPanelGeneralCollection> {
+  async findGeneralUnitPanels(params: GeneralUnitPanelSearchParams): Promise<UnitPanelGeneralCollection> {
     if (!params.scope.canViewAllUnits && !params.scope.canViewAssignedUnits && params.scope.divisionIds.length === 0) {
       throw new Error("SCOPE_FORBIDDEN");
     }
 
     const pool = this.poolFactory();
+    const queryParams: unknown[] = [];
+    const filters = ["COALESCE(gp.is_active, 1) = 1"];
+    if (params.nodeType === "PANEL") filters.push("gp.parent_id IS NULL");
+    if (params.nodeType === "PART") filters.push("gp.parent_id IS NOT NULL");
+    const q = params.q?.trim();
+    if (q) {
+      filters.push("(gp.name LIKE ? OR gp.section LIKE ? OR COALESCE(gp.category, '') LIKE ?)");
+      const like = `%${q}%`;
+      queryParams.push(like, like, like);
+    }
+    const limit = Math.max(1, Math.min(params.limit ?? (q ? 25 : 500), 100));
     const [rows] = await pool.query<UnitPanelGeneralRow[]>(
       `
         SELECT
@@ -2046,7 +2063,7 @@ export class UnitsRepository {
           DATE_FORMAT(gp.updated_at, '%Y-%m-%d %H:%i:%s') AS updatedAt
         FROM master_panels_general gp
         LEFT JOIN master_panels_general child ON child.parent_id = gp.id
-        WHERE COALESCE(gp.is_active, 1) = 1
+        WHERE ${filters.join(" AND ")}
         GROUP BY
           gp.id,
           gp.parent_id,
@@ -2064,7 +2081,9 @@ export class UnitsRepository {
           COALESCE(gp.sort_order, 0) ASC,
           gp.section ASC,
           gp.name ASC
+        LIMIT ?
       `,
+      [...queryParams, limit],
     );
 
     return { tree: buildUnitPanelGeneralTree(rows) };

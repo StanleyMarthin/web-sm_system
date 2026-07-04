@@ -36,7 +36,7 @@ export interface UnitsService {
   updateUnit(session: WebSession, unitId: string, input: UpdateUnitRequest): Promise<UnitBoardRow>;
   deleteUnit(session: WebSession, unitId: string): Promise<{ deletedUnitId: string }>;
   getUnitPanels(session: WebSession, unitId: string): Promise<UnitPanelCollection | null>;
-  getGeneralUnitPanels(session: WebSession): Promise<UnitPanelGeneralCollection>;
+  getGeneralUnitPanels(session: WebSession, query?: { q?: string; nodeType?: "PANEL" | "PART"; limit?: number }): Promise<UnitPanelGeneralCollection>;
   createUnitPanel(session: WebSession, unitId: string, input: CreateUnitPanelRequest): Promise<UnitPanelRecord>;
   updateUnitPanel(session: WebSession, unitId: string, panelId: number, input: UpdateUnitPanelRequest): Promise<UnitPanelRecord>;
   renameUnitPanelCategory(session: WebSession, unitId: string, input: RenameUnitPanelCategoryRequest): Promise<{ updatedCount: number }>;
@@ -159,10 +159,11 @@ export class DefaultUnitsService implements UnitsService {
     });
   }
 
-  async getGeneralUnitPanels(session: WebSession): Promise<UnitPanelGeneralCollection> {
+  async getGeneralUnitPanels(session: WebSession, query: { q?: string; nodeType?: "PANEL" | "PART"; limit?: number } = {}): Promise<UnitPanelGeneralCollection> {
     return this.repository.findGeneralUnitPanels({
       employeeId: session.user.employeeId,
       scope: session.user.scope,
+      ...query,
     });
   }
 

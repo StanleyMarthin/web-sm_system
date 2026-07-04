@@ -348,10 +348,15 @@ export async function fetchUnitPanels(cookieHeader: string, unitId: string) {
   }
 }
 
-export async function fetchUnitPanelGeneralTemplates(cookieHeader: string) {
+export async function fetchUnitPanelGeneralTemplates(
+  cookieHeader: string,
+  searchParams: Record<string, string | string[] | undefined> = {},
+) {
+  const queryString = toUrlSearchParams(searchParams).toString();
+  const suffix = queryString ? `?${queryString}` : "";
   try {
     const response = await fetch(
-      `${getApiBaseUrl()}/api/units/master-panels/general`,
+      `${getApiBaseUrl()}/api/units/master-panels/general${suffix}`,
       buildServerOrBrowserRequestInit(cookieHeader),
     );
 

@@ -107,11 +107,11 @@ export function SearchableField({
                   event.preventDefault();
                   chooseOption(option);
                 }}
-                className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-[15px] font-mono text-foreground transition-colors hover:bg-primary/[0.07] hover:text-app-accent-ink"
+                className="block w-full px-3 py-2 text-left font-mono transition-colors hover:bg-primary/[0.07] hover:text-app-accent-ink"
               >
-                <span className="min-w-0 truncate">{option.value}</span>
+                <span className="block whitespace-normal break-words text-[14px] leading-snug text-foreground">{option.value}</span>
                 {option.label ? (
-                  <span className="shrink-0 text-[15px] uppercase tracking-[0.12em] text-muted-foreground">{option.label}</span>
+                  <span className="mt-0.5 block whitespace-normal break-words text-[11px] uppercase tracking-[0.12em] text-muted-foreground">{option.label}</span>
                 ) : null}
               </button>
             ))
