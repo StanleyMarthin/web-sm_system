@@ -16,6 +16,7 @@ import {
   type WoRepository,
 } from "@/repositories/wo.repo";
 import type { WebSession } from "@/services/auth/session.service";
+import { buildGridMeta } from "@/services/grid/paginate";
 
 interface WoListResult {
   data: WoRecord[];
@@ -41,18 +42,6 @@ interface WoMutationResult {
   woId: string;
   status: WoStatus;
   linkedCountdownId?: string | null;
-}
-
-function buildMeta(page: number, limit: number, total: number) {
-  const totalPages = Math.max(1, Math.ceil(total / limit));
-  return {
-    page,
-    limit,
-    total,
-    totalPages,
-    hasNext: page < totalPages,
-    hasPrev: page > 1,
-  };
 }
 
 const WO_QUERY_CACHE_TTL_MS = 5_000;
@@ -128,7 +117,7 @@ export class DefaultWoService implements WoService {
 
         return {
           data: listResult.rows,
-          meta: buildMeta(query.page, query.limit, listResult.total),
+          meta: buildGridMeta(listResult.total, query.page, query.limit),
           references,
           query,
           summary: listResult.summary,
@@ -161,7 +150,7 @@ export class DefaultWoService implements WoService {
 
         return {
           data: listResult.rows,
-          meta: buildMeta(query.page, query.limit, listResult.total),
+          meta: buildGridMeta(listResult.total, query.page, query.limit),
           references,
           query,
           summary: listResult.summary,
@@ -194,7 +183,7 @@ export class DefaultWoService implements WoService {
 
         return {
           data: listResult.rows,
-          meta: buildMeta(query.page, query.limit, listResult.total),
+          meta: buildGridMeta(listResult.total, query.page, query.limit),
           references,
           query,
           summary: listResult.summary,

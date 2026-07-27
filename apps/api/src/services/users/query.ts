@@ -1,4 +1,5 @@
 import type { GridFilter, GridQueryState } from "@smsystem/contracts/grid";
+import { sanitizeGridQuery } from "@/services/shared/grid.utils";
 
 const USER_GRID_SORT_FIELDS = [
   "employeeId",
@@ -24,20 +25,10 @@ export interface UserGridQuery extends GridQueryState {
 }
 
 export function sanitizeUserGridQuery(query: GridQueryState): UserGridQuery {
-  const sortBy = USER_GRID_SORT_FIELDS.includes(query.sortBy as UserGridSortField)
-    ? (query.sortBy as UserGridSortField)
-    : "employeeId";
-
-  const filters = query.filters.filter(
-    (filter): filter is GridFilter & { field: UserGridFilterField } =>
-      USER_GRID_FILTER_FIELDS.includes(filter.field as UserGridFilterField),
+  return sanitizeGridQuery(
+    query,
+    USER_GRID_SORT_FIELDS,
+    USER_GRID_FILTER_FIELDS,
+    "employeeId",
   );
-
-  return {
-    ...query,
-    limit: Math.min(query.limit, 100),
-    page: Math.max(query.page, 1),
-    sortBy,
-    filters,
-  };
 }

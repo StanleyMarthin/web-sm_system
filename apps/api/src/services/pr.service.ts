@@ -15,6 +15,7 @@ import { TtlCache } from "@/lib/ttl-cache";
 import { MySqlAuditRepository } from "@/repositories/audit.repo";
 import { MySqlPrRepository, type PrRepository } from "@/repositories/pr.repo";
 import type { WebSession } from "@/services/auth/session.service";
+import { buildGridMeta } from "@/services/grid/paginate";
 
 interface PrListResult {
   data: PrRecord[];
@@ -29,18 +30,6 @@ interface PrListResult {
   references: Awaited<ReturnType<PrRepository["listReferences"]>>;
   query: PrGridQuery;
   summary: PrSummary;
-}
-
-function buildMeta(page: number, limit: number, total: number) {
-  const totalPages = Math.max(1, Math.ceil(total / limit));
-  return {
-    page,
-    limit,
-    total,
-    totalPages,
-    hasNext: page < totalPages,
-    hasPrev: page > 1,
-  };
 }
 
 const PR_QUERY_CACHE_TTL_MS = 5_000;
@@ -115,7 +104,7 @@ export class DefaultPrService implements PrService {
 
         return {
           data: listResult.rows,
-          meta: buildMeta(query.page, query.limit, listResult.total),
+          meta: buildGridMeta(listResult.total, query.page, query.limit),
           references,
           query,
           summary: listResult.summary,

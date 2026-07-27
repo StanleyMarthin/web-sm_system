@@ -14,6 +14,7 @@ import { TtlCache } from "@/lib/ttl-cache";
 import { MySqlAuditRepository } from "@/repositories/audit.repo";
 import { MySqlVendorRepository, type VendorRepository } from "@/repositories/vendor.repo";
 import type { WebSession } from "@/services/auth/session.service";
+import { buildGridMeta } from "@/services/grid/paginate";
 
 interface VendorListResult {
   data: VendorRecord[];
@@ -28,18 +29,6 @@ interface VendorListResult {
   references: Awaited<ReturnType<VendorRepository["listReferences"]>>;
   query: VendorGridQuery;
   summary: VendorSummary;
-}
-
-function buildMeta(page: number, limit: number, total: number) {
-  const totalPages = Math.max(1, Math.ceil(total / limit));
-  return {
-    page,
-    limit,
-    total,
-    totalPages,
-    hasNext: page < totalPages,
-    hasPrev: page > 1,
-  };
 }
 
 const VENDOR_STATUS_TRANSITIONS: Record<VendorRecord["status"], VendorRecord["status"][]> = {
@@ -123,7 +112,7 @@ export class DefaultVendorService implements VendorService {
 
         return {
           data: listResult.rows,
-          meta: buildMeta(query.page, query.limit, listResult.total),
+          meta: buildGridMeta(listResult.total, query.page, query.limit),
           references,
           query,
           summary: listResult.summary,

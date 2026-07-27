@@ -17,6 +17,7 @@ import {
   type SpkRepository,
 } from "@/repositories/spk.repo";
 import type { WebSession } from "@/services/auth/session.service";
+import { buildGridMeta } from "@/services/grid/paginate";
 
 interface SpkListResult {
   data: SpkHeaderRecord[];
@@ -52,18 +53,6 @@ interface SpkItemApprovalResult {
 interface SpkDraftDetailUpdateResult {
   spkId: string;
   detailCount: number;
-}
-
-function buildMeta(page: number, limit: number, total: number) {
-  const totalPages = Math.max(1, Math.ceil(total / limit));
-  return {
-    page,
-    limit,
-    total,
-    totalPages,
-    hasNext: page < totalPages,
-    hasPrev: page > 1,
-  };
 }
 
 function requireGlobalScope(session: WebSession) {
@@ -142,7 +131,7 @@ export class DefaultSpkService implements SpkService {
     return {
       data: listResult.rows,
       storageReady: listResult.storageReady,
-      meta: buildMeta(query.page, query.limit, listResult.total),
+      meta: buildGridMeta(listResult.total, query.page, query.limit),
       query,
       summary,
     };

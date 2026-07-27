@@ -1,4 +1,5 @@
 import type { GridFilter, GridQueryState } from "@smsystem/contracts/grid";
+import { sanitizeGridQuery } from "@/services/shared/grid.utils";
 
 const UNIT_GRID_SORT_FIELDS = [
   "targetDeliveryDate",
@@ -24,20 +25,10 @@ export interface UnitGridQuery extends GridQueryState {
 }
 
 export function sanitizeUnitGridQuery(query: GridQueryState): UnitGridQuery {
-  const sortBy = UNIT_GRID_SORT_FIELDS.includes(query.sortBy as UnitGridSortField)
-    ? (query.sortBy as UnitGridSortField)
-    : "targetDeliveryDate";
-
-  const filters = query.filters.filter(
-    (filter): filter is GridFilter & { field: UnitGridFilterField } =>
-      UNIT_GRID_FILTER_FIELDS.includes(filter.field as UnitGridFilterField),
+  return sanitizeGridQuery(
+    query,
+    UNIT_GRID_SORT_FIELDS,
+    UNIT_GRID_FILTER_FIELDS,
+    "targetDeliveryDate",
   );
-
-  return {
-    ...query,
-    limit: Math.min(query.limit, 100),
-    page: Math.max(query.page, 1),
-    sortBy,
-    filters,
-  };
 }

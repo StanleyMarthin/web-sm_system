@@ -1,4 +1,5 @@
 import type { GridFilter, GridQueryState } from "@smsystem/contracts/grid";
+import { sanitizeGridQuery } from "@/services/shared/grid.utils";
 
 const COUNTDOWN_GRID_SORT_FIELDS = [
   "updatedAt",
@@ -32,24 +33,10 @@ export interface CountdownGridQuery extends GridQueryState {
 }
 
 export function sanitizeCountdownGridQuery(query: GridQueryState): CountdownGridQuery {
-  const sortBy = COUNTDOWN_GRID_SORT_FIELDS.includes(
-    query.sortBy as CountdownGridSortField,
-  )
-    ? (query.sortBy as CountdownGridSortField)
-    : "updatedAt";
-
-  const filters = query.filters.filter(
-    (filter): filter is GridFilter & { field: CountdownGridFilterField } =>
-      COUNTDOWN_GRID_FILTER_FIELDS.includes(
-        filter.field as CountdownGridFilterField,
-      ),
+  return sanitizeGridQuery(
+    query,
+    COUNTDOWN_GRID_SORT_FIELDS,
+    COUNTDOWN_GRID_FILTER_FIELDS,
+    "updatedAt",
   );
-
-  return {
-    ...query,
-    limit: Math.min(query.limit, 100),
-    page: Math.max(query.page, 1),
-    sortBy,
-    filters,
-  };
 }

@@ -1,4 +1,4 @@
-import { parseGridQueryParams } from "@smsystem/contracts/grid";
+import { parseGridQueryParams, type GridQueryState } from "@smsystem/contracts/grid";
 import {
   warehouseTransactionQuerySchema,
   type WarehouseTransactionQuery,
@@ -62,16 +62,15 @@ const VALID_TRANSACTION_FILTER_FIELDS = new Set([
 const VALID_GENERIC_FILTER_FIELDS = new Set(["itemCategory", "divisionId"]);
 
 function resolveSortBy(
-  searchParams: URLSearchParams,
+  gridQuery: GridQueryState,
   fallback: string,
   validFields: Set<string>,
 ) {
-  const gridQuery = parseGridQueryParams(searchParams);
   return validFields.has(gridQuery.sortBy) ? gridQuery.sortBy : fallback;
 }
 
-function resolveSortDirection(searchParams: URLSearchParams) {
-  return parseGridQueryParams(searchParams).sortDirection;
+function resolveSortDirection(gridQuery: GridQueryState) {
+  return gridQuery.sortDirection;
 }
 
 export function sanitizeWarehouseTransactionsQuery(
@@ -94,8 +93,8 @@ export function sanitizeWarehouseTransactionsQuery(
 
   return warehouseTransactionQuerySchema.parse({
     ...gridQuery,
-    sortBy: resolveSortBy(searchParams, "requestDate", VALID_TRANSACTION_SORT_FIELDS),
-    sortDirection: resolveSortDirection(searchParams),
+    sortBy: resolveSortBy(gridQuery, "requestDate", VALID_TRANSACTION_SORT_FIELDS),
+    sortDirection: resolveSortDirection(gridQuery),
     filters,
     view,
     dateFrom,
@@ -114,8 +113,8 @@ export function sanitizeWarehouseGenericGridQuery(
 
   return warehouseTransactionQuerySchema.parse({
     ...gridQuery,
-    sortBy: resolveSortBy(searchParams, fallbackSortBy, VALID_GRID_SORT_FIELDS),
-    sortDirection: resolveSortDirection(searchParams),
+    sortBy: resolveSortBy(gridQuery, fallbackSortBy, VALID_GRID_SORT_FIELDS),
+    sortDirection: resolveSortDirection(gridQuery),
     filters,
     view: null,
   });
