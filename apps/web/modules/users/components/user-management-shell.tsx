@@ -308,10 +308,12 @@ export function UserManagementShell({
       />
 
       {editorMode ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 px-4 backdrop-blur-[1px]">
-          <div className="w-full max-w-3xl rounded-3xl border border-border dark:border-white/[0.08] bg-background p-6">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg text-foreground dark:text-foreground">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-2 backdrop-blur-[1px] sm:p-4">
+          <div
+            className="flex max-h-[calc(100svh-1rem)] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-border bg-background p-4 dark:border-white/[0.08] sm:max-h-[calc(100svh-2rem)] sm:rounded-3xl sm:p-6"
+          >
+            <div className="flex shrink-0 items-center justify-between gap-4">
+              <h3 className="min-w-0 break-words text-lg text-foreground">
                 {editorMode === "create"
                   ? "Buat Pengguna"
                   : editorMode === "edit"
@@ -321,7 +323,7 @@ export function UserManagementShell({
               <button
                 type="button"
                 onClick={closeEditor}
-                className="rounded-full border border-border dark:border-white/[0.08] px-3 py-1 text-xs uppercase tracking-[0.15em] text-muted-foreground dark:text-foreground/50 hover:text-foreground dark:text-foreground"
+                className="shrink-0 whitespace-nowrap rounded-full border border-border px-3 py-1 text-xs uppercase tracking-[0.15em] text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring dark:border-white/[0.08] dark:text-foreground/50 dark:hover:text-foreground"
               >
                 Tutup
               </button>
