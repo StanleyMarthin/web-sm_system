@@ -1,22 +1,51 @@
-/*
-TUJUAN: wrapper halaman source agar heading, filter reference, notice, dan collector konsisten.
+"use client";
 
-IMPORT
-"use client"; SourceCollector; readonly SpfSource/SpfPagination/SourceQuery types.
+import Link from "next/link";
+import { SourceCollector } from "./source-collector";
+import type { SpfSource, SpfPagination } from "@/shared/api/spf-contracts";
+import { PageHeader } from "@/shared/ui/compact";
 
-KENAPA IMPORT INI DIPERLUKAN
-Client boundary dibutuhkan untuk event; SourceCollector mereuse table/selection; readonly types
-membuat shell hanya meneruskan snapshot server dan tidak mengubahnya.
+interface SourceCollectorShellProps {
+  sources: readonly SpfSource[];
+  meta: SpfPagination;
+}
 
-PROPS: Readonly<{ rows:readonly SpfSource[]; meta:SpfPagination; state:SourceQuery }>
-KODE: section+h1+description tentang snapshot; warning bahwa COLLECT tidak mengubah SMS_DB;
-render SourceCollector; aria-live notice untuk hasil inserted/ignored.
+export function SourceCollectorShell({
+  sources,
+  meta,
+}: SourceCollectorShellProps) {
+  return (
+    <section aria-labelledby="spf-source-collector-title" className="space-y-4">
+      <div className="space-y-1">
+        <nav aria-label="Breadcrumb">
+          <ol className="flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground dark:text-foreground/45">
+            <li>
+              <Link href="/spf/items" className="hover:underline">
+                Item SPF
+              </Link>
+            </li>
+            <li>/</li>
+            <li className="text-foreground dark:text-foreground">Source SMS DB</li>
+          </ol>
+        </nav>
+        <PageHeader
+          eyebrow="SPF Admin"
+          title="SMS Database Source Collector"
+        />
+      </div>
 
-KENAPA KODE INI: warning menjelaskan konsekuensi sebelum aksi; aria-live menyampaikan hasil
-async kepada screen reader tanpa memindahkan focus.
+      {/* Notice Banner */}
+      <div className="rounded border border-primary/20 bg-primary/5 p-3 dark:border-primary/15 dark:bg-primary/8">
+        <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-app-accent-ink font-semibold dark:text-app-accent-ink/90">
+          💡 Catatan Pengumpulan Source
+        </p>
+        <p className="mt-1 text-[12px] leading-5 text-muted-foreground dark:text-foreground/75">
+          Proses pengumpulan (COLLECT) akan menyalin item mentah dari basis data SMS ke dalam item pekerjaan SPF untuk diproses lebih lanjut. Mengumpulkan data tidak memodifikasi atau menghapus data mentah pada SMS DB.
+        </p>
+      </div>
 
-SECURITY: halaman server sudah ADMIN-only, tetapi mutation denial 403 tetap ditampilkan aman.
-DATA: jangan menyimpan selection lintas refresh; source yang sudah collected hilang dari hasil.
-
-SELESAI JIKA: admin paham konsekuensi collect dan hasil partial terlihat jelas.
-*/
+      {/* Collector Component */}
+      <SourceCollector sources={sources} meta={meta} />
+    </section>
+  );
+}

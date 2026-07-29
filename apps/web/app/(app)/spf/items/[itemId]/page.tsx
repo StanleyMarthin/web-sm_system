@@ -1,27 +1,57 @@
-/*
-IMPORT YANG DIGUNAKAN
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
+import { requireAdminSession } from "@/shared/auth/admin-session";
 import { fetchSpfItemDetail } from "@/shared/api/spf";
+import { ModuleUnavailableState } from "@/shared/ui/module-unavailable-state";
 import { ItemDetailShell } from "@/modules/spf/components/item-detail-shell";
 
-KENAPA IMPORT INI DIPERLUKAN
-- `headers`: session server fetch.
-- `notFound`/`redirect`: status HTTP/navigation tepat untuk missing/auth.
-- `fetchSpfItemDetail`: validasi envelope dan error mapping tidak diulang.
-- `ItemDetailShell`: detail, edit, delete, dan media berbagi snapshot yang sama.
+interface Props {
+  params: Promise<{ itemId: string }>;
+}
 
-STRUKTUR KODE: validasi Number.isSafeInteger(id) && id > 0, fetch dengan cookie,
-mapping 401/403/404 seperti detail periode, lalu render readonly metadata.
-Render ItemDetailShell sekali dengan item/media/role/editable dari response.
-KENAPA: validasi ID sebelum fetch menolak input buruk lebih cepat; capability backend mencegah
-UI menebak apakah item masih boleh diubah setelah masuk periode workflow.
-LOGIC — item detail
-- Validate positive integer ID; mode DETAIL; translate 404 to notFound().
-- Render description as escaped text, never dangerouslySetInnerHTML.
-- Media URL comes from backend; never infer public bucket path.
-- ADMIN receives edit/delete/upload controls only when item is editable.
-- Forms start from latest server values and show field errors plus error summary.
+export default async function ItemDetailPage({ params }: Props) {
+  const { itemId } = await params;
 
-SELESAI JIKA: description escaped, broken media punya fallback, 404 tidak bocorkan detail DB.
-*/
+  // Validasi ID sebelum menyentuh backend — menolak input buruk cepat.
+  const id = Number(itemId);
+  if (!Number.isSafeInteger(id) || id <= 0) {
+    notFound();
+  }
+
+  const cookieHeader = (await headers()).get("cookie") ?? "";
+  const session = await requireAdminSession(cookieHeader);
+  if (!session) redirect("/login");
+
+  const result = await fetchSpfItemDetail(cookieHeader, id);
+
+  if (result.status === 401) redirect("/login");
+  if (result.status === 403) redirect("/forbidden");
+  if (result.status === 404) notFound();
+
+  if (!result.payload) {
+    return (
+      <ModuleUnavailableState
+        module="SPF · Item"
+        title="Detail item tidak tersedia"
+        message="Server tidak dapat diakses atau terjadi kesalahan saat memuat data."
+        backHref="/spf/items"
+        backLabel="Kembali ke Daftar Item"
+      />
+    );
+  }
+
+  const { item, media } = result.payload;
+
+  // Item yang sudah ada di periode workflow tidak bisa diedit lagi.
+  // Backend tetap menjadi penjaga akhir setiap mode.
+  const editable = session.role === "ADMIN" && item.period_id === null;
+
+  return (
+    <ItemDetailShell
+      item={item}
+      media={media}
+      role={session.role}
+      editable={editable}
+    />
+  );
+}

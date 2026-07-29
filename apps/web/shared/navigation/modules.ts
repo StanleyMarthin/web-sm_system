@@ -125,6 +125,26 @@ const navigationModules: NavigationItem[] = [
     ],
   },
   {
+    id: "spf",
+    label: "SPF Client Portal",
+    icon: "grid",
+    group: "Operations",
+    subItems: [
+      {
+        id: "spf-periods",
+        label: "Periode SPF",
+        href: "/spf/periods",
+        permission: permissionCodes.profileView,
+      },
+      {
+        id: "spf-items",
+        label: "Item Restorasi",
+        href: "/spf/items",
+        permission: permissionCodes.profileView,
+      },
+    ],
+  },
+  {
     id: "gallery",
     label: "Gallery",
     href: "/gallery",

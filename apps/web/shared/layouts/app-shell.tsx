@@ -81,7 +81,8 @@ function matchesBasePath(pathname: string, href: string, id?: string): boolean {
     (targetPath === "/monitoring" && (pathname === "/monitoring" || pathname.startsWith("/monitoring/today") || pathname.startsWith("/monitoring/overtime"))) ||
     (targetPath === "/settings/calendar" && pathname.startsWith("/settings/calendar")) ||
     (id === "requests" && pathname.startsWith("/requests")) ||
-    (id === "warehouse" && pathname.startsWith("/warehouse"))
+    (id === "warehouse" && pathname.startsWith("/warehouse")) ||
+    (id === "spf" && pathname.startsWith("/spf"))
   );
 }
 

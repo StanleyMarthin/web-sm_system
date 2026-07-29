@@ -38,6 +38,7 @@ yarn-error.log*
 # Environment and secrets
 .env
 .env.*
+src/config/secrets/
 !.env.example
 !.env.local.example
 # Keep production examples local until all real secrets are replaced by placeholders.

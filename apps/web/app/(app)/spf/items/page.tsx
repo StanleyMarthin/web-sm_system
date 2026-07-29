@@ -1,40 +1,102 @@
-/*
-IMPORT YANG DIGUNAKAN
 import dynamic from "next/dynamic";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { fetchSpfItems, parseItemListQuery } from "@/shared/api/spf";
+import { requireAdminSession } from "@/shared/auth/admin-session";
+import { fetchSpfItems } from "@/shared/api/spf";
+import { ModuleUnavailableState } from "@/shared/ui/module-unavailable-state";
 import { PageDataSkeleton } from "@/shared/ui/page-data-skeleton";
-const ItemListShell = dynamic(() => import("@/modules/spf/components/item-list-shell")
-  .then(module => module.ItemListShell), { loading: () => <PageDataSkeleton title="Memuat item SPF" /> });
 
-KENAPA IMPORT INI DIPERLUKAN
-- `dynamic` + skeleton: JS tabel/form dimuat saat perlu dengan feedback stabil.
-- `headers`: cookie hanya dipakai server-side.
-- `redirect`: auth failure tidak disamakan dengan API unavailable.
-- `fetchSpfItems`: menyatukan request envelope dan response validation.
-- `parseItemListQuery`: URL eksternal tidak pernah langsung menjadi body backend.
-- `ItemListShell`: menyatukan filter, dialog create, notice, dan list.
+const ItemListShell = dynamic(
+  () =>
+    import("@/modules/spf/components/item-list-shell").then(
+      (m) => m.ItemListShell,
+    ),
+  { loading: () => <PageDataSkeleton title="Memuat daftar item SPF" /> },
+);
 
-KENAPA KODE INI: URL menjadi state filter/pagination agar refresh, bookmark, back/forward bekerja;
-server tetap mengambil data sehingga client tidak membuat waterfall sesudah hydration.
+// ─── Query parser ─────────────────────────────────────────────────────────────
+// Menolak key asing dan nilai invalid; menggunakan safe defaults.
+const ALLOWED_ITEM_SORTS = ["created_at", "updated_at", "car_id"] as const;
+type ItemSort = (typeof ALLOWED_ITEM_SORTS)[number];
 
-STRUKTUR KODE: sama dengan `dashboard/users/page.tsx` — resolve searchParams,
-ambil cookie, panggil fetchSpfItems, redirect 401/403, unavailable state saat payload null,
-lalu render dynamic ItemListShell dengan rows/meta/state/role. Jangan fetch ulang saat mount.
+function parseItemListQuery(
+  searchParams: Record<string, string | string[] | undefined>,
+): {
+  limit: number;
+  offset: number;
+  car_id?: number;
+  period_id?: number;
+  sort?: ItemSort;
+  order?: "ASC" | "DESC";
+} {
+  const rawPage = searchParams["page"];
+  const page =
+    typeof rawPage === "string" && /^\d+$/.test(rawPage)
+      ? Math.max(1, Number.parseInt(rawPage, 10))
+      : 1;
+  const limit = 25;
+  const offset = (page - 1) * limit;
 
-QUERY: page, period_id, car_id, sort, order. Parser mengabaikan key asing dan nilai invalid.
-LOGIC — item list
-- Filters: period_id and car_id; sort uses explicit allowlist; server pagination 25.
-- ADMIN can create/edit/delete/upload/delete media when backend permits; others read-only.
-- Confirm destructive actions; no optimistic delete.
-- Upload must validate allowed MIME and effective Base64 size below backend JSON limit.
+  const rawCarId = searchParams["car_id"];
+  const car_id =
+    typeof rawCarId === "string" && /^\d+$/.test(rawCarId)
+      ? Number.parseInt(rawCarId, 10)
+      : undefined;
 
-PSEUDOCODE
-query = itemQuerySchema.safeParse(searchParams) ?? safeDefaults
-result = spfApi.item({ mode: 'LIST', ...query })
-render existing SmartDataGrid + filters + pagination
-mutation success -> router.refresh(); 409 -> refresh + stale-state message
+  const rawPeriodId = searchParams["period_id"];
+  const period_id =
+    typeof rawPeriodId === "string" && /^\d+$/.test(rawPeriodId)
+      ? Number.parseInt(rawPeriodId, 10)
+      : undefined;
 
-SELESAI JIKA: filter tersimpan di URL, back/forward bekerja, pagination tetap server-side.
-*/
+  const rawSort = searchParams["sort"];
+  const sort =
+    typeof rawSort === "string" &&
+    ALLOWED_ITEM_SORTS.includes(rawSort as ItemSort)
+      ? (rawSort as ItemSort)
+      : undefined;
+
+  const rawOrder = searchParams["order"];
+  const order =
+    rawOrder === "ASC" || rawOrder === "DESC" ? rawOrder : undefined;
+
+  return { limit, offset, car_id, period_id, sort, order };
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
+interface Props {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}
+
+export default async function ItemsPage({ searchParams }: Props) {
+  const cookieHeader = (await headers()).get("cookie") ?? "";
+  const session = await requireAdminSession(cookieHeader);
+
+  if (!session) redirect("/login");
+
+  const query = parseItemListQuery(await searchParams);
+  const result = await fetchSpfItems(cookieHeader, query);
+
+  if (result.status === 401) redirect("/login");
+  if (result.status === 403) redirect("/forbidden");
+
+  if (!result.payload) {
+    return (
+      <ModuleUnavailableState
+        module="SPF"
+        title="Daftar item tidak tersedia"
+        message="Server tidak dapat dijangkau atau terjadi kesalahan. Coba muat ulang halaman."
+        backHref="/dashboard"
+        backLabel="Ke Dashboard"
+      />
+    );
+  }
+
+  return (
+    <ItemListShell
+      rows={result.payload.items}
+      meta={result.payload.meta}
+      role={session.role}
+    />
+  );
+}
