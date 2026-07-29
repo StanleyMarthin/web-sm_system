@@ -30,6 +30,10 @@ interface UserCreateFormProps {
 }
 
 function buildScopeHint(role: UserGridReference["roles"][number] | undefined): string {
+  if (!role) {
+    return "Pilih role untuk melihat lingkup akses pengguna.";
+  }
+
   switch (role?.scopeBasis) {
     case "GLOBAL":
       return "Role ini dapat melihat seluruh data sesuai permission yang dicentang.";
@@ -39,8 +43,10 @@ function buildScopeHint(role: UserGridReference["roles"][number] | undefined): s
       return "Role ini mengikuti unit yang sedang dipegang pada assignment operasional. Daftar unit tidak diatur manual dari layar ini.";
     case "SELF_ONLY":
       return "Role ini hanya memakai data milik user itu sendiri.";
-    default:
+    case "OWN_DIVISION":
       return "Role ini mengikuti divisi utama user.";
+    default:
+      return "Lingkup akses role ini belum ditentukan.";
   }
 }
 
@@ -98,7 +104,10 @@ export function UserCreateForm({ references, onSuccess, onError, onClose }: User
   };
 
   return (
-    <form className="mt-5 grid gap-4 md:grid-cols-2" onSubmit={handleSubmit(onSubmit)}>
+    <form
+      className="mt-4 grid min-h-0 overflow-y-auto overscroll-contain pr-1 gap-4 md:grid-cols-2"
+      onSubmit={handleSubmit(onSubmit)}
+    >
       <label className="space-y-1">
         <span className="text-xs uppercase tracking-[0.14em] text-foreground/45">ID Pegawai</span>
         <input
@@ -175,7 +184,9 @@ export function UserCreateForm({ references, onSuccess, onError, onClose }: User
 
       <div className="md:col-span-2 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4">
         <p className="text-xs uppercase tracking-[0.14em] text-foreground/45">Ringkasan Lingkup</p>
-        {buildScopeHint(selectedRoleDefinition) ? null : null}
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">
+          {buildScopeHint(selectedRoleDefinition)}
+        </p>
       </div>
 
       {selectedRoleDefinition?.scopeBasis === "ASSIGNED_DIVISIONS" && (
@@ -221,19 +232,19 @@ export function UserCreateForm({ references, onSuccess, onError, onClose }: User
         {errors.password && <p className="text-xs text-destructive">{errors.password.message}</p>}
       </label>
 
-      <div className="flex justify-end gap-2 pt-2 md:col-span-2">
+      <div className="sticky bottom-0 z-10 -mx-1 flex flex-col-reverse gap-2 border-t border-border bg-background px-1 py-3 sm:flex-row sm:justify-end md:col-span-2">
         <button
           type="button"
           onClick={onClose}
           disabled={isPending}
-          className="rounded-full border border-white/[0.08] px-4 py-2 text-sm text-foreground/60 hover:text-foreground"
+          className="h-11 whitespace-nowrap rounded-full border border-border px-4 py-2 text-sm text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         >
           Batal
         </button>
         <button
           type="submit"
           disabled={isPending || !isValid}
-          className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary disabled:opacity-40"
+          className="inline-flex h-11 items-center justify-center gap-2 whitespace-nowrap rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-40"
         >
           <UserCog className="h-4 w-4" />
           Simpan Pengguna
