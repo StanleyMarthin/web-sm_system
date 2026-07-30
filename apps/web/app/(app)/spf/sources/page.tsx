@@ -1,35 +1,78 @@
-/*
-IMPORT YANG DIGUNAKAN
 import dynamic from "next/dynamic";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { fetchSpfSources } from "@/shared/api/spf";
-const SourceCollectorShell = dynamic(() => import("@/modules/spf/components/source-collector-shell")
-  .then(module => module.SourceCollectorShell));
+import { requireAdminSession } from "@/shared/auth/admin-session";
+import { fetchSpfSources, getSpfBffOrigin } from "@/shared/api/spf";
+import { ModuleUnavailableState } from "@/shared/ui/module-unavailable-state";
+import { PageDataSkeleton } from "@/shared/ui/page-data-skeleton";
 
-KENAPA IMPORT INI DIPERLUKAN
-- `dynamic`: selection/table hanya menjadi client JS pada halaman collector.
-- `headers`: meneruskan session aman ke BFF.
-- `redirect`: source SMS hanya boleh dibuka ADMIN.
-- `fetchSpfSources`: parser query, request mode, dan envelope berada di boundary tunggal.
-- `SourceCollectorShell`: heading/warning/result dan table mempunyai satu orchestration owner.
+// JS tabel selection hanya dimuat saat perlu.
+const SourceCollectorShell = dynamic(
+  () =>
+    import("@/modules/spf/components/source-collector-shell").then(
+      (m) => m.SourceCollectorShell,
+    ),
+  { loading: () => <PageDataSkeleton title="Memuat source SMS" /> },
+);
 
-KENAPA KODE INI: role diperiksa sebelum query untuk menghindari data source bocor; backend tetap
-memeriksa role lagi karena visibility UI bukan authorization.
+// ─── Query parser ─────────────────────────────────────────────────────────────
+function parseSourceQuery(
+  searchParams: Record<string, string | string[] | undefined>,
+): { limit: number; offset: number; car_id?: string } {
+  const rawPage = searchParams["page"];
+  const page =
+    typeof rawPage === "string" && /^\d+$/.test(rawPage)
+      ? Math.max(1, Number.parseInt(rawPage, 10))
+      : 1;
+  const limit = 25;
+  const offset = (page - 1) * limit;
 
-STRUKTUR KODE: require role ADMIN sebelum fetch; parse car_id/work_type/page;
-fetch mode SMS_DB dengan cookie; mapping status standar; render SourceCollectorShell dynamic.
-Role selain ADMIN langsung forbidden, bukan sekadar menyembunyikan tombol.
-LOGIC — SMS source collector, ADMIN only
-- Fetch { mode: 'SMS_DB' } with car/work-type filters and server pagination.
-- Keep immutable selection for current page, maximum 200 IDs.
-- Send one { mode: 'COLLECT', source_ids }; disable duplicate submission.
-- Display inserted/ignored result, clear selection, refresh source and item data.
+  const rawCarId = searchParams["car_id"];
+  const car_id =
+    typeof rawCarId === "string" && rawCarId.trim().length <= 100
+      ? rawCarId.trim()
+      : undefined;
 
-PSEUDOCODE
-nextSelection = new Set(previousSelection)
-assert nextSelection.size <= 200
-await spfApi.source({ mode: 'COLLECT', source_ids: [...nextSelection] })
+  return { limit, offset, car_id };
+}
 
-SELESAI JIKA: batas 200 tampil sebelum submit dan hasil partial/ignored dapat dipahami user.
-*/
+// ─── Page (ADMIN only) ────────────────────────────────────────────────────────
+interface Props {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}
+
+export default async function SourcesPage({ searchParams }: Props) {
+  const requestHeaders = await headers();
+  const cookieHeader = requestHeaders.get("cookie") ?? "";
+  const session = await requireAdminSession(cookieHeader);
+
+  if (!session) redirect("/login");
+
+  // Sources hanya bisa dilihat ADMIN — bukan sekadar menyembunyikan tombol.
+  if (!session.access.canAdmin) redirect("/forbidden");
+
+  const query = parseSourceQuery(await searchParams);
+  const result = await fetchSpfSources(cookieHeader, query, getSpfBffOrigin());
+
+  if (result.status === 401) redirect("/login");
+  if (result.status === 403) redirect("/forbidden");
+
+  if (!result.payload) {
+    return (
+      <ModuleUnavailableState
+        module="SPF · Source"
+        title="Data source SMS tidak tersedia"
+        message="Server tidak dapat dijangkau atau terjadi kesalahan. Coba muat ulang halaman."
+        backHref="/spf/items"
+        backLabel="Ke Daftar Item"
+      />
+    );
+  }
+
+  return (
+    <SourceCollectorShell
+      sources={result.payload.sources}
+      meta={result.payload.meta}
+    />
+  );
+}

@@ -78,6 +78,9 @@ export const permissionCodes = {
   bubutInvoicePrint: "bubut_invoice.print",
   bubutInvoiceCancel: "bubut_invoice.cancel",
   manageUsers: "user.manage",
+  spfAdmin: "spf:admin",
+  spfApprove: "spf:approve",
+  spfPublish: "spf:publish",
 } as const;
 
 export const permissionCatalog = Object.values(permissionCodes);
@@ -222,6 +225,9 @@ const permissionMetaCatalog: Record<string, PermissionMeta> = {
   [permissionCodes.bubutInvoicePrint]: { platforms: ["WEB"], audience: "WEB" },
   [permissionCodes.bubutInvoiceCancel]: { platforms: ["WEB"], audience: "WEB" },
   [permissionCodes.manageUsers]: { platforms: ["WEB"], audience: "WEB" },
+  [permissionCodes.spfAdmin]: { platforms: ["WEB"], audience: "WEB" },
+  [permissionCodes.spfApprove]: { platforms: ["WEB"], audience: "WEB" },
+  [permissionCodes.spfPublish]: { platforms: ["WEB"], audience: "WEB" },
 };
 
 export function hasPermission(

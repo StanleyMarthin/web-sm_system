@@ -1,63 +1,97 @@
-/*
-IMPORT YANG DIGUNAKAN
 import "server-only";
 import { NextResponse, type NextRequest } from "next/server";
-import { z } from "zod";
-import { requireAdminSession } from "@/shared/auth/admin-session";
+import { CSRF_COOKIE_NAME, SESSION_COOKIE_NAME } from "@smsystem/contracts/auth";
 import { requestSchemas, type SpfResource } from "@/shared/api/spf-contracts";
 
-KENAPA IMPORT INI DIPERLUKAN
-- `server-only`: build gagal bila modul bersecret tidak sengaja diimport Client Component.
-- `NextRequest`/`NextResponse`: akses cookie/header dan response Route Handler yang typed.
-- `z`: memvalidasi data tak tepercaya sebelum menyentuh upstream.
-- `requireAdminSession`: actor berasal dari session signed, bukan body/header browser.
-- `requestSchemas`: FE dan BFF memakai batas mode/field yang sama; `SpfResource` menjaga allowlist.
+const ALLOWED_RESOURCES = new Set<SpfResource>(["source", "item", "period"]);
 
-KONSTANTA
-const resources = new Set<SpfResource>(["source", "item", "period"]);
-const upstreamBaseUrl = process.env.SPF_API_INTERNAL_URL?.replace(/\/$/u, "");
-const adminApiKey = process.env.PORTAL_ADMIN_API_KEY;
-Validasi kedua env saat server bootstrap; key minimum 32 chars. Jangan fallback.
-
-STRUKTUR IMPLEMENTASI
-export async function POST(request: NextRequest, context: { params: Promise<{resource:string}> }) {
-  const session = await requireAdminSession(request.headers.get("cookie") ?? "");
-  if (!session) return safeError(401, "UNAUTHORIZED", "Sesi berakhir.");
-  if (!isSameOriginAndValidCsrf(request)) return safeError(403, "CSRF_INVALID", ...);
-  const resource = (await context.params).resource;
-  if (!resources.has(resource as SpfResource)) return safeError(404, "NOT_FOUND", ...);
-  const raw = await readJsonWithLimit(request); // catch malformed/oversize -> 400/413
-  const parsed = requestSchemas[resource].safeParse(raw);
-  if (!parsed.success) return safeValidationError(parsed.error); // no stack
-  const upstream = await fetch(`${upstreamBaseUrl}/api/spf/${resource}`, {
-    method: "POST", cache: "no-store", signal: AbortSignal.timeout(15_000),
-    headers: { "content-type":"application/json", authorization:`Bearer ${adminApiKey}`,
-      "x-employee-id":session.employeeId, "x-admin-role":session.role },
-    body: JSON.stringify(parsed.data),
-  });
-  return normalizeUpstream(upstream); // allowlist status/body fields only
+function errorResponse(status: number, code: string, message: string) {
+  return NextResponse.json({ error: { code, message } }, { status });
 }
 
-KENAPA KODE INI DITULIS
-BFF diperlukan karena backend memakai secret server. Browser hanya berbicara same-origin;
-BFF memverifikasi session+CSRF, menambahkan actor terverifikasi, membatasi resource/body/time,
-dan menyaring response. Tanpanya API key atau identity header dapat dipalsukan dari browser.
+export async function POST(
+  request: NextRequest,
+  context: { params: Promise<{ resource: string }> },
+) {
+  const contentLength = Number(request.headers.get("content-length") ?? "0");
+  if (Number.isFinite(contentLength) && contentLength > 7_500_000) {
+    return errorResponse(413, "PAYLOAD_TOO_LARGE", "Ukuran upload melebihi batas 5 MB.");
+  }
 
-ERROR: timeout/network -> 503; invalid upstream JSON -> 502; 429 keeps Retry-After.
-LOG: request ID, resource, mode, status, duration; never key, cookie, or file_data.
-LOGIC — same-origin BFF; browser must never receive PORTAL_ADMIN_API_KEY.
-1. requireAdminSession(request.cookies); absent -> 401.
-2. Allow only resource source | item | period; otherwise 404.
-3. Enforce CSRF using existing smsystem mechanism and validate JSON/body size.
-4. Validate request with resource discriminated union.
-5. POST to `${API_INTERNAL_URL}/api/spf/${resource}` with server-only Bearer key,
-   verified session employee ID and verified role; cache no-store + timeout.
-6. Preserve useful HTTP status, normalize safe envelope, strip upstream cookies,
-   stack traces and hop-by-hop headers. Never log credentials or full file_data.
+  const { resource } = await context.params;
+  if (!ALLOWED_RESOURCES.has(resource as SpfResource)) {
+    return errorResponse(404, "NOT_FOUND", "Resource SPF tidak ditemukan.");
+  }
 
-ENV: API_INTERNAL_URL and PORTAL_ADMIN_API_KEY are server-only; no NEXT_PUBLIC_ prefix.
-PRODUCTION BLOCKER: backend currently trusts identity headers. Restrict endpoint to this
-BFF/private network or replace them with a signed smsystem identity token.
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return errorResponse(400, "BAD_REQUEST", "Body request harus berupa JSON.");
+  }
 
-SELESAI JIKA: browser bundle/search tidak mengandung secret dan forged identity test gagal.
-*/
+  const targetResource = resource as SpfResource;
+  const parsed = requestSchemas[targetResource].safeParse(body);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    return errorResponse(
+      400,
+      "VALIDATION_ERROR",
+      `${issue?.path.join(".") || "body"}: ${issue?.message || "Data tidak valid"}`,
+    );
+  }
+
+  const upstreamBaseUrl = process.env.SPF_API_INTERNAL_URL?.trim().replace(/\/$/u, "");
+  if (!upstreamBaseUrl) {
+    return errorResponse(503, "SPF_NOT_CONFIGURED", "Backend SPF belum dikonfigurasi.");
+  }
+  const requestOrigin = request.headers.get("origin");
+  if (requestOrigin) {
+    try {
+      const originHost = new URL(requestOrigin).host;
+      const serverHost = request.headers.get("host") ?? request.nextUrl.host;
+      if (originHost !== serverHost) {
+        return errorResponse(403, "INVALID_ORIGIN", "Origin request tidak diizinkan.");
+      }
+    } catch {
+      return errorResponse(403, "INVALID_ORIGIN", "Origin request tidak valid.");
+    }
+  }
+  const sessionCookie = request.cookies.get(SESSION_COOKIE_NAME)?.value ?? "";
+  const csrfToken = request.cookies.get(CSRF_COOKIE_NAME)?.value ?? "";
+  // The Bun API REQUIRES sm_device_id to validate the session, so we MUST forward it.
+  const deviceId = request.cookies.get("sm_device_id")?.value ?? "";
+  
+  const cookieHeader = [
+    sessionCookie && `${SESSION_COOKIE_NAME}=${encodeURIComponent(sessionCookie)}`,
+    csrfToken && `${CSRF_COOKIE_NAME}=${encodeURIComponent(csrfToken)}`,
+    deviceId && `sm_device_id=${encodeURIComponent(deviceId)}`,
+  ].filter(Boolean).join("; ");
+
+  try {
+    const upstream = await fetch(`${upstreamBaseUrl}/api/spf/${targetResource}`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        ...(cookieHeader ? { cookie: cookieHeader } : {}),
+        ...(csrfToken ? { "x-csrf-token": csrfToken } : {}),
+        ...(requestOrigin ? { origin: requestOrigin } : {}),
+      },
+      body: JSON.stringify(parsed.data),
+      cache: "no-store",
+      signal: AbortSignal.timeout(15_000),
+    });
+
+    const headers = new Headers();
+    for (const name of ["content-type", "content-disposition"]) {
+      const value = upstream.headers.get(name);
+      if (value) headers.set(name, value);
+    }
+    return new Response(await upstream.arrayBuffer(), {
+      status: upstream.status,
+      headers,
+    });
+  } catch {
+    return errorResponse(502, "SPF_UPSTREAM_UNAVAILABLE", "Backend SPF tidak dapat dijangkau.");
+  }
+}

@@ -133,6 +133,19 @@ const navigationModules: NavigationItem[] = [
     group: "Operations",
   },
   {
+    id: "spf",
+    label: "SPF",
+    href: "/spf/items",
+    permission: permissionCodes.spfAdmin,
+    icon: "grid",
+    group: "Operations",
+    subItems: [
+      { id: "spf-items", label: "Item", href: "/spf/items", permission: permissionCodes.spfAdmin },
+      { id: "spf-periods", label: "Periode", href: "/spf/periods", permission: permissionCodes.spfAdmin },
+      { id: "spf-sources", label: "Source", href: "/spf/sources", permission: permissionCodes.spfAdmin },
+    ],
+  },
+  {
     id: "qa",
     label: "QA",
     href: "/qc/dashboard",
@@ -290,6 +303,12 @@ function hasNodePermission(
   item: Pick<NavigationItem, "id" | "permission">,
   permissions: readonly string[],
 ) {
+  if (item.id === "spf" || item.id === "spf-items" || item.id === "spf-periods") {
+    return [permissionCodes.spfAdmin, permissionCodes.spfApprove, permissionCodes.spfPublish].some((permission) =>
+      permissions.includes(permission),
+    );
+  }
+
   if (item.id === "requests" || item.id.startsWith("requests-")) {
     return hasRequestAccess(permissions);
   }

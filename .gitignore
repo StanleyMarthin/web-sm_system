@@ -7,7 +7,7 @@ node_modules/
 !.yarn/plugins/
 !.yarn/releases/
 !.yarn/versions/
-
+IMPLEMENTATION_PROMPT.ts
 # Build output and caches
 .next/
 **/.next/
@@ -21,6 +21,7 @@ coverage/
 tmp/
 *.tsbuildinfo
 next-env.d.ts
+/apps/api/db
 
 # Tests are local-only in the runtime-source handoff.
 **/*.test.ts
@@ -101,6 +102,7 @@ nginx/
 # SQL dumps are local; application migrations are source code.
 *.sql
 /apps/api/db/migrations/*.sql
+!/apps/api/db/migrations/20260730_seed_spf_permissions.sql
 
 # Misc OS/editor files
 .DS_Store

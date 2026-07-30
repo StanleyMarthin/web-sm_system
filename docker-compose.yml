@@ -61,6 +61,7 @@ services:
     environment:
       NODE_ENV: production
       NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-/api}
+      SPF_API_INTERNAL_URL: ${SPF_API_INTERNAL_URL:?SPF_API_INTERNAL_URL is required}
     expose:
       - "3000"
     depends_on:

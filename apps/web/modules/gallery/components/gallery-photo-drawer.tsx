@@ -38,25 +38,11 @@ function humanizePhotoType(photoType: GalleryPhotoType): string {
 }
 
 function buildDownloadFileName(
-  unitName: string,
-  jobName: string,
   photo: GalleryPhotoRecord,
   index?: number,
 ) {
   const originalName = decodeURIComponent(photo.photoUrl.split("/").pop() ?? "foto.jpg");
-
-  if ((photo.source as string) !== "WEB") {
-    return typeof index === "number" && index > 0 ? `${index}_${originalName}` : originalName;
-  }
-
-  const extension = originalName.includes(".")
-    ? originalName.split(".").pop()
-    : "jpg";
-  const safeUnit = unitName.replace(/[^\w\- ]/gu, "_").trim();
-  const safeJob = jobName.replace(/[^\w\- ]/gu, "_").trim();
-  const structuredName = `${safeUnit}_${safeJob}_${photo.photoType.toLowerCase()}.${extension}`;
-  
-  return typeof index === "number" && index > 0 ? `${index}_${structuredName}` : structuredName;
+  return typeof index === "number" && index > 0 ? `${index}_${originalName}` : originalName;
 }
 
 async function downloadUrl(url: string, fileName: string) {
@@ -258,6 +244,10 @@ export function GalleryPhotoDrawer({
   }
 
   async function handleDeletePhoto(photoId: string) {
+    if (!window.confirm("Hapus foto ini secara permanen?")) {
+      return;
+    }
+
     setRowSavingId(photoId);
     setError(null);
 
@@ -336,8 +326,6 @@ export function GalleryPhotoDrawer({
         await downloadUrl(
           getProxiedImageUrl(photo.photoUrl) as string,
           buildDownloadFileName(
-            detail.data.actual.unitName,
-            detail.data.actual.jobName,
             photo,
             index
           ),
@@ -567,8 +555,6 @@ export function GalleryPhotoDrawer({
                                   void downloadUrl(
                                     getProxiedImageUrl(photo.photoUrl) as string,
                                     buildDownloadFileName(
-                                      detail.data.actual.unitName,
-                                      detail.data.actual.jobName,
                                       photo,
                                     ),
                                   );

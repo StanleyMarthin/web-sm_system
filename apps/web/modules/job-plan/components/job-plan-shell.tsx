@@ -1,5 +1,7 @@
 "use client";
 
+/* Hallmark · pre-emit critique: P5 H5 E5 S5 R5 V4 */
+
 import type {
   JobPlanDraftRecord,
   JobPlanCreateMode,
@@ -12,6 +14,8 @@ import type {
 } from "@smsystem/contracts/job-plan";
 import {
   buildJobPlanScheduleSegments,
+  calculateJobPlanFinishTime,
+  findExceededJobPlanAllocation,
   formatDurationHHMM,
   parseDurationHHMM,
 } from "@smsystem/contracts/job-plan-schedule";
@@ -23,8 +27,11 @@ import {
   FileImage,
   FileSpreadsheet,
   FileText,
+  CornerDownLeft,
+  Pencil,
   Plus,
   Save,
+  Trash2,
   X,
 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -54,6 +61,7 @@ import {
 } from "@/shared/ui/compact";
 import { useSweetAlert } from "@/shared/ui/sweet-alert";
 import { humanizeCodeLabel, fmtTime } from "@/shared/format/humanize";
+import { SearchableField } from "@/modules/units/components/shared/SearchableField";
 
 interface JobPlanShellProps {
   title: string;
@@ -137,15 +145,19 @@ interface InlineCreateRowState {
   divisionId: string;
   taskDate: string;
   carId: string;
+  unitQuery: string;
   panelKey: string;
+  panelQuery: string;
   referenceId: string;
   assignedUserId: string;
+  picQuery: string;
   targetHours: string;
   startTime: string;
   finishTime: string;
   startTimeTouched: boolean;
   finishTimeTouched: boolean;
   jobDescription: string;
+  instructionQuery: string;
   note: string;
   isPriority: boolean;
 }
@@ -192,15 +204,19 @@ function createEmptyInlineCreateRow(taskDate: string, divisionId: string): Inlin
     divisionId,
     taskDate,
     carId: "",
+    unitQuery: "",
     panelKey: "",
+    panelQuery: "",
     referenceId: "",
     assignedUserId: "",
+    picQuery: "",
     targetHours: "01:00",
     startTime: "08:00",
     finishTime: "09:00",
     startTimeTouched: false,
     finishTimeTouched: false,
     jobDescription: "",
+    instructionQuery: "",
     note: "",
     isPriority: false,
   };
@@ -341,9 +357,9 @@ export function JobPlanShell({
   const [quickCreateMode, setQuickCreateMode] = useState<AddJobKind>(null);
   const [quickCreateSubmitting, setQuickCreateSubmitting] = useState(false);
   const [quickCreateRows, setQuickCreateRows] = useState<InlineCreateRowState[]>([]);
-  const [selectedQuickCreateRowIds, setSelectedQuickCreateRowIds] = useState<Set<string>>(
-    new Set(),
-  );
+  const [quickCreateEntry, setQuickCreateEntry] = useState<InlineCreateRowState | null>(null);
+  const [editingQuickCreateRowId, setEditingQuickCreateRowId] = useState<string | null>(null);
+  const [quickCreateDivisionQuery, setQuickCreateDivisionQuery] = useState("");
   const [editForm, setEditForm] = useState<JobPlanEditFormState>(emptyEditForm(state.dateStart));
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
   const [workspaceSubmitting, setWorkspaceSubmitting] = useState(false);
@@ -365,6 +381,17 @@ export function JobPlanShell({
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [exportOpen, setExportOpen] = useState(false);
   const countdownTransferHandledRef = useRef<string | null>(null);
+  const quickCreateDialogRef = useRef<HTMLDialogElement | null>(null);
+
+  useEffect(() => {
+    if (quickCreateMode !== "normal" && quickCreateMode !== "overtime") return;
+    const dialog = quickCreateDialogRef.current;
+    if (!dialog?.open) dialog?.showModal();
+    dialog?.querySelector<HTMLInputElement>("input")?.focus();
+    return () => {
+      if (dialog?.open) dialog.close();
+    };
+  }, [quickCreateMode]);
 
   const filters: SmartDataGridFilterDefinition[] = [
     {
@@ -385,6 +412,42 @@ export function JobPlanShell({
     () => new Map(references.countdowns.map((item) => [item.value, item])),
     [references.countdowns],
   );
+  const quickCreateAllocationError = useMemo(() => {
+    const availableHoursByReference = new Map(
+      references.countdowns.map((countdown) => [
+        countdown.value,
+        countdown.availablePlanHours ?? countdown.remainingHours,
+      ]),
+    );
+
+    return findExceededJobPlanAllocation(
+      [
+        ...quickCreateRows.filter((row) => row.rowId !== editingQuickCreateRowId),
+        ...(quickCreateEntry ? [quickCreateEntry] : []),
+      ].flatMap((row) => {
+        const targetHours = parseDurationHHMM(row.targetHours);
+        return targetHours === null
+          ? []
+          : [{ referenceId: row.referenceId, targetHours }];
+      }),
+      availableHoursByReference,
+    );
+  }, [editingQuickCreateRowId, quickCreateEntry, quickCreateRows, references.countdowns]);
+  const quickCreateStagedAllocationError = useMemo(() => {
+    const availableHoursByReference = new Map(
+      references.countdowns.map((countdown) => [
+        countdown.value,
+        countdown.availablePlanHours ?? countdown.remainingHours,
+      ]),
+    );
+    return findExceededJobPlanAllocation(
+      quickCreateRows.flatMap((row) => {
+        const targetHours = parseDurationHHMM(row.targetHours);
+        return targetHours === null ? [] : [{ referenceId: row.referenceId, targetHours }];
+      }),
+      availableHoursByReference,
+    );
+  }, [quickCreateRows, references.countdowns]);
   const workOrderMap = useMemo(
     () => new Map(references.workOrders.map((item) => [item.value, item])),
     [references.workOrders],
@@ -694,17 +757,23 @@ export function JobPlanShell({
 
     setAddMenuOpen(false);
     setQuickCreateMode(nextMode);
-    setQuickCreateRows([
+    setQuickCreateDivisionQuery(
+      references.divisions.find((division) => division.value === divisionFilterValue)?.label ?? "",
+    );
+    setQuickCreateRows([]);
+    setQuickCreateEntry(
       applyInlineSchedule(createEmptyInlineCreateRow(state.dateStart, divisionFilterValue), nextMode),
-    ]);
-    setSelectedQuickCreateRowIds(new Set());
+    );
+    setEditingQuickCreateRowId(null);
   }
 
   function closeQuickCreate() {
     setQuickCreateMode(null);
     setQuickCreateSubmitting(false);
     setQuickCreateRows([]);
-    setSelectedQuickCreateRowIds(new Set());
+    setQuickCreateEntry(null);
+    setEditingQuickCreateRowId(null);
+    setQuickCreateDivisionQuery("");
   }
 
   function openCreateWorkspace(forceNonTechnical = false) {
@@ -768,10 +837,7 @@ export function JobPlanShell({
   }
 
   async function submitUpdate() {
-    if (!activePlan) {
-      return;
-    }
-
+    if (!activePlan) return;
     if (!isDraftStatus(activePlan.status)) {
       setError("Hanya draft yang masih disimpan lokal yang bisa diubah.");
       return;
@@ -779,7 +845,6 @@ export function JobPlanShell({
 
     setError(null);
     setMessage(null);
-
     const targetHours = parseDurationHHMM(editForm.targetHours);
     if (!targetHours || targetHours <= 0) {
       setError("Total jam harus memakai format HH:MM.");
@@ -788,12 +853,7 @@ export function JobPlanShell({
 
     const result = await saveJobPlanDraft({
       replaceItems: false,
-      items: [
-        {
-          ...buildEditedDraftRecord(activePlan),
-          targetHours,
-        },
-      ],
+      items: [{ ...buildEditedDraftRecord(activePlan), targetHours }],
     });
     if (!result.success) {
       setError(result.message);
@@ -1040,7 +1100,13 @@ export function JobPlanShell({
     return {
       ...row,
       startTime: row.startTimeTouched ? row.startTime : preview[0].startTime,
-      finishTime: row.finishTimeTouched ? row.finishTime : preview[preview.length - 1].finishTime,
+      finishTime: row.finishTimeTouched
+        ? row.finishTime
+        : calculateJobPlanFinishTime(
+          row.taskDate,
+          row.startTimeTouched ? row.startTime : preview[0].startTime,
+          parseDurationHHMM(row.targetHours) ?? 0,
+        ),
     };
   }, [getInlinePreview, quickCreateMode]);
 
@@ -1076,13 +1142,17 @@ export function JobPlanShell({
       {
         ...createEmptyInlineCreateRow(state.dateStart, divisionId),
         carId: selectedCountdown.carId,
+        unitQuery: selectedCountdown.unitName,
         panelKey: selectedCountdown.panelName ?? selectedCountdown.panelSectionName ?? "-",
+        panelQuery: selectedCountdown.panelName ?? selectedCountdown.panelSectionName ?? "-",
         referenceId: selectedCountdown.value,
         targetHours: formatDurationHHMM(targetHours),
         jobDescription:
-          selectedCountdown.jobName ??
-          selectedCountdown.label ??
-          "",
+          [selectedCountdown.jobName, selectedCountdown.panelName ?? selectedCountdown.panelSectionName]
+            .filter(Boolean)
+            .join(" · ") || selectedCountdown.label || "",
+        instructionQuery:
+          selectedCountdown.jobName ?? selectedCountdown.label ?? "",
         note: `Sumber: Countdown ${selectedCountdown.value}`,
       },
       transferMode,
@@ -1092,79 +1162,78 @@ export function JobPlanShell({
     setError(null);
     setAddMenuOpen(false);
     setQuickCreateMode(transferMode);
-    setQuickCreateRows([row]);
-    setSelectedQuickCreateRowIds(new Set());
+    setQuickCreateDivisionQuery(
+      references.divisions.find((division) => division.value === divisionId)?.label ?? "",
+    );
+    setQuickCreateRows([]);
+    setQuickCreateEntry(row);
+    setEditingQuickCreateRowId(null);
   }, [
     applyInlineSchedule,
     countdownTransferKey,
     mode,
     references.countdowns,
+    references.divisions,
     searchParams,
     state.dateStart,
   ]);
 
-  function addInlineCreateRow() {
-    setQuickCreateRows((currentValue) => [
-      ...currentValue,
-      applyInlineSchedule(createEmptyInlineCreateRow(state.dateStart, divisionFilterValue)),
-    ]);
-  }
-
-  function removeSelectedInlineCreateRows() {
-    if (selectedQuickCreateRowIds.size === 0) {
-      return;
-    }
-
-    setQuickCreateRows((currentValue) => {
-      const remainingRows = currentValue.filter(
-        (row) => !selectedQuickCreateRowIds.has(row.rowId),
-      );
-      if (remainingRows.length > 0) {
-        return remainingRows;
-      }
-
-      return [
-        applyInlineSchedule(
-          createEmptyInlineCreateRow(state.dateStart, divisionFilterValue),
-          quickCreateMode === "additional" ? null : quickCreateMode,
-        ),
-      ];
-    });
-    setSelectedQuickCreateRowIds(new Set());
-  }
-
-  function updateInlineCreateRow(
-    rowId: string,
+  function updateQuickCreateEntry(
     updater: (row: InlineCreateRowState) => InlineCreateRowState,
   ) {
-    setQuickCreateRows((currentValue) =>
-      currentValue.map((row) => (row.rowId === rowId ? applyInlineSchedule(updater(row)) : row)),
+    setQuickCreateEntry((currentValue) =>
+      currentValue ? applyInlineSchedule(updater(currentValue)) : currentValue,
     );
   }
 
-  function handleInlineLastFieldKeyDown(
-    event: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>,
-    rowIndex: number,
-  ) {
-    const isLastRow = rowIndex === quickCreateRows.length - 1;
-    if (!isLastRow) {
+  function commitQuickCreateEntry() {
+    const row = quickCreateEntry;
+    if (!row?.divisionId || !row.referenceId || !row.assignedUserId || !row.jobDescription.trim()) {
+      setError("Lengkapi Divisi, Unit, PIC, Panel/Part, Job Description, dan Instruksi Kerja.");
+      return;
+    }
+    if (!parseDurationHHMM(row.targetHours)) {
+      setError("Target hari ini harus memakai format HH:MM.");
+      return;
+    }
+    if (quickCreateAllocationError) {
+      setError(`Target hari ini melebihi sisa target ${formatDurationHHMM(quickCreateAllocationError.availableHours)}.`);
       return;
     }
 
-    if (event.key !== "Tab" && event.key !== "Enter") {
-      return;
-    }
+    setError(null);
+    setQuickCreateRows((currentValue) =>
+      editingQuickCreateRowId
+        ? currentValue.map((item) => item.rowId === editingQuickCreateRowId ? row : item)
+        : [...currentValue, row],
+    );
+    setEditingQuickCreateRowId(null);
+    setQuickCreateEntry(applyInlineSchedule(
+      createEmptyInlineCreateRow(row.taskDate, row.divisionId),
+      quickCreateMode === "overtime" ? "overtime" : "normal",
+    ));
+    requestAnimationFrame(() => {
+      quickCreateDialogRef.current?.querySelectorAll<HTMLInputElement>("input")[1]?.focus();
+    });
+  }
 
-    const row = quickCreateRows[rowIndex];
-    if (!row) {
-      return;
-    }
+  function editQuickCreateRow(row: InlineCreateRowState) {
+    setEditingQuickCreateRowId(row.rowId);
+    setQuickCreateEntry(row);
+    quickCreateDialogRef.current?.querySelector<HTMLInputElement>("input")?.focus();
+  }
 
-    if (!row.referenceId || !row.assignedUserId || !row.jobDescription.trim()) {
-      return;
+  function deleteQuickCreateRow(rowId: string) {
+    setQuickCreateRows((currentValue) => currentValue.filter((row) => row.rowId !== rowId));
+    if (editingQuickCreateRowId === rowId) {
+      setEditingQuickCreateRowId(null);
+      setQuickCreateEntry((currentValue) => currentValue
+        ? applyInlineSchedule(
+            createEmptyInlineCreateRow(currentValue.taskDate, currentValue.divisionId),
+            quickCreateMode === "overtime" ? "overtime" : "normal",
+          )
+        : currentValue);
     }
-
-    addInlineCreateRow();
   }
 
   function getQuickCreateUnitOptions(row: InlineCreateRowState) {
@@ -1183,25 +1252,29 @@ export function JobPlanShell({
   function getQuickCreatePanelOptions(row: InlineCreateRowState) {
     const unique = new Map<string, { value: string; label: string }>();
     for (const countdown of getCountdownRowsByDivision(row.divisionId)) {
-      if (countdown.carId !== row.carId) {
-        continue;
-      }
-      const key = countdown.panelName ?? countdown.panelSectionName ?? "-";
-      if (!unique.has(key)) {
-        unique.set(key, {
-          value: key,
-          label: key,
-        });
-      }
+      if (countdown.carId !== row.carId) continue;
+      const panel = countdown.panelName ?? countdown.panelSectionName ?? "-";
+      unique.set(panel, { value: panel, label: panel });
     }
     return Array.from(unique.values());
   }
 
   function getQuickCreateJobOptions(row: InlineCreateRowState) {
     return getCountdownRowsByDivision(row.divisionId).filter((countdown) => {
-      const panelKey = countdown.panelName ?? countdown.panelSectionName ?? "-";
-      return countdown.carId === row.carId && panelKey === row.panelKey;
+      const panel = countdown.panelName ?? countdown.panelSectionName ?? "-";
+      return countdown.carId === row.carId && panel === row.panelKey;
     });
+  }
+
+  function getCountdownInstruction(countdown: (typeof references.countdowns)[number]) {
+    return [
+      countdown.jobName ?? countdown.label,
+      countdown.panelName ?? countdown.panelSectionName,
+    ].filter(Boolean).join(" · ");
+  }
+
+  function getCountdownJobOptionValue(countdown: (typeof references.countdowns)[number]) {
+    return countdown.jobName ?? countdown.label;
   }
 
   function getQuickCreateSelectedCountdown(row: InlineCreateRowState) {
@@ -1230,29 +1303,32 @@ export function JobPlanShell({
         return;
       }
 
+      if (quickCreateStagedAllocationError) {
+        setError(
+          `Total jam untuk job yang sama ${formatDurationHHMM(quickCreateStagedAllocationError.requestedHours)}, melebihi sisa target ${formatDurationHHMM(quickCreateStagedAllocationError.availableHours)}. Kurangi jam atau hapus baris duplikat.`,
+        );
+        return;
+      }
+
       const draftItems: JobPlanDraftRecord[] = [];
       for (const row of usedRows) {
         if (!row.divisionId) {
           setError("Pilih divisi di header dulu.");
           return;
         }
-
         if (!row.referenceId || !row.assignedUserId) {
           setError("Pilih pekerjaan countdown dan PIC di setiap baris yang dipakai.");
           return;
         }
-
         if (!row.jobDescription.trim()) {
           setError("Instruksi kerja wajib diisi.");
           return;
         }
-
         const draft = buildInlineDraftRecord(row);
         if (!draft) {
           setError("Lengkapi pekerjaan countdown dan total jam dengan format HH:MM.");
           return;
         }
-
         draftItems.push(draft);
       }
 
@@ -1724,7 +1800,6 @@ export function JobPlanShell({
     sectionRows: Array<Record<string, string | number | boolean | null>>,
     sectionMeta: JobPlanGridMeta,
     showControls: boolean,
-    sectionMode: "normal" | "overtime",
   ) {
     const viewportClassName =
       mode === "all"
@@ -1748,289 +1823,62 @@ export function JobPlanShell({
         onSelectionChange={setSelectedKeys}
         rowKeyField="planId"
         showControls={showControls}
-        prependRow={renderQuickCreateEditor(sectionMode)}
         viewportClassName={viewportClassName}
       />
     );
   }
 
   function renderQuickCreateEditor(sectionMode: "normal" | "overtime") {
-    if (quickCreateMode !== sectionMode) {
-      return null;
-    }
+    if (quickCreateMode !== sectionMode) return null;
 
-    const colSpan = columns.length + 1;
+    return quickCreateRows.map((row, index) => {
+      const selectedCountdown = getQuickCreateSelectedCountdown(row);
+      const employeeName =
+        getInlineEmployees(row)
+          .find((employee) => employee.value === row.assignedUserId)
+          ?.label.replace(`${row.assignedUserId} · `, "") ?? "-";
+      const targetTotalHours = selectedCountdown?.targetTotalHours ?? null;
+      const remainingWorkHours = selectedCountdown?.remainingHours ?? null;
+      const hasAllocationError =
+        quickCreateStagedAllocationError?.referenceId === row.referenceId;
 
-    return (
-      <>
-        <tr>
-          <td colSpan={colSpan} className="border-b border-white/5 bg-background px-3 py-2">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <p className="text-[11px] font-mono text-foreground/70">
-                  Tambah job {quickCreateMode === "overtime" ? "lembur" : "normal"}
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <ActionButton variant="primary" onClick={addInlineCreateRow}>
-                  <Plus className="h-3 w-3" />
-                  Tambah Row
-                </ActionButton>
-                <ActionButton
-                  variant="danger"
-                  disabled={selectedQuickCreateRowIds.size === 0}
-                  onClick={removeSelectedInlineCreateRows}
-                >
-                  <X className="h-3 w-3" />
-                  Hapus Baris
-                </ActionButton>
-                <ActionButton
-                  variant="primary"
-                  disabled={quickCreateSubmitting}
-                  onClick={() => {
-                    void submitQuickCreate();
-                  }}
-                >
-                  <Save className="h-3 w-3" />
-                  {quickCreateSubmitting ? "Menyimpan..." : "Simpan"}
-                </ActionButton>
-                <ActionButton onClick={closeQuickCreate}>Batal</ActionButton>
-              </div>
+      return (
+        <tr
+          key={row.rowId}
+          className={[
+            "bg-background align-top transition-colors",
+            editingQuickCreateRowId === row.rowId
+              ? "bg-primary/[0.05]"
+              : "hover:bg-muted/40",
+          ].join(" ")}
+        >
+          <td className="sticky left-0 z-10 border-b border-border bg-inherit px-3 py-2 text-center font-mono text-[11px] text-muted-foreground">{index + 1}</td>
+          <td className="min-w-[210px] border-b border-border px-3 py-2 font-medium text-foreground">{row.unitQuery || "-"}</td>
+          <td className="min-w-[160px] border-b border-border px-3 py-2">
+            <span className="block font-mono text-[11px] text-foreground">{row.assignedUserId || "-"}</span>
+            <span className="mt-0.5 block text-[10px] text-muted-foreground">({employeeName})</span>
+          </td>
+          <td className="min-w-[210px] border-b border-border px-3 py-2 text-foreground/80">{row.panelQuery || "-"}</td>
+          <td className="min-w-[210px] border-b border-border px-3 py-2 text-app-accent-ink">{row.instructionQuery || "-"}</td>
+          <td className="min-w-[260px] border-b border-border px-3 py-2 text-foreground/75">{row.jobDescription || "-"}</td>
+          <td className="border-b border-border px-3 py-2 text-right font-mono text-[11px] text-foreground/60">{targetTotalHours === null ? "-" : formatDurationHHMM(targetTotalHours)}</td>
+          <td className={["border-b border-border px-3 py-2 text-right font-mono text-[11px]", hasAllocationError ? "text-destructive" : "text-foreground"].join(" ")}>{row.targetHours}</td>
+          <td className="border-b border-border px-3 py-2 text-right font-mono text-[11px] text-foreground/60">{remainingWorkHours === null ? "-" : formatDurationHHMM(remainingWorkHours)}</td>
+          <td className="min-w-[150px] border-b border-border px-3 py-2 font-mono text-[11px] text-foreground/75">{fmtTime(row.startTime)} — {fmtTime(row.finishTime)}</td>
+          <td className="min-w-[180px] border-b border-border px-3 py-2 text-foreground/65">{row.note || "-"}</td>
+          <td className="w-[96px] border-b border-border px-3 py-2">
+            <div className="flex items-center gap-1">
+              <button type="button" onClick={() => editQuickCreateRow(row)} className="grid h-8 w-8 place-items-center border border-primary/35 text-app-accent-ink hover:bg-primary/10 active:bg-primary/15 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring" aria-label={`Edit baris ${index + 1}`}>
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
+              <button type="button" onClick={() => deleteQuickCreateRow(row.rowId)} className="grid h-8 w-8 place-items-center border border-destructive/25 text-destructive hover:bg-destructive/10 active:bg-destructive/15 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring" aria-label={`Hapus baris ${index + 1}`}>
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
             </div>
           </td>
         </tr>
-        {quickCreateRows.map((row, index) => {
-          const preview = getInlinePreview(row);
-          const selectedCountdown = getQuickCreateSelectedCountdown(row);
-          const targetTotalHours = selectedCountdown?.targetTotalHours ?? null;
-          const remainingWorkHours = selectedCountdown?.remainingHours ?? null;
-          const countdownProgress = selectedCountdown?.progressPercent ?? null;
-
-          return (
-            <tr key={row.rowId} className="align-top bg-background">
-              <td className="sticky left-0 z-20 border-b border-white/5 bg-background px-3 py-2">
-                <input
-                  type="checkbox"
-                  checked={selectedQuickCreateRowIds.has(row.rowId)}
-                  onChange={(event) => {
-                    setSelectedQuickCreateRowIds((currentValue) => {
-                      const nextValue = new Set(currentValue);
-                      if (event.target.checked) {
-                        nextValue.add(row.rowId);
-                      } else {
-                        nextValue.delete(row.rowId);
-                      }
-                      return nextValue;
-                    });
-                  }}
-                  className="h-3.5 w-3.5 rounded border-white/20 bg-white/5 accent-primary"
-                />
-              </td>
-              <td className="border-b border-white/[0.04] p-2 min-w-[170px]">
-                <CompactSelect
-                  value={row.carId}
-                  onChange={(event) =>
-                    updateInlineCreateRow(row.rowId, (currentValue) => ({
-                      ...currentValue,
-                      carId: event.target.value,
-                      panelKey: "",
-                      referenceId: "",
-                      jobDescription: "",
-                    }))}
-                >
-                  <option value="">Pilih Unit</option>
-                  {getQuickCreateUnitOptions(row).map((unit) => (
-                    <option key={unit.value} value={unit.value}>
-                      {unit.label}
-                    </option>
-                  ))}
-                </CompactSelect>
-              </td>
-              <td className="border-b border-white/[0.04] p-2 min-w-[126px]">
-                <CompactInput
-                  type="date"
-                  value={row.taskDate}
-                  onChange={(event) =>
-                    updateInlineCreateRow(row.rowId, (currentValue) => ({
-                      ...currentValue,
-                      taskDate: event.target.value,
-                    }))}
-                />
-              </td>
-              <td className="border-b border-white/[0.04] p-2 min-w-[180px]">
-                <CompactSelect
-                  value={row.divisionId}
-                  onChange={(event) =>
-                    updateInlineCreateRow(row.rowId, (currentValue) => ({
-                      ...currentValue,
-                      divisionId: event.target.value,
-                      assignedUserId: "",
-                      carId: "",
-                      panelKey: "",
-                      referenceId: "",
-                      jobDescription: "",
-                    }))}
-                >
-                  <option value="">Pilih Divisi</option>
-                  {references.divisions.map((division) => (
-                    <option key={division.value} value={division.value}>
-                      {division.label}
-                    </option>
-                  ))}
-                </CompactSelect>
-              </td>
-              <td className="border-b border-white/[0.04] p-2 min-w-[220px]">
-                <CompactSelect
-                  value={row.assignedUserId}
-                  onChange={(event) =>
-                    updateInlineCreateRow(row.rowId, (currentValue) => ({
-                      ...currentValue,
-                      assignedUserId: event.target.value,
-                    }))}
-                >
-                  <option value="">Pilih PIC</option>
-                  {getInlineEmployees(row).map((employee) => (
-                    <option key={employee.value} value={employee.value}>
-                      {employee.label}
-                    </option>
-                  ))}
-                </CompactSelect>
-              </td>
-              <td className="border-b border-white/[0.04] p-2 min-w-[220px]">
-                <CompactSelect
-                  value={row.panelKey}
-                  disabled={!row.carId}
-                  onChange={(event) =>
-                    updateInlineCreateRow(row.rowId, (currentValue) => ({
-                      ...currentValue,
-                      panelKey: event.target.value,
-                      referenceId: "",
-                      jobDescription: "",
-                    }))}
-                >
-                  <option value="">Pilih Panel / Part</option>
-                  {getQuickCreatePanelOptions(row).map((panel) => (
-                    <option key={panel.value} value={panel.value}>
-                      {panel.label}
-                    </option>
-                  ))}
-                </CompactSelect>
-              </td>
-              <td className="border-b border-white/[0.04] p-2 min-w-[250px]">
-                <CompactSelect
-                  value={row.referenceId}
-                  disabled={!row.panelKey}
-                  onChange={(event) => {
-                    const selectedCountdown = getQuickCreateJobOptions(row).find(
-                      (countdown) => countdown.value === event.target.value,
-                    );
-                    updateInlineCreateRow(row.rowId, (currentValue) => ({
-                      ...currentValue,
-                      referenceId: event.target.value,
-                      jobDescription:
-                        currentValue.jobDescription ||
-                        selectedCountdown?.jobName ||
-                        selectedCountdown?.label ||
-                        "",
-                    }));
-                  }}
-                >
-                  <option value="">Pilih Jobdesc</option>
-                  {getQuickCreateJobOptions(row).map((countdown) => (
-                    <option key={countdown.value} value={countdown.value}>
-                      {countdown.jobName ?? countdown.label}
-                    </option>
-                  ))}
-                </CompactSelect>
-              </td>
-              <td className="border-b border-white/[0.04] p-2 min-w-[280px]">
-                <CompactInput
-                  type="text"
-                  value={row.jobDescription}
-                  placeholder="Instruksi kerja"
-                  onChange={(event) =>
-                    updateInlineCreateRow(row.rowId, (currentValue) => ({
-                      ...currentValue,
-                      jobDescription: event.target.value,
-                    }))}
-                />
-              </td>
-              <td className="border-b border-white/[0.04] p-2 min-w-[120px]">
-                <CompactInput
-                  type="text"
-                  value={row.targetHours}
-                  placeholder="HH:MM"
-                  onChange={(event) =>
-                    updateInlineCreateRow(row.rowId, (currentValue) => ({
-                      ...currentValue,
-                      targetHours: event.target.value,
-                    }))}
-                />
-              </td>
-              <td className="border-b border-white/[0.04] px-3 py-2 min-w-[120px] text-right text-[11px] text-foreground/55">
-                {targetTotalHours !== null ? formatDurationHHMM(targetTotalHours) : "-"}
-              </td>
-              <td className="border-b border-white/[0.04] px-3 py-2 min-w-[90px] text-right text-[11px] text-foreground/55">
-                {countdownProgress !== null ? countdownProgress.toFixed(0) : 0}
-              </td>
-              <td className="border-b border-white/[0.04] px-3 py-2 min-w-[120px] text-right text-[11px] text-foreground/55">
-                {remainingWorkHours !== null ? formatDurationHHMM(remainingWorkHours) : "-"}
-              </td>
-              <td className="border-b border-white/[0.04] p-2 min-w-[150px]">
-                <div className="grid grid-cols-2 gap-1">
-                  <CompactInput
-                    type="time"
-                    value={row.startTime}
-                    onChange={(event) =>
-                      updateInlineCreateRow(row.rowId, (currentValue) => ({
-                        ...currentValue,
-                        startTime: event.target.value,
-                        startTimeTouched: true,
-                      }))}
-                  />
-                  <CompactInput
-                    type="time"
-                    value={row.finishTime}
-                    onChange={(event) =>
-                      updateInlineCreateRow(row.rowId, (currentValue) => ({
-                        ...currentValue,
-                        finishTime: event.target.value,
-                        finishTimeTouched: true,
-                      }))}
-                  />
-                </div>
-                {preview.length > 1 ? (
-                  <p className="mt-1 text-[10px] text-foreground/35">
-                    Split {fmtTime(preview[0]?.finishTime)} lalu lanjut lembur
-                  </p>
-                ) : null}
-              </td>
-              <td className="border-b border-white/[0.04] px-3 py-2 min-w-[120px] text-[11px] text-foreground/30">
-                Belum ada aktual
-              </td>
-              <td className="border-b border-white/[0.04] px-3 py-2 min-w-[110px] text-center">
-                <span className="inline-flex border border-white/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.12em] text-foreground/55">
-                  Baru
-                </span>
-              </td>
-              <td className="border-b border-white/[0.04] p-2 min-w-[200px]">
-                <CompactInput
-                  type="text"
-                  value={row.note}
-                  placeholder="Keterangan"
-                  onKeyDown={(event) => handleInlineLastFieldKeyDown(event, index)}
-                  onChange={(event) =>
-                    updateInlineCreateRow(row.rowId, (currentValue) => ({
-                      ...currentValue,
-                      note: event.target.value,
-                    }))}
-                />
-              </td>
-            </tr>
-          );
-        })}
-      </>
-    );
+      );
+    });
   }
 
   function getAdditionalPanelOptions(row: WorkspaceRowState) {
@@ -2241,6 +2089,11 @@ export function JobPlanShell({
   const unifiedMeta = mode === "all" && allSections
     ? allSections.normal.meta
     : meta;
+  const quickEntryCountdown = quickCreateEntry ? getQuickCreateSelectedCountdown(quickCreateEntry) : null;
+  const quickEntryUnits = quickCreateEntry ? getQuickCreateUnitOptions(quickCreateEntry) : [];
+  const quickEntryEmployees = quickCreateEntry ? getInlineEmployees(quickCreateEntry) : [];
+  const quickEntryPanels = quickCreateEntry ? getQuickCreatePanelOptions(quickCreateEntry) : [];
+  const quickEntryJobs = quickCreateEntry ? getQuickCreateJobOptions(quickCreateEntry) : [];
 
   return (
     <div className="space-y-2">
@@ -2466,8 +2319,93 @@ export function JobPlanShell({
         unifiedRows,
         unifiedMeta,
         true,
-        mode === "overtime" ? "overtime" : "normal",
       )}
+
+      {quickCreateMode === "normal" || quickCreateMode === "overtime" ? (
+        <dialog
+          ref={quickCreateDialogRef}
+          aria-labelledby="quick-create-title"
+          onCancel={(event) => {
+            event.preventDefault();
+            if (!quickCreateSubmitting) closeQuickCreate();
+          }}
+          onClick={(event) => {
+            if (event.target === event.currentTarget && !quickCreateSubmitting) closeQuickCreate();
+          }}
+          className="fixed inset-0 z-50 m-0 h-full max-h-none w-full max-w-none items-center justify-center bg-black/70 p-2 open:flex backdrop:bg-black/70 sm:p-4"
+        >
+          <div className="flex max-h-[calc(100svh-1rem)] w-full max-w-none flex-col overflow-hidden border border-border bg-card shadow-2xl shadow-black/20 sm:max-h-[calc(100svh-2rem)]">
+            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-4 py-3 sm:px-5 sm:py-4">
+              <div className="min-w-0">
+                <h3 id="quick-create-title" className="truncate text-base font-semibold text-foreground">
+                  Tambah job {quickCreateMode === "overtime" ? "lembur" : "normal"}
+                </h3>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  Isi form, tekan Enter untuk staging · Shift+Enter untuk baris baru pada catatan
+                </p>
+              </div>
+              <button type="button" onClick={closeQuickCreate} className="grid h-11 w-11 shrink-0 place-items-center border border-border text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring" aria-label="Tutup spreadsheet job plan">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            {quickCreateEntry ? (
+              <form className="shrink-0 border-b border-border bg-background px-4 py-3 sm:px-5" onSubmit={(event) => { event.preventDefault(); commitQuickCreateEntry(); }}>
+                <div className="grid gap-4 xl:grid-cols-[minmax(0,1.08fr)_minmax(0,0.92fr)] xl:gap-0">
+                  <div className="space-y-2 xl:pr-6">
+                    <p className="border-b border-border pb-2 font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">Referensi Pekerjaan</p>
+                    <div className="grid items-center gap-2 md:grid-cols-[105px_minmax(0,1fr)]"><FieldLabel required>Divisi</FieldLabel><SearchableField value={quickCreateDivisionQuery} options={references.divisions.map((division) => ({ value: division.label, dedupeKey: division.value }))} placeholder="Pilih divisi..." heightClassName="h-9" menuZClassName="z-[70]" onChange={(query) => { const selected = references.divisions.find((division) => division.label.toLowerCase() === query.toLowerCase()); setQuickCreateDivisionQuery(query); updateQuickCreateEntry((row) => ({ ...row, divisionId: selected?.value ?? "", assignedUserId: "", picQuery: "", carId: "", unitQuery: "", panelKey: "", panelQuery: "", referenceId: "", jobDescription: "", instructionQuery: "" })); }} /></div>
+                    <div className="grid items-center gap-2 md:grid-cols-[105px_minmax(0,1fr)]"><FieldLabel required>Unit</FieldLabel><SearchableField value={quickCreateEntry.unitQuery} options={quickEntryUnits.map((unit) => ({ value: unit.label, dedupeKey: unit.value }))} disabled={!quickCreateEntry.divisionId} placeholder="Pilih unit..." heightClassName="h-9" menuZClassName="z-[70]" onChange={(query) => { const selected = quickEntryUnits.find((unit) => unit.label.toLowerCase() === query.toLowerCase()); updateQuickCreateEntry((row) => ({ ...row, unitQuery: query, carId: selected?.value ?? "", panelKey: "", panelQuery: "", referenceId: "", jobDescription: "", instructionQuery: "" })); }} /></div>
+                    <div className="grid items-center gap-2 md:grid-cols-[105px_minmax(0,1fr)]"><FieldLabel required>PIC</FieldLabel><SearchableField value={quickCreateEntry.picQuery} options={quickEntryEmployees.map((employee) => ({ value: employee.value, label: employee.label.replace(`${employee.value} · `, "") }))} disabled={!quickCreateEntry.divisionId} placeholder="Pilih PIC..." heightClassName="h-9" menuZClassName="z-[70]" onChange={(query) => { const selected = quickEntryEmployees.find((employee) => employee.value.toLowerCase() === query.toLowerCase()); updateQuickCreateEntry((row) => ({ ...row, picQuery: selected?.value ?? query, assignedUserId: selected?.value ?? "" })); }} /></div>
+                    <div className="grid items-center gap-2 md:grid-cols-[105px_minmax(0,1fr)]"><FieldLabel required>Panel / Part</FieldLabel><SearchableField value={quickCreateEntry.panelQuery} options={quickEntryPanels} disabled={!quickCreateEntry.carId} placeholder="Pilih panel / part..." heightClassName="h-9" menuZClassName="z-[70]" onChange={(query) => { const selected = quickEntryPanels.find((panel) => panel.label.toLowerCase() === query.toLowerCase()); updateQuickCreateEntry((row) => ({ ...row, panelQuery: query, panelKey: selected?.value ?? "", referenceId: "", jobDescription: "", instructionQuery: "" })); }} /></div>
+                    <div className="grid items-center gap-2 md:grid-cols-[105px_minmax(0,1fr)]"><FieldLabel required>Job Description</FieldLabel><SearchableField value={quickCreateEntry.instructionQuery} options={quickEntryJobs.map((countdown) => ({ value: getCountdownJobOptionValue(countdown), label: countdown.panelName ?? countdown.panelSectionName ?? "Panel / Part", dedupeKey: countdown.value }))} disabled={!quickCreateEntry.panelKey} placeholder="Pilih job description..." heightClassName="h-9" menuZClassName="z-[70]" onChange={(query) => updateQuickCreateEntry((row) => ({ ...row, instructionQuery: query, referenceId: "", jobDescription: "" }))} onSelect={(option) => { const selected = quickEntryJobs.find((countdown) => countdown.value === option.dedupeKey); if (selected) updateQuickCreateEntry((row) => ({ ...row, instructionQuery: selected.jobName ?? selected.label, referenceId: selected.value, jobDescription: getCountdownInstruction(selected) })); }} /></div>
+                    <div className="grid items-start gap-2 md:grid-cols-[105px_minmax(0,1fr)]"><FieldLabel required>Instruksi Kerja</FieldLabel><CompactTextarea rows={2} value={quickCreateEntry.jobDescription} placeholder="Masukkan instruksi kerja..." onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); commitQuickCreateEntry(); } }} onChange={(event) => updateQuickCreateEntry((row) => ({ ...row, jobDescription: event.target.value }))} /></div>
+                  </div>
+                  <div className="space-y-2 xl:border-l xl:border-border xl:pl-6">
+                    <p className="border-b border-border pb-2 font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">Target &amp; Jadwal</p>
+                    <div className="grid items-center gap-2 md:grid-cols-[105px_minmax(0,1fr)]"><FieldLabel required>Tanggal</FieldLabel><CompactInput type="date" value={quickCreateEntry.taskDate} onChange={(event) => updateQuickCreateEntry((row) => ({ ...row, taskDate: event.target.value, finishTimeTouched: false }))} /></div>
+                    <div className="grid items-center gap-2 md:grid-cols-[105px_minmax(0,1fr)]"><FieldLabel>Target Awal</FieldLabel><CompactInput value={quickEntryCountdown?.targetTotalHours == null ? "-" : formatDurationHHMM(quickEntryCountdown.targetTotalHours)} disabled /></div>
+                    <div className="grid items-center gap-2 md:grid-cols-[105px_minmax(0,1fr)]"><FieldLabel required>Target Hari Ini</FieldLabel><CompactInput value={quickCreateEntry.targetHours} placeholder="HH:MM" aria-invalid={quickCreateAllocationError?.referenceId === quickCreateEntry.referenceId || undefined} onChange={(event) => updateQuickCreateEntry((row) => ({ ...row, targetHours: event.target.value, finishTimeTouched: false }))} /></div>
+                    <div className="grid items-center gap-2 md:grid-cols-[105px_minmax(0,1fr)]"><FieldLabel>Sisa Target</FieldLabel><CompactInput value={quickEntryCountdown?.remainingHours == null ? "-" : formatDurationHHMM(quickEntryCountdown.remainingHours)} disabled /></div>
+                    <div className="grid items-center gap-2 md:grid-cols-[105px_minmax(0,1fr)]"><FieldLabel>Jadwal Mulai</FieldLabel><CompactInput type="time" value={quickCreateEntry.startTime} onChange={(event) => updateQuickCreateEntry((row) => ({ ...row, startTime: event.target.value, startTimeTouched: true, finishTimeTouched: false }))} /></div>
+                    <div className="grid items-center gap-2 md:grid-cols-[105px_minmax(0,1fr)]"><FieldLabel>Jadwal Selesai</FieldLabel><CompactInput type="time" value={quickCreateEntry.finishTime} onChange={(event) => updateQuickCreateEntry((row) => ({ ...row, finishTime: event.target.value, finishTimeTouched: true }))} /></div>
+                    <div className="grid items-start gap-2 md:grid-cols-[105px_minmax(0,1fr)]"><FieldLabel>Catatan</FieldLabel><CompactTextarea rows={2} value={quickCreateEntry.note} placeholder="Masukkan catatan..." onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); commitQuickCreateEntry(); } }} onChange={(event) => updateQuickCreateEntry((row) => ({ ...row, note: event.target.value }))} /></div>
+                  </div>
+                </div>
+                <div className="mt-3 flex items-center justify-between border-t border-border pt-3">
+                  <p className="text-[10px] text-muted-foreground">Enter untuk memasukkan · Shift+Enter untuk newline</p>
+                  <ActionButton variant="primary" type="submit"><CornerDownLeft className="h-3.5 w-3.5" /> {editingQuickCreateRowId ? "Perbarui Row" : "Masukkan ke Row"}</ActionButton>
+                </div>
+              </form>
+            ) : null}
+            <div className="flex shrink-0 items-center justify-between border-b border-border bg-card px-4 py-2 sm:px-5">
+              <p className="font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">Staging Job Plan</p>
+              <span className="font-mono text-[10px] text-app-accent-ink">{quickCreateRows.length} row</span>
+            </div>
+            <div className="min-h-0 flex-1 overflow-auto overscroll-contain">
+              <table className="w-full min-w-[1840px] table-fixed border-collapse text-left">
+                <thead className="sticky top-0 z-30 bg-card">
+                  <tr>
+                    <th className="w-10 border-b border-border px-3 py-2 text-center font-mono text-[10px] uppercase text-muted-foreground" scope="col">No.</th>
+                    {[["Unit", "w-[210px]"], ["PIC", "w-[160px]"], ["Panel / Part", "w-[210px]"], ["Job Description", "w-[210px]"], ["Instruksi Kerja", "w-[260px]"], ["Target Awal", "w-[100px]"], ["Target Hari Ini", "w-[115px]"], ["Sisa Target", "w-[100px]"], ["Jadwal", "w-[150px]"], ["Catatan", "w-[180px]"], ["Aksi", "w-[96px]"]].map(([label, width]) => (
+                      <th key={label} scope="col" className={`${width} whitespace-normal border-b border-border px-3 py-2 text-[10px] font-mono uppercase leading-4 tracking-[0.1em] text-muted-foreground`}>{label}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>{renderQuickCreateEditor(quickCreateMode)}</tbody>
+              </table>
+            </div>
+            <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-border bg-card px-4 py-3 sm:px-5 [&_button]:whitespace-nowrap">
+              <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground">{quickCreateRows.length} row siap disimpan</p>
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <ActionButton onClick={closeQuickCreate}>Batal</ActionButton>
+                <ActionButton variant="primary" disabled={quickCreateSubmitting || quickCreateRows.length === 0} onClick={() => { void submitQuickCreate(); }}>
+                  <Save className="h-3 w-3" /> {quickCreateSubmitting ? "Menyimpan..." : "Simpan Job Plan"}
+                </ActionButton>
+              </div>
+            </div>
+          </div>
+        </dialog>
+      ) : null}
 
       {workspaceOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
@@ -2667,15 +2605,9 @@ export function JobPlanShell({
                   {isDraftStatus(activePlan.status) ? "Edit Draft Job Plan" : "Detail Job Plan"}
                 </p>
                 <h3 className="mt-0.5 text-[13px] font-mono text-foreground/80">{activePlan.planId}</h3>
-                <p className="mt-1 text-[11px] text-foreground/40">
-                  {activePlan.unitName} · {activePlan.divisionName}
-                </p>
+                <p className="mt-1 text-[11px] text-foreground/40">{activePlan.unitName} · {activePlan.divisionName}</p>
               </div>
-              <button
-                type="button"
-                onClick={closeEditor}
-                className="border border-white/10 p-1.5 text-foreground/40 transition-colors hover:text-foreground"
-              >
+              <button type="button" onClick={closeEditor} className="border border-white/10 p-1.5 text-foreground/40 transition-colors hover:text-foreground">
                 <X className="h-4 w-4" />
               </button>
             </div>
@@ -2683,115 +2615,45 @@ export function JobPlanShell({
             <div className="mt-4 grid gap-3 md:grid-cols-2">
               <div>
                 <FieldLabel required>PIC</FieldLabel>
-                <CompactSelect
-                  value={editForm.assignedUserId}
-                  onChange={(event) =>
-                    setEditForm((currentValue) => ({
-                      ...currentValue,
-                      assignedUserId: event.target.value,
-                    }))}
-                >
+                <CompactSelect value={editForm.assignedUserId} onChange={(event) => setEditForm((currentValue) => ({ ...currentValue, assignedUserId: event.target.value }))}>
                   <option value="">Pilih PIC</option>
-                  {references.employees.map((employee) => (
-                    <option key={employee.value} value={employee.value}>
-                      {employee.label}
-                    </option>
-                  ))}
+                  {references.employees.map((employee) => <option key={employee.value} value={employee.value}>{employee.label}</option>)}
                 </CompactSelect>
               </div>
               <div>
                 <FieldLabel required>Tanggal</FieldLabel>
-                <CompactInput
-                  type="date"
-                  value={editForm.taskDate}
-                  onChange={(event) =>
-                    setEditForm((currentValue) => ({
-                      ...currentValue,
-                      taskDate: event.target.value,
-                    }))}
-                />
+                <CompactInput type="date" value={editForm.taskDate} onChange={(event) => setEditForm((currentValue) => ({ ...currentValue, taskDate: event.target.value }))} />
               </div>
               <div>
                 <FieldLabel required>Jam Kerja</FieldLabel>
-                <CompactInput
-                  type="number"
-                  min="0.5"
-                  step="0.5"
-                  value={editForm.targetHours}
-                  onChange={(event) =>
-                    setEditForm((currentValue) => ({
-                      ...currentValue,
-                      targetHours: event.target.value,
-                    }))}
-                />
+                <CompactInput type="number" min="0.5" step="0.5" value={editForm.targetHours} onChange={(event) => setEditForm((currentValue) => ({ ...currentValue, targetHours: event.target.value }))} />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <FieldLabel>Mulai</FieldLabel>
-                  <CompactInput
-                    type="time"
-                    value={editForm.startTime}
-                    onChange={(event) =>
-                      setEditForm((currentValue) => ({
-                        ...currentValue,
-                        startTime: event.target.value,
-                      }))}
-                  />
+                  <CompactInput type="time" value={editForm.startTime} onChange={(event) => setEditForm((currentValue) => ({ ...currentValue, startTime: event.target.value }))} />
                 </div>
                 <div>
                   <FieldLabel>Selesai</FieldLabel>
-                  <CompactInput
-                    type="time"
-                    value={editForm.finishTime}
-                    onChange={(event) =>
-                      setEditForm((currentValue) => ({
-                        ...currentValue,
-                        finishTime: event.target.value,
-                      }))}
-                  />
+                  <CompactInput type="time" value={editForm.finishTime} onChange={(event) => setEditForm((currentValue) => ({ ...currentValue, finishTime: event.target.value }))} />
                 </div>
               </div>
             </div>
 
             <div className="mt-3">
               <FieldLabel required>Instruksi</FieldLabel>
-              <CompactTextarea
-                rows={3}
-                value={editForm.jobDescription}
-                onChange={(event) =>
-                  setEditForm((currentValue) => ({
-                    ...currentValue,
-                    jobDescription: event.target.value,
-                  }))}
-              />
+              <CompactTextarea rows={3} value={editForm.jobDescription} onChange={(event) => setEditForm((currentValue) => ({ ...currentValue, jobDescription: event.target.value }))} />
             </div>
 
             <div className="mt-3 grid gap-3 md:grid-cols-[minmax(0,1fr)_140px]">
               <div>
                 <FieldLabel>Keterangan</FieldLabel>
-                <CompactInput
-                  type="text"
-                  value={editForm.note}
-                  onChange={(event) =>
-                    setEditForm((currentValue) => ({
-                      ...currentValue,
-                      note: event.target.value,
-                    }))}
-                />
+                <CompactInput type="text" value={editForm.note} onChange={(event) => setEditForm((currentValue) => ({ ...currentValue, note: event.target.value }))} />
               </div>
               <div>
                 <FieldLabel>Prioritas</FieldLabel>
                 <label className="flex h-8 items-center gap-2 rounded-md border border-white/5 bg-card px-2.5 text-[12px] text-foreground">
-                  <input
-                    type="checkbox"
-                    checked={editForm.isPriority}
-                    onChange={(event) =>
-                      setEditForm((currentValue) => ({
-                        ...currentValue,
-                        isPriority: event.target.checked,
-                      }))}
-                    className="h-3.5 w-3.5 rounded border-white/20 bg-white/5 accent-primary"
-                  />
+                  <input type="checkbox" checked={editForm.isPriority} onChange={(event) => setEditForm((currentValue) => ({ ...currentValue, isPriority: event.target.checked }))} className="h-3.5 w-3.5 rounded border-white/20 bg-white/5 accent-primary" />
                   Tandai prioritas
                 </label>
               </div>
@@ -2799,21 +2661,11 @@ export function JobPlanShell({
 
             <div className="mt-4 flex justify-between gap-2 border-t border-white/[0.05] pt-3">
               {isDraftStatus(activePlan.status) ? (
-                <ActionButton variant="danger" onClick={() => { void submitDelete(activePlan); }}>
-                  Hapus Draft
-                </ActionButton>
+                <ActionButton variant="danger" onClick={() => { void submitDelete(activePlan); }}>Hapus Draft</ActionButton>
               ) : <span />}
               <div className="flex gap-2">
                 <ActionButton onClick={closeEditor}>Batal</ActionButton>
-                <ActionButton
-                  variant="primary"
-                  disabled={isPending}
-                  onClick={() => {
-                    startTransition(() => {
-                      void submitUpdate();
-                    });
-                  }}
-                >
+                <ActionButton variant="primary" disabled={isPending} onClick={() => { startTransition(() => { void submitUpdate(); }); }}>
                   <Save className="h-3 w-3" />
                   {isPending ? "Menyimpan..." : isDraftStatus(activePlan.status) ? "Simpan Draft" : "Simpan"}
                 </ActionButton>

@@ -1,49 +1,70 @@
-/*
-IMPORT YANG DIGUNAKAN
 import dynamic from "next/dynamic";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { fetchSpfPeriods } from "@/shared/api/spf";
-import { PageDataSkeleton } from "@/shared/ui/page-data-skeleton";
+import { requireAdminSession } from "@/shared/auth/admin-session";
+import { fetchSpfPeriods, getSpfBffOrigin } from "@/shared/api/spf";
 import { ModuleUnavailableState } from "@/shared/ui/module-unavailable-state";
+import { PageDataSkeleton } from "@/shared/ui/page-data-skeleton";
 
-KENAPA IMPORT INI DIPERLUKAN
-- `dynamic`: menunda JS interaktif tabel/dialog; initial data tetap di server.
-- `headers`: meneruskan cookie ke helper server tanpa mengekspos token.
-- `redirect`: memisahkan kegagalan auth dari kegagalan layanan.
-- `fetchSpfPeriods`: page tidak mengetahui URL/header/format mentah backend.
-- `PageDataSkeleton`: feedback loading konsisten dengan halaman lain.
-- `ModuleUnavailableState`: 5xx/network error punya fallback aman dan reusable.
+// Dynamic import: JS tabel/dialog dimuat saat perlu; data awal tetap di server.
+const PeriodListShell = dynamic(
+  () =>
+    import("@/modules/spf/components/period-list-shell").then(
+      (m) => m.PeriodListShell,
+    ),
+  { loading: () => <PageDataSkeleton title="Memuat daftar periode SPF" /> },
+);
 
-STRUKTUR KODE
-const PeriodListShell = dynamic(() => import("@/modules/spf/components/period-list-shell")
-  .then(module => module.PeriodListShell), { loading: () => <PageDataSkeleton title="Memuat periode SPF" /> });
-
-interface Props { searchParams: Promise<Record<string, string | string[] | undefined>> }
-export default async function PeriodsPage({ searchParams }: Props) {
-  const query = parsePeriodListQuery(await searchParams); // invalid -> safe defaults
-  const cookie = (await headers()).get("cookie") ?? "";
-  const result = await fetchSpfPeriods(cookie, query);
-  if (result.status === 401) redirect("/login");
-  if (result.status === 403) redirect("/forbidden");
-  if (!result.payload) return <ModuleUnavailableState module="SPF" ... />;
-  return <PeriodListShell {...result.payload.data} state={query} role={result.role} />;
+// ─── Query parser ─────────────────────────────────────────────────────────────
+// Menolak key asing dan nilai invalid; menggunakan safe defaults.
+function parsePeriodListQuery(
+  searchParams: Record<string, string | string[] | undefined>,
+): { limit: number; offset: number } {
+  const rawPage = searchParams["page"];
+  const page =
+    typeof rawPage === "string" && /^\d+$/.test(rawPage)
+      ? Math.max(1, Number.parseInt(rawPage, 10))
+      : 1;
+  const limit = 25;
+  const offset = (page - 1) * limit;
+  return { limit, offset };
 }
 
-PENJELASAN: data awal tetap server-side seperti halaman users existing; client hanya interaksi.
-KENAPA STRUKTUR INI: server fetch mengurangi request waterfall dan mencegah flash data tanpa izin;
-shell menerima snapshot typed sehingga interaksi client tidak menduplikasi source of truth.
-LOGIC — period list
-- Parse page as positive integer; use limit 25 and offset (page - 1) * 25.
-- Server-fetch period { mode: 'LIST' }; redirect 401/403, safe retry state otherwise.
-- Show title, status, creator, timestamps, and detail link.
-- Show Create only to ADMIN. API remains final authorization authority.
+// ─── Page ─────────────────────────────────────────────────────────────────────
+interface Props {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}
 
-PSEUDOCODE
-session = requireAdminSession()
-query = safePagination(searchParams)
-result = spfServerApi.period({ mode: 'LIST', ...query }, session)
-return PeriodList(result.rows, result.total, session.role)
+export default async function PeriodsPage({ searchParams }: Props) {
+  const requestHeaders = await headers();
+  const cookieHeader = requestHeaders.get("cookie") ?? "";
+  const session = await requireAdminSession(cookieHeader);
 
-SELESAI JIKA: URL adalah sumber pagination, refresh aman, empty/error/loading tersedia.
-*/
+  if (!session) redirect("/login");
+
+  const query = parsePeriodListQuery(await searchParams);
+  const result = await fetchSpfPeriods(cookieHeader, query, getSpfBffOrigin());
+
+  if (result.status === 401) redirect("/login");
+  if (result.status === 403) redirect("/forbidden");
+
+  if (!result.payload) {
+    return (
+      <ModuleUnavailableState
+        module="SPF"
+        title="Daftar periode tidak tersedia"
+        message="Server SPF tidak dapat dijangkau atau terjadi kesalahan. Coba muat ulang halaman."
+        backHref="/dashboard"
+        backLabel="Ke Dashboard"
+      />
+    );
+  }
+
+  return (
+    <PeriodListShell
+      rows={result.payload.periods}
+      meta={result.payload.meta}
+      access={session.access}
+    />
+  );
+}

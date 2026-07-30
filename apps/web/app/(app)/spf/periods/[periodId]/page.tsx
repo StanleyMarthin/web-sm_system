@@ -1,41 +1,63 @@
-/*
-IMPORT YANG DIGUNAKAN
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
-import { fetchSpfPeriodDetail } from "@/shared/api/spf";
+import { requireAdminSession } from "@/shared/auth/admin-session";
+import { fetchSpfPeriodDetail, getSpfBffOrigin } from "@/shared/api/spf";
+import { ModuleUnavailableState } from "@/shared/ui/module-unavailable-state";
+
+// PeriodDetailShell mengimplementasikan UI — diimport langsung karena sudah ada
+// breadcrumb dan snapshot tunggal yang dibagi ke summary, items, dan workflow.
+// Belum bisa dynamic import karena shell memerlukan typed snapshot dari server.
 import { PeriodDetailShell } from "@/modules/spf/components/period-detail-shell";
 
-KENAPA IMPORT INI DIPERLUKAN
-- `headers`: membawa session pada server fetch.
-- `notFound`: ID invalid/missing memakai semantics 404 Next, bukan halaman error buatan.
-- `redirect`: 401/403 keluar sebelum detail sensitif dirender.
-- `fetchSpfPeriodDetail`: kontrak request/response terpusat dan tervalidasi.
-- `PeriodDetailShell`: satu pemilik orchestration UI; page tetap tipis.
+interface Props {
+  params: Promise<{ periodId: string }>;
+}
 
-STRUKTUR KODE
-interface Props { params: Promise<{ periodId: string }> }
 export default async function PeriodDetailPage({ params }: Props) {
-  const id = Number((await params).periodId);
-  if (!Number.isSafeInteger(id) || id <= 0) notFound();
-  const cookie = (await headers()).get("cookie") ?? "";
-  const result = await fetchSpfPeriodDetail(cookie, id);
+  const { periodId } = await params;
+
+  // Validasi ID sebelum menyentuh backend
+  const id = periodId.trim();
+  if (!id || id.length > 100) {
+    notFound();
+  }
+
+  const requestHeaders = await headers();
+  const cookieHeader = requestHeaders.get("cookie") ?? "";
+  const session = await requireAdminSession(cookieHeader);
+  if (!session) redirect("/login");
+
+  const result = await fetchSpfPeriodDetail(cookieHeader, id, getSpfBffOrigin());
+
   if (result.status === 401) redirect("/login");
   if (result.status === 403) redirect("/forbidden");
   if (result.status === 404) notFound();
-  if (!result.payload) return <ModuleUnavailableState ... />;
-  return <PeriodDetailShell period={...} items={...} role={...} editable={...} />;
+
+  if (!result.payload) {
+    return (
+      <ModuleUnavailableState
+        module="SPF · Periode"
+        title="Detail periode tidak tersedia"
+        message="Server tidak dapat diakses atau terjadi kesalahan saat memuat data."
+        backHref="/spf/periods"
+        backLabel="Kembali ke Daftar Periode"
+      />
+    );
+  }
+
+  // `editable` ditentukan dari status periode — backend tetap menjadi penjaga akhir.
+  // Status DRAFT dan REJECTED masih bisa diedit ADMIN.
+  const { period, items } = result.payload;
+  const editable =
+    session.access.canAdmin &&
+    (period.workflow_status === "DRAFT" || period.workflow_status === "REJECTED");
+
+  return (
+    <PeriodDetailShell
+      period={period}
+      items={items}
+      access={session.access}
+      editable={editable}
+    />
+  );
 }
-
-PENJELASAN: jangan fetch detail di setiap child; satu snapshot server dibagi lewat readonly props.
-KENAPA: satu fetch menghindari data berbeda antar summary, items, dan tombol workflow.
-LOGIC — period detail/workflow
-- Reject non-positive integer periodId before request; 404 uses notFound().
-- Fetch detail server-side. Render actions only for valid role + current status.
-- ADMIN: DRAFT -> SUBMIT -> WAITING_APPROVAL.
-- APPROVER: WAITING_APPROVAL -> APPROVE -> APPROVED, or REJECT -> REJECTED.
-- PUBLISHER: APPROVED -> PUBLISH -> PUBLISHED; PUBLISHED -> UNPUBLISH -> DRAFT.
-- Mutation: disable double-submit, confirm, show safe result, router.refresh().
-- On 409 refresh because another actor changed state.
-
-SELESAI JIKA: semua status punya badge, aksi ilegal tidak muncul, backend denial tetap ditangani.
-*/

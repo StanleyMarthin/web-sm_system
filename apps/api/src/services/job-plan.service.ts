@@ -15,7 +15,10 @@ import type {
   UpdateJobPlanStatusRequest,
 } from "@smsystem/contracts/job-plan";
 import { jobPlanDraftRecordSchema } from "@smsystem/contracts/job-plan";
-import { buildJobPlanScheduleSegments } from "@smsystem/contracts/job-plan-schedule";
+import {
+  buildJobPlanScheduleSegments,
+  findExceededJobPlanAllocation,
+} from "@smsystem/contracts/job-plan-schedule";
 import type { RedisClientType } from "redis";
 import ExcelJS from "exceljs";
 import type { AuditService } from "@/services/audit/audit.service";
@@ -680,6 +683,34 @@ export class DefaultJobPlanService implements JobPlanService {
     const nextDrafts = Array.from(draftMap.values()).sort((left, right) =>
       left.taskDate.localeCompare(right.taskDate) || left.draftItemId.localeCompare(right.draftItemId),
     );
+    const countdownIds = Array.from(new Set(nextDrafts.flatMap((draft) =>
+      draft.sourceType === "COUNTDOWN" && draft.coreId ? [draft.coreId] : [],
+    )));
+    const references = await this.repository.listReferences({
+      employeeId: session.user.employeeId,
+      scope: session.user.scope,
+      mode: "all",
+      countdownIds,
+    });
+    const availableHoursByReference = new Map(references.countdowns.map((countdown) => [
+      countdown.value,
+      countdown.availablePlanHours ?? countdown.remainingHours,
+    ]));
+    const countdownDrafts = nextDrafts.flatMap((draft) =>
+        draft.sourceType === "COUNTDOWN" && draft.coreId
+          ? [{ referenceId: draft.coreId, targetHours: draft.targetHours }]
+          : [],
+      );
+    if (countdownDrafts.some((draft) => !availableHoursByReference.has(draft.referenceId))) {
+      throw new Error("COUNTDOWN_NOT_FOUND");
+    }
+    const exceededAllocation = findExceededJobPlanAllocation(
+      countdownDrafts,
+      availableHoursByReference,
+    );
+    if (exceededAllocation) {
+      throw new Error("COUNTDOWN_CAPACITY_EXCEEDED");
+    }
     await this.writeDrafts(session.user.employeeId, nextDrafts);
 
     await this.auditService.log({
