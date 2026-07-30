@@ -47,6 +47,7 @@ export function PeriodList({ rows, meta, role }: PeriodListProps) {
   const { alertElement, confirm, notifySuccess, notifyError } = useSweetAlert();
   const [isSubmitting, startSubmitTransition] = useTransition();
   const [isDeleting, startDeleteTransition] = useTransition();
+  const [deletingId, setDeletingId] = useState<string | number | null>(null);
 
   const page = Math.floor(meta.offset / meta.limit) + 1;
   const totalPages = Math.ceil(meta.total / meta.limit);
@@ -86,27 +87,30 @@ export function PeriodList({ rows, meta, role }: PeriodListProps) {
 
   async function handleDeletePeriod(period: SpfPeriod) {
     const confirmed = await confirm({
-      title: `Hapus Antrian Periode #${period.id}`,
-      description: "Apakah Anda yakin ingin menghapus antrian ini?",
+      title: `Hapus Periode #${period.id}`,
+      description: `Apakah Anda yakin ingin menghapus periode "${period.title}"? Aksi ini tidak dapat dibatalkan.`,
       tone: "warning",
-      confirmLabel: "Ya, Hapus",
+      confirmLabel: "Ya, Hapus Periode",
       cancelLabel: "Batal",
     });
 
     if (!confirmed) return;
 
+    setDeletingId(period.id);
     startDeleteTransition(async () => {
       const result = await mutateSpf("period", {
         mode: "DELETE",
         period_id: period.id,
       });
 
+      setDeletingId(null);
+
       if (!result.success) {
         notifyError("Gagal Menghapus", result.message);
         return;
       }
 
-      notifySuccess("Berhasil", `Antrian periode #${period.id} telah dihapus.`);
+      notifySuccess("Berhasil", `Periode #${period.id} telah dihapus.`);
       router.refresh();
     });
   }
@@ -145,9 +149,10 @@ export function PeriodList({ rows, meta, role }: PeriodListProps) {
           </thead>
           <tbody>
             {rows.map((period) => {
-              const isModifiable =
+              const canSubmit =
                 role === "ADMIN" &&
                 (period.status === "DRAFT" || period.status === "REJECTED");
+              const canDelete = role === "ADMIN";
 
               return (
                 <tr
@@ -177,15 +182,17 @@ export function PeriodList({ rows, meta, role }: PeriodListProps) {
                     <StatusBadge status={period.status} />
                   </td>
                   <td className="px-3 py-2.5 font-mono text-[12px] text-muted-foreground tabular-nums dark:text-foreground/40">
-                    {new Date(period.created_at).toLocaleDateString("id-ID", {
-                      day: "2-digit",
-                      month: "short",
-                      year: "numeric",
-                    })}
+                    {period.created_at
+                      ? new Date(period.created_at).toLocaleDateString("id-ID", {
+                          day: "2-digit",
+                          month: "short",
+                          year: "numeric",
+                        })
+                      : "-"}
                   </td>
                   <td className="px-3 py-2.5">
-                    {isModifiable ? (
-                      <div className="flex flex-wrap items-center gap-1.5">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {canSubmit && (
                         <button
                           type="button"
                           disabled={isSubmitting}
@@ -195,19 +202,19 @@ export function PeriodList({ rows, meta, role }: PeriodListProps) {
                         >
                           Ajukan
                         </button>
+                      )}
+                      {canDelete && (
                         <button
                           type="button"
-                          disabled={isDeleting}
+                          disabled={isDeleting && deletingId === period.id}
                           onClick={() => handleDeletePeriod(period)}
                           className="inline-flex items-center rounded border border-destructive/30 bg-destructive/10 px-2.5 py-1 font-mono text-[11px] font-semibold text-destructive transition-all hover:bg-destructive/20 disabled:opacity-50 dark:border-destructive/30 dark:bg-destructive/15"
-                          title="Hapus Antrian Periode Ini"
+                          title="Hapus Periode Ini"
                         >
-                          {isDeleting ? "Hapus…" : "Hapus"}
+                          {isDeleting && deletingId === period.id ? "Hapus…" : "Hapus"}
                         </button>
-                      </div>
-                    ) : (
-                      <span className="font-mono text-[12px] text-muted-foreground">-</span>
-                    )}
+                      )}
+                    </div>
                   </td>
                 </tr>
               );

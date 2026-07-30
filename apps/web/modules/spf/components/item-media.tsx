@@ -8,7 +8,7 @@ import { useSweetAlert } from "@/shared/ui/sweet-alert";
 import { mutateSpf } from "@/shared/api/spf";
 
 interface ItemMediaProps {
-  itemId: number;
+  itemId: number | string;
   media: readonly SpfMedia[];
   editable: boolean;
 }
@@ -29,7 +29,7 @@ export function ItemMedia({ itemId, media, editable }: ItemMediaProps) {
   const [isUploading, startUploadTransition] = useTransition();
   const [isDeleting, startDeleteTransition] = useTransition();
   const [uploadError, setUploadError] = useState<string | null>(null);
-  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [deletingId, setDeletingId] = useState<string | number | null>(null);
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     setUploadError(null);

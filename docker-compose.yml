@@ -39,6 +39,8 @@ services:
       R2_BUCKET_NAME: ${R2_BUCKET_NAME:-}
       R2_PUBLIC_URL: ${R2_PUBLIC_URL:-}
       FCM_SERVER_KEY: ${FCM_SERVER_KEY:-}
+    ports:
+      - "${API_HOST_PORT:-3003}:3001"
     expose:
       - "3001"
     networks:
@@ -61,6 +63,9 @@ services:
     environment:
       NODE_ENV: production
       NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-/api}
+      SPF_API_INTERNAL_URL: ${SPF_API_INTERNAL_URL:-http://172.17.0.1:3001}
+    ports:
+      - "${WEB_HOST_PORT:-3002}:3000"
     expose:
       - "3000"
     depends_on:
@@ -79,8 +84,8 @@ services:
       api:
         condition: service_healthy
     ports:
-      - "80:80"
-      - "443:443"
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/conf.d:/etc/nginx/conf.d:ro

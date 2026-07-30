@@ -1,20 +1,21 @@
 import { z } from "zod";
 
 // ─── Primitive helpers ────────────────────────────────────────────────────────
-const positiveId = z
-  .number({ message: "ID wajib diisi" })
-  .int("ID harus bilangan bulat")
-  .positive("ID harus lebih dari 0");
+// Request ID accepts string or number from UI/caller
+export const requestIdSchema = z.union([z.string(), z.number()]);
+export const idSchema = requestIdSchema;
+const requestIdArraySchema = z.array(requestIdSchema).min(1, "Minimal satu ID diperlukan");
+const flexibleRequestIdArray = z.array(requestIdSchema);
 
-const positiveIdArray = z
-  .array(positiveId)
-  .min(1, "Minimal satu ID diperlukan");
+// Response ID transforms any number/string from backend to string for UI consistency
+export const responseIdSchema = z.union([z.string(), z.number()]).transform(String);
 
-const pagination = z.object({
-  limit: z.number().int().min(1).max(100).optional().default(25),
-  offset: z.number().int().min(0).optional().default(0),
-});
+const paginationRequest = {
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+  offset: z.coerce.number().int().min(0).optional(),
+};
 
+const text = (max: number) => z.string().trim().min(1).max(max);
 const trimmedString = (label: string, max: number) =>
   z
     .string({ message: `${label} wajib diisi` })
@@ -23,25 +24,21 @@ const trimmedString = (label: string, max: number) =>
     .max(max, `${label} maksimal ${max} karakter`);
 
 // ─── Sort allowlists ──────────────────────────────────────────────────────────
-const ALLOWED_ITEM_SORTS = ["created_at", "updated_at", "car_id"] as const;
+const ALLOWED_ITEM_SORTS = ["created_at", "updated_at", "work_type", "car_id"] as const;
 const ALLOWED_PERIOD_SORTS = ["created_at", "updated_at", "title"] as const;
 const ORDER = ["ASC", "DESC", "asc", "desc"] as const;
 
 // ─── Source request schema ────────────────────────────────────────────────────
 const sourceRequestSchema = z.discriminatedUnion("mode", [
-  // List raw source data dari sms_db
   z.object({
     mode: z.literal("SMS_DB"),
-    car_id: positiveId.optional(),
-    ...pagination.shape,
+    car_id: requestIdSchema.optional(),
+    work_type: z.string().trim().max(100).optional(),
+    ...paginationRequest,
   }),
-  // Collect sumber menjadi SPF items
   z.object({
     mode: z.literal("COLLECT"),
-    source_ids: z
-      .array(positiveId)
-      .min(1, "Minimal 1 source dipilih")
-      .max(200, "Maksimal 200 source per request"),
+    source_ids: requestIdArraySchema.max(200, "Maksimal 200 source per request"),
   }),
 ]);
 
@@ -49,43 +46,46 @@ const sourceRequestSchema = z.discriminatedUnion("mode", [
 const itemRequestSchema = z.discriminatedUnion("mode", [
   z.object({
     mode: z.literal("LIST"),
-    car_id: positiveId.optional(),
-    period_id: positiveId.optional(),
+    car_id: requestIdSchema.optional(),
+    period_id: requestIdSchema.optional(),
     sort: z.enum(ALLOWED_ITEM_SORTS).optional(),
     order: z.enum(ORDER).optional(),
-    ...pagination.shape,
+    ...paginationRequest,
   }),
   z.object({
     mode: z.literal("DETAIL"),
-    item_id: positiveId,
+    item_id: requestIdSchema,
   }),
   z.object({
     mode: z.literal("CREATE"),
-    car_id: positiveId,
-    description: trimmedString("Deskripsi", 5000),
-    work_type: trimmedString("Jenis pekerjaan", 100),
+    car_id: requestIdSchema,
+    panel_id: z.coerce.number().int().positive().optional(),
+    description: text(5000),
+    work_type: text(100),
   }),
   z.object({
     mode: z.literal("UPDATE"),
-    item_id: positiveId,
-    description: trimmedString("Deskripsi", 5000).optional(),
-    work_type: trimmedString("Jenis pekerjaan", 100).optional(),
+    item_id: requestIdSchema,
+    description: text(5000).optional(),
+    work_type: text(100).optional(),
   }),
   z.object({
     mode: z.literal("DELETE"),
-    item_id: positiveId,
+    item_id: requestIdSchema,
   }),
   z.object({
     mode: z.literal("UPLOAD_MEDIA"),
-    item_id: positiveId,
-    filename: z.string().min(1, "Nama file wajib diisi"),
-    mime_type: z.string().min(1, "MIME type wajib diisi"),
-    data: z.string().min(1, "Data Base64 wajib diisi"), // base64
+    item_id: requestIdSchema,
+    file_name: text(255).refine((name) => !/[\\/\u0000-\u001f\u007f]/u.test(name), "Nama file tidak valid").optional(),
+    filename: text(255).optional(),
+    mime_type: z.string().min(1),
+    file_data: z.string().min(1).optional(),
+    data: z.string().min(1).optional(),
   }),
   z.object({
     mode: z.literal("DELETE_MEDIA"),
-    item_id: positiveId,
-    media_id: positiveId,
+    media_id: requestIdSchema,
+    item_id: requestIdSchema.optional(),
   }),
 ]);
 
@@ -95,62 +95,38 @@ const periodRequestSchema = z.discriminatedUnion("mode", [
     mode: z.literal("LIST"),
     sort: z.enum(ALLOWED_PERIOD_SORTS).optional(),
     order: z.enum(ORDER).optional(),
-    ...pagination.shape,
+    ...paginationRequest,
   }),
   z.object({
     mode: z.literal("DETAIL"),
-    period_id: positiveId,
+    period_id: requestIdSchema,
   }),
   z.object({
     mode: z.literal("CREATE"),
-    title: trimmedString("Judul", 255),
-    description: z
-      .string()
-      .trim()
-      .max(5000, "Deskripsi maksimal 5000 karakter")
-      .optional(),
-    attach_item_ids: positiveIdArray.optional(),
+    title: text(255),
+    description: z.string().trim().max(5000).optional(),
+    date_start: z.string().optional(),
+    date_end: z.string().optional(),
+    item_ids: flexibleRequestIdArray.optional(),
+    attach_item_ids: flexibleRequestIdArray.optional(),
   }),
   z.object({
     mode: z.literal("UPDATE"),
-    period_id: positiveId,
-    title: trimmedString("Judul", 255).optional(),
-    description: z
-      .string()
-      .trim()
-      .max(5000, "Deskripsi maksimal 5000 karakter")
-      .optional(),
-    attach_item_ids: positiveIdArray.optional(),
+    period_id: requestIdSchema,
+    title: text(255).optional(),
+    description: z.string().trim().max(5000).optional(),
+    date_start: z.string().optional(),
+    date_end: z.string().optional(),
+    item_ids: flexibleRequestIdArray.optional(),
+    attach_item_ids: flexibleRequestIdArray.optional(),
   }),
-  z.object({
-    mode: z.literal("SUBMIT"),
-    period_id: positiveId,
-  }),
-  z.object({
-    mode: z.literal("APPROVE"),
-    period_id: positiveId,
-  }),
-  z.object({
-    mode: z.literal("REJECT"),
-    period_id: positiveId,
-    reason: trimmedString("Alasan penolakan", 2000),
-  }),
-  z.object({
-    mode: z.literal("PUBLISH"),
-    period_id: positiveId,
-  }),
-  z.object({
-    mode: z.literal("UNPUBLISH"),
-    period_id: positiveId,
-  }),
-  z.object({
-    mode: z.literal("EXPORT"),
-    period_id: positiveId,
-  }),
-  z.object({
-    mode: z.literal("DELETE"),
-    period_id: positiveId,
-  }),
+  z.object({ mode: z.literal("SUBMIT"), period_id: requestIdSchema }),
+  z.object({ mode: z.literal("APPROVE"), period_id: requestIdSchema }),
+  z.object({ mode: z.literal("REJECT"), period_id: requestIdSchema, reason: text(2000).optional() }),
+  z.object({ mode: z.literal("PUBLISH"), period_id: requestIdSchema }),
+  z.object({ mode: z.literal("UNPUBLISH"), period_id: requestIdSchema }),
+  z.object({ mode: z.literal("EXPORT"), period_id: requestIdSchema }),
+  z.object({ mode: z.literal("DELETE"), period_id: requestIdSchema }),
 ]);
 
 // ─── Request registry ─────────────────────────────────────────────────────────
@@ -180,181 +156,244 @@ export const spfPaginationSchema = z.object({
   total: z.number().int().nonnegative(),
   limit: z.number().int().positive(),
   offset: z.number().int().nonnegative(),
-  hasNextPage: z.boolean(),
-});
+  hasNextPage: z.boolean().optional(),
+}).transform((p) => ({
+  ...p,
+  hasNextPage: p.hasNextPage ?? (p.offset + p.limit < p.total),
+}));
 export type SpfPagination = z.infer<typeof spfPaginationSchema>;
 
 export const spfItemSchema = z.object({
-  id: z.number().int().positive(),
-  car_id: z.union([z.number(), z.string()]),
+  id: responseIdSchema,
+  source_id: responseIdSchema.nullable().optional(),
+  car_id: responseIdSchema,
   car_name: z.string().optional(),
   description: z.string(),
   work_type: z.string(),
-  period_id: z.number().int().positive().nullable(),
-  created_at: z.string(),
-  updated_at: z.string(),
+  period_id: responseIdSchema.nullable(),
+  is_released: z.coerce.boolean().optional(),
+  created_by: z.string().nullable().optional(),
+  created_at: z.string().nullable().transform((v) => v ?? ""),
+  updated_at: z.string().nullable().transform((v) => v ?? ""),
 });
 export type SpfItem = z.infer<typeof spfItemSchema>;
 
 export const spfMediaSchema = z.object({
-  id: z.number().int().positive(),
-  item_id: z.number().int().positive(),
-  url: z.string().url(),
+  id: responseIdSchema,
+  item_id: responseIdSchema,
+  r2_key: z.string().optional(),
+  url: z.string().optional(),
+  file_name: z.string().optional(),
+  filename: z.string().optional(),
   mime_type: z.string(),
-  filename: z.string(),
-  created_at: z.string(),
-});
+  size_bytes: z.number().nonnegative().optional(),
+  admin_id: z.string().nullable().optional(),
+  created_at: z.string().nullable().transform((v) => v ?? ""),
+}).transform((m) => ({
+  ...m,
+  url: m.url ?? m.r2_key ?? "",
+  filename: m.filename ?? m.file_name ?? "",
+}));
 export type SpfMedia = z.infer<typeof spfMediaSchema>;
 
 export const spfPeriodSchema = z.object({
-  id: z.number().int().positive(),
-  title: z.string(),
-  description: z.string().nullable(),
-  status: z.enum(SPF_PERIOD_STATUSES),
-  rejection_reason: z.string().nullable(),
-  created_by: z.string(),
-  created_at: z.string(),
-  updated_at: z.string(),
-});
+  id: responseIdSchema,
+  title: z.string().nullable().transform((v) => v ?? "-"),
+  description: z.string().nullable().optional(),
+  workflow_status: z.enum(SPF_PERIOD_STATUSES).optional(),
+  status: z.enum(SPF_PERIOD_STATUSES).optional(),
+  date_start: z.string().nullable().optional(),
+  date_end: z.string().nullable().optional(),
+  rejection_reason: z.string().nullable().optional(),
+  created_by: z.string().nullable().transform((v) => v ?? "-"),
+  created_at: z.string().nullable().transform((v) => v ?? ""),
+  updated_at: z.string().nullable().transform((v) => v ?? ""),
+}).transform((p) => ({
+  ...p,
+  workflow_status: p.workflow_status ?? p.status ?? "DRAFT",
+  status: p.status ?? p.workflow_status ?? "DRAFT",
+}));
 export type SpfPeriod = z.infer<typeof spfPeriodSchema>;
 
 export const spfSourceSchema = z.object({
-  id: z.number().int().positive(),
-  car_id: z.union([z.number(), z.string()]),
+  id: responseIdSchema,
+  car_id: responseIdSchema,
   car_name: z.string().optional(),
   description: z.string(),
   work_type: z.string().nullable(),
-  collected: z.boolean(),
-  created_at: z.string(),
+  collected: z.coerce.boolean(),
+  created_at: z.string().nullable().transform((v) => v ?? ""),
 });
 export type SpfSource = z.infer<typeof spfSourceSchema>;
 
 // ─── Response envelopes ───────────────────────────────────────────────────────
 export const spfItemListEnvelopeSchema = z.object({
-  success: z.literal(true),
-  message: z.string(),
+  success: z.boolean().optional(),
+  message: z.string().optional(),
   data: z.object({
     items: z.array(spfItemSchema),
-    meta: spfPaginationSchema,
+    total: z.number().int().nonnegative().optional(),
+    limit: z.number().int().positive().optional(),
+    offset: z.number().int().nonnegative().optional(),
+    meta: spfPaginationSchema.optional(),
+  }).transform((d) => {
+    const total = d.total ?? d.meta?.total ?? d.items.length;
+    const limit = d.limit ?? d.meta?.limit ?? 25;
+    const offset = d.offset ?? d.meta?.offset ?? 0;
+    return {
+      items: d.items,
+      total,
+      limit,
+      offset,
+      meta: d.meta ?? { total, limit, offset, hasNextPage: offset + limit < total },
+    };
   }),
 });
 
 export const spfItemDetailEnvelopeSchema = z.object({
-  success: z.literal(true),
-  message: z.string(),
+  success: z.boolean().optional(),
+  message: z.string().optional(),
   data: z.object({
     item: spfItemSchema,
     media: z.array(spfMediaSchema),
   }),
 });
 
-export const spfItemMutationEnvelopeSchema = z.object({
-  success: z.literal(true),
-  message: z.string(),
-  data: z.object({
-    item: spfItemSchema,
-  }),
-});
-
 export const spfPeriodListEnvelopeSchema = z.object({
-  success: z.literal(true),
-  message: z.string(),
+  success: z.boolean().optional(),
+  message: z.string().optional(),
   data: z.object({
     periods: z.array(spfPeriodSchema),
-    meta: spfPaginationSchema,
+    total: z.number().int().nonnegative().optional(),
+    limit: z.number().int().positive().optional(),
+    offset: z.number().int().nonnegative().optional(),
+    meta: spfPaginationSchema.optional(),
+  }).transform((d) => {
+    const total = d.total ?? d.meta?.total ?? d.periods.length;
+    const limit = d.limit ?? d.meta?.limit ?? 25;
+    const offset = d.offset ?? d.meta?.offset ?? 0;
+    return {
+      periods: d.periods,
+      total,
+      limit,
+      offset,
+      meta: d.meta ?? { total, limit, offset, hasNextPage: offset + limit < total },
+    };
   }),
 });
 
 export const spfPeriodDetailEnvelopeSchema = z.object({
-  success: z.literal(true),
-  message: z.string(),
+  success: z.boolean().optional(),
+  message: z.string().optional(),
   data: z.object({
     period: spfPeriodSchema,
     items: z.array(spfItemSchema),
-  }),
-});
-
-export const spfPeriodMutationEnvelopeSchema = z.object({
-  success: z.literal(true),
-  message: z.string(),
-  data: z.object({
-    period: spfPeriodSchema,
+    total_items: z.number().int().nonnegative().optional(),
   }),
 });
 
 export const spfSourceListEnvelopeSchema = z.object({
-  success: z.literal(true),
-  message: z.string(),
+  success: z.boolean().optional(),
+  message: z.string().optional(),
   data: z.object({
-    sources: z.array(spfSourceSchema),
-    meta: spfPaginationSchema,
+    sources: z.array(spfSourceSchema).optional(),
+    items: z.array(spfSourceSchema).optional(),
+    total: z.number().int().nonnegative().optional(),
+    limit: z.number().int().positive().optional(),
+    offset: z.number().int().nonnegative().optional(),
+    meta: spfPaginationSchema.optional(),
+  }).transform((d) => {
+    const list = d.sources ?? d.items ?? [];
+    const total = d.total ?? d.meta?.total ?? list.length;
+    const limit = d.limit ?? d.meta?.limit ?? 25;
+    const offset = d.offset ?? d.meta?.offset ?? 0;
+    return {
+      sources: list,
+      items: list,
+      total,
+      limit,
+      offset,
+      meta: d.meta ?? { total, limit, offset, hasNextPage: offset + limit < total },
+    };
   }),
 });
 
 export const spfCollectEnvelopeSchema = z.object({
-  success: z.literal(true),
-  message: z.string(),
+  success: z.boolean().optional(),
+  message: z.string().optional(),
   data: z.object({
-    inserted: z.number().int().nonnegative(),
-    ignored: z.number().int().nonnegative(),
+    inserted: z.number().int().nonnegative().optional(),
+    ignored: z.number().int().nonnegative().optional(),
   }),
 });
 
+export const spfMutationEnvelopeSchema = z.object({
+  success: z.boolean().optional(),
+  message: z.string().optional(),
+  data: z.record(z.string(), z.unknown()),
+});
+
 export const spfErrorEnvelopeSchema = z.object({
-  success: z.literal(false),
-  message: z.string(),
+  success: z.literal(false).optional(),
+  message: z.string().optional(),
   error: z
     .object({
       code: z.string().optional(),
+      message: z.string().optional(),
     })
     .optional(),
 });
 
-// ─── Response registry (keyed by resource) ───────────────────────────────────
-// Note: untuk LIST vs. DETAIL, parsing dilakukan di spf.ts berdasarkan mode.
+export const generateUrlRequestSchema = z.object({
+  owner_name: text(255),
+  period_id: text(100),
+});
+export type GenerateUrlRequest = z.infer<typeof generateUrlRequestSchema>;
+
+export const spfGenerateUrlEnvelopeSchema = z.object({
+  success: z.boolean().optional(),
+  message: z.string().optional(),
+  data: z.object({
+    owner_name: z.string().optional(),
+    period_id: z.string().optional(),
+    url: z.string(),
+    token: z.string().optional(),
+    expires_at: z.string().optional(),
+  }),
+});
+export type SpfGenerateUrlResult = z.infer<typeof spfGenerateUrlEnvelopeSchema>["data"];
+
+// ─── Response registry ────────────────────────────────────────────────────────
 export const responseSchemas = {
   source: spfSourceListEnvelopeSchema,
   item: spfItemListEnvelopeSchema,
   period: spfPeriodListEnvelopeSchema,
 } as const;
 
-// ─── Form-level Zod schemas (dipakai langsung oleh React Hook Form) ───────────
+// ─── Form-level Zod schemas ───────────────────────────────────────────────────
 export const itemCreateFormSchema = z.object({
   car_id: z
-    .string()
-    .min(1, "Car ID wajib diisi")
-    .regex(/^\d+$/, "Car ID harus berupa angka")
-    .transform((val) => Number.parseInt(val, 10))
-    .refine((val) => val > 0, { message: "Car ID harus lebih dari 0" }),
+    .union([z.string(), z.number()])
+    .transform((val) => String(val).trim())
+    .refine((val) => /^\d+$/u.test(val) && Number.parseInt(val, 10) > 0, {
+      message: "Car ID harus berupa angka positif",
+    })
+    .transform((val) => Number.parseInt(val, 10)),
   description: trimmedString("Deskripsi", 5000),
   work_type: trimmedString("Jenis pekerjaan", 100),
 });
 
 export const itemUpdateFormSchema = z.object({
-  description: z
-    .string()
-    .trim()
-    .max(5000, "Deskripsi maksimal 5000 karakter")
-    .optional(),
-  work_type: z
-    .string()
-    .trim()
-    .max(100, "Jenis pekerjaan maksimal 100 karakter")
-    .optional(),
+  description: z.string().trim().max(5000).optional(),
+  work_type: z.string().trim().max(100).optional(),
 });
 
 export const periodCreateFormSchema = z.object({
   title: trimmedString("Judul", 255),
-  description: z
-    .string()
-    .trim()
-    .max(5000, "Deskripsi maksimal 5000 karakter")
-    .optional()
-    .or(z.literal("")),
-  attach_item_ids_raw: z
-    .string()
-    .optional()
-    .describe("Comma-separated positive integers"),
+  description: z.string().trim().max(5000).optional().or(z.literal("")),
+  date_start: z.string().optional(),
+  date_end: z.string().optional(),
+  attach_item_ids_raw: z.string().optional(),
 });
 
 export const periodUpdateFormSchema = periodCreateFormSchema.partial();

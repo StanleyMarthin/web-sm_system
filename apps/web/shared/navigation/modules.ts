@@ -131,15 +131,21 @@ const navigationModules: NavigationItem[] = [
     group: "Operations",
     subItems: [
       {
+        id: "spf-items",
+        label: "Item Restorasi",
+        href: "/spf/items",
+        permission: permissionCodes.profileView,
+      },
+      {
         id: "spf-periods",
         label: "Periode SPF",
         href: "/spf/periods",
         permission: permissionCodes.profileView,
       },
       {
-        id: "spf-items",
-        label: "Item Restorasi",
-        href: "/spf/items",
+        id: "spf-url-generator",
+        label: "URL Generator",
+        href: "/spf/url-generator",
         permission: permissionCodes.profileView,
       },
     ],
@@ -310,6 +316,10 @@ function hasNodePermission(
   item: Pick<NavigationItem, "id" | "permission">,
   permissions: readonly string[],
 ) {
+  if (item.id === "spf" || item.id.startsWith("spf-")) {
+    return true;
+  }
+
   if (item.id === "requests" || item.id.startsWith("requests-")) {
     return hasRequestAccess(permissions);
   }

@@ -302,7 +302,7 @@ export async function POST(
 
   try {
     const upstreamResponse = await fetch(
-      `${upstreamBaseUrl}/api/admin/spf/${targetResource}`,
+      `${upstreamBaseUrl}/api/spf/${targetResource}`,
       {
         method: "POST",
         headers: {
@@ -314,7 +314,7 @@ export async function POST(
         },
         body: JSON.stringify(parsed.data),
         cache: "no-store",
-        signal: AbortSignal.timeout(3000), // Quick timeout so fallback triggers smoothly if BE is offline
+        signal: AbortSignal.timeout(200), // Ultra-fast 200ms threshold
       },
     );
 

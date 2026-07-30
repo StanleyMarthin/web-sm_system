@@ -15,7 +15,7 @@ interface SourceCollectorProps {
 export function SourceCollector({ sources, meta }: SourceCollectorProps) {
   const router = useRouter();
   const { alertElement, notifySuccess, notifyError } = useSweetAlert();
-  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [selectedIds, setSelectedIds] = useState<Set<number | string>>(new Set());
   const [isCollecting, startCollectTransition] = useTransition();
   const [carFilter, setCarFilter] = useState("");
   const [resultNotice, setResultNotice] = useState<string | null>(null);
@@ -51,7 +51,7 @@ export function SourceCollector({ sources, meta }: SourceCollectorProps) {
     });
   }
 
-  function toggleSelectOne(id: number) {
+  function toggleSelectOne(id: number | string) {
     setSelectedIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) {

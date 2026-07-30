@@ -14,15 +14,6 @@ export async function handleDashboardBootstrapRoute(
     return sessionResult.response;
   }
 
-  const permissionResult = requirePermission(
-    request,
-    sessionResult.session,
-    permissionCodes.profileView,
-  );
-  if ("response" in permissionResult) {
-    return permissionResult.response;
-  }
-
   return successResponse(request, "Dashboard bootstrap ready", {
     welcome: `Selamat datang, ${sessionResult.session.user.fullName}`,
     employeeId: sessionResult.session.user.employeeId,
@@ -44,15 +35,6 @@ export async function handleDashboardSummaryRoute(
   const sessionResult = await requireSession(request, authService);
   if ("response" in sessionResult) {
     return sessionResult.response;
-  }
-
-  const permissionResult = requirePermission(
-    request,
-    sessionResult.session,
-    permissionCodes.profileView,
-  );
-  if ("response" in permissionResult) {
-    return permissionResult.response;
   }
 
   try {

@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ItemList } from "./item-list";
 import { ItemForm } from "./forms/item-form";
@@ -52,19 +51,12 @@ export function ItemListShell({ rows, meta, role }: ItemListShellProps) {
         actions={
           <div className="flex items-center gap-2">
             {role === "ADMIN" && (
-              <>
-                <Link href="/spf/sources">
-                  <ActionButton variant="default">
-                    Source SMS DB
-                  </ActionButton>
-                </Link>
-                <ActionButton
-                  variant="primary"
-                  onClick={() => setCreateOpen(true)}
-                >
-                  + Buat Item
-                </ActionButton>
-              </>
+              <ActionButton
+                variant="primary"
+                onClick={() => setCreateOpen(true)}
+              >
+                + Buat Item
+              </ActionButton>
             )}
           </div>
         }

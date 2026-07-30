@@ -49,7 +49,7 @@ const ACTION_VARIANTS: Record<
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 interface PeriodWorkflowActionsProps {
-  periodId: number;
+  periodId: number | string;
   status: SpfPeriodStatus;
   role: SpfRole;
 }

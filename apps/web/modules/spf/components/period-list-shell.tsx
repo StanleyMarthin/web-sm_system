@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { PeriodList } from "./period-list";
 import { PeriodForm } from "./forms/period-form";
+import { ItemForm } from "./forms/item-form";
 import type { SpfPeriod, SpfPagination } from "@/shared/api/spf-contracts";
 import type { SpfRole } from "@/shared/auth/admin-session";
 import { ActionButton, PageHeader } from "@/shared/ui/compact";
@@ -31,6 +32,7 @@ const MONTH_OPTIONS = [
 
 export function PeriodListShell({ rows, meta, role }: PeriodListShellProps) {
   const [isCreateOpen, setCreateOpen] = useState(false);
+  const [isCreateItemOpen, setCreateItemOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<
     "DRAFT_REJECT" | "ALL" | "WAITING_APPROVAL" | "APPROVED" | "PUBLISHED"
@@ -133,15 +135,24 @@ export function PeriodListShell({ rows, meta, role }: PeriodListShellProps) {
         title="Daftar Periode Progress"
         actions={
           role === "ADMIN" ? (
-            <ActionButton
-              variant="primary"
-              onClick={() => {
-                setCreateOpen(true);
-                setNotice(null);
-              }}
-            >
-              + Buat Periode Baru
-            </ActionButton>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setCreateItemOpen(true)}
+                className="inline-flex h-9 items-center gap-1.5 border border-primary/35 px-3 font-mono text-[12px] font-medium uppercase tracking-[0.08em] text-app-accent-ink transition-colors hover:bg-primary/10 dark:border-primary/35 dark:text-app-accent-ink dark:hover:bg-primary/10"
+              >
+                + Buat Item
+              </button>
+              <ActionButton
+                variant="primary"
+                onClick={() => {
+                  setCreateOpen(true);
+                  setNotice(null);
+                }}
+              >
+                + Buat Periode Baru
+              </ActionButton>
+            </div>
           ) : undefined
         }
       />
@@ -302,6 +313,35 @@ export function PeriodListShell({ rows, meta, role }: PeriodListShellProps) {
               }}
               onError={() => {
                 // Dialog tetap terbuka saat error — ditangani di dalam PeriodForm
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Create Item Dialog */}
+      {isCreateItemOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/35 p-4 backdrop-blur-[1px] dark:bg-background/80">
+          <div className="w-full max-w-lg border border-border bg-white p-6 shadow-2xl dark:border-white/[0.08] dark:bg-popover">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground dark:text-foreground/50">
+                Buat Item Baru
+              </h2>
+              <button
+                type="button"
+                onClick={() => setCreateItemOpen(false)}
+                className="text-muted-foreground hover:text-foreground dark:text-foreground/50 dark:hover:text-foreground"
+                aria-label="Tutup dialog"
+              >
+                ✕
+              </button>
+            </div>
+            <ItemForm
+              mode="CREATE"
+              onClose={() => setCreateItemOpen(false)}
+              onSuccess={() => {
+                setCreateItemOpen(false);
+                setNotice("Item berhasil dibuat.");
               }}
             />
           </div>

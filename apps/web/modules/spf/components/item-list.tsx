@@ -20,7 +20,7 @@ export function ItemList({ rows, meta, role, editable = true }: ItemListProps) {
   const router = useRouter();
   const { alertElement, confirm, notifySuccess, notifyError } = useSweetAlert();
   const [isDeleting, startDeleteTransition] = useTransition();
-  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [deletingId, setDeletingId] = useState<string | number | null>(null);
 
   const page = Math.floor(meta.offset / meta.limit) + 1;
   const totalPages = Math.ceil(meta.total / meta.limit);
@@ -134,7 +134,7 @@ export function ItemList({ rows, meta, role, editable = true }: ItemListProps) {
                     >
                       👁️ Detail
                     </Link>
-                    {role === "ADMIN" && editable && item.period_id === null && (
+                    {role === "ADMIN" && editable && (
                       <button
                         type="button"
                         onClick={() => handleDelete(item)}

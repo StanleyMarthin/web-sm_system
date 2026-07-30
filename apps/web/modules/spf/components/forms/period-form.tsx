@@ -29,8 +29,8 @@ const periodFormSchema = z.object({
     .max(5000, "Deskripsi maksimal 5000 karakter")
     .optional()
     .or(z.literal("")),
-  date_start: z.string().optional().or(z.literal("")),
-  date_end: z.string().optional().or(z.literal("")),
+  date_start: z.string().min(1, "Tanggal mulai wajib diisi"),
+  date_end: z.string().min(1, "Tanggal selesai wajib diisi"),
   division: z.string().optional().or(z.literal("")),
   attach_item_ids_raw: z
     .string()
@@ -88,8 +88,8 @@ export function PeriodForm(props: PeriodFormProps) {
     defaultValues: {
       title: period?.title ?? "",
       description: period?.description ?? "",
-      date_start: "",
-      date_end: "",
+      date_start: period?.date_start ?? "",
+      date_end: period?.date_end ?? "",
       division: "",
       attach_item_ids_raw: "",
     },
@@ -100,9 +100,9 @@ export function PeriodForm(props: PeriodFormProps) {
 
     const confirmed = await confirm({
       title: `Hapus Periode #${period.id}`,
-      description: "Apakah kamu ingin menghapus draft ini?",
+      description: `Apakah Anda yakin ingin menghapus periode "${period.title}"? Aksi ini tidak dapat dibatalkan.`,
       tone: "warning",
-      confirmLabel: "Ya, Hapus",
+      confirmLabel: "Ya, Hapus Periode",
       cancelLabel: "Batal",
     });
 
@@ -121,9 +121,9 @@ export function PeriodForm(props: PeriodFormProps) {
         return;
       }
 
-      notifySuccess("Berhasil", "Draft periode berhasil dihapus.");
+      notifySuccess("Berhasil", "Periode berhasil dihapus.");
       onClose?.();
-      onSuccess?.("Draft periode berhasil dihapus.");
+      onSuccess?.("Periode berhasil dihapus.");
       router.replace("/spf/periods");
       router.refresh();
     });
@@ -139,6 +139,8 @@ export function PeriodForm(props: PeriodFormProps) {
           mode: "CREATE",
           title: values.title,
           ...(values.description ? { description: values.description } : {}),
+          ...(values.date_start ? { date_start: values.date_start } : {}),
+          ...(values.date_end ? { date_end: values.date_end } : {}),
           ...(itemIds ? { attach_item_ids: itemIds } : {}),
         });
 
@@ -173,10 +175,10 @@ export function PeriodForm(props: PeriodFormProps) {
     const hasChangedTitle = changedTitle !== undefined;
     const hasChangedDesc = changedDesc !== undefined;
     const hasItemIds = itemIds !== undefined && itemIds.length > 0;
-    const hasDateFilter = Boolean(values.date_start || values.date_end);
-    const hasDivision = Boolean(values.division);
+    const hasDateStart = Boolean(values.date_start && values.date_start !== period.date_start);
+    const hasDateEnd = Boolean(values.date_end && values.date_end !== period.date_end);
 
-    if (!hasChangedTitle && !hasChangedDesc && !hasItemIds && !hasDateFilter && !hasDivision) {
+    if (!hasChangedTitle && !hasChangedDesc && !hasItemIds && !hasDateStart && !hasDateEnd) {
       setServerError("Tidak ada perubahan yang terdeteksi.");
       return;
     }
@@ -187,6 +189,8 @@ export function PeriodForm(props: PeriodFormProps) {
         period_id: period.id,
         ...(hasChangedTitle ? { title: changedTitle! } : {}),
         ...(hasChangedDesc ? { description: changedDesc! } : {}),
+        ...(hasDateStart ? { date_start: values.date_start } : {}),
+        ...(hasDateEnd ? { date_end: values.date_end } : {}),
         ...(hasItemIds ? { attach_item_ids: itemIds! } : {}),
       });
 
@@ -210,7 +214,7 @@ export function PeriodForm(props: PeriodFormProps) {
     <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
       {alertElement}
 
-      {/* Title */}
+      {/* Judul Periode */}
       <div>
         <FieldLabel required>Judul Periode</FieldLabel>
         <CompactInput
@@ -228,7 +232,7 @@ export function PeriodForm(props: PeriodFormProps) {
         )}
       </div>
 
-      {/* Description */}
+      {/* Deskripsi */}
       <div>
         <FieldLabel>Deskripsi (opsional)</FieldLabel>
         <CompactTextarea
@@ -251,50 +255,39 @@ export function PeriodForm(props: PeriodFormProps) {
         )}
       </div>
 
-      {/* Date Filter Range (Filter Tanggal & Bulan) */}
+      {/* Tanggal Range */}
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
-          <FieldLabel>Filter Tanggal Mulai</FieldLabel>
+          <FieldLabel required>Tanggal Mulai</FieldLabel>
           <CompactInput
             id="period-date-start"
             type="date"
             disabled={isPending}
             {...register("date_start")}
           />
+          {errors.date_start && (
+            <p className="mt-1 text-[12px] text-destructive">
+              {errors.date_start.message}
+            </p>
+          )}
         </div>
         <div>
-          <FieldLabel>Filter Tanggal Selesai</FieldLabel>
+          <FieldLabel required>Tanggal Selesai</FieldLabel>
           <CompactInput
             id="period-date-end"
             type="date"
             disabled={isPending}
             {...register("date_end")}
           />
+          {errors.date_end && (
+            <p className="mt-1 text-[12px] text-destructive">
+              {errors.date_end.message}
+            </p>
+          )}
         </div>
       </div>
 
-      {/* Pilih Divisi */}
-      <div>
-        <FieldLabel>Pilih Divisi Pekerjaan</FieldLabel>
-        <select
-          id="period-division"
-          disabled={isPending}
-          className="w-full rounded border border-border bg-background px-3 py-2 text-[13px] font-medium text-foreground transition-colors focus:border-primary focus:outline-none dark:border-white/[0.1] dark:bg-popover"
-          {...register("division")}
-        >
-          <option value="">Semua Divisi</option>
-          <option value="BODYWORK">Bodywork</option>
-          <option value="PAINTING">Paintwork / Painting</option>
-          <option value="ENGINE">Engine & Mechanical</option>
-          <option value="INTERIOR">Interior & Trim</option>
-          <option value="ELEKTRIKAL">Elektrikal & Wiring</option>
-        </select>
-        <p className="mt-1 text-[11px] text-muted-foreground">
-          Pilih divisi pekerjaan yang akan difokuskan dalam periode progress ini.
-        </p>
-      </div>
-
-      {/* Server error — dialog tetap terbuka saat ada error */}
+      {/* Server error */}
       <Toast message={serverError} variant="err" />
 
       {/* Action buttons */}
@@ -306,7 +299,7 @@ export function PeriodForm(props: PeriodFormProps) {
             disabled={isPending}
             onClick={handleDeletePeriod}
           >
-            Hapus Draft
+            Hapus Periode
           </ActionButton>
         ) : (
           <div />

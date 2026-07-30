@@ -60,12 +60,14 @@ type ItemFormProps =
   | {
       mode: "CREATE";
       item?: undefined;
+      onClose?: () => void;
       onSuccess?: () => void;
       onError?: (message: string) => void;
     }
   | {
       mode: "UPDATE";
       item: Readonly<SpfItem>;
+      onClose?: () => void;
       onSuccess?: () => void;
       onError?: (message: string) => void;
     };
