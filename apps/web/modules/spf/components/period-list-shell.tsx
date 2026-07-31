@@ -178,7 +178,7 @@ export function PeriodListShell({ rows, meta, role }: PeriodListShellProps) {
           <select
             id="filter-status"
             value={activeTab}
-            onChange={(e) => setActiveTab(e.target.value as any)}
+            onChange={(e) => setActiveTab(e.target.value as "DRAFT_REJECT" | "ALL" | "WAITING_APPROVAL" | "APPROVED" | "PUBLISHED")}
             className="h-8 rounded border border-border bg-background px-2.5 font-mono text-[11px] font-semibold text-foreground outline-none transition-colors focus:border-primary dark:border-white/[0.1] dark:bg-popover"
           >
             <option value="DRAFT_REJECT">Draft & Reject ({draftRejectCount})</option>
