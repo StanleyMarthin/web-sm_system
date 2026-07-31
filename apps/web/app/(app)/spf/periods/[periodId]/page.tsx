@@ -16,9 +16,8 @@ interface Props {
 export default async function PeriodDetailPage({ params }: Props) {
   const { periodId } = await params;
 
-  // Validasi ID sebelum menyentuh backend
-  const id = Number(periodId);
-  if (!Number.isSafeInteger(id) || id <= 0) {
+  // Validasi ID: harus string non-kosong, max 100 karakter, karakter aman (alphanumeric, dash, underscore, dot)
+  if (!periodId || periodId.length > 100 || !/^[\w.\-]+$/u.test(periodId)) {
     notFound();
   }
 
@@ -26,7 +25,7 @@ export default async function PeriodDetailPage({ params }: Props) {
   const session = await requireAdminSession(cookieHeader);
   if (!session) redirect("/login");
 
-  const result = await fetchSpfPeriodDetail(cookieHeader, id);
+  const result = await fetchSpfPeriodDetail(cookieHeader, periodId);
 
   if (result.status === 401) redirect("/login");
   if (result.status === 403) redirect("/forbidden");

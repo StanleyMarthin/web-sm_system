@@ -7,7 +7,7 @@ export default function ForbiddenPage() {
         </p>
         <h1 className="mt-4 text-2xl font-semibold dark:font-light">Izin akses tidak mencukupi</h1>
         <p className="mt-3 text-sm leading-6 text-muted-foreground dark:text-foreground/45">
-          Endpoint dashboard bootstrap ditolak oleh permission guard backend.
+          Akses Anda ditolak oleh sistem karena peran akun ini tidak memiliki izin yang cukup untuk melihat atau melakukan aksi pada halaman ini.
         </p>
       </div>
     </div>

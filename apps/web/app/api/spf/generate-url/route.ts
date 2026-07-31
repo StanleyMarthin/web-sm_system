@@ -69,7 +69,8 @@ export async function POST(request: NextRequest) {
 
     const upstreamData = await upstream.json().catch(() => null);
     return NextResponse.json(upstreamData, { status: upstream.status });
-  } catch {
-    return errorResponse(502, "SPF_UPSTREAM_UNAVAILABLE", "Backend SPF tidak dapat dijangkau.");
+  } catch (err: unknown) {
+    const errMessage = err instanceof Error ? err.message : String(err);
+    return errorResponse(502, "SPF_UPSTREAM_UNAVAILABLE", `Backend SPF tidak dapat dijangkau: ${errMessage}`);
   }
 }

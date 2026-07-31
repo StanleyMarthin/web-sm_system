@@ -39,8 +39,6 @@ services:
       R2_BUCKET_NAME: ${R2_BUCKET_NAME:-}
       R2_PUBLIC_URL: ${R2_PUBLIC_URL:-}
       FCM_SERVER_KEY: ${FCM_SERVER_KEY:-}
-    ports:
-      - "${API_HOST_PORT:-3003}:3001"
     expose:
       - "3001"
     networks:
@@ -63,9 +61,7 @@ services:
     environment:
       NODE_ENV: production
       NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-/api}
-      SPF_API_INTERNAL_URL: ${SPF_API_INTERNAL_URL:-http://172.17.0.1:3001}
-    ports:
-      - "${WEB_HOST_PORT:-3002}:3000"
+      SPF_API_INTERNAL_URL: ${SPF_API_INTERNAL_URL:?SPF_API_INTERNAL_URL is required}
     expose:
       - "3000"
     depends_on:
@@ -112,7 +108,65 @@ services:
     networks:
       - smsystem_internal
 
+  spf-api:
+    build:
+      context: ../sm_webclient/backend-sm-spf
+      dockerfile: Dockerfile
+    container_name: smsystem_spf_api
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      TRUST_PROXY: 1
+      # Database
+      DB_HOST: ${SPF_DB_HOST:-172.31.11.74}
+      DB_PORT: ${SPF_DB_PORT:-3306}
+      DB_USER: ${SPF_DB_USER:-smsystem_app}
+      DB_PASSWORD: ${SPF_DB_PASS:?SPF_DB_PASS is required}
+      DB_NAME: ${SPF_DB_NAME:-sms_client}
+      CLIENT_DB_NAME: ${SPF_DB_NAME:-sms_client}
+      SMS_DB_HOST: ${SPF_DB_HOST:-172.31.11.74}
+      SMS_DB_PORT: ${SPF_DB_PORT:-3306}
+      SMS_DB_USER: ${SPF_DB_USER:-smsystem_app}
+      SMS_DB_PASSWORD: ${SPF_DB_PASS:?SPF_DB_PASS is required}
+      SMS_DB_NAME: ${SPF_SMS_DB_NAME:-sms_db}
+      REDIS_URL: redis://${REDIS_HOST:-172.31.11.74}:${REDIS_PORT:-6379}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      SMSYSTEM_API_BASE_URL: ${SPF_SMSYSTEM_API_BASE_URL:-http://api:3001}
+      PORTAL_COOKIE_SECRET: ${SPF_PORTAL_COOKIE_SECRET:?SPF_PORTAL_COOKIE_SECRET is required}
+      SPF_SYNC_API_KEY: ${SPF_SYNC_API_KEY:?SPF_SYNC_API_KEY is required}
+      CORS_ORIGINS: ${SPF_CORS_ORIGINS:?SPF_CORS_ORIGINS is required}
+      PORTAL_PUBLIC_URL: ${SPF_PORTAL_PUBLIC_URL:?SPF_PORTAL_PUBLIC_URL is required}
+      R2_ENDPOINT_URL: ${R2_ENDPOINT_URL:-}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+      R2_BUCKET_NAME: ${R2_BUCKET_NAME:-}
+      R2_PUBLIC_URL: ${R2_PUBLIC_URL:-}
+    ports:
+      - "127.0.0.1:3003:3001"
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - smsystem_internal
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3001/health >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  spf-web:
+    build:
+      context: ../sm_webclient/frontend-sm-spf
+      dockerfile: Dockerfile
+    container_name: frontend-sm-spf
+    networks:
+      - smsystem_internal
+    restart: unless-stopped
+
 networks:
   smsystem_internal:
     name: smsystem_internal
     driver: bridge
+

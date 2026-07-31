@@ -12,9 +12,8 @@ interface Props {
 export default async function ItemDetailPage({ params }: Props) {
   const { itemId } = await params;
 
-  // Validasi ID sebelum menyentuh backend — menolak input buruk cepat.
-  const id = Number(itemId);
-  if (!Number.isSafeInteger(id) || id <= 0) {
+  // Validasi ID: UUID atau slug string, max 100 karakter
+  if (!itemId || itemId.length > 100 || !/^[\w.\-]+$/u.test(itemId)) {
     notFound();
   }
 
@@ -22,7 +21,7 @@ export default async function ItemDetailPage({ params }: Props) {
   const session = await requireAdminSession(cookieHeader);
   if (!session) redirect("/login");
 
-  const result = await fetchSpfItemDetail(cookieHeader, id);
+  const result = await fetchSpfItemDetail(cookieHeader, itemId);
 
   if (result.status === 401) redirect("/login");
   if (result.status === 403) redirect("/forbidden");

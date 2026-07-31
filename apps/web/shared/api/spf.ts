@@ -212,23 +212,27 @@ async function serverPost(
   const adminApiKey = process.env.PORTAL_ADMIN_API_KEY || "";
 
   try {
+    const csrfMatch = cookieHeader.match(/sm_csrf=([^;]+)/);
+    const csrfToken = csrfMatch ? decodeURIComponent(csrfMatch[1]) : "";
+
     const response = await fetch(`${upstreamBaseUrl}/api/spf/${resource}`, {
       method: "POST",
       headers: {
         "content-type": "application/json",
         ...(cookieHeader ? { cookie: cookieHeader } : {}),
         ...(adminApiKey ? { authorization: `Bearer ${adminApiKey}` } : {}),
+        ...(csrfToken ? { "x-csrf-token": csrfToken } : {}),
       },
       body: JSON.stringify(parsed),
       cache: "no-store",
-      signal: AbortSignal.timeout(200),
+      signal: AbortSignal.timeout(15_000),
     });
     if (!response.ok) {
-      return { payload: getMockData(resource, parsed), status: 200 };
+      return { payload: null, status: response.status };
     }
     return { payload: await response.json(), status: response.status };
   } catch {
-    return { payload: getMockData(resource, parsed), status: 200 };
+    return { payload: null, status: 503 };
   }
 }
 
