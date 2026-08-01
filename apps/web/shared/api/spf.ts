@@ -7,6 +7,8 @@ import {
   spfPeriodListEnvelopeSchema,
   spfPeriodDetailEnvelopeSchema,
   spfSourceListEnvelopeSchema,
+  spfClientListEnvelopeSchema,
+  spfClientDetailEnvelopeSchema,
   spfCollectEnvelopeSchema,
   generateUrlRequestSchema,
   spfGenerateUrlEnvelopeSchema,
@@ -18,11 +20,15 @@ import type {
   ItemRequest,
   PeriodRequest,
   SourceRequest,
+  ClientRequest,
   SpfItem,
   SpfMedia,
   SpfPeriod,
   SpfPagination,
   SpfSource,
+  SpfClient,
+  SpfClientVehicle,
+  SpfTimelineEntry,
   SpfGenerateUrlResult,
 } from "@/shared/api/spf-contracts";
 
@@ -44,159 +50,6 @@ async function parseErrorBody(response: Response): Promise<ApiErrorBody> {
       error: { code: "INVALID_RESPONSE", message: "Response server tidak valid." },
     };
   }
-}
-
-// ─── Realistis Dummy Data berdasarkan Dump MySQL sms_client ──────────────────
-const mockSources: SpfSource[] = [
-  {
-    id: "542",
-    car_id: "PORSCHE944_MRPRAM",
-    car_name: "Porsche 944 (Mr. Pram)",
-    description: "CHECK + ANALISA + TEST FUNGSI + MERAPIKAN WIRING CABLE MOTOR DYNAMO LOCK LUGGAGE DI UNIT",
-    work_type: "ELEKTRIKAL",
-    collected: true,
-    created_at: "2023-11-06T08:00:00Z",
-  },
-  {
-    id: "545",
-    car_id: "PORSCHE930_ADRIAN",
-    car_name: "Porsche 930 Turbo (Adrian)",
-    description: "PERANCANGAN COVER DEK BAGASI PERSIAPAN PEMASANGAN",
-    work_type: "INTERIOR",
-    collected: true,
-    created_at: "2026-04-27T08:00:00Z",
-  },
-  {
-    id: "554",
-    car_id: "PORSCHE930_ADRIAN",
-    car_name: "Porsche 930 Turbo (Adrian)",
-    description: "SANDING DEMPUL + MERAPIKAN COVER KONDENSOR AC PERSIAPAN SPRAY CAT",
-    work_type: "BODYWORK",
-    collected: false,
-    created_at: "2026-05-18T08:00:00Z",
-  },
-];
-
-const mockItems: SpfItem[] = [
-  {
-    id: "1",
-    source_id: "559",
-    car_id: "PORSCHE930_ADRIAN",
-    car_name: "Porsche 930 Turbo (Adrian)",
-    description: "MAKING PACKING INLET TURBO PERSIAPAN PEMASANGAN",
-    work_type: "ENGINE",
-    period_id: "559",
-    created_at: "2026-06-08T08:00:00Z",
-    updated_at: "2026-06-13T16:00:00Z",
-  },
-  {
-    id: "2",
-    source_id: "542",
-    car_id: "PORSCHE944_MRPRAM",
-    car_name: "Porsche 944 (Mr. Pram)",
-    description: "MERAPIKAN + PENGGANTIAN INSULATOR KAIN CABLE BAWAH DASHBOARD 14 PCS DI UNIT",
-    work_type: "ELEKTRIKAL",
-    period_id: "542",
-    created_at: "2023-09-11T08:00:00Z",
-    updated_at: "2023-09-17T16:00:00Z",
-  },
-];
-
-const mockMedia: SpfMedia[] = [
-  {
-    id: "101",
-    item_id: "1",
-    url: "https://picsum.photos/800/600?random=1",
-    mime_type: "image/jpeg",
-    filename: "inlet_turbo_packing_01.jpg",
-    created_at: "2026-06-08T10:00:00Z",
-  },
-];
-
-const mockPeriods: SpfPeriod[] = [
-  {
-    id: "559",
-    title: "PORSCHE930_ADRIAN — Periode Restorasi Juni 2026 (Minggu 2)",
-    description: "Pekerjaan sektor engine: packing inlet turbo dan perbaikan jalur cool start.",
-    workflow_status: "PUBLISHED",
-    status: "PUBLISHED",
-    rejection_reason: null,
-    created_by: "ADMIN_STANLEY",
-    created_at: "2026-06-08T08:00:00Z",
-    updated_at: "2026-06-13T16:00:00Z",
-  },
-  {
-    id: "545",
-    title: "PORSCHE930_ADRIAN — Periode Restorasi Mei 2026 (Minggu 4)",
-    description: "Pekerjaan sektor interior: perancangan cover dek bagasi dan fitting jok.",
-    workflow_status: "APPROVED",
-    status: "APPROVED",
-    rejection_reason: null,
-    created_by: "ADMIN_STANLEY",
-    created_at: "2026-05-25T08:00:00Z",
-    updated_at: "2026-05-30T16:00:00Z",
-  },
-];
-
-function getMockData(resource: SpfResource, input: Record<string, unknown>) {
-  const mode = input.mode as string;
-  const itemId = String(input.item_id ?? "");
-  const periodId = String(input.period_id ?? "");
-
-  if (resource === "source") {
-    return {
-      data: {
-        items: mockSources,
-        total: mockSources.length,
-        limit: 25,
-        offset: 0,
-      },
-    };
-  }
-
-  if (resource === "item") {
-    if (mode === "DETAIL") {
-      const targetItem = mockItems.find((i) => i.id === itemId) || mockItems[0]!;
-      const itemMedia = mockMedia.filter((m) => m.item_id === targetItem.id);
-      return {
-        data: {
-          item: targetItem,
-          media: itemMedia,
-        },
-      };
-    }
-    return {
-      data: {
-        items: mockItems,
-        total: mockItems.length,
-        limit: 25,
-        offset: 0,
-      },
-    };
-  }
-
-  if (resource === "period") {
-    if (mode === "DETAIL") {
-      const targetPeriod = mockPeriods.find((p) => p.id === periodId) || mockPeriods[0]!;
-      const periodItems = mockItems.filter((i) => i.period_id === targetPeriod.id);
-      return {
-        data: {
-          period: targetPeriod,
-          items: periodItems,
-        },
-      };
-    }
-    return {
-      data: {
-        periods: mockPeriods,
-        total: mockPeriods.length,
-        limit: 25,
-        offset: 0,
-      },
-    };
-  }
-
-  return { data: {} };
 }
 
 // ─── Server-side POST helper (for Server Components) ────────────────────────
@@ -301,7 +154,7 @@ export const fetchSpfPeriods = cache(
         offset: envelope.data.offset,
         hasNextPage: envelope.data.offset + envelope.data.limit < envelope.data.total,
       };
-      return { payload: { periods: envelope.data.periods, meta }, status };
+      return { payload: { periods: envelope.data.items, meta }, status };
     } catch {
       return { payload: null, status: 502 };
     }
@@ -314,13 +167,58 @@ export const fetchSpfPeriodDetail = cache(
     cookieHeader: string,
     periodId: string | number,
   ): Promise<{
-    payload: { period: SpfPeriod; items: SpfItem[] } | null;
+    payload: { period: SpfPeriod; items: SpfItem[]; media: SpfMedia[] } | null;
     status: number;
   }> => {
     const { payload, status } = await serverPost("period", { mode: "DETAIL", period_id: String(periodId) }, cookieHeader);
     if (!payload) return { payload: null, status };
     try {
       const envelope = spfPeriodDetailEnvelopeSchema.parse(payload);
+      return { payload: envelope.data, status };
+    } catch {
+      return { payload: null, status: 502 };
+    }
+  },
+);
+
+// ─── Server fetch: SPF Clients (list) ───────────────────────────────────────
+export const fetchSpfClients = cache(
+  async (
+    cookieHeader: string,
+    query: Partial<Omit<ClientRequest & { mode: "LIST" }, "mode">> = {},
+  ): Promise<{
+    payload: { clients: SpfClient[]; meta: SpfPagination } | null;
+    status: number;
+  }> => {
+    const { payload, status } = await serverPost("client", { mode: "LIST", ...query }, cookieHeader);
+    if (!payload) return { payload: null, status };
+    try {
+      const envelope = spfClientListEnvelopeSchema.parse(payload);
+      return { payload: { clients: envelope.data.items, meta: envelope.data.meta }, status };
+    } catch {
+      return { payload: null, status: 502 };
+    }
+  },
+);
+
+// ─── Server fetch: SPF Client Detail ────────────────────────────────────────
+export const fetchSpfClientDetail = cache(
+  async (
+    cookieHeader: string,
+    clientId: string,
+  ): Promise<{
+    payload: {
+      client: SpfClient;
+      vehicles: SpfClientVehicle[];
+      timeline: SpfTimelineEntry[];
+      reports: SpfPeriod[];
+    } | null;
+    status: number;
+  }> => {
+    const { payload, status } = await serverPost("client", { mode: "DETAIL", client_id: clientId }, cookieHeader);
+    if (!payload) return { payload: null, status };
+    try {
+      const envelope = spfClientDetailEnvelopeSchema.parse(payload);
       return { payload: envelope.data, status };
     } catch {
       return { payload: null, status: 502 };
@@ -357,7 +255,7 @@ export const fetchSpfSources = cache(
 // ─── Client mutation: mutateSpf ──────────────────────────────────────────────
 export async function mutateSpf<T = unknown>(
   resource: SpfResource,
-  input: ItemRequest | PeriodRequest | SourceRequest,
+  input: ItemRequest | PeriodRequest | SourceRequest | ClientRequest,
   signal?: AbortSignal,
 ): Promise<SpfMutationResult<T>> {
   let response: Response;
@@ -396,6 +294,7 @@ export async function mutateSpf<T = unknown>(
 // ─── Collect source (convenience wrapper) ───────────────────────────────────
 export async function mutateSpfCollect(
   sourceIds: (string | number)[],
+  periodId?: string,
 ): Promise<SpfMutationResult<{ inserted?: number; ignored?: number }>> {
   let response: Response;
   try {
@@ -403,7 +302,7 @@ export async function mutateSpfCollect(
       method: "POST",
       credentials: "same-origin",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ mode: "COLLECT", source_ids: sourceIds.map(String) }),
+      body: JSON.stringify({ mode: "COLLECT", source_ids: sourceIds.map(String), ...(periodId ? { period_id: periodId } : {}) }),
     });
   } catch {
     return { success: false, status: 503, message: "Gagal terhubung ke server.", errorCode: "NETWORK_ERROR" };
@@ -450,7 +349,7 @@ function resolveDefaultMessage(status: number): string {
 
 function parseSuccessEnvelope(
   resource: SpfResource,
-  input: ItemRequest | PeriodRequest | SourceRequest,
+  input: ItemRequest | PeriodRequest | SourceRequest | ClientRequest,
   json: unknown,
 ): unknown {
   if (resource === "item") {
@@ -473,18 +372,21 @@ function parseSuccessEnvelope(
     if (req.mode === "COLLECT") return spfCollectEnvelopeSchema.parse(json).data;
   }
 
+  if (resource === "client") {
+    const req = input as ClientRequest;
+    if (req.mode === "LIST") return spfClientListEnvelopeSchema.parse(json).data;
+    if (req.mode === "DETAIL") return spfClientDetailEnvelopeSchema.parse(json).data;
+    return spfMutationEnvelopeSchema.parse(json).data;
+  }
+
   throw new Error(`Unknown resource+mode: ${resource}`);
 }
 
 export async function generateSpfPortalUrl(
-  ownerName: string,
-  periodId: string | number,
+  input: { period_id: string; account_id?: string; owner_slug?: string; owner_name?: string },
 ): Promise<SpfMutationResult<SpfGenerateUrlResult>> {
   try {
-    const payload = generateUrlRequestSchema.parse({
-      owner_name: ownerName,
-      period_id: String(periodId),
-    });
+    const payload = generateUrlRequestSchema.parse(input);
     const response = await fetch("/api/spf/generate-url", {
       method: "POST",
       credentials: "same-origin",
@@ -508,5 +410,77 @@ export async function generateSpfPortalUrl(
       return { success: false, status: 400, message: "Data owner atau periode tidak valid." };
     }
     return { success: false, status: 503, message: "Gagal terhubung ke server." };
+  }
+}
+
+export async function exportSpfPeriod(periodId: string): Promise<SpfMutationResult<{ blob: Blob; filename: string }>> {
+  let response: Response;
+  try {
+    response = await fetch("/api/spf/period", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ mode: "EXPORT", period_id: periodId }),
+    });
+  } catch {
+    return { success: false, status: 503, message: "Gagal terhubung ke server.", errorCode: "NETWORK_ERROR" };
+  }
+
+  if (!response.ok) {
+    const body = await parseErrorBody(response);
+    return {
+      success: false,
+      status: response.status,
+      message: body.error?.message ?? resolveDefaultMessage(response.status),
+      errorCode: body.error?.code ?? resolveErrorCode(response.status),
+    };
+  }
+
+  const disposition = response.headers.get("content-disposition") ?? "";
+  const match = disposition.match(/filename\*=UTF-8''([^;]+)|filename="?([^"]+)"?/i);
+  const filename = decodeURIComponent(match?.[1] ?? match?.[2] ?? `spf-${periodId}.pdf`);
+  return { success: true, data: { blob: await response.blob(), filename } };
+}
+
+export async function uploadSpfItemMedia(
+  itemId: string,
+  file: File,
+  metadata: { caption?: string; display_order?: number } = {},
+): Promise<SpfMutationResult<Record<string, unknown>>> {
+  const formData = new FormData();
+  formData.set("mode", "UPLOAD_MEDIA");
+  formData.set("item_id", itemId);
+  formData.set("file", file);
+  formData.set("filename", file.name);
+  formData.set("mime_type", file.type);
+  if (metadata.caption) formData.set("caption", metadata.caption);
+  if (metadata.display_order !== undefined) formData.set("display_order", String(metadata.display_order));
+
+  let response: Response;
+  try {
+    response = await fetch("/api/spf/media/upload", {
+      method: "POST",
+      credentials: "same-origin",
+      body: formData,
+    });
+  } catch {
+    return { success: false, status: 503, message: "Gagal terhubung ke server.", errorCode: "NETWORK_ERROR" };
+  }
+
+  if (!response.ok) {
+    const body = await parseErrorBody(response);
+    return {
+      success: false,
+      status: response.status,
+      message: body.error?.message ?? resolveDefaultMessage(response.status),
+      errorCode: body.error?.code ?? resolveErrorCode(response.status),
+    };
+  }
+
+  try {
+    const envelope = spfMutationEnvelopeSchema.parse(await response.json());
+    return { success: true, data: envelope.data };
+  } catch {
+    return { success: false, status: 502, message: "Response server tidak valid.", errorCode: "INVALID_RESPONSE" };
   }
 }

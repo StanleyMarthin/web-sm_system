@@ -3,11 +3,15 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { SpfItem, SpfPagination } from "@/shared/api/spf-contracts";
+import { ArrowDown, ArrowUp, Check, Edit3, X } from "lucide-react";
+import type { SpfItem, SpfPagination, SpfSourceStatus } from "@/shared/api/spf-contracts";
 import type { SpfRole } from "@/shared/auth/admin-session";
-import { ActionButton, EmptyRow } from "@/shared/ui/compact";
-import { useSweetAlert } from "@/shared/ui/sweet-alert";
 import { mutateSpf } from "@/shared/api/spf";
+import { ActionButton, CompactInput, CompactTextarea, EmptyRow } from "@/shared/ui/compact";
+import { useSweetAlert } from "@/shared/ui/sweet-alert";
+import { SpfDataTable } from "./spf-data-table";
+import { SpfSourceBadge } from "./spf-source-badge";
+import { SpfSourceStatusBadge } from "./spf-status-badge";
 
 interface ItemListProps {
   rows: readonly SpfItem[];
@@ -16,166 +20,182 @@ interface ItemListProps {
   editable?: boolean;
 }
 
-export function ItemList({ rows, meta, role, editable = true }: ItemListProps) {
+type DraftEdit = {
+  customer_description: string;
+  work_status: string;
+  progress: number;
+  exclusion_reason: string;
+};
+
+export function CuratedItemEditor({ rows, role, editable = true }: ItemListProps) {
   const router = useRouter();
-  const { alertElement, confirm, notifySuccess, notifyError } = useSweetAlert();
-  const [isDeleting, startDeleteTransition] = useTransition();
-  const [deletingId, setDeletingId] = useState<string | number | null>(null);
+  const { alertElement, notifyError, notifySuccess } = useSweetAlert();
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draft, setDraft] = useState<DraftEdit | null>(null);
+  const [isPending, startTransition] = useTransition();
+  const canEdit = editable && role === "ADMIN";
 
-  const page = Math.floor(meta.offset / meta.limit) + 1;
-  const totalPages = Math.ceil(meta.total / meta.limit);
-
-  function goToPage(next: number) {
-    const params = new URLSearchParams(window.location.search);
-    params.set("page", String(next));
-    router.push(`?${params.toString()}`);
+  function startEdit(item: SpfItem) {
+    setEditingId(item.id);
+    setDraft({
+      customer_description: item.customer_description,
+      work_status: item.work_status,
+      progress: item.progress,
+      exclusion_reason: item.exclusion_reason ?? "",
+    });
   }
 
-  async function handleDelete(item: SpfItem) {
-    const confirmed = await confirm({
-      title: `Hapus Item #${item.id}`,
-      description: `Apakah Anda yakin ingin menghapus item "${item.work_type}" untuk Car #${item.car_id}? Aksi ini tidak dapat dibatalkan.`,
-      tone: "warning",
-      confirmLabel: "Hapus Item",
-      cancelLabel: "Batal",
-    });
-
-    if (!confirmed) return;
-
-    setDeletingId(item.id);
-    startDeleteTransition(async () => {
-      const result = await mutateSpf("item", {
-        mode: "DELETE",
+  function updateItem(item: SpfItem, patch: Partial<SpfItem> & { spf_status?: SpfSourceStatus }) {
+    startTransition(async () => {
+      const payload: any = {
+        mode: "UPDATE",
         item_id: item.id,
-      });
-
-      setDeletingId(null);
-
+        ...patch,
+      };
+      const result = await mutateSpf("item", payload);
       if (!result.success) {
-        notifyError("Gagal Hapus", result.message);
+        notifyError(result.status === 409 ? "Data telah berubah" : "Gagal menyimpan", result.message);
+        if (result.status === 409) router.refresh();
         return;
       }
-
-      notifySuccess("Sukses", `Item #${item.id} berhasil dihapus.`);
+      notifySuccess("Tersimpan", "Kurasi item diperbarui.");
+      setEditingId(null);
+      setDraft(null);
       router.refresh();
     });
   }
 
+  function saveEdit(item: SpfItem) {
+    if (!draft) return;
+    if (!draft.customer_description.trim()) {
+      notifyError("Validasi", "Customer description wajib diisi.");
+      return;
+    }
+    if (draft.progress < 0 || draft.progress > 100) {
+      notifyError("Validasi", "Progress wajib 0-100.");
+      return;
+    }
+    updateItem(item, {
+      customer_description: draft.customer_description.trim(),
+      work_status: draft.work_status.trim() || item.work_status,
+      progress: draft.progress,
+      exclusion_reason: draft.exclusion_reason.trim() || undefined,
+    });
+  }
+
+  function move(item: SpfItem, direction: -1 | 1) {
+    updateItem(item, { display_order: Math.max(0, item.display_order + direction) });
+  }
+
   if (rows.length === 0) {
-    return <EmptyRow message="Belum ada item SPF yang ditemukan." />;
+    return <EmptyRow message="Belum ada item dalam periode ini." />;
   }
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       {alertElement}
-
-      <div className="overflow-x-auto border border-border dark:border-white/[0.05]">
-        <table className="w-full min-w-[700px] text-[13px]">
-          <thead>
-            <tr className="border-b border-border bg-muted dark:border-white/[0.05] dark:bg-white/[0.02]">
-              <th className="px-3 py-2 text-left font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground dark:text-foreground/40">
-                ID
-              </th>
-              <th className="px-3 py-2 text-left font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground dark:text-foreground/40">
-                Nama Mobil
-              </th>
-              <th className="px-3 py-2 text-left font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground dark:text-foreground/40">
-                Jenis Pekerjaan
-              </th>
-              <th className="px-3 py-2 text-left font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground dark:text-foreground/40">
-                Deskripsi
-              </th>
-              <th className="px-3 py-2 text-left font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground dark:text-foreground/40">
-                Periode ID
-              </th>
-              <th className="px-3 py-2 text-left font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground dark:text-foreground/40">
-                Aksi
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((item) => (
-              <tr
-                key={item.id}
-                className="border-b border-border last:border-b-0 hover:bg-muted/40 dark:border-white/[0.04] dark:hover:bg-white/[0.02]"
-              >
-                <td className="px-3 py-2.5 font-mono text-[12px] text-muted-foreground tabular-nums dark:text-foreground/45">
-                  #{item.id}
-                </td>
-                <td className="px-3 py-2.5 font-mono text-[12px] font-semibold text-foreground dark:text-foreground">
-                  {item.car_name || item.car_id}
-                </td>
-                <td className="px-3 py-2.5 font-medium text-foreground dark:text-foreground">
-                  {item.work_type}
-                </td>
-                <td className="max-w-[280px] px-3 py-2.5">
-                  <p className="truncate text-foreground dark:text-foreground/90">
-                    {item.description}
-                  </p>
-                </td>
-                <td className="px-3 py-2.5 font-mono text-[12px] text-muted-foreground tabular-nums dark:text-foreground/45">
-                  {item.period_id ? (
-                    <Link
-                      href={`/spf/periods/${item.period_id}`}
-                      className="text-app-accent-ink hover:underline dark:text-app-accent-ink/80"
-                    >
-                      #{item.period_id}
-                    </Link>
-                  ) : (
-                    "-"
-                  )}
-                </td>
-                <td className="px-3 py-2.5">
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <Link
-                      href={`/spf/items/${item.id}`}
-                      className="inline-flex items-center gap-1 rounded border border-border bg-muted/60 px-2.5 py-1 font-mono text-[11px] font-semibold text-foreground transition-all hover:bg-muted dark:border-white/[0.08] dark:bg-white/[0.04]"
-                      title="Lihat Detail Item"
-                    >
-                      👁️ Detail
-                    </Link>
-                    {role === "ADMIN" && editable && (
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(item)}
-                        disabled={isDeleting && deletingId === item.id}
-                        className="inline-flex items-center gap-1 rounded border border-destructive/30 bg-destructive/10 px-2.5 py-1 font-mono text-[11px] font-semibold text-destructive transition-all hover:bg-destructive/20 disabled:opacity-50 dark:border-destructive/30 dark:bg-destructive/15"
-                        title="Hapus Item Ini"
-                      >
-                        🗑️ {isDeleting && deletingId === item.id ? "Hapus…" : "Hapus"}
-                      </button>
-                    )}
+      <SpfDataTable
+        rows={rows}
+        minWidth={1180}
+        emptyMessage="Belum ada item SPF."
+        columns={[
+          { key: "source", label: "Sumber", render: (item) => <SpfSourceBadge value={item.source_type} /> },
+          {
+            key: "desc",
+            label: "Isi Laporan",
+            render: (item) => editingId === item.id && draft ? (
+              <div className="space-y-2">
+                <CompactTextarea
+                  rows={3}
+                  value={draft.customer_description}
+                  onChange={(event) => setDraft({ ...draft, customer_description: event.target.value })}
+                />
+                <p className="text-[12px] text-muted-foreground">{item.original_description || "-"}</p>
+              </div>
+            ) : (
+              <div className="max-w-[420px]">
+                <Link href={`/spf/items/${item.id}`} className="font-medium text-foreground hover:text-app-accent-ink hover:underline">
+                  {item.customer_description}
+                </Link>
+                <p className="mt-1 text-[12px] text-muted-foreground">{item.original_description || "-"}</p>
+              </div>
+            ),
+          },
+          { key: "panel", label: "Panel/Part", render: (item) => item.panel_name ?? item.panel ?? item.panel_id ?? "-" },
+          {
+            key: "status",
+            label: "Status",
+            render: (item) => editingId === item.id && draft ? (
+              <CompactInput value={draft.work_status} onChange={(event) => setDraft({ ...draft, work_status: event.target.value })} />
+            ) : item.work_status,
+          },
+          {
+            key: "progress",
+            label: "Progress",
+            render: (item) => editingId === item.id && draft ? (
+              <CompactInput
+                type="number"
+                min={0}
+                max={100}
+                value={draft.progress}
+                onChange={(event) => setDraft({ ...draft, progress: Number(event.target.value) })}
+              />
+            ) : `${item.progress}%`,
+          },
+          { key: "docs", label: "Dok.", render: (item) => item.documentation_count },
+          { key: "spf", label: "SPF", render: (item) => <SpfSourceStatusBadge status={item.spf_status} /> },
+          {
+            key: "order",
+            label: "Urut",
+            render: (item) => (
+              <div className="flex items-center gap-1">
+                <span className="font-mono text-[12px]">{item.display_order}</span>
+                {canEdit && item.spf_status === "INCLUDED" ? (
+                  <>
+                    <button type="button" onClick={() => move(item, -1)} className="border border-border p-1 text-muted-foreground hover:bg-muted">
+                      <ArrowUp className="h-3.5 w-3.5" />
+                    </button>
+                    <button type="button" onClick={() => move(item, 1)} className="border border-border p-1 text-muted-foreground hover:bg-muted">
+                      <ArrowDown className="h-3.5 w-3.5" />
+                    </button>
+                  </>
+                ) : null}
+              </div>
+            ),
+          },
+          {
+            key: "action",
+            label: "Aksi",
+            render: (item) => {
+              if (!canEdit) return <span className="text-[12px] text-muted-foreground">Read-only</span>;
+              if (editingId === item.id) {
+                return (
+                  <div className="flex flex-wrap gap-1.5">
+                    <ActionButton variant="success" disabled={isPending} onClick={() => saveEdit(item)}><Check className="h-3.5 w-3.5" />Simpan</ActionButton>
+                    <ActionButton disabled={isPending} onClick={() => { setEditingId(null); setDraft(null); }}><X className="h-3.5 w-3.5" />Batal</ActionButton>
                   </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between">
-          <p className="font-mono text-[11px] text-muted-foreground dark:text-foreground/40">
-            {meta.total} total · halaman {page} dari {totalPages}
-          </p>
-          <div className="flex items-center gap-1">
-            <ActionButton
-              variant="default"
-              disabled={page <= 1}
-              onClick={() => goToPage(page - 1)}
-            >
-              ← Prev
-            </ActionButton>
-            <ActionButton
-              variant="default"
-              disabled={!meta.hasNextPage}
-              onClick={() => goToPage(page + 1)}
-            >
-              Next →
-            </ActionButton>
-          </div>
-        </div>
-      )}
+                );
+              }
+              return (
+                <div className="flex flex-wrap gap-1.5">
+                  <ActionButton onClick={() => startEdit(item)} disabled={isPending}>
+                    <Edit3 className="h-3.5 w-3.5" />Edit
+                  </ActionButton>
+                  {item.spf_status === "INCLUDED" ? (
+                    <ActionButton variant="danger" disabled={isPending} onClick={() => updateItem(item, { spf_status: "EXCLUDED" })}>Exclude</ActionButton>
+                  ) : (
+                    <ActionButton variant="success" disabled={isPending} onClick={() => updateItem(item, { spf_status: "INCLUDED" })}>Include</ActionButton>
+                  )}
+                </div>
+              );
+            },
+          },
+        ]}
+      />
     </div>
   );
+}
+
+export function ItemList(props: ItemListProps) {
+  return <CuratedItemEditor {...props} />;
 }

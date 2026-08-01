@@ -45,7 +45,7 @@ export default async function PeriodDetailPage({ params }: Props) {
 
   // `editable` ditentukan dari status periode — backend tetap menjadi penjaga akhir.
   // Status DRAFT dan REJECTED masih bisa diedit ADMIN.
-  const { period, items } = result.payload;
+  const { period, items, media } = result.payload;
   const editable =
     session.role === "ADMIN" &&
     (period.status === "DRAFT" || period.status === "REJECTED");
@@ -54,6 +54,7 @@ export default async function PeriodDetailPage({ params }: Props) {
     <PeriodDetailShell
       period={period}
       items={items}
+      media={media}
       role={session.role}
       editable={editable}
     />

@@ -19,15 +19,45 @@ const PeriodListShell = dynamic(
 // Menolak key asing dan nilai invalid; menggunakan safe defaults.
 function parsePeriodListQuery(
   searchParams: Record<string, string | string[] | undefined>,
-): { limit: number; offset: number } {
+): {
+  car_id?: string;
+  year?: string;
+  date_start?: string;
+  date_end?: string;
+  workflow_status?: "DRAFT" | "WAITING_APPROVAL" | "APPROVED" | "PUBLISHED" | "REJECTED";
+  search?: string;
+  limit: number;
+  offset: number;
+  page: number;
+} {
+  const first = (key: string) => {
+    const value = searchParams[key];
+    return typeof value === "string" ? value.trim() : undefined;
+  };
   const rawPage = searchParams["page"];
   const page =
     typeof rawPage === "string" && /^\d+$/.test(rawPage)
       ? Math.max(1, Number.parseInt(rawPage, 10))
       : 1;
-  const limit = 25;
+  const rawLimit = first("limit");
+  const limit = rawLimit && /^\d+$/.test(rawLimit) ? Math.min(100, Math.max(1, Number.parseInt(rawLimit, 10))) : 25;
   const offset = (page - 1) * limit;
-  return { limit, offset };
+  const status = first("workflow_status");
+  const workflow_status =
+    status === "DRAFT" || status === "WAITING_APPROVAL" || status === "APPROVED" || status === "PUBLISHED" || status === "REJECTED"
+      ? status
+      : undefined;
+  return {
+    car_id: first("car_id") || undefined,
+    year: first("tahun") || first("year") || undefined,
+    date_start: first("date_start") || undefined,
+    date_end: first("date_end") || undefined,
+    workflow_status,
+    search: first("search") || undefined,
+    limit,
+    offset,
+    page,
+  };
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────

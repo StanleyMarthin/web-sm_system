@@ -143,6 +143,12 @@ const navigationModules: NavigationItem[] = [
         permission: permissionCodes.profileView,
       },
       {
+        id: "spf-clients",
+        label: "Client / Customer",
+        href: "/spf/clients",
+        permission: permissionCodes.profileView,
+      },
+      {
         id: "spf-url-generator",
         label: "URL Generator",
         href: "/spf/url-generator",

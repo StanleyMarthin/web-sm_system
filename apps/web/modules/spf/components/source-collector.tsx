@@ -2,265 +2,168 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import type { SpfSource, SpfPagination } from "@/shared/api/spf-contracts";
-import { ActionButton, CompactInput, EmptyRow } from "@/shared/ui/compact";
-import { useSweetAlert } from "@/shared/ui/sweet-alert";
+import { CheckSquare, Square } from "lucide-react";
+import type { SpfPagination, SpfSource } from "@/shared/api/spf-contracts";
 import { mutateSpfCollect } from "@/shared/api/spf";
+import { ActionButton, EmptyRow } from "@/shared/ui/compact";
+import { useSweetAlert } from "@/shared/ui/sweet-alert";
+import { SpfDataTable } from "./spf-data-table";
+import { SpfSourceBadge } from "./spf-source-badge";
+import { SpfSourceStatusBadge } from "./spf-status-badge";
 
-interface SourceCollectorProps {
+interface TechnicalJobdescSelectorProps {
   sources: readonly SpfSource[];
-  meta: SpfPagination;
+  meta?: SpfPagination;
+  periodId?: string;
+  selectedIds?: readonly string[];
+  onSelectionChange?: (ids: string[]) => void;
+  readonly?: boolean;
 }
 
-export function SourceCollector({ sources, meta }: SourceCollectorProps) {
+function sourceKey(source: Pick<SpfSource, "source_type" | "source_id" | "id">) {
+  return `${source.source_type ?? "SYSTEM"}:${source.source_id ?? source.id}`;
+}
+
+export function TechnicalJobdescSelector({
+  sources,
+  meta,
+  periodId,
+  selectedIds,
+  onSelectionChange,
+  readonly = false,
+}: TechnicalJobdescSelectorProps) {
   const router = useRouter();
-  const { alertElement, notifySuccess, notifyError } = useSweetAlert();
-  const [selectedIds, setSelectedIds] = useState<Set<number | string>>(new Set());
+  const { alertElement, notifyError, notifySuccess } = useSweetAlert();
+  const [internalIds, setInternalIds] = useState<string[]>([]);
   const [isCollecting, startCollectTransition] = useTransition();
-  const [carFilter, setCarFilter] = useState("");
-  const [resultNotice, setResultNotice] = useState<string | null>(null);
+  const effectiveSelectedIds = selectedIds ?? internalIds;
 
-  const page = Math.floor(meta.offset / meta.limit) + 1;
-  const totalPages = Math.ceil(meta.total / meta.limit);
-
-  // Visible rows that are not yet collected
-  const uncollectedVisible = useMemo(
-    () => sources.filter((s) => !s.collected),
+  const selectableSources = useMemo(
+    () => sources.filter((source) => source.spf_status === "READY" && !source.collected),
     [sources],
   );
+  const selectedSet = useMemo(() => new Set(effectiveSelectedIds), [effectiveSelectedIds]);
 
-  const isAllVisibleSelected =
-    uncollectedVisible.length > 0 &&
-    uncollectedVisible.every((s) => selectedIds.has(s.id));
-
-  function toggleSelectAllVisible() {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (isAllVisibleSelected) {
-        for (const s of uncollectedVisible) {
-          next.delete(s.id);
-        }
-      } else {
-        for (const s of uncollectedVisible) {
-          if (next.size < 200) {
-            next.add(s.id);
-          }
-        }
-      }
-      return next;
-    });
-  }
-
-  function toggleSelectOne(id: number | string) {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        if (next.size >= 200) {
-          notifyError("Batas Maksimum", "Maksimal 200 item per request collect.");
-          return prev;
-        }
-        next.add(id);
-      }
-      return next;
-    });
-  }
-
-  function handleFilterSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setSelectedIds(new Set()); // Reset selection when filter changes
-    const params = new URLSearchParams(window.location.search);
-    if (carFilter.trim()) {
-      params.set("car_id", carFilter.trim());
-    } else {
-      params.delete("car_id");
+  function setSelected(next: string[]) {
+    if (onSelectionChange) {
+      onSelectionChange(next);
+      return;
     }
-    params.set("page", "1");
-    router.push(`?${params.toString()}`);
+    setInternalIds(next);
   }
 
-  function goToPage(next: number) {
-    setSelectedIds(new Set()); // Clear selection on page change
-    const params = new URLSearchParams(window.location.search);
-    params.set("page", String(next));
-    router.push(`?${params.toString()}`);
+  function toggle(source: SpfSource) {
+    const key = sourceKey(source);
+    if (source.spf_status !== "READY" || source.collected || readonly) return;
+    setSelected(selectedSet.has(key) ? effectiveSelectedIds.filter((id) => id !== key) : [...effectiveSelectedIds, key]);
+  }
+
+  function toggleAll() {
+    if (readonly) return;
+    const keys = selectableSources.map(sourceKey);
+    const allSelected = keys.length > 0 && keys.every((key) => selectedSet.has(key));
+    setSelected(allSelected ? effectiveSelectedIds.filter((id) => !keys.includes(id)) : Array.from(new Set([...effectiveSelectedIds, ...keys])));
   }
 
   function handleCollectSubmit() {
-    if (selectedIds.size === 0) return;
-    const idsArray = Array.from(selectedIds);
-
+    if (effectiveSelectedIds.length === 0) return;
     startCollectTransition(async () => {
-      const result = await mutateSpfCollect(idsArray);
-
+      const sourceIds = effectiveSelectedIds.map((key) => key.split(":").slice(1).join(":"));
+      const result = await mutateSpfCollect(sourceIds, periodId);
       if (!result.success) {
-        notifyError("Gagal Collect", result.message);
+        notifyError("Gagal collect", result.message);
         return;
       }
-
-      const { inserted, ignored } = result.data;
-      const notice = `Berhasil collect: ${inserted} item baru ditambahkan, ${ignored} diabaikan (sudah ada).`;
-      setResultNotice(notice);
-      notifySuccess("Collect Sukses", notice);
-      setSelectedIds(new Set());
+      notifySuccess("Collect sukses", `${result.data.inserted ?? 0} item ditambahkan, ${result.data.ignored ?? 0} diabaikan.`);
+      setSelected([]);
       router.refresh();
     });
   }
 
+  const allSelected = selectableSources.length > 0 && selectableSources.every((source) => selectedSet.has(sourceKey(source)));
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {alertElement}
-
-      {/* Accessible Result Notice */}
-      {resultNotice && (
-        <p
-          role="status"
-          aria-live="polite"
-          className="border border-success/20 bg-success/8 px-3 py-2 text-[13px] text-success dark:border-success/25 dark:bg-success/8"
+      <div className="flex flex-wrap items-center justify-between gap-2 border border-border bg-card px-3 py-2 dark:border-white/[0.05]">
+        <button
+          type="button"
+          onClick={toggleAll}
+          disabled={readonly || selectableSources.length === 0}
+          className="inline-flex h-9 items-center gap-2 border border-border px-3 font-mono text-[12px] uppercase tracking-[0.08em] text-muted-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/[0.08]"
         >
-          {resultNotice}
-        </p>
-      )}
-
-      {/* Filter & Action Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border border-border bg-card p-3 dark:border-white/[0.05]">
-        <form onSubmit={handleFilterSubmit} className="flex items-center gap-2">
-          <div className="w-36">
-            <CompactInput
-              placeholder="Filter Nama Mobil"
-              value={carFilter}
-              onChange={(e) => setCarFilter(e.target.value)}
-            />
-          </div>
-          <ActionButton type="submit" variant="primary">
-            Filter
-          </ActionButton>
-        </form>
-
-        <div className="flex items-center gap-3">
-          <span className="font-mono text-[11px] text-muted-foreground tabular-nums dark:text-foreground/45">
-            Terpilih: {selectedIds.size} / 200 maks
-          </span>
-          <ActionButton
-            type="button"
-            variant="success"
-            disabled={selectedIds.size === 0 || isCollecting}
-            onClick={handleCollectSubmit}
-          >
-            {isCollecting
-              ? "Proses Collect…"
-              : `Collect ${selectedIds.size} Source`}
-          </ActionButton>
+          {allSelected ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+          Pilih READY
+        </button>
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-[11px] text-muted-foreground">{effectiveSelectedIds.length} source dipilih</span>
+          {!onSelectionChange ? (
+            <ActionButton variant="success" disabled={effectiveSelectedIds.length === 0 || isCollecting} onClick={handleCollectSubmit}>
+              {isCollecting ? "Collect..." : "Collect Source"}
+            </ActionButton>
+          ) : null}
         </div>
       </div>
 
-      {/* Source Data Table */}
       {sources.length === 0 ? (
-        <EmptyRow message="Tidak ada data source SMS yang ditemukan." />
+        <EmptyRow message="Tidak ada jobdesc teknis dari sistem untuk unit dan rentang tanggal ini." />
       ) : (
-        <div className="overflow-x-auto border border-border dark:border-white/[0.05]">
-          <table className="w-full min-w-[700px] text-[13px]">
-            <thead>
-              <tr className="border-b border-border bg-muted dark:border-white/[0.05] dark:bg-white/[0.02]">
-                <th className="w-10 px-3 py-2 text-center">
-                  <input
-                    type="checkbox"
-                    checked={isAllVisibleSelected}
-                    onChange={toggleSelectAllVisible}
-                    disabled={uncollectedVisible.length === 0}
-                    className="cursor-pointer"
-                  />
-                </th>
-                <th className="px-3 py-2 text-left font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground dark:text-foreground/40">
-                  ID
-                </th>
-                <th className="px-3 py-2 text-left font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground dark:text-foreground/40">
-                  Nama Mobil
-                </th>
-                <th className="px-3 py-2 text-left font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground dark:text-foreground/40">
-                  Deskripsi SMS
-                </th>
-                <th className="px-3 py-2 text-left font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground dark:text-foreground/40">
-                  Jenis Pekerjaan
-                </th>
-                <th className="px-3 py-2 text-left font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground dark:text-foreground/40">
-                  Status
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {sources.map((source) => {
-                const isSelected = selectedIds.has(source.id);
+        <SpfDataTable
+          rows={sources}
+          minWidth={1100}
+          emptyMessage="Tidak ada source SPF."
+          columns={[
+            {
+              key: "select",
+              label: "",
+              className: "w-12 text-center",
+              render: (source) => {
+                const key = sourceKey(source);
+                const disabled = readonly || source.spf_status !== "READY" || source.collected;
                 return (
-                  <tr
-                    key={source.id}
-                    className={`border-b border-border last:border-b-0 hover:bg-muted/40 dark:border-white/[0.04] dark:hover:bg-white/[0.02] ${
-                      source.collected ? "opacity-50 bg-muted/20" : ""
-                    }`}
+                  <button
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => toggle(source)}
+                    aria-label={`Pilih source ${source.source_id ?? source.id}`}
+                    className="inline-flex h-7 w-7 items-center justify-center text-muted-foreground disabled:cursor-not-allowed disabled:opacity-35"
                   >
-                    <td className="px-3 py-2.5 text-center">
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={() => toggleSelectOne(source.id)}
-                        disabled={source.collected}
-                        className="cursor-pointer disabled:cursor-not-allowed"
-                      />
-                    </td>
-                    <td className="px-3 py-2.5 font-mono text-[12px] text-muted-foreground tabular-nums dark:text-foreground/45">
-                      #{source.id}
-                    </td>
-                    <td className="px-3 py-2.5 font-mono text-[12px] font-semibold text-foreground dark:text-foreground">
-                      {source.car_name || source.car_id}
-                    </td>
-                    <td className="max-w-[280px] px-3 py-2.5">
-                      <p className="truncate text-foreground dark:text-foreground/90">
-                        {source.description}
-                      </p>
-                    </td>
-                    <td className="px-3 py-2.5 text-foreground dark:text-foreground/80">
-                      {source.work_type ?? "-"}
-                    </td>
-                    <td className="px-3 py-2.5 font-mono text-[11px] uppercase tracking-[0.08em]">
-                      {source.collected ? (
-                        <span className="text-muted-foreground">Collected</span>
-                      ) : (
-                        <span className="text-success font-semibold">Ready</span>
-                      )}
-                    </td>
-                  </tr>
+                    {selectedSet.has(key) ? <CheckSquare className="h-4 w-4 text-success" /> : <Square className="h-4 w-4" />}
+                  </button>
                 );
-              })}
-            </tbody>
-          </table>
-        </div>
+              },
+            },
+            { key: "source", label: "Source", render: (source) => <SpfSourceBadge value={source.source_type} /> },
+            {
+              key: "jobdesc",
+              label: "Jobdesc",
+              render: (source) => (
+                <div className="max-w-[360px]">
+                  <p className="font-medium text-foreground">{source.customer_description || source.description}</p>
+                  <p className="mt-1 text-[12px] text-muted-foreground">{source.original_description || "-"}</p>
+                </div>
+              ),
+            },
+            { key: "panel", label: "Panel/Part", render: (source) => source.panel_name ?? source.panel ?? source.panel_id ?? "-" },
+            { key: "divisi", label: "Divisi", render: (source) => source.divisi ?? source.work_type ?? "-" },
+            { key: "pic", label: "PIC", render: (source) => source.pic ?? "-" },
+            { key: "status", label: "Status", render: (source) => <SpfSourceStatusBadge status={source.spf_status} /> },
+            { key: "date", label: "Tanggal", render: (source) => source.work_date ?? source.created_at ?? "-" },
+            { key: "progress", label: "Progress", render: (source) => `${source.progress}%` },
+            { key: "docs", label: "Dok.", render: (source) => source.documentation_count ?? 0 },
+          ]}
+        />
       )}
 
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between">
-          <p className="font-mono text-[11px] text-muted-foreground dark:text-foreground/40">
-            {meta.total} total · halaman {page} dari {totalPages}
-          </p>
-          <div className="flex items-center gap-1">
-            <ActionButton
-              variant="default"
-              disabled={page <= 1}
-              onClick={() => goToPage(page - 1)}
-            >
-              ← Prev
-            </ActionButton>
-            <ActionButton
-              variant="default"
-              disabled={!meta.hasNextPage}
-              onClick={() => goToPage(page + 1)}
-            >
-              Next →
-            </ActionButton>
-          </div>
-        </div>
-      )}
+      {meta ? (
+        <p className="font-mono text-[11px] text-muted-foreground">
+          {meta.total} total · offset {meta.offset} · limit {meta.limit}
+        </p>
+      ) : null}
     </div>
   );
+}
+
+export function SourceCollector({ sources, meta }: { sources: readonly SpfSource[]; meta: SpfPagination }) {
+  return <TechnicalJobdescSelector sources={sources} meta={meta} />;
 }

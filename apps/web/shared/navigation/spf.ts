@@ -9,6 +9,11 @@ export function buildSpfNavigation(role: SpfRole): NavigationItem {
       href: "/spf/periods",
     },
     {
+      id: "spf-clients",
+      label: "Client / Customer",
+      href: "/spf/clients",
+    },
+    {
       id: "spf-items",
       label: "Item Restorasi",
       href: "/spf/items",

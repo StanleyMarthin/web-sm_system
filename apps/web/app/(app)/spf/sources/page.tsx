@@ -18,7 +18,7 @@ const SourceCollectorShell = dynamic(
 // ─── Query parser ─────────────────────────────────────────────────────────────
 function parseSourceQuery(
   searchParams: Record<string, string | string[] | undefined>,
-): { limit: number; offset: number; car_id?: number } {
+): { limit: number; offset: number; car_id?: string } {
   const rawPage = searchParams["page"];
   const page =
     typeof rawPage === "string" && /^\d+$/.test(rawPage)
@@ -29,8 +29,8 @@ function parseSourceQuery(
 
   const rawCarId = searchParams["car_id"];
   const car_id =
-    typeof rawCarId === "string" && /^\d+$/.test(rawCarId)
-      ? Number.parseInt(rawCarId, 10)
+    typeof rawCarId === "string" && rawCarId.trim().length > 0
+      ? rawCarId.trim()
       : undefined;
 
   return { limit, offset, car_id };

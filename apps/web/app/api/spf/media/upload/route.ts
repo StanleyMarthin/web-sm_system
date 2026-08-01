@@ -1,50 +1,22 @@
 import "server-only";
 import { NextResponse, type NextRequest } from "next/server";
 import { CSRF_COOKIE_NAME, SESSION_COOKIE_NAME } from "@smsystem/contracts/auth";
-import { requestSchemas, type SpfResource } from "@/shared/api/spf-contracts";
-
-const ALLOWED_RESOURCES = new Set<SpfResource>(["source", "item", "period", "client"]);
 
 function errorResponse(status: number, code: string, message: string) {
   return NextResponse.json({ error: { code, message } }, { status });
 }
 
-export async function POST(
-  request: NextRequest,
-  context: { params: Promise<{ resource: string }> },
-) {
+export async function POST(request: NextRequest) {
   const contentLength = Number(request.headers.get("content-length") ?? "0");
-  if (Number.isFinite(contentLength) && contentLength > 7_500_000) {
-    return errorResponse(413, "PAYLOAD_TOO_LARGE", "Ukuran upload melebihi batas 5 MB.");
-  }
-
-  const { resource } = await context.params;
-  if (!ALLOWED_RESOURCES.has(resource as SpfResource)) {
-    return errorResponse(404, "NOT_FOUND", "Resource SPF tidak ditemukan.");
-  }
-
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return errorResponse(400, "BAD_REQUEST", "Body request harus berupa JSON.");
-  }
-
-  const targetResource = resource as SpfResource;
-  const parsed = requestSchemas[targetResource].safeParse(body);
-  if (!parsed.success) {
-    const issue = parsed.error.issues[0];
-    return errorResponse(
-      400,
-      "VALIDATION_ERROR",
-      `${issue?.path.join(".") || "body"}: ${issue?.message || "Data tidak valid"}`,
-    );
+  if (Number.isFinite(contentLength) && contentLength > 50_000_000) {
+    return errorResponse(413, "PAYLOAD_TOO_LARGE", "Ukuran upload melebihi batas 50 MB.");
   }
 
   const upstreamBaseUrl = process.env.SPF_API_INTERNAL_URL?.trim().replace(/\/$/u, "");
   if (!upstreamBaseUrl) {
     return errorResponse(503, "SPF_NOT_CONFIGURED", "Backend SPF belum dikonfigurasi.");
   }
+
   const requestOrigin = request.headers.get("origin");
   if (requestOrigin) {
     try {
@@ -57,36 +29,39 @@ export async function POST(
       return errorResponse(403, "INVALID_ORIGIN", "Origin request tidak valid.");
     }
   }
+
   const sessionCookie = request.cookies.get(SESSION_COOKIE_NAME)?.value ?? "";
   const csrfToken = request.cookies.get(CSRF_COOKIE_NAME)?.value ?? "";
-  // The Bun API REQUIRES sm_device_id to validate the session, so we MUST forward it.
   const deviceId = request.cookies.get("sm_device_id")?.value ?? "";
-  
   const cookieHeader = [
     sessionCookie && `${SESSION_COOKIE_NAME}=${encodeURIComponent(sessionCookie)}`,
     csrfToken && `${CSRF_COOKIE_NAME}=${encodeURIComponent(csrfToken)}`,
     deviceId && `sm_device_id=${encodeURIComponent(deviceId)}`,
   ].filter(Boolean).join("; ");
 
+  let formData: FormData;
   try {
-    const upstream = await fetch(`${upstreamBaseUrl}/api/spf/${targetResource}`, {
+    formData = await request.formData();
+  } catch {
+    return errorResponse(400, "BAD_REQUEST", "Body request harus berupa multipart FormData.");
+  }
+
+  try {
+    const upstream = await fetch(`${upstreamBaseUrl}/api/spf/media/upload`, {
       method: "POST",
       headers: {
-        "content-type": "application/json",
         ...(cookieHeader ? { cookie: cookieHeader } : {}),
         ...(csrfToken ? { "x-csrf-token": csrfToken } : {}),
         ...(requestOrigin ? { origin: requestOrigin } : {}),
       },
-      body: JSON.stringify(parsed.data),
+      body: formData,
       cache: "no-store",
-      signal: AbortSignal.timeout(15_000),
+      signal: AbortSignal.timeout(60_000),
     });
 
     const headers = new Headers();
-    for (const name of ["content-type", "content-disposition"]) {
-      const value = upstream.headers.get(name);
-      if (value) headers.set(name, value);
-    }
+    const contentType = upstream.headers.get("content-type");
+    if (contentType) headers.set("content-type", contentType);
     return new Response(await upstream.arrayBuffer(), {
       status: upstream.status,
       headers,

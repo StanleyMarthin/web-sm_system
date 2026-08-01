@@ -1,45 +1,36 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import type { ReactNode } from "react";
 import { useRouter } from "next/navigation";
+import { CheckCircle2, Eye, Send, UploadCloud, XCircle } from "lucide-react";
 import { mutateSpf } from "@/shared/api/spf";
-import type { SpfPeriodStatus, SpfPeriod } from "@/shared/api/spf-contracts";
+import type { SpfPeriodStatus } from "@/shared/api/spf-contracts";
 import type { SpfRole } from "@/shared/auth/admin-session";
-import { ActionButton, CompactTextarea, FieldLabel, Toast } from "@/shared/ui/compact";
+import { ActionButton, CompactTextarea, FieldLabel } from "@/shared/ui/compact";
 import { useSweetAlert } from "@/shared/ui/sweet-alert";
+import { SpfDialog } from "./spf-dialog";
 
-// ─── Workflow matrix ──────────────────────────────────────────────────────────
 type WorkflowAction = "SUBMIT" | "APPROVE" | "REJECT" | "PUBLISH" | "UNPUBLISH";
 
-function getAllowedActions(
-  role: SpfRole,
-  status: SpfPeriodStatus,
-): readonly WorkflowAction[] {
-  if (role === "ADMIN") {
-    if (status === "DRAFT" || status === "REJECTED") return ["SUBMIT"];
-  }
-  if (role === "APPROVER") {
-    if (status === "WAITING_APPROVAL") return ["APPROVE", "REJECT"];
-  }
-  if (role === "PUBLISHER") {
-    if (status === "APPROVED") return ["PUBLISH"];
-    if (status === "PUBLISHED") return ["UNPUBLISH"];
-  }
-  return [];
+function getAllowedActions(role: SpfRole, status: SpfPeriodStatus): WorkflowAction[] {
+  const actions: WorkflowAction[] = [];
+  if (role === "ADMIN" && (status === "DRAFT" || status === "REJECTED")) actions.push("SUBMIT");
+  if (role === "APPROVER" && status === "WAITING_APPROVAL") actions.push("APPROVE", "REJECT");
+  if (role === "PUBLISHER" && status === "APPROVED") actions.push("PUBLISH");
+  if (role === "PUBLISHER" && status === "PUBLISHED") actions.push("UNPUBLISH");
+  return actions;
 }
 
 const ACTION_LABELS: Record<WorkflowAction, string> = {
   SUBMIT: "Ajukan",
-  APPROVE: "Setujui",
-  REJECT: "Tolak",
-  PUBLISH: "Publikasi",
-  UNPUBLISH: "Cabut Publikasi",
+  APPROVE: "Approve",
+  REJECT: "Reject",
+  PUBLISH: "Publish",
+  UNPUBLISH: "Unpublish",
 };
 
-const ACTION_VARIANTS: Record<
-  WorkflowAction,
-  "default" | "primary" | "danger" | "success"
-> = {
+const ACTION_VARIANTS: Record<WorkflowAction, "default" | "primary" | "danger" | "success"> = {
   SUBMIT: "primary",
   APPROVE: "success",
   REJECT: "danger",
@@ -47,184 +38,136 @@ const ACTION_VARIANTS: Record<
   UNPUBLISH: "danger",
 };
 
-// ─── Props ────────────────────────────────────────────────────────────────────
-interface PeriodWorkflowActionsProps {
-  periodId: number | string;
+const ACTION_ICONS: Record<WorkflowAction, ReactNode> = {
+  SUBMIT: <Send className="h-3.5 w-3.5" />,
+  APPROVE: <CheckCircle2 className="h-3.5 w-3.5" />,
+  REJECT: <XCircle className="h-3.5 w-3.5" />,
+  PUBLISH: <UploadCloud className="h-3.5 w-3.5" />,
+  UNPUBLISH: <Eye className="h-3.5 w-3.5" />,
+};
+
+interface PeriodWorkflowBarProps {
+  periodId: string | number;
   status: SpfPeriodStatus;
   role: SpfRole;
 }
 
-export function PeriodWorkflowActions({
-  periodId,
-  status,
-  role,
-}: PeriodWorkflowActionsProps) {
+export function PeriodWorkflowBar({ periodId, status, role }: PeriodWorkflowBarProps) {
   const router = useRouter();
-  const { alertElement, confirm, notifySuccess, notifyError } = useSweetAlert();
+  const { alertElement, confirm, notifyError, notifySuccess } = useSweetAlert();
   const [isPending, startTransition] = useTransition();
-  const [rejectReason, setRejectReason] = useState("");
-  const [rejectError, setRejectError] = useState<string | null>(null);
-  const [pendingReject, setPendingReject] = useState(false);
-
+  const [reasonAction, setReasonAction] = useState<"REJECT" | "UNPUBLISH" | null>(null);
+  const [reason, setReason] = useState("");
+  const [reasonError, setReasonError] = useState<string | null>(null);
   const allowedActions = getAllowedActions(role, status);
 
-  if (allowedActions.length === 0) return null;
+  function onConflict(message: string) {
+    notifyError("Data telah berubah", message || "Data telah berubah. Halaman akan diperbarui.");
+    router.refresh();
+  }
 
-  async function executeAction(action: WorkflowAction) {
-    // REJECT: tampilkan textarea terpisah, eksekusi dari tombol confirm di dalam textarea
-    if (action === "REJECT") {
-      setPendingReject(true);
-      return;
+  async function execute(action: WorkflowAction, actionReason?: string) {
+    if (action === "REJECT" || action === "UNPUBLISH") {
+      if (!actionReason) {
+        setReasonAction(action);
+        setReason("");
+        setReasonError(null);
+        return;
+      }
+    } else {
+      const ok = await confirm({
+        title: `${ACTION_LABELS[action]} periode`,
+        description: "Lanjutkan aksi workflow periode ini?",
+        tone: action === "SUBMIT" ? "info" : "success",
+        confirmLabel: ACTION_LABELS[action],
+        cancelLabel: "Batal",
+      });
+      if (!ok) return;
     }
-
-    const confirmed = await confirm({
-      title: `${ACTION_LABELS[action]} Periode`,
-      description: `Apakah Anda yakin ingin melanjutkan aksi ini? Perubahan status tidak dapat diurungkan kecuali melalui workflow selanjutnya.`,
-      tone:
-        action === "APPROVE" || action === "PUBLISH"
-          ? "success"
-          : action === "UNPUBLISH"
-            ? "warning"
-            : "info",
-      confirmLabel: ACTION_LABELS[action],
-      cancelLabel: "Batal",
-    });
-
-    if (!confirmed) return;
 
     startTransition(async () => {
       const result = await mutateSpf("period", {
         mode: action,
-        period_id: periodId,
-      });
+        period_id: String(periodId),
+        ...(actionReason ? { reason: actionReason } : {}),
+      } as any);
 
       if (!result.success) {
-        // 409: status berubah oleh user lain → refresh tanpa error toast
         if (result.status === 409) {
-          notifyError(
-            "Status berubah",
-            "Status periode telah diperbarui oleh pengguna lain. Halaman akan diperbarui.",
-          );
-          router.refresh();
+          onConflict(result.message);
           return;
         }
         notifyError("Gagal", result.message);
         return;
       }
 
-      notifySuccess(`Periode berhasil di-${ACTION_LABELS[action].toLowerCase()}.`);
+      notifySuccess("Workflow diperbarui", `Periode berhasil: ${ACTION_LABELS[action]}.`);
+      setReasonAction(null);
+      setReason("");
       router.refresh();
     });
   }
 
-  async function handleRejectSubmit() {
-    setRejectError(null);
-    const reason = rejectReason.trim();
-    if (!reason) {
-      setRejectError("Alasan penolakan wajib diisi.");
+  function submitReason() {
+    const trimmed = reason.trim();
+    if (!reasonAction) return;
+    if (!trimmed) {
+      setReasonError("Reason wajib diisi.");
       return;
     }
-    if (reason.length > 2000) {
-      setRejectError("Alasan maksimal 2000 karakter.");
+    if (trimmed.length > 2000) {
+      setReasonError("Reason maksimal 2000 karakter.");
       return;
     }
-
-    startTransition(async () => {
-      const result = await mutateSpf("period", {
-        mode: "REJECT",
-        period_id: periodId,
-        reason,
-      });
-
-      if (!result.success) {
-        if (result.status === 409) {
-          notifyError(
-            "Status berubah",
-            "Status periode telah diperbarui oleh pengguna lain. Halaman akan diperbarui.",
-          );
-          setPendingReject(false);
-          router.refresh();
-          return;
-        }
-        setRejectError(result.message);
-        return;
-      }
-
-      notifySuccess("Periode berhasil ditolak.");
-      setPendingReject(false);
-      setRejectReason("");
-      router.refresh();
-    });
+    void execute(reasonAction, trimmed);
   }
+
+  if (allowedActions.length === 0) return null;
 
   return (
     <>
       {alertElement}
+      <div className="flex flex-wrap items-center gap-2">
+        {allowedActions.map((action) => (
+          <ActionButton key={action} variant={ACTION_VARIANTS[action]} disabled={isPending} onClick={() => { void execute(action); }}>
+            {ACTION_ICONS[action]}
+            {isPending ? "Memproses..." : ACTION_LABELS[action]}
+          </ActionButton>
+        ))}
+      </div>
 
-      {/* Reject form overlay */}
-      {pendingReject && (
-        <div className="space-y-3 rounded-none border border-destructive/20 bg-destructive/5 p-4 dark:border-destructive/15 dark:bg-destructive/8">
-          <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-destructive dark:text-destructive/80">
-            Alasan Penolakan
-          </p>
-          <div>
-            <FieldLabel required>Alasan</FieldLabel>
-            <CompactTextarea
-              id="reject-reason"
-              rows={3}
-              placeholder="Tuliskan alasan penolakan (maks. 2000 karakter)"
-              value={rejectReason}
-              onChange={(e) => setRejectReason(e.target.value)}
-              disabled={isPending}
-              aria-describedby={rejectError ? "reject-reason-err" : undefined}
-            />
-            {rejectError && (
-              <p id="reject-reason-err" className="mt-1 text-[12px] text-destructive">
-                {rejectError}
-              </p>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <ActionButton
-              type="button"
-              variant="danger"
-              disabled={isPending}
-              onClick={handleRejectSubmit}
-            >
-              {isPending ? "Memproses…" : "Konfirmasi Tolak"}
-            </ActionButton>
-            <ActionButton
-              type="button"
-              variant="default"
-              disabled={isPending}
-              onClick={() => {
-                setPendingReject(false);
-                setRejectReason("");
-                setRejectError(null);
-              }}
-            >
-              Batal
+      <SpfDialog
+        open={Boolean(reasonAction)}
+        title={reasonAction === "REJECT" ? "Reason Reject" : "Reason Unpublish"}
+        onClose={() => setReasonAction(null)}
+        footer={
+          <div className="flex justify-end gap-2">
+            <ActionButton disabled={isPending} onClick={() => setReasonAction(null)}>Batal</ActionButton>
+            <ActionButton variant="danger" disabled={isPending} onClick={submitReason}>
+              {isPending ? "Memproses..." : "Konfirmasi"}
             </ActionButton>
           </div>
+        }
+      >
+        <div className="space-y-2">
+          <FieldLabel required>Reason</FieldLabel>
+          <CompactTextarea
+            rows={5}
+            value={reason}
+            onChange={(event) => {
+              setReason(event.target.value);
+              setReasonError(null);
+            }}
+            placeholder="Tuliskan alasan agar audit trail jelas."
+            aria-describedby={reasonError ? "spf-workflow-reason-error" : undefined}
+          />
+          {reasonError ? <p id="spf-workflow-reason-error" className="text-[12px] text-destructive">{reasonError}</p> : null}
         </div>
-      )}
-
-      {/* Workflow action buttons */}
-      {!pendingReject && (
-        <div className="flex flex-wrap items-center gap-2">
-          {allowedActions.map((action) => (
-            <ActionButton
-              key={action}
-              type="button"
-              variant={ACTION_VARIANTS[action]}
-              disabled={isPending}
-              onClick={() => executeAction(action)}
-            >
-              {isPending ? "Memproses…" : ACTION_LABELS[action]}
-            </ActionButton>
-          ))}
-        </div>
-      )}
+      </SpfDialog>
     </>
   );
+}
+
+export function PeriodWorkflowActions(props: PeriodWorkflowBarProps) {
+  return <PeriodWorkflowBar {...props} />;
 }

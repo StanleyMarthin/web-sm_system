@@ -24,8 +24,8 @@ function parseItemListQuery(
 ): {
   limit: number;
   offset: number;
-  car_id?: number;
-  period_id?: number;
+  car_id?: string;
+  period_id?: string;
   sort?: ItemSort;
   order?: "ASC" | "DESC";
 } {
@@ -39,14 +39,14 @@ function parseItemListQuery(
 
   const rawCarId = searchParams["car_id"];
   const car_id =
-    typeof rawCarId === "string" && /^\d+$/.test(rawCarId)
-      ? Number.parseInt(rawCarId, 10)
+    typeof rawCarId === "string" && rawCarId.trim()
+      ? rawCarId.trim()
       : undefined;
 
   const rawPeriodId = searchParams["period_id"];
   const period_id =
-    typeof rawPeriodId === "string" && /^\d+$/.test(rawPeriodId)
-      ? Number.parseInt(rawPeriodId, 10)
+    typeof rawPeriodId === "string" && rawPeriodId.trim()
+      ? rawPeriodId.trim()
       : undefined;
 
   const rawSort = searchParams["sort"];

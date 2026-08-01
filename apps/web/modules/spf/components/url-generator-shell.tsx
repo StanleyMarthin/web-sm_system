@@ -1,230 +1,194 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
+import { Check, Copy, ExternalLink, Link2, Mail, MessageCircle, RotateCcw } from "lucide-react";
 import { generateSpfPortalUrl, mutateSpf } from "@/shared/api/spf";
-import type { SpfPeriod } from "@/shared/api/spf-contracts";
+import type { SpfClient, SpfPeriod } from "@/shared/api/spf-contracts";
 import { ActionButton, CompactInput, FieldLabel, PageHeader, SectionCard } from "@/shared/ui/compact";
 import { useSweetAlert } from "@/shared/ui/sweet-alert";
-import { Copy, ExternalLink, Link2, Check, Sparkles, ShieldCheck } from "lucide-react";
 
-interface UrlGeneratorShellProps {
-  publishedPeriods?: SpfPeriod[];
-  initialOwnerName?: string;
+interface ClientAccessShareTabProps {
+  client?: SpfClient;
+  publishedPeriods?: readonly SpfPeriod[];
   initialPeriodId?: string;
 }
 
-export function UrlGeneratorShell({
-  publishedPeriods: initialPublishedPeriods,
-  initialOwnerName = "",
-  initialPeriodId = "",
-}: UrlGeneratorShellProps) {
-  const [ownerName, setOwnerName] = useState(initialOwnerName);
+export function ClientAccessShareTab({ client, publishedPeriods = [], initialPeriodId = "" }: ClientAccessShareTabProps) {
   const [periodId, setPeriodId] = useState(initialPeriodId);
-  const [periods, setPeriods] = useState<SpfPeriod[]>(initialPublishedPeriods ?? []);
+  const [accountId, setAccountId] = useState(client?.account_id ?? "");
+  const [ownerSlug, setOwnerSlug] = useState(client?.owner_slug ?? "");
   const [generatedUrl, setGeneratedUrl] = useState<string | null>(null);
+  const [expiry, setExpiry] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [isPending, startTransition] = useTransition();
   const { alertElement, notifyError, notifySuccess } = useSweetAlert();
+  const identifierLocked = Boolean(client);
+  const clientLabel = client?.display_name ?? ownerSlug ?? accountId ?? "Client";
 
-  useEffect(() => {
-    if (initialPublishedPeriods && initialPublishedPeriods.length > 0) return;
-
-    async function loadPublishedPeriods() {
-      const res = await mutateSpf<{ periods: SpfPeriod[] }>("period", {
-        mode: "LIST",
-        limit: 100,
-        offset: 0,
-      });
-      if (res.success && res.data?.periods) {
-        const published = res.data.periods.filter(
-          (p) => p.status === "PUBLISHED"
-        );
-        setPeriods(published);
-      }
-    }
-    loadPublishedPeriods();
-  }, [initialPublishedPeriods]);
-
-  const publishedPeriods = periods;
-
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!ownerName.trim()) {
-      notifyError("Form Belum Lengkap", "Silakan masukkan nama client / owner.");
+  function generateUrl(event: React.FormEvent) {
+    event.preventDefault();
+    if (!periodId.trim()) {
+      notifyError("Form belum lengkap", "Pilih periode PUBLISHED.");
       return;
     }
-    if (!periodId.toString().trim()) {
-      notifyError("Form Belum Lengkap", "Silakan masukkan atau pilih ID periode.");
+    if (!accountId.trim() && !ownerSlug.trim()) {
+      notifyError("Identifier client kosong", "Gunakan account_id atau owner_slug dari data client.");
       return;
     }
 
     startTransition(async () => {
-      const result = await generateSpfPortalUrl(ownerName.trim(), periodId.toString().trim());
-      if (result.success) {
-        setGeneratedUrl(result.data.url);
-        notifySuccess("URL Berhasil Digenerate", "Link akses portal siap dibagikan ke client.");
-      } else {
-        notifyError("Gagal Generate URL", result.message);
+      const result = await generateSpfPortalUrl({
+        period_id: periodId.trim(),
+        account_id: accountId.trim() || undefined,
+        owner_slug: ownerSlug.trim() || undefined,
+      });
+      if (!result.success) {
+        notifyError("Gagal generate URL", result.message);
+        return;
       }
+      setGeneratedUrl(result.data.url);
+      setExpiry(result.data.expires_at ?? null);
+      notifySuccess("URL siap", "Link portal client berhasil dibuat.");
     });
   }
 
-  async function handleCopy() {
-    if (!generatedUrl) return;
+  async function copy(text: string, label: string) {
     try {
-      await navigator.clipboard.writeText(generatedUrl);
+      await navigator.clipboard.writeText(text);
       setCopied(true);
-      notifySuccess("Disalin ke Clipboard", "URL portal berhasil disalin.");
-      setTimeout(() => setCopied(false), 2500);
+      notifySuccess("Disalin", label);
+      setTimeout(() => setCopied(false), 2000);
     } catch {
-      notifyError("Gagal Menyalin", "Tidak dapat menyalin URL secara otomatis.");
+      notifyError("Gagal menyalin", "Clipboard browser tidak tersedia.");
     }
   }
 
+  function resetAccessCode() {
+    if (!client) return;
+    startTransition(async () => {
+      const result = await mutateSpf("client", { mode: "RESET_ACCESS_CODE", client_id: client.id });
+      if (!result.success) {
+        notifyError("Gagal reset access code", result.message);
+        return;
+      }
+      notifySuccess("Access code direset", "Plaintext access code lama tidak ditampilkan.");
+    });
+  }
+
+  const whatsappTemplate = generatedUrl
+    ? `Halo ${clientLabel}, laporan progress kendaraan sudah tersedia: ${generatedUrl}`
+    : "";
+  const emailTemplate = generatedUrl
+    ? `Subject: Laporan Progress Kendaraan\n\nHalo ${clientLabel},\n\nLaporan progress kendaraan sudah tersedia melalui link berikut:\n${generatedUrl}\n\nTerima kasih.`
+    : "";
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {alertElement}
+      <SectionCard label="Akses & Berbagi">
+        <div className="grid gap-4 lg:grid-cols-2">
+          <form onSubmit={generateUrl} className="space-y-3">
+            <div className="border border-border bg-muted/30 px-3 py-2 text-[12px] text-muted-foreground dark:border-white/[0.06]">
+              Status access code: <span className="font-semibold text-foreground">{client?.access_code_status ?? "Tidak diketahui"}</span>. Plaintext access code lama tidak ditampilkan.
+            </div>
 
-      <PageHeader
-        eyebrow="SM-SPF Administrator"
-        title="Portal URL Generator"
-        actions={
-          <div className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-1 rounded-full border border-success/30 bg-success/10 px-2.5 py-1 text-xs font-medium text-success">
-              <ShieldCheck className="h-3.5 w-3.5" />
-              Direct Auth Ready
-            </span>
-          </div>
-        }
-      />
+            <div className="grid gap-3 md:grid-cols-2">
+              <div>
+                <FieldLabel>account_id</FieldLabel>
+                <CompactInput value={accountId} onChange={(event) => setAccountId(event.target.value)} disabled={identifierLocked || isPending} />
+              </div>
+              <div>
+                <FieldLabel>owner_slug</FieldLabel>
+                <CompactInput value={ownerSlug} onChange={(event) => setOwnerSlug(event.target.value)} disabled={identifierLocked || isPending} />
+              </div>
+            </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-        {/* Form Card */}
-        <div className="lg:col-span-6">
-          <SectionCard label="Form Input Parameter URL Portal">
-            <form onSubmit={handleSubmit} className="space-y-4 pt-2">
-              <div className="space-y-1.5">
-                <FieldLabel required>Nama Owner / Client</FieldLabel>
-                <CompactInput
-                  placeholder="Contoh: Mr. ADRIAN"
-                  value={ownerName}
-                  onChange={(e) => setOwnerName(e.target.value)}
+            <div>
+              <FieldLabel required>Periode PUBLISHED</FieldLabel>
+              {publishedPeriods.length > 0 ? (
+                <select
+                  value={periodId}
+                  onChange={(event) => setPeriodId(event.target.value)}
                   disabled={isPending}
-                />
-                <p className="text-[11px] text-muted-foreground">
-                  Nama owner atau slug identitas client yang terdaftar di sistem.
-                </p>
-              </div>
-
-              <div className="space-y-1.5">
-                <FieldLabel required>ID Periode Progress (PUBLISHED)</FieldLabel>
-                {publishedPeriods.length > 0 ? (
-                  <select
-                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    value={periodId}
-                    onChange={(e) => setPeriodId(e.target.value)}
-                    disabled={isPending}
-                  >
-                    <option value="">-- Pilih Periode Progress --</option>
-                    {publishedPeriods.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.title} (#{p.id})
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <CompactInput
-                    placeholder="Contoh: PORSCHE930_ADRIAN-2026-06-004"
-                    value={periodId}
-                    onChange={(e) => setPeriodId(e.target.value)}
-                    disabled={isPending}
-                  />
-                )}
-                <p className="text-[11px] text-muted-foreground">
-                  Hanya periode yang berstatus <span className="font-semibold text-success">PUBLISHED</span> yang dapat digenerate token aksesnya.
-                </p>
-              </div>
-
-              <div className="pt-2">
-                <ActionButton
-                  type="submit"
-                  variant="primary"
-                  disabled={isPending || !ownerName.trim() || !periodId.trim()}
-                  className="w-full justify-center gap-2 py-2.5 font-medium shadow-md transition-all hover:shadow-lg"
+                  className="h-9 w-full border border-border bg-card px-3 text-[13px] text-foreground outline-none focus:border-primary/55 dark:border-white/[0.08] dark:bg-muted"
                 >
-                  <Sparkles className="h-4 w-4" />
-                  {isPending ? "Generating URL..." : "Generate URL Portal Klien"}
+                  <option value="">Pilih periode</option>
+                  {publishedPeriods.map((period) => (
+                    <option key={period.id} value={period.id}>{period.car_id} · {period.title}</option>
+                  ))}
+                </select>
+              ) : (
+                <CompactInput value={periodId} onChange={(event) => setPeriodId(event.target.value)} placeholder="period_id PUBLISHED" disabled={isPending} />
+              )}
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <ActionButton type="submit" variant="primary" disabled={isPending}>
+                <Link2 className="h-3.5 w-3.5" />
+                {isPending ? "Generate..." : "Generate URL"}
+              </ActionButton>
+              {client ? (
+                <ActionButton disabled={isPending} onClick={resetAccessCode}>
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  Reset Access Code
                 </ActionButton>
-              </div>
-            </form>
-          </SectionCard>
-        </div>
+              ) : null}
+            </div>
+          </form>
 
-        {/* Result Card */}
-        <div className="lg:col-span-6">
-          <SectionCard label="Hasil URL & Uji Akses">
+          <div className="space-y-3">
             {generatedUrl ? (
-              <div className="space-y-4 pt-2">
-                <div className="rounded-lg border border-primary/25 bg-gradient-to-br from-primary/5 via-background to-primary/10 p-4 shadow-sm">
-                  <div className="flex items-center justify-between pb-2">
-                    <span className="inline-flex items-center gap-1.5 font-mono text-xs font-semibold text-primary">
-                      <Link2 className="h-4 w-4" />
-                      Client Portal Link
-                    </span>
-                    <span className="rounded bg-success/15 px-2 py-0.5 font-mono text-[10px] uppercase font-bold text-success">
-                      Token Active
-                    </span>
+              <>
+                <div className="border border-primary/25 bg-primary/8 p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.08em] text-app-accent-ink">URL Portal</p>
+                    {expiry ? <p className="font-mono text-[11px] text-muted-foreground">Expiry: {expiry}</p> : null}
                   </div>
-
-                  <div className="relative my-2 rounded border border-border bg-card p-3 font-mono text-xs break-all text-foreground select-all">
-                    {generatedUrl}
-                  </div>
-
-                  <div className="flex flex-wrap gap-2 pt-2">
-                    <ActionButton
-                      variant={copied ? "success" : "primary"}
-                      onClick={handleCopy}
-                      className="flex-1 justify-center gap-1.5"
-                    >
-                      {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                      {copied ? "Link Tersalin!" : "Salin Link URL"}
-                    </ActionButton>
-
-                    <a
-                      href={generatedUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center justify-center gap-1.5 rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium hover:bg-accent hover:text-accent-foreground"
-                    >
-                      <ExternalLink className="h-3.5 w-3.5" />
-                      Uji Buka Portal
-                    </a>
-                  </div>
+                  <p className="mt-2 break-all font-mono text-[12px] text-foreground">{generatedUrl}</p>
                 </div>
-
-                <div className="rounded-md border border-border/80 bg-muted/40 p-3 text-xs space-y-1.5 text-muted-foreground">
-                  <p className="font-semibold text-foreground">💡 Informasi Penggunaan:</p>
-                  <ul className="list-disc pl-4 space-y-1">
-                    <li>Kirimkan URL ini ke client (via WhatsApp, Email, atau SMS).</li>
-                    <li>Client yang mengklik link ini akan otomatis terverifikasi tanpa perlu memasukkan token manual.</li>
-                    <li>Sesi verifikasi tersimpan di backend hingga periode selesai atau publikasi dicabut.</li>
-                  </ul>
+                <div className="flex flex-wrap gap-2">
+                  <ActionButton variant={copied ? "success" : "primary"} onClick={() => { void copy(generatedUrl, "URL portal disalin."); }}>
+                    {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                    Copy URL
+                  </ActionButton>
+                  <a href={generatedUrl} target="_blank" rel="noopener noreferrer" className="inline-flex h-9 items-center gap-1.5 border border-border px-3 font-mono text-[12px] uppercase tracking-[0.08em] text-muted-foreground hover:bg-muted">
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    Uji Buka
+                  </a>
                 </div>
-              </div>
+                <ActionButton onClick={() => { void copy(whatsappTemplate, "Template WhatsApp disalin."); }}>
+                  <MessageCircle className="h-3.5 w-3.5" />
+                  Template WhatsApp
+                </ActionButton>
+                <ActionButton onClick={() => { void copy(emailTemplate, "Template email disalin."); }}>
+                  <Mail className="h-3.5 w-3.5" />
+                  Template Email
+                </ActionButton>
+              </>
             ) : (
-              <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border py-12 text-center">
-                <div className="rounded-full bg-muted p-3 text-muted-foreground mb-3">
-                  <Link2 className="h-6 w-6" />
-                </div>
-                <h3 className="text-sm font-medium text-foreground">Belum ada URL yang digenerate</h3>
-                <p className="text-xs text-muted-foreground mt-1 max-w-xs">
-                  Isi form di samping lalu klik <strong>Generate URL Portal Klien</strong> untuk membuat link portal unik.
-                </p>
+              <div className="border border-dashed border-border px-3 py-8 text-center text-[13px] text-muted-foreground dark:border-white/[0.08]">
+                URL portal akan muncul setelah generate berhasil.
               </div>
             )}
-          </SectionCard>
+          </div>
         </div>
-      </div>
+      </SectionCard>
+    </div>
+  );
+}
+
+export function UrlGeneratorShell({
+  publishedPeriods,
+  initialPeriodId = "",
+}: {
+  publishedPeriods?: SpfPeriod[];
+  initialOwnerName?: string;
+  initialPeriodId?: string;
+}) {
+  return (
+    <div className="space-y-4">
+      <PageHeader eyebrow="SM-SPF Administrator" title="Portal URL Generator" />
+      <ClientAccessShareTab publishedPeriods={publishedPeriods ?? []} initialPeriodId={initialPeriodId} />
     </div>
   );
 }
