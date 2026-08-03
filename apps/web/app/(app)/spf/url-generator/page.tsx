@@ -12,25 +12,12 @@ const UrlGeneratorShell = dynamic(
   { loading: () => <PageDataSkeleton title="Memuat Portal URL Generator" /> },
 );
 
-interface Props {
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
-}
-
-export default async function SpfUrlGeneratorPage({ searchParams }: Props) {
+export default async function SpfUrlGeneratorPage() {
   const requestHeaders = await headers();
   const cookieHeader = requestHeaders.get("cookie") ?? "";
   const session = await requireAdminSession(cookieHeader);
 
   if (!session) redirect("/login");
 
-  const resolvedParams = await searchParams;
-  const ownerNameParam = typeof resolvedParams["owner_name"] === "string" ? resolvedParams["owner_name"] : "";
-  const periodIdParam = typeof resolvedParams["period_id"] === "string" ? resolvedParams["period_id"] : "";
-
-  return (
-    <UrlGeneratorShell
-      initialOwnerName={ownerNameParam}
-      initialPeriodId={periodIdParam}
-    />
-  );
+  return <UrlGeneratorShell />;
 }

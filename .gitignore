@@ -110,3 +110,10 @@ nginx/
 *.orig
 *.swp
 *~
+
+# Debug/sensitive artifacts — jangan pernah di-commit
+cookies.txt
+generate-url.ts
+patch-auth.sh
+patch-login.sh
+patch-vehicles-log.sh

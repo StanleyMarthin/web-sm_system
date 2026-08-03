@@ -14,8 +14,8 @@ export async function POST(
   context: { params: Promise<{ resource: string }> },
 ) {
   const contentLength = Number(request.headers.get("content-length") ?? "0");
-  if (Number.isFinite(contentLength) && contentLength > 7_500_000) {
-    return errorResponse(413, "PAYLOAD_TOO_LARGE", "Ukuran upload melebihi batas 5 MB.");
+  if (Number.isFinite(contentLength) && contentLength > 35_000_000) {
+    return errorResponse(413, "PAYLOAD_TOO_LARGE", "Ukuran upload melebihi batas 35 MB.");
   }
 
   const { resource } = await context.params;

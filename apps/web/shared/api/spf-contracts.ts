@@ -50,9 +50,7 @@ const sourceRequestSchema = z.discriminatedUnion("mode", [
   }),
   z.object({
     mode: z.literal("COLLECT"),
-    period_id: z.string().optional(),
     source_ids: idArraySchema.min(1, "Minimal satu ID diperlukan"),
-    sources: z.array(sourceKeySchema).optional(),
   }),
 ]);
 
@@ -73,19 +71,12 @@ const itemRequestSchema = z.discriminatedUnion("mode", [
     car_id: z.string().trim().min(1),
     period_id: requestIdSchema.optional(),
     panel_id: requestIdSchema.nullable().optional(),
-    panel_name: optionalText(255),
-    panel: optionalText(255),
     customer_description: text(5000),
     original_description: optionalText(5000),
     work_status: text(100),
     progress: z.coerce.number().min(0).max(100),
-    divisi: optionalText(100),
-    pic: optionalText(255),
-    work_date: z.string().optional(),
     display_order: z.coerce.number().int().min(0).optional(),
     source_type: z.literal("MANUAL").optional(),
-    documentation_checked: z.boolean().optional(),
-    media: z.array(z.unknown()).optional(),
   }),
   z.object({
     mode: z.literal("UPDATE"),
@@ -95,37 +86,22 @@ const itemRequestSchema = z.discriminatedUnion("mode", [
     work_status: optionalText(100),
     progress: z.coerce.number().min(0).max(100).optional(),
     panel_id: requestIdSchema.nullable().optional(),
-    panel_name: optionalText(255),
     display_order: z.coerce.number().int().min(0).optional(),
     spf_status: z.enum(SPF_SOURCE_STATUSES).optional(),
-    exclusion_reason: optionalText(2000),
-    documentation_checked: z.boolean().optional(),
   }),
   z.object({ mode: z.literal("DELETE"), item_id: requestIdSchema }),
   z.object({
     mode: z.literal("UPLOAD_MEDIA"),
     item_id: requestIdSchema,
-    filename: text(255).optional(),
-    file_name: text(255).optional(),
-    mime_type: z.string().min(1),
-    caption: optionalText(500),
-    display_order: z.coerce.number().int().min(0).optional(),
+    file_name: text(255),
+    mime_type: z.enum(["image/jpeg", "image/png", "image/webp", "video/mp4"]),
+    file_data: z.string().min(1),
   }),
-  z.object({
-    mode: z.literal("DELETE_MEDIA"),
-    media_id: requestIdSchema,
-    item_id: requestIdSchema.optional(),
-  }),
+  z.object({ mode: z.literal("DELETE_MEDIA"), media_id: requestIdSchema }),
   z.object({
     mode: z.literal("HIDE_MEDIA"),
     media_id: requestIdSchema,
-    item_id: requestIdSchema.optional(),
     hidden: z.boolean(),
-  }),
-  z.object({
-    mode: z.literal("REORDER"),
-    period_id: requestIdSchema,
-    item_ids: idArraySchema,
   }),
 ]);
 
@@ -146,28 +122,24 @@ const periodRequestSchema = z.discriminatedUnion("mode", [
   z.object({
     mode: z.literal("CREATE"),
     car_id: z.string().trim().min(1),
-    year: z.string().trim().optional(),
     title: optionalText(255),
     description: optionalText(5000),
     date_start: z.string().min(1),
     date_end: z.string().min(1),
     item_ids: idArraySchema.optional(),
     attach_item_ids: idArraySchema.optional(),
-    source_keys: z.array(sourceKeySchema).optional(),
-    save_as: z.literal("DRAFT").optional(),
+    source_ids: idArraySchema.optional(),
   }),
   z.object({
     mode: z.literal("UPDATE"),
     period_id: requestIdSchema,
-    car_id: z.string().trim().optional(),
-    year: z.string().trim().optional(),
     title: optionalText(255),
     description: optionalText(5000),
     date_start: z.string().optional(),
     date_end: z.string().optional(),
     item_ids: idArraySchema.optional(),
     attach_item_ids: idArraySchema.optional(),
-    source_keys: z.array(sourceKeySchema).optional(),
+    source_ids: idArraySchema.optional(),
   }),
   z.object({ mode: z.literal("SUBMIT"), period_id: requestIdSchema }),
   z.object({ mode: z.literal("APPROVE"), period_id: requestIdSchema }),
@@ -175,7 +147,6 @@ const periodRequestSchema = z.discriminatedUnion("mode", [
   z.object({ mode: z.literal("PUBLISH"), period_id: requestIdSchema }),
   z.object({ mode: z.literal("UNPUBLISH"), period_id: requestIdSchema, reason: text(2000) }),
   z.object({ mode: z.literal("EXPORT"), period_id: requestIdSchema }),
-  z.object({ mode: z.literal("DELETE"), period_id: requestIdSchema }),
 ]);
 
 const clientRequestSchema = z.discriminatedUnion("mode", [
@@ -187,36 +158,11 @@ const clientRequestSchema = z.discriminatedUnion("mode", [
   }),
   z.object({ mode: z.literal("DETAIL"), client_id: requestIdSchema }),
   z.object({
-    mode: z.literal("UPDATE"),
-    client_id: requestIdSchema,
-    display_name: optionalText(255),
-    status: optionalText(50),
-  }),
-  z.object({
-    mode: z.literal("ATTACH_VEHICLE"),
-    client_id: requestIdSchema,
-    car_id: z.string().trim().min(1),
-    source_type: sourceTypeSchema.optional(),
-  }),
-  z.object({
-    mode: z.literal("DETACH_VEHICLE"),
-    client_id: requestIdSchema,
-    car_id: z.string().trim().min(1),
-  }),
-  z.object({
     mode: z.literal("SET_ACCESS_CODE"),
     client_id: requestIdSchema,
-    access_code: optionalText(255),
+    access_code: z.string().trim().min(4).max(255),
   }),
   z.object({ mode: z.literal("RESET_ACCESS_CODE"), client_id: requestIdSchema }),
-  z.object({
-    mode: z.literal("GENERATE_URL"),
-    client_id: requestIdSchema,
-    account_id: z.string().trim().optional(),
-    owner_slug: z.string().trim().optional(),
-    car_id: z.string().trim().optional(),
-    period_id: requestIdSchema,
-  }),
 ]);
 
 export const requestSchemas = {
@@ -578,11 +524,9 @@ export const spfErrorEnvelopeSchema = z.object({
 });
 
 export const generateUrlRequestSchema = z.object({
-  owner_name: optionalText(255),
   account_id: z.string().trim().max(255).optional(),
   owner_slug: z.string().trim().max(255).optional(),
-  period_id: text(100),
-}).refine((value) => Boolean(value.account_id || value.owner_slug || value.owner_name), {
+}).refine((value) => Boolean(value.account_id || value.owner_slug), {
   message: "account_id atau owner_slug wajib diisi",
 });
 export type GenerateUrlRequest = z.infer<typeof generateUrlRequestSchema>;

@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Eye, Send, UploadCloud, XCircle } from "lucide-react";
 import { mutateSpf } from "@/shared/api/spf";
-import type { SpfPeriodStatus } from "@/shared/api/spf-contracts";
+import type { PeriodRequest, SpfPeriodStatus } from "@/shared/api/spf-contracts";
 import type { SpfRole } from "@/shared/auth/admin-session";
 import { ActionButton, CompactTextarea, FieldLabel } from "@/shared/ui/compact";
 import { useSweetAlert } from "@/shared/ui/sweet-alert";
@@ -86,11 +86,11 @@ export function PeriodWorkflowBar({ periodId, status, role }: PeriodWorkflowBarP
     }
 
     startTransition(async () => {
-      const result = await mutateSpf("period", {
-        mode: action,
-        period_id: String(periodId),
-        ...(actionReason ? { reason: actionReason } : {}),
-      } as any);
+      const payload: PeriodRequest =
+        action === "REJECT" || action === "UNPUBLISH"
+          ? { mode: action, period_id: String(periodId), reason: actionReason ?? "" }
+          : { mode: action, period_id: String(periodId) };
+      const result = await mutateSpf("period", payload);
 
       if (!result.success) {
         if (result.status === 409) {

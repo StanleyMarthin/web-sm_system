@@ -294,7 +294,6 @@ export async function mutateSpf<T = unknown>(
 // ─── Collect source (convenience wrapper) ───────────────────────────────────
 export async function mutateSpfCollect(
   sourceIds: (string | number)[],
-  periodId?: string,
 ): Promise<SpfMutationResult<{ inserted?: number; ignored?: number }>> {
   let response: Response;
   try {
@@ -302,7 +301,7 @@ export async function mutateSpfCollect(
       method: "POST",
       credentials: "same-origin",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ mode: "COLLECT", source_ids: sourceIds.map(String), ...(periodId ? { period_id: periodId } : {}) }),
+      body: JSON.stringify({ mode: "COLLECT", source_ids: sourceIds.map(String) }),
     });
   } catch {
     return { success: false, status: 503, message: "Gagal terhubung ke server.", errorCode: "NETWORK_ERROR" };
@@ -383,7 +382,7 @@ function parseSuccessEnvelope(
 }
 
 export async function generateSpfPortalUrl(
-  input: { period_id: string; account_id?: string; owner_slug?: string; owner_name?: string },
+  input: { account_id?: string; owner_slug?: string },
 ): Promise<SpfMutationResult<SpfGenerateUrlResult>> {
   try {
     const payload = generateUrlRequestSchema.parse(input);
@@ -445,42 +444,32 @@ export async function exportSpfPeriod(periodId: string): Promise<SpfMutationResu
 export async function uploadSpfItemMedia(
   itemId: string,
   file: File,
-  metadata: { caption?: string; display_order?: number } = {},
+  _metadata: { caption?: string; display_order?: number } = {},
 ): Promise<SpfMutationResult<Record<string, unknown>>> {
-  const formData = new FormData();
-  formData.set("mode", "UPLOAD_MEDIA");
-  formData.set("item_id", itemId);
-  formData.set("file", file);
-  formData.set("filename", file.name);
-  formData.set("mime_type", file.type);
-  if (metadata.caption) formData.set("caption", metadata.caption);
-  if (metadata.display_order !== undefined) formData.set("display_order", String(metadata.display_order));
-
-  let response: Response;
   try {
-    response = await fetch("/api/spf/media/upload", {
-      method: "POST",
-      credentials: "same-origin",
-      body: formData,
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result ?? ""));
+      reader.onerror = () => reject(new Error("Gagal membaca file"));
+      reader.readAsDataURL(file);
+    });
+    const matches = dataUrl.match(/^data:([a-zA-Z0-9/+.-]+);base64,(.+)$/);
+    if (!matches?.[1] || !matches[2]) {
+      return { success: false, status: 400, message: "Format file tidak valid.", errorCode: "INVALID_FILE" };
+    }
+    const allowedMimeTypes = ["image/jpeg", "image/png", "image/webp", "video/mp4"] as const;
+    const mimeType = allowedMimeTypes.find((type) => type === matches[1]);
+    if (!mimeType) {
+      return { success: false, status: 400, message: "Tipe media tidak didukung.", errorCode: "INVALID_MEDIA_TYPE" };
+    }
+    return await mutateSpf("item", {
+      mode: "UPLOAD_MEDIA",
+      item_id: String(itemId),
+      file_name: file.name,
+      mime_type: mimeType,
+      file_data: matches[2],
     });
   } catch {
-    return { success: false, status: 503, message: "Gagal terhubung ke server.", errorCode: "NETWORK_ERROR" };
-  }
-
-  if (!response.ok) {
-    const body = await parseErrorBody(response);
-    return {
-      success: false,
-      status: response.status,
-      message: body.error?.message ?? resolveDefaultMessage(response.status),
-      errorCode: body.error?.code ?? resolveErrorCode(response.status),
-    };
-  }
-
-  try {
-    const envelope = spfMutationEnvelopeSchema.parse(await response.json());
-    return { success: true, data: envelope.data };
-  } catch {
-    return { success: false, status: 502, message: "Response server tidak valid.", errorCode: "INVALID_RESPONSE" };
+    return { success: false, status: 503, message: "Gagal memproses file.", errorCode: "FILE_READ_ERROR" };
   }
 }

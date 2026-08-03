@@ -20,8 +20,6 @@ const ALLOWED_MIME_TYPES = [
   "image/png",
   "image/webp",
   "video/mp4",
-  "video/webm",
-  "application/pdf",
 ];
 
 export function DocumentationManager({ itemId, media, editable }: DocumentationManagerProps) {
@@ -59,8 +57,8 @@ export function DocumentationManager({ itemId, media, editable }: DocumentationM
   function updateMedia(mediaItem: SpfMedia, mode: "DELETE_MEDIA" | "HIDE_MEDIA") {
     startTransition(async () => {
       const result = await mutateSpf("item", mode === "DELETE_MEDIA"
-        ? { mode, item_id: String(itemId), media_id: mediaItem.id }
-        : { mode, item_id: String(itemId), media_id: mediaItem.id, hidden: !mediaItem.hidden });
+        ? { mode, media_id: mediaItem.id }
+        : { mode, media_id: mediaItem.id, hidden: !mediaItem.hidden });
       if (!result.success) {
         notifyError(result.status === 409 ? "Data telah berubah" : "Gagal memperbarui media", result.message);
         if (result.status === 409) router.refresh();
@@ -88,7 +86,7 @@ export function DocumentationManager({ itemId, media, editable }: DocumentationM
             <Upload className="h-3.5 w-3.5" />
             Upload Manual
           </ActionButton>
-          <span className="text-[12px] text-muted-foreground">JPG, PNG, WEBP, video, PDF. Upload memakai multipart FormData.</span>
+          <span className="text-[12px] text-muted-foreground">JPG, PNG, WEBP, MP4. Upload memakai base64 JSON melalui endpoint item.</span>
         </div>
       ) : null}
 

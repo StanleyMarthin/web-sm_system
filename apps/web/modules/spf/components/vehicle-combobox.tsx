@@ -53,8 +53,8 @@ export function VehicleCombobox({
       .then((response) => (response.ok ? response.json() : null))
       .then((body) => {
         if (cancelled) return;
-        const data = Array.isArray(body?.data) ? body.data : [];
-        setLoadedVehicles(data.map(mapUnitRow).filter((row: any): row is VehicleOption => Boolean(row)));
+        const data: unknown[] = Array.isArray(body?.data) ? body.data : [];
+        setLoadedVehicles(data.map(mapUnitRow).filter((row: VehicleOption | null): row is VehicleOption => Boolean(row)));
       })
       .catch(() => {
         if (!cancelled) setLoadedVehicles([]);

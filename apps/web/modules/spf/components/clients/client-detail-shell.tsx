@@ -32,7 +32,6 @@ export function ClientDetailShell({
   reports: readonly SpfPeriod[];
 }) {
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
-  const publishedReports = reports.filter((report) => report.status === "PUBLISHED");
 
   return (
     <section className="space-y-5">
@@ -141,7 +140,7 @@ export function ClientDetailShell({
         </SectionCard>
       ) : null}
 
-      {activeTab === "access" ? <ClientAccessShareTab client={client} publishedPeriods={publishedReports} /> : null}
+      {activeTab === "access" ? <ClientAccessShareTab client={client} /> : null}
     </section>
   );
 }

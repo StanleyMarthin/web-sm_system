@@ -14,7 +14,6 @@ import { SpfSourceStatusBadge } from "./spf-status-badge";
 interface TechnicalJobdescSelectorProps {
   sources: readonly SpfSource[];
   meta?: SpfPagination;
-  periodId?: string;
   selectedIds?: readonly string[];
   onSelectionChange?: (ids: string[]) => void;
   readonly?: boolean;
@@ -27,7 +26,6 @@ function sourceKey(source: Pick<SpfSource, "source_type" | "source_id" | "id">) 
 export function TechnicalJobdescSelector({
   sources,
   meta,
-  periodId,
   selectedIds,
   onSelectionChange,
   readonly = false,
@@ -69,7 +67,7 @@ export function TechnicalJobdescSelector({
     if (effectiveSelectedIds.length === 0) return;
     startCollectTransition(async () => {
       const sourceIds = effectiveSelectedIds.map((key) => key.split(":").slice(1).join(":"));
-      const result = await mutateSpfCollect(sourceIds, periodId);
+      const result = await mutateSpfCollect(sourceIds);
       if (!result.success) {
         notifyError("Gagal collect", result.message);
         return;

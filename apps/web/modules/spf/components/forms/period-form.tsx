@@ -151,30 +151,28 @@ export function PeriodWizard({ period }: { period?: SpfPeriod }) {
     }
 
     startTransition(async () => {
-      const sourceIds = draft.selected_source_keys.map(sourceIdFromKey);
+      const sourceIds = draft.selected_source_keys
+        .filter((key) => !key.startsWith("MANUAL:"))
+        .map(sourceIdFromKey);
       const itemIds = Array.from(new Set([...draft.selected_item_ids, ...items.filter((item) => item.spf_status === "INCLUDED").map((item) => item.id)]));
       const result = await mutateSpf<Record<string, unknown>>("period", period
         ? {
             mode: "UPDATE",
             period_id: period.id,
-            car_id: draft.car_id,
-            year: draft.year,
             date_start: draft.date_start,
             date_end: draft.date_end,
             description: draft.description || undefined,
             item_ids: itemIds,
-            source_keys: draft.selected_source_keys.map((key) => ({ source_type: key.startsWith("MANUAL:") ? "MANUAL" : "SYSTEM", source_id: sourceIdFromKey(key) })),
+            source_ids: sourceIds,
           }
         : {
             mode: "CREATE",
             car_id: draft.car_id,
-            year: draft.year,
             date_start: draft.date_start,
             date_end: draft.date_end,
             description: draft.description || undefined,
-            attach_item_ids: itemIds,
-            source_keys: draft.selected_source_keys.map((key) => ({ source_type: key.startsWith("MANUAL:") ? "MANUAL" : "SYSTEM", source_id: sourceIdFromKey(key) })),
-            save_as: "DRAFT",
+            item_ids: itemIds,
+            source_ids: sourceIds,
           });
 
       if (!result.success) {
@@ -259,7 +257,6 @@ export function PeriodWizard({ period }: { period?: SpfPeriod }) {
           {activeSourceTab === "SYSTEM" ? (
             <TechnicalJobdescSelector
               sources={sources}
-              periodId={period?.id}
               selectedIds={draft.selected_source_keys}
               onSelectionChange={(ids) => setDraft({ ...draft, selected_source_keys: ids })}
             />

@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowDown, ArrowUp, Check, Edit3, X } from "lucide-react";
-import type { SpfItem, SpfPagination, SpfSourceStatus } from "@/shared/api/spf-contracts";
+import type { ItemRequest, SpfItem, SpfPagination, SpfSourceStatus } from "@/shared/api/spf-contracts";
 import type { SpfRole } from "@/shared/auth/admin-session";
 import { mutateSpf } from "@/shared/api/spf";
 import { ActionButton, CompactInput, CompactTextarea, EmptyRow } from "@/shared/ui/compact";
@@ -24,7 +24,6 @@ type DraftEdit = {
   customer_description: string;
   work_status: string;
   progress: number;
-  exclusion_reason: string;
 };
 
 export function CuratedItemEditor({ rows, role, editable = true }: ItemListProps) {
@@ -41,16 +40,19 @@ export function CuratedItemEditor({ rows, role, editable = true }: ItemListProps
       customer_description: item.customer_description,
       work_status: item.work_status,
       progress: item.progress,
-      exclusion_reason: item.exclusion_reason ?? "",
     });
   }
 
   function updateItem(item: SpfItem, patch: Partial<SpfItem> & { spf_status?: SpfSourceStatus }) {
     startTransition(async () => {
-      const payload: any = {
+      const payload: ItemRequest = {
         mode: "UPDATE",
         item_id: item.id,
-        ...patch,
+        customer_description: patch.customer_description,
+        work_status: patch.work_status,
+        progress: patch.progress,
+        display_order: patch.display_order,
+        spf_status: patch.spf_status,
       };
       const result = await mutateSpf("item", payload);
       if (!result.success) {
@@ -79,7 +81,6 @@ export function CuratedItemEditor({ rows, role, editable = true }: ItemListProps
       customer_description: draft.customer_description.trim(),
       work_status: draft.work_status.trim() || item.work_status,
       progress: draft.progress,
-      exclusion_reason: draft.exclusion_reason.trim() || undefined,
     });
   }
 
