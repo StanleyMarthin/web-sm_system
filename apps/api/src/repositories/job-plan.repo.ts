@@ -608,6 +608,7 @@ function buildListSelectSql(): string {
 async function getCountdownContext(
   connection: Pick<PoolConnection, "query">,
   coreId: string,
+  lockForUpdate = false,
 ): Promise<CountdownContextRow | null> {
   const [rows] = (await connection.query(
     `
@@ -626,6 +627,7 @@ async function getCountdownContext(
       LEFT JOIN sm_divisi d ON d.id = jc.division_id
       WHERE jc.id = ?
       LIMIT 1
+      ${lockForUpdate ? "FOR UPDATE" : ""}
     `,
     [coreId],
   )) as [CountdownContextRow[], unknown];
@@ -638,7 +640,7 @@ async function assertCountdownAccessible(
   params: ScopeParams,
   coreId: string,
 ): Promise<CountdownContextRow> {
-  const countdown = await getCountdownContext(connection, coreId);
+  const countdown = await getCountdownContext(connection, coreId, true);
   if (!countdown) {
     throw new Error("COUNTDOWN_NOT_FOUND");
   }
@@ -1138,7 +1140,10 @@ export interface JobPlanRepository {
     total: number;
     summary: JobPlanSummary;
   }>;
-  listReferences(params: ScopeParams & { mode: JobPlanGridQuery["mode"] }): Promise<JobPlanGridReference>;
+  listReferences(params: ScopeParams & {
+    mode: JobPlanGridQuery["mode"];
+    countdownIds?: string[];
+  }): Promise<JobPlanGridReference>;
   getPicLoad(
     employeeId: string,
     taskDate: string,
@@ -1245,7 +1250,7 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
   }
 
   async listReferences(
-    params: ScopeParams & { mode: JobPlanGridQuery["mode"] },
+    params: ScopeParams & { mode: JobPlanGridQuery["mode"]; countdownIds?: string[] },
   ): Promise<JobPlanGridReference> {
     const pool = this.poolFactory();
     const employeeParams: unknown[] = [];
@@ -1278,6 +1283,10 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
       "jc",
       "p_scope",
     );
+    const countdownIdSql = params.countdownIds?.length
+      ? `AND jc.id IN (${params.countdownIds.map(() => "?").join(", ")})`
+      : "";
+    countdownParams.push(...(params.countdownIds ?? []));
 
     const unitScopeClauses: string[] = [];
     if (!params.scope.canViewAllUnits) {
@@ -1544,6 +1553,7 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
           WHERE COALESCE(jc.status, 'PLAN') NOT IN ('DONE', 'CANCEL')
             AND COALESCE(jc.remaining_hours, 0) > 0
             ${countdownScopeSql ? `AND ${countdownScopeSql}` : ""}
+            ${countdownIdSql}
           GROUP BY
             jc.id,
             jc.car_id,
@@ -1557,7 +1567,7 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
             jc.actual_progress_percent,
             planCapacity.reservedPlanHours
           ORDER BY jc.updated_at DESC, jc.created_at DESC
-          LIMIT 200
+          ${params.countdownIds?.length ? "" : "LIMIT 200"}
         `,
         countdownParams,
       ),

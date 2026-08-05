@@ -7,6 +7,39 @@ export interface JobPlanScheduleSegment {
   finishTime: string;
 }
 
+export interface JobPlanAllocationLimitExceeded {
+  referenceId: string;
+  requestedHours: number;
+  availableHours: number;
+}
+
+export function findExceededJobPlanAllocation(
+  rows: Array<{ referenceId: string; targetHours: number }>,
+  availableHoursByReference: ReadonlyMap<string, number>,
+): JobPlanAllocationLimitExceeded | null {
+  const requestedHoursByReference = new Map<string, number>();
+
+  for (const row of rows) {
+    if (!row.referenceId || !Number.isFinite(row.targetHours) || row.targetHours <= 0) {
+      continue;
+    }
+
+    requestedHoursByReference.set(
+      row.referenceId,
+      Number(((requestedHoursByReference.get(row.referenceId) ?? 0) + row.targetHours).toFixed(2)),
+    );
+  }
+
+  for (const [referenceId, requestedHours] of requestedHoursByReference) {
+    const availableHours = availableHoursByReference.get(referenceId);
+    if (availableHours !== undefined && requestedHours > availableHours + 0.0001) {
+      return { referenceId, requestedHours, availableHours };
+    }
+  }
+
+  return null;
+}
+
 const START_MINUTES_NORMAL = 8 * 60;
 const START_MINUTES_SUNDAY = 8 * 60;
 const OVERTIME_START_WEEKDAY = 17 * 60;
@@ -67,6 +100,27 @@ export function breakStartMinutesForJobPlanDate(taskDate: string): number {
   return date.getDay() === 5 ? (11 * 60) + 30 : 12 * 60;
 }
 
+export function calculateJobPlanFinishTime(
+  taskDate: string,
+  startTime: string,
+  durationHours: number,
+): string {
+  const [hourRaw, minuteRaw] = startTime.split(":");
+  const startMinutes = (Number(hourRaw) * 60) + Number(minuteRaw);
+  const workMinutes = Math.max(0, Math.round(durationHours * 60));
+  const breakStart = breakStartMinutesForJobPlanDate(taskDate);
+  const breakEnd = breakStart + breakMinutesForJobPlanDate(taskDate);
+  const effectiveStart = startMinutes >= breakStart && startMinutes < breakEnd
+    ? breakEnd
+    : startMinutes;
+  const finishWithoutBreak = effectiveStart + workMinutes;
+  const finishMinutes = effectiveStart < breakStart && finishWithoutBreak > breakStart
+    ? finishWithoutBreak + (breakEnd - breakStart)
+    : finishWithoutBreak;
+
+  return toTimeString(finishMinutes);
+}
+
 export function getNormalThresholdTime(taskDate: string): string {
   const date = parseIsoDate(taskDate);
   if (date.getDay() === 6) {
@@ -94,21 +148,7 @@ export function isSundayJobPlan(taskDate: string): boolean {
 }
 
 export function calculateNormalFinishTime(taskDate: string, durationHours: number): string {
-  const workMinutes = Math.round(durationHours * 60);
-  const breakStart = breakStartMinutesForJobPlanDate(taskDate);
-  const breakMinutes = breakMinutesForJobPlanDate(taskDate);
-  const breakEnd = breakStart + breakMinutes;
-
-  let extraMinutes = 0;
-  if (
-    breakMinutes > 0 &&
-    START_MINUTES_NORMAL < breakEnd &&
-    (START_MINUTES_NORMAL + workMinutes) > breakStart
-  ) {
-    extraMinutes = breakMinutes;
-  }
-
-  return toTimeString(START_MINUTES_NORMAL + workMinutes + extraMinutes);
+  return calculateJobPlanFinishTime(taskDate, toTimeString(START_MINUTES_NORMAL), durationHours);
 }
 
 export function calculateOvertimeFinishTime(taskDate: string, durationHours: number): string {

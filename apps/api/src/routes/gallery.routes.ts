@@ -138,6 +138,7 @@ export async function handleGalleryListRoute(
       ...parseGridQueryParams(url.searchParams),
       date: url.searchParams.get("date") ?? new Date().toISOString().slice(0, 10),
       unitId: url.searchParams.get("unitId"),
+      divisionId: url.searchParams.get("divisionId"),
       panelId: url.searchParams.get("panelId"),
       status: url.searchParams.get("status"),
       part: url.searchParams.get("part") ?? "",
