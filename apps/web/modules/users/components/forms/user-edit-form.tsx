@@ -8,6 +8,7 @@ import { UserCog } from "lucide-react";
 import { updateUser } from "@/shared/api/users";
 import type { UserGridReference, UserRecord } from "@smsystem/contracts/user";
 import { useRouter } from "next/navigation";
+import { groupDivisionOptions } from "../../division-options";
 
 const editUserSchema = z.object({
   employeeId: z.string(),
@@ -77,6 +78,7 @@ export function UserEditForm({ user, references, onSuccess, onError, onClose }: 
   const selectedRoleId = watch("roleId");
   const selectedRoleDefinition = references.roles.find((r) => r.value === selectedRoleId);
   const managedDivisionIds = watch("managedDivisionIds");
+  const divisionGroups = groupDivisionOptions(references.divisions);
 
   const onSubmit = (data: EditUserFormValues) => {
     startTransition(async () => {
@@ -164,18 +166,22 @@ export function UserEditForm({ user, references, onSuccess, onError, onClose }: 
       </label>
 
       <label className="space-y-1">
-        <span className="text-xs uppercase tracking-[0.14em] text-foreground/45">Divisi Utama</span>
+        <span className="text-xs uppercase tracking-[0.14em] text-foreground/45">Divisi / Team Utama</span>
         <select
           {...register("divisionId")}
           className="h-11 w-full rounded-2xl border border-white/[0.08] bg-white/[0.03] px-3 text-sm text-foreground outline-none focus:border-primary/40"
         >
           <option value="">Pilih divisi</option>
-          {references.divisions.map((division) => (
-            <option key={division.value} value={division.value}>
-              {division.label}
-            </option>
-          ))}
+          {divisionGroups.map((division) => division.teams.length > 0 ? (
+            <optgroup key={division.value} label={division.label}>
+              <option value={division.value}>{division.label} (induk)</option>
+              {division.teams.map((team) => (
+                <option key={team.value} value={team.value}>{team.label}</option>
+              ))}
+            </optgroup>
+          ) : <option key={division.value} value={division.value}>{division.label}</option>)}
         </select>
+        <p className="text-xs text-muted-foreground">Pilih team untuk anggota operasional; pilih induk bila divisi belum dibagi team.</p>
         {errors.divisionId && <p className="text-xs text-destructive">{errors.divisionId.message}</p>}
       </label>
 
@@ -197,7 +203,7 @@ export function UserEditForm({ user, references, onSuccess, onError, onClose }: 
             <p className="text-xs uppercase tracking-[0.14em] text-foreground/45">Divisi Pegangan</p>
           </div>
           <div className="grid gap-2 md:grid-cols-2">
-            {references.divisions.map((division) => {
+            {divisionGroups.flatMap((division) => [division, ...division.teams]).map((division) => {
               const checked = managedDivisionIds.includes(division.value);
               return (
                 <label

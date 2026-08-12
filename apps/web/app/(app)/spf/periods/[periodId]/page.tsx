@@ -1,13 +1,4 @@
-import { headers } from "next/headers";
-import { notFound, redirect } from "next/navigation";
-import { requireAdminSession } from "@/shared/auth/admin-session";
-import { fetchSpfPeriodDetail } from "@/shared/api/spf";
-import { ModuleUnavailableState } from "@/shared/ui/module-unavailable-state";
-
-// PeriodDetailShell mengimplementasikan UI — diimport langsung karena sudah ada
-// breadcrumb dan snapshot tunggal yang dibagi ke summary, items, dan workflow.
-// Belum bisa dynamic import karena shell memerlukan typed snapshot dari server.
-import { PeriodDetailShell } from "@/modules/spf/components/period-detail-shell";
+import { redirect } from "next/navigation";
 
 interface Props {
   params: Promise<{ periodId: string }>;
@@ -15,48 +6,5 @@ interface Props {
 
 export default async function PeriodDetailPage({ params }: Props) {
   const { periodId } = await params;
-
-  // Validasi ID: harus string non-kosong, max 100 karakter, karakter aman (alphanumeric, dash, underscore, dot)
-  if (!periodId || periodId.length > 100 || !/^[\w.\-]+$/u.test(periodId)) {
-    notFound();
-  }
-
-  const cookieHeader = (await headers()).get("cookie") ?? "";
-  const session = await requireAdminSession(cookieHeader);
-  if (!session) redirect("/login");
-
-  const result = await fetchSpfPeriodDetail(cookieHeader, periodId);
-
-  if (result.status === 401) redirect("/login");
-  if (result.status === 403) redirect("/forbidden");
-  if (result.status === 404) notFound();
-
-  if (!result.payload) {
-    return (
-      <ModuleUnavailableState
-        module="SPF · Periode"
-        title="Detail periode tidak tersedia"
-        message="Server tidak dapat diakses atau terjadi kesalahan saat memuat data."
-        backHref="/spf/periods"
-        backLabel="Kembali ke Daftar Periode"
-      />
-    );
-  }
-
-  // `editable` ditentukan dari status periode — backend tetap menjadi penjaga akhir.
-  // Status DRAFT dan REJECTED masih bisa diedit ADMIN.
-  const { period, items, media } = result.payload;
-  const editable =
-    session.role === "ADMIN" &&
-    (period.status === "DRAFT" || period.status === "REJECTED");
-
-  return (
-    <PeriodDetailShell
-      period={period}
-      items={items}
-      media={media}
-      role={session.role}
-      editable={editable}
-    />
-  );
+  redirect(`/spf/periods?period=${encodeURIComponent(periodId)}`);
 }

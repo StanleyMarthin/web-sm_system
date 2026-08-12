@@ -6,6 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { ActionButton, CompactInput, CompactSelect, CompactTextarea, FieldLabel } from "@/shared/ui/compact";
 import { Save, X } from "lucide-react";
+import { formatCountdownStatus } from "../../countdown-copy";
 
 const countdownFormSchema = z.object({
   countdownId: z.string().optional(),
@@ -102,14 +103,12 @@ export function CountdownBoardForm({ initialValues, editorMode, references, isSa
   });
   const selectedDivision = references.divisions.find((division) => division.value === selectedDivisionId);
   const selectedParentId = selectedDivision?.parentId ?? null;
-  const selectedParentCode = (selectedDivision?.parentCode ?? selectedDivision?.parentName ?? "").trim().toUpperCase();
-  const includeMechanicParent = selectedParentId !== null && selectedParentCode === "MECHANIC";
   const visibleJobTypes = useMemo(() => references.jobTypes.filter((jobType) => {
     if (!selectedDivisionId) return true;
     if (jobType.divisionId === null || jobType.divisionId === undefined) return true;
     if (String(jobType.divisionId) === selectedDivisionId) return true;
-    return includeMechanicParent && jobType.divisionId === selectedParentId;
-  }), [includeMechanicParent, references.jobTypes, selectedDivisionId, selectedParentId]);
+    return jobType.divisionId === selectedParentId;
+  }), [references.jobTypes, selectedDivisionId, selectedParentId]);
   const visiblePanels = useMemo(() => references.panels.filter((panel) => {
     const matchesUnit = !selectedCarId || !panel.carId || panel.carId === selectedCarId;
     const matchesSection = !selectedSectionName || panel.section === selectedSectionName;
@@ -133,11 +132,12 @@ export function CountdownBoardForm({ initialValues, editorMode, references, isSa
   }, [initialValues, reset]);
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+    <form onSubmit={handleSubmit(onSubmit)} className="border border-border bg-background">
+      <div className="space-y-5 p-4 sm:p-5">
       {/* ── Grup 1: Identitas Unit ── */}
       <div>
         <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-foreground/25">Identitas Unit</p>
-        <div className="grid gap-2 lg:grid-cols-5">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           <div>
             <FieldLabel required>Unit</FieldLabel>
             <CompactSelect {...register("carId")} value={selectedCarId}>
@@ -148,8 +148,8 @@ export function CountdownBoardForm({ initialValues, editorMode, references, isSa
           <div>
             <FieldLabel required>Tipe</FieldLabel>
             <CompactSelect {...register("taskCategory")} value={selectedTaskCategory}>
-              <option value="MAIN">Main</option>
-              <option value="ADDITIONAL">Additional</option>
+              <option value="MAIN">Utama</option>
+              <option value="ADDITIONAL">Tambahan</option>
             </CompactSelect>
           </div>
           <div>
@@ -180,21 +180,21 @@ export function CountdownBoardForm({ initialValues, editorMode, references, isSa
 
       {/* ── Grup 2: Detail Pekerjaan ── */}
       <div>
-        <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-foreground/25">Detail Job Description</p>
-        <div className="grid gap-2 lg:grid-cols-4">
+        <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-foreground/25">Detail Pekerjaan</p>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           <div>
             <FieldLabel required>Status</FieldLabel>
             {editorMode === "create" ? (
               <div className="flex h-[30px] items-center rounded-lg border border-success/20 bg-success/[0.06] px-2.5">
-                <span className="text-[11px] font-semibold tracking-wider text-success">PLAN</span>
+                <span className="text-[11px] font-semibold tracking-wider text-muted-foreground">{formatCountdownStatus("PLAN")}</span>
                 <input type="hidden" {...register("status")} value="PLAN" />
               </div>
             ) : (
               <CompactSelect {...register("status")} value={selectedStatus}>
-                <option value="PLAN">PLAN</option>
-                <option value="PROSES">PROSES</option>
-                <option value="QC_READY">QC_READY</option>
-                <option value="DONE">DONE</option>
+                <option value="PLAN">{formatCountdownStatus("PLAN")}</option>
+                <option value="PROSES">{formatCountdownStatus("PROSES")}</option>
+                <option value="QC_READY">{formatCountdownStatus("QC_READY")}</option>
+                <option value="DONE">{formatCountdownStatus("DONE")}</option>
               </CompactSelect>
             )}
           </div>
@@ -220,29 +220,29 @@ export function CountdownBoardForm({ initialValues, editorMode, references, isSa
 
       {/* ── Grup 3: Jadwal & Referensi ── */}
       <div>
-        <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-foreground/25">Jadwal &amp; Referensi</p>
-        <div className="grid gap-2 lg:grid-cols-4">
+        <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-foreground/25">Jadwal dan Referensi</p>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           <div>
             <FieldLabel required>Target Awal</FieldLabel>
             <CompactInput type="text" placeholder="000:00" {...register("targetHoursInitial")} />
           </div>
           <div>
-            <FieldLabel>Start Date</FieldLabel>
+            <FieldLabel>Tanggal Mulai</FieldLabel>
             <CompactInput type="date" {...register("startDate")} />
           </div>
           <div>
             <FieldLabel required>Deadline</FieldLabel>
             <CompactInput type="date" {...register("deadlineDate")} />
           </div>
-          <div className="lg:col-span-1">
+          <div>
             <FieldLabel>Catatan</FieldLabel>
             <CompactTextarea rows={2} {...register("note")} />
           </div>
         </div>
       </div>
 
-      {/* ── Footer ── */}
-      <div className="flex items-center justify-between gap-2 rounded-lg border border-white/[0.05] bg-white/[0.01] px-3 py-2">
+      </div>
+      <div className="flex items-center justify-between gap-2 border-t border-border bg-card px-4 py-3 sm:px-5">
         <p className="text-[11px] text-foreground/35">
           {editorMode === "edit" ? "Edit Jobdesc" : "Form baru"}
         </p>
@@ -250,7 +250,7 @@ export function CountdownBoardForm({ initialValues, editorMode, references, isSa
           <ActionButton onClick={onCancel} type="button" disabled={isSaving}><X className="h-3 w-3" />Batal</ActionButton>
           <ActionButton variant="success" type="submit" disabled={isSaving}>
             <Save className="h-3 w-3" />
-            {isSaving ? "Menyimpan..." : editorMode === "edit" ? "Update" : "Simpan"}
+            {isSaving ? "Menyimpan…" : editorMode === "edit" ? "Perbarui" : "Simpan"}
           </ActionButton>
         </div>
       </div>

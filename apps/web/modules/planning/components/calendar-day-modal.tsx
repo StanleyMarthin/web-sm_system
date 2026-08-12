@@ -47,7 +47,7 @@ function spkStatusBadge(status: string) {
     SUBMITTED: "bg-info/15 text-info dark:text-info",
     APPROVED: "bg-success/15 text-success dark:text-success",
     ACTIVE: "bg-primary/15 text-app-accent-ink dark:text-app-accent-ink",
-    DONE: "bg-muted text-muted-foreground dark:text-muted-foreground",
+    DONE: "bg-success/15 text-success dark:text-success",
     REJECTED: "bg-destructive/15 text-destructive dark:text-destructive",
   };
   return map[status] ?? "bg-muted0/15 text-muted-foreground";

@@ -4,7 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { CheckSquare, Square } from "lucide-react";
 import type { SpfPagination, SpfSource } from "@/shared/api/spf-contracts";
-import { mutateSpfCollect } from "@/shared/api/spf";
+import { mutateSpf, mutateSpfCollect } from "@/shared/api/spf";
 import { ActionButton, EmptyRow } from "@/shared/ui/compact";
 import { useSweetAlert } from "@/shared/ui/sweet-alert";
 import { SpfDataTable } from "./spf-data-table";
@@ -17,6 +17,7 @@ interface TechnicalJobdescSelectorProps {
   selectedIds?: readonly string[];
   onSelectionChange?: (ids: string[]) => void;
   readonly?: boolean;
+  periodId?: string;
 }
 
 function sourceKey(source: Pick<SpfSource, "source_type" | "source_id" | "id">) {
@@ -29,6 +30,7 @@ export function TechnicalJobdescSelector({
   selectedIds,
   onSelectionChange,
   readonly = false,
+  periodId,
 }: TechnicalJobdescSelectorProps) {
   const router = useRouter();
   const { alertElement, notifyError, notifySuccess } = useSweetAlert();
@@ -67,12 +69,14 @@ export function TechnicalJobdescSelector({
     if (effectiveSelectedIds.length === 0) return;
     startCollectTransition(async () => {
       const sourceIds = effectiveSelectedIds.map((key) => key.split(":").slice(1).join(":"));
-      const result = await mutateSpfCollect(sourceIds);
+      const result = periodId
+        ? await mutateSpf("period", { mode: "UPDATE", period_id: periodId, source_ids: sourceIds })
+        : await mutateSpfCollect(sourceIds);
       if (!result.success) {
-        notifyError("Gagal collect", result.message);
+        notifyError("Gagal menarik data", result.message);
         return;
       }
-      notifySuccess("Collect sukses", `${result.data.inserted ?? 0} item ditambahkan, ${result.data.ignored ?? 0} diabaikan.`);
+      notifySuccess("Data berhasil ditarik", periodId ? "Item terpilih sudah masuk ke periode." : "Item terpilih berhasil dikumpulkan.");
       setSelected([]);
       router.refresh();
     });
@@ -91,25 +95,25 @@ export function TechnicalJobdescSelector({
           className="inline-flex h-9 items-center gap-2 border border-border px-3 font-mono text-[12px] uppercase tracking-[0.08em] text-muted-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/[0.08]"
         >
           {allSelected ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
-          Pilih READY
+          Pilih Semua
         </button>
         <div className="flex items-center gap-2">
-          <span className="font-mono text-[11px] text-muted-foreground">{effectiveSelectedIds.length} source dipilih</span>
+          <span className="font-mono text-[11px] text-muted-foreground">{effectiveSelectedIds.length} sumber dipilih</span>
           {!onSelectionChange ? (
             <ActionButton variant="success" disabled={effectiveSelectedIds.length === 0 || isCollecting} onClick={handleCollectSubmit}>
-              {isCollecting ? "Collect..." : "Collect Source"}
+              {isCollecting ? "Menarik..." : "Tarik Data"}
             </ActionButton>
           ) : null}
         </div>
       </div>
 
       {sources.length === 0 ? (
-        <EmptyRow message="Tidak ada jobdesc teknis dari sistem untuk unit dan rentang tanggal ini." />
+        <EmptyRow message="Tidak ada pekerjaan teknis untuk unit dan rentang tanggal ini." />
       ) : (
         <SpfDataTable
           rows={sources}
           minWidth={1100}
-          emptyMessage="Tidak ada source SPF."
+          emptyMessage="Tidak ada sumber data."
           columns={[
             {
               key: "select",
@@ -123,7 +127,7 @@ export function TechnicalJobdescSelector({
                     type="button"
                     disabled={disabled}
                     onClick={() => toggle(source)}
-                    aria-label={`Pilih source ${source.source_id ?? source.id}`}
+                    aria-label={`Pilih sumber ${source.source_id ?? source.id}`}
                     className="inline-flex h-7 w-7 items-center justify-center text-muted-foreground disabled:cursor-not-allowed disabled:opacity-35"
                   >
                     {selectedSet.has(key) ? <CheckSquare className="h-4 w-4 text-success" /> : <Square className="h-4 w-4" />}
@@ -131,10 +135,10 @@ export function TechnicalJobdescSelector({
                 );
               },
             },
-            { key: "source", label: "Source", render: (source) => <SpfSourceBadge value={source.source_type} /> },
+            { key: "source", label: "Sumber", render: (source) => <SpfSourceBadge value={source.source_type} /> },
             {
               key: "jobdesc",
-              label: "Jobdesc",
+              label: "Pekerjaan",
               render: (source) => (
                 <div className="max-w-[360px]">
                   <p className="font-medium text-foreground">{source.customer_description || source.description}</p>
@@ -155,7 +159,7 @@ export function TechnicalJobdescSelector({
 
       {meta ? (
         <p className="font-mono text-[11px] text-muted-foreground">
-          {meta.total} total · offset {meta.offset} · limit {meta.limit}
+          {meta.total} total data
         </p>
       ) : null}
     </div>

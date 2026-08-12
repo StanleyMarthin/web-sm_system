@@ -32,6 +32,7 @@ import type {
   UpdateWarehouseStockCard,
   UpdateWarehouseStorageLocation,
 } from "@smsystem/contracts/warehouse";
+import { permissionCodes } from "@smsystem/permissions";
 import { getApiEnv } from "@/config/env";
 import type { AuditService } from "@/services/audit/audit.service";
 import { DefaultAuditService } from "@/services/audit/audit.service";
@@ -43,6 +44,10 @@ import {
 import { S3GalleryUploadTicketProvider } from "@/services/storage/r2-upload.service";
 import type { WebSession } from "@/services/auth/session.service";
 import { TtlCache } from "@/lib/ttl-cache";
+import {
+  notifyMobileEmployees,
+  resolveEmployeeIdsByPermission,
+} from "@/services/mobile-notification.service";
 import {
   createUploadNonce,
   extensionForImageContentType,
@@ -95,6 +100,25 @@ function sanitizePath(value: string): string {
     .replaceAll(/[^\w\- ]/gu, "_")
     .trim();
 }
+
+const warehouseNotification = (
+  employeeIds: string[],
+  title: string,
+  body: string,
+  data: Record<string, string>,
+) => notifyMobileEmployees(employeeIds, { title, body, data }, "sm_warehouse");
+
+const warehousePermissionNotification = async (
+  permission: string,
+  divisionId: number | undefined,
+  title: string,
+  body: string,
+  data: Record<string, string>,
+) => notifyMobileEmployees(
+  await resolveEmployeeIdsByPermission(permission, divisionId),
+  { title, body, data },
+  "sm_warehouse",
+);
 
 interface WarehouseListResult<T> {
   data: T[];
@@ -774,6 +798,30 @@ export class DefaultWarehouseService implements WarehouseService {
       newValue: resolvedInput,
     });
 
+    const notificationData = {
+      logId: result.transactionId,
+      approvalStatus: result.approvalStatus,
+      itemStatus: result.itemStatus,
+      module: "warehouse",
+    };
+    if (result.approvalStatus === "APPROVED") {
+      await warehousePermissionNotification(
+        permissionCodes.warehouseReady,
+        undefined,
+        "Permintaan Tools Baru",
+        `${resolvedRequesterName} meminta ${resolvedInput.itemName}. Tidak perlu approval dan langsung masuk antrean gudang untuk disiapkan.`,
+        notificationData,
+      );
+    } else {
+      await warehousePermissionNotification(
+        permissionCodes.warehouseApprove,
+        divisionId,
+        "Permintaan Gudang Baru",
+        `${resolvedRequesterName} mengajukan ${resolvedInput.itemName}. Menunggu persetujuan KD Divisi.`,
+        notificationData,
+      );
+    }
+
     return result;
   }
 
@@ -901,6 +949,37 @@ export class DefaultWarehouseService implements WarehouseService {
       newValue: result,
     });
 
+    const notificationData = {
+      logId: input.transactionId,
+      approvalStatus: nextStage,
+      module: "warehouse",
+    };
+    if (nextStage === "APPROVED") {
+      await warehouseNotification(
+        [detail.employeeId],
+        "Permintaan Gudang Disetujui",
+        `Permintaan ${detail.itemName} pada request ${input.transactionId} sudah disetujui dan diteruskan ke gudang untuk disiapkan.`,
+        notificationData,
+      );
+      if (detail.transactionType !== "PENYIMPANAN") {
+        await warehousePermissionNotification(
+          permissionCodes.warehouseReady,
+          undefined,
+          "Permintaan Gudang Disetujui",
+          `Permintaan ${detail.itemName} pada request ${input.transactionId} sudah disetujui dan diteruskan ke gudang untuk disiapkan.`,
+          notificationData,
+        );
+      }
+    } else {
+      await warehousePermissionNotification(
+        permissionCodes.warehouseApprove,
+        nextStage === "PENDING_KD" ? detail.divisionId ?? undefined : undefined,
+        "Permintaan Gudang Lanjut Proses",
+        `Permintaan ${detail.itemName} pada request ${input.transactionId} lanjut ke tahap ${nextStage === "PENDING_KEPALA_GUDANG" ? "Kepala Gudang" : "PPIC"}.`,
+        notificationData,
+      );
+    }
+
     return result;
   }
 
@@ -937,6 +1016,13 @@ export class DefaultWarehouseService implements WarehouseService {
       newValue: result,
     });
 
+    await warehouseNotification(
+      [detail.employeeId],
+      "Permintaan Gudang Ditolak",
+      `Permintaan ${detail.itemName} pada request ${input.transactionId} ditolak.`,
+      { logId: input.transactionId, approvalStatus: "REJECTED", module: "warehouse" },
+    );
+
     return result;
   }
 
@@ -970,6 +1056,13 @@ export class DefaultWarehouseService implements WarehouseService {
       },
       newValue: result,
     });
+
+    await warehouseNotification(
+      [detail.employeeId],
+      "Barang Siap Diambil",
+      `Barang ${detail.itemName} pada request ${input.transactionId} sudah siap diambil di gudang.`,
+      { logId: input.transactionId, itemStatus: "READY", module: "warehouse" },
+    );
 
     return result;
   }
@@ -1012,6 +1105,13 @@ export class DefaultWarehouseService implements WarehouseService {
       newValue: result,
     });
 
+    await warehouseNotification(
+      [detail.employeeId],
+      "Barang Sudah Diambil",
+      `Barang ${detail.itemName} pada request ${input.transactionId} sudah tercatat keluar dari gudang.`,
+      { logId: input.transactionId, itemStatus: "RELEASED", module: "warehouse" },
+    );
+
     return result;
   }
 
@@ -1051,6 +1151,13 @@ export class DefaultWarehouseService implements WarehouseService {
       newValue: result,
     });
 
+    await warehouseNotification(
+      [detail.employeeId],
+      "Barang Dikembalikan",
+      `Barang ${detail.itemName} pada request ${input.transactionId} sudah dikonfirmasi kembali ke gudang.`,
+      { logId: input.transactionId, itemStatus: "RETURNED", module: "warehouse" },
+    );
+
     return result;
   }
 
@@ -1088,6 +1195,13 @@ export class DefaultWarehouseService implements WarehouseService {
       },
       newValue: result,
     });
+
+    await warehouseNotification(
+      [detail.employeeId],
+      "Barang Disimpan",
+      `Barang ${detail.itemName} pada request ${input.transactionId} sudah disimpan kembali di gudang.`,
+      { logId: input.transactionId, itemStatus: "STORED", module: "warehouse" },
+    );
 
     return result;
   }

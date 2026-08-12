@@ -12,6 +12,7 @@
     "./job-plan": "./src/job-plan.ts",
     "./job-plan-schedule": "./src/job-plan-schedule.ts",
     "./monitoring": "./src/monitoring.ts",
+    "./notification": "./src/notification.ts",
     "./issue": "./src/issue.ts",
     "./qa": "./src/qa.ts",
     "./qc": "./src/qc.ts",

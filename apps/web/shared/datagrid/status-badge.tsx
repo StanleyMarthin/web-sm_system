@@ -8,6 +8,15 @@ interface StatusBadgeProps {
 export function DataGridStatusBadge({ value }: StatusBadgeProps) {
   const normalizedValue = String(value ?? "").toUpperCase();
   const label = humanizeCodeLabel(value);
+  const isMuted = [
+    "PLAN",
+    "DRAFT",
+    "PENDING_APPROVAL",
+    "NONE",
+    "BELUM",
+    "NOT_SET",
+    "",
+  ].includes(normalizedValue);
   const isSuccess = [
     "ACTIVE",
     "APPROVED",
@@ -25,6 +34,8 @@ export function DataGridStatusBadge({ value }: StatusBadgeProps) {
   const isDanger = [
     "INACTIVE",
     "REJECTED",
+    "PENDING",
+    "PENDING_REVIEW",
     "CANCELLED",
     "CANCEL",
     "BAD",
@@ -36,7 +47,9 @@ export function DataGridStatusBadge({ value }: StatusBadgeProps) {
     "OVERDUE",
   ].includes(normalizedValue);
   const className =
-    isSuccess
+    isMuted
+      ? "border-border bg-muted/40 text-muted-foreground dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-muted-foreground"
+      : isSuccess
       ? "border-success/25 bg-success/15 text-success dark:border-success/30 dark:bg-success/18 dark:text-success"
       : isDanger
         ? "border-destructive/25 bg-destructive/15 text-destructive dark:border-destructive/30 dark:bg-destructive/18 dark:text-destructive"

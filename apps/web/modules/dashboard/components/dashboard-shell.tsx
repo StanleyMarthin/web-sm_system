@@ -187,7 +187,7 @@ function isTechnicalDivisionName(name: string | null | undefined) {
 
   const excluded = new Set([
     "ACCOUNTING",
-    "ADVISOR",
+    "QA",
     "ADMIN",
     "AR",
     "CUSTOMERSERVICE",

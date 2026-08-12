@@ -2,10 +2,10 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import { Download, Eye, FileText, Images, ListChecks, ScrollText } from "lucide-react";
+import { Database, Download, Eye, FileText, Images, ListChecks, ScrollText } from "lucide-react";
 import { exportSpfPeriod } from "@/shared/api/spf";
-import type { SpfItem, SpfMedia, SpfPeriod } from "@/shared/api/spf-contracts";
-import type { SpfRole } from "@/shared/auth/admin-session";
+import type { SpfItem, SpfMedia, SpfPagination, SpfPeriod, SpfSource } from "@/shared/api/spf-contracts";
+import type { SpfCapabilities } from "@/shared/auth/admin-session";
 import { ActionButton, PageHeader, SectionCard } from "@/shared/ui/compact";
 import { useSweetAlert } from "@/shared/ui/sweet-alert";
 import { PeriodWorkflowBar } from "./period-workflow-actions";
@@ -14,6 +14,7 @@ import { DocumentationManager } from "./item-media";
 import { PortalPreview } from "./portal-preview";
 import { AuditTimeline } from "./audit-timeline";
 import { SpfStatusBadge } from "./spf-status-badge";
+import { TechnicalJobdescSelector } from "./source-collector";
 
 type TabKey = "summary" | "items" | "documentation" | "preview" | "audit";
 
@@ -21,8 +22,9 @@ interface PeriodDetailShellProps {
   period: Readonly<SpfPeriod>;
   items: readonly SpfItem[];
   media?: readonly SpfMedia[];
-  role: SpfRole;
-  editable: boolean;
+  permissions: SpfCapabilities;
+  sources?: readonly SpfSource[];
+  sourceMeta?: SpfPagination;
 }
 
 const TABS: Array<{ key: TabKey; label: string; icon: React.ReactNode }> = [
@@ -49,11 +51,13 @@ function downloadBlob(blob: Blob, filename: string) {
   URL.revokeObjectURL(url);
 }
 
-export function PeriodDetailShell({ period, items, media = [], role, editable }: PeriodDetailShellProps) {
+export function PeriodDetailShell({ period, items, media = [], permissions, sources = [], sourceMeta }: PeriodDetailShellProps) {
   const [activeTab, setActiveTab] = useState<TabKey>("summary");
+  const [showSourcePicker, setShowSourcePicker] = useState(false);
+  const [selectedDocumentationItemId, setSelectedDocumentationItemId] = useState<string | null>(null);
   const [isExporting, startExportTransition] = useTransition();
   const { alertElement, notifyError, notifySuccess } = useSweetAlert();
-  const isEditable = editable && role === "ADMIN" && (period.status === "DRAFT" || period.status === "REJECTED");
+  const isEditable = permissions.canAdmin && (period.status === "DRAFT" || period.status === "REJECTED");
   const includedItems = useMemo(
     () => items.filter((item) => item.spf_status === "INCLUDED").sort((a, b) => a.display_order - b.display_order),
     [items],
@@ -95,7 +99,7 @@ export function PeriodDetailShell({ period, items, media = [], role, editable }:
     <section aria-labelledby="period-detail-title" className="space-y-5">
       {alertElement}
       <nav aria-label="Breadcrumb" className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground">
-        <Link href="/spf/periods" className="hover:underline">Periode SPF</Link>
+        <Link href="/spf/periods" className="text-app-accent-ink hover:underline">← Periode SPF</Link>
         <span className="px-1">/</span>
         <span className="text-foreground">{period.id}</span>
       </nav>
@@ -110,12 +114,17 @@ export function PeriodDetailShell({ period, items, media = [], role, editable }:
               {isExporting ? "Export..." : "Export"}
             </ActionButton>
             {period.status === "APPROVED" ? (
-              <Link href={`/spf/periods/${period.id}?tab=preview`} className="inline-flex h-9 items-center gap-1.5 border border-border px-3 font-mono text-[12px] font-medium uppercase tracking-[0.08em] text-muted-foreground hover:bg-muted">
+              <Link href={`/spf/periods?period=${encodeURIComponent(period.id)}&tab=preview`} className="inline-flex h-9 items-center gap-1.5 border border-border px-3 font-mono text-[12px] font-medium uppercase tracking-[0.08em] text-muted-foreground hover:bg-muted">
                 <Eye className="h-3.5 w-3.5" />
                 Preview Web Client
               </Link>
             ) : null}
-            <PeriodWorkflowBar periodId={period.id} status={period.status} role={role} />
+            <PeriodWorkflowBar
+              periodId={period.id}
+              status={period.status}
+              permissions={permissions}
+              submitBlockedReason={includedItems.length === 0 ? "Pilih minimal satu item yang siap dipublikasikan." : undefined}
+            />
           </div>
         }
       />
@@ -123,7 +132,7 @@ export function PeriodDetailShell({ period, items, media = [], role, editable }:
       {!isEditable ? (
         <div className="border border-primary/20 bg-primary/5 p-3 dark:border-primary/15 dark:bg-primary/8">
           <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.08em] text-app-accent-ink">Mode Read-Only ({period.status.replaceAll("_", " ")})</p>
-          <p className="mt-1 text-[12px] text-muted-foreground">Perubahan isi laporan hanya tersedia saat status DRAFT atau REJECTED untuk Admin.</p>
+          <p className="mt-1 text-[12px] text-muted-foreground">Isi laporan dapat diubah kembali setelah periode berstatus Draft atau Ditolak.</p>
         </div>
       ) : null}
 
@@ -154,7 +163,7 @@ export function PeriodDetailShell({ period, items, media = [], role, editable }:
             </div>
             <div>
               <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground">Unit</p>
-              <p className="mt-1 font-mono text-[13px] font-semibold text-foreground">{period.car_id || "-"}</p>
+              <p className="mt-1 font-mono text-[13px] font-semibold text-foreground">{period.car_name || period.car_id || "-"}</p>
             </div>
             <div>
               <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground">Rentang</p>
@@ -179,13 +188,35 @@ export function PeriodDetailShell({ period, items, media = [], role, editable }:
 
       {activeTab === "items" ? (
         <SectionCard label="Isi Laporan" count={items.length}>
-          <CuratedItemEditor rows={items} meta={{ total: items.length, limit: Math.max(1, items.length), offset: 0, hasNextPage: false }} role={role} editable={isEditable} />
+          {isEditable ? (
+            <div className="mb-3 flex justify-end">
+              <ActionButton onClick={() => setShowSourcePicker((shown) => !shown)}>
+                <Database className="h-3.5 w-3.5" />
+                {showSourcePicker ? "Tutup Sumber Data" : "Tarik Data"}
+              </ActionButton>
+            </div>
+          ) : null}
+          {showSourcePicker ? (
+            <div className="mb-4 border border-primary/20 bg-primary/5 p-3">
+              <TechnicalJobdescSelector sources={sources} meta={sourceMeta} periodId={period.id} />
+            </div>
+          ) : null}
+          <CuratedItemEditor
+            rows={items}
+            meta={{ total: items.length, limit: Math.max(1, items.length), offset: 0, hasNextPage: false }}
+            canAdmin={permissions.canAdmin}
+            editable={isEditable}
+            onOpenDocumentation={(itemId) => {
+              setSelectedDocumentationItemId(itemId);
+              setActiveTab("documentation");
+            }}
+          />
         </SectionCard>
       ) : null}
 
       {activeTab === "documentation" ? (
         <div className="space-y-4">
-          {items.map((item) => (
+          {[...items].sort((a, b) => Number(b.id === selectedDocumentationItemId) - Number(a.id === selectedDocumentationItemId)).map((item) => (
             <SectionCard key={item.id} label={item.customer_description || item.id} count={(mediaByItem.get(item.id) ?? []).length}>
               <DocumentationManager itemId={item.id} media={mediaByItem.get(item.id) ?? []} editable={isEditable} />
             </SectionCard>

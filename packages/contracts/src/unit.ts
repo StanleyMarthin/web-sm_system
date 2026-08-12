@@ -63,6 +63,29 @@ export const unitBoardEnvelopeSchema = z.object({
   query: gridQueryStateSchema,
 });
 
+export const unitClientSchema = z.object({
+  name: z.string(),
+  unitCount: z.number().int().nonnegative(),
+});
+
+export const unitClientUnitSchema = z.object({
+  unitId: z.string(),
+  unitName: z.string(),
+  status: z.string(),
+});
+
+export const unitClientsEnvelopeSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+  data: z.object({
+    clients: z.array(unitClientSchema),
+    selectedClient: z.object({ name: z.string(), units: z.array(unitClientUnitSchema) }).nullable(),
+  }),
+});
+
+export type UnitClient = z.infer<typeof unitClientSchema>;
+export type UnitClientUnit = z.infer<typeof unitClientUnitSchema>;
+
 export const createUnitRequestSchema = z.object({
   unitId: z.string().trim().min(1).max(64),
   unitName: z.string().trim().min(1).max(255),

@@ -24,6 +24,10 @@ import { permissionCodes } from "@smsystem/permissions";
 import type { WebSession } from "@/services/auth/session.service";
 import { applyDefaultDivisionIdFilter } from "@/services/grid/division-default";
 import { TtlCache } from "@/lib/ttl-cache";
+import {
+  notifyMobileEmployees,
+  resolveEmployeeIdsByPermission,
+} from "@/services/mobile-notification.service";
 
 interface QcListResult {
   data: QcQueueRecord[];
@@ -169,10 +173,11 @@ export class DefaultQcService implements QcService {
       throw new Error("QC_NOT_FOUND");
     }
 
+    const qcLevel = deriveQcLevel(session);
     const result = await this.repository.passInspection(
       {
         actorId: session.user.employeeId,
-        qcLevel: deriveQcLevel(session),
+        qcLevel,
       },
       {
         coreId,
@@ -207,6 +212,20 @@ export class DefaultQcService implements QcService {
       newValue: result,
     });
 
+    try {
+      const employeeIds = await (this.repository.findAssignedEmployeeIds?.(coreId) ?? Promise.resolve([]));
+      const recipients = [...employeeIds, detail.item.reworkAssignedUserId].filter(
+        (employeeId): employeeId is string => Boolean(employeeId),
+      );
+      await notifyMobileEmployees(recipients, {
+        title: "QC Lolos",
+        body: `QC ${qcLevel.replace("QC_", "")} menyatakan ${detail.item.unitName} - ${detail.item.panelName ?? detail.item.jobName} lolos. Pekerjaan selesai.`,
+        data: { coreId, qcId: result.qcId, resultStatus: "LOLOS", qcLevel, module: "qc" },
+      }, "sm_job_qc");
+    } catch (error) {
+      console.error("[qc] notification error:", error);
+    }
+
     return result;
   }
 
@@ -220,10 +239,11 @@ export class DefaultQcService implements QcService {
       throw new Error("QC_NOT_FOUND");
     }
 
+    const qcLevel = deriveQcLevel(session);
     const result = await this.repository.rejectInspection(
       {
         actorId: session.user.employeeId,
-        qcLevel: deriveQcLevel(session),
+        qcLevel,
       },
       {
         coreId,
@@ -272,6 +292,23 @@ export class DefaultQcService implements QcService {
         issueId,
       },
     });
+
+    try {
+      const originalWorkers = await (this.repository.findAssignedEmployeeIds?.(coreId) ?? []);
+      const recipients = qcLevel === "QC_KD"
+        ? [input.reworkAssignedUser, ...originalWorkers]
+        : await resolveEmployeeIdsByPermission(
+          permissionCodes.qcSubmit,
+          detail.item.divisionId ?? undefined,
+        );
+      await notifyMobileEmployees(recipients, {
+        title: "QC Tidak Lolos",
+        body: `QC ${qcLevel.replace("QC_", "")} menyatakan ${detail.item.unitName} - ${detail.item.panelName ?? detail.item.jobName} tidak lolos dan perlu diperbaiki.`,
+        data: { coreId, qcId: result.qcId, resultStatus: "TIDAK_LOLOS", qcLevel, module: "qc" },
+      }, "sm_job_qc");
+    } catch (error) {
+      console.error("[qc] notification error:", error);
+    }
 
     return {
       ...result,

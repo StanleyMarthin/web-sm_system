@@ -536,7 +536,7 @@ export function RequestDetailDialog({
                 <tr>
                   <th style={thStyle}>ISSUED</th>
                   <th style={thStyle}>HEAD OF DIVISION</th>
-                  <th style={thStyle}>ADVISOR</th>
+                  <th style={thStyle}>QA</th>
                   <th style={thStyle}>KEPALA PROJECT</th>
                   <th style={thStyle}>PROJECT MANAGER</th>
                 </tr>
@@ -621,7 +621,7 @@ export function RequestDetailDialog({
               <thead>
                 <tr>
                   <th style={thStyle}>ISSUED</th>
-                  <th style={thStyle}>ADVISOR</th>
+                  <th style={thStyle}>QA</th>
                   <th style={thStyle}>KEPALA PROJECT</th>
                   <th style={thStyle}>PROJECT MANAGER</th>
                 </tr>
@@ -966,7 +966,7 @@ export function RequestDetailDialog({
                     }}
                     className="border border-success/30 bg-success/[0.04] text-success px-3 py-1.5 text-[14px] font-mono uppercase disabled:opacity-30"
                   >
-                    {canApproveWoPm ? "Approve PM" : canApproveWoKp ? "Approve KP" : canApproveWoAdvisor ? "Approve Advisor" : "Approve KD"}
+                    {canApproveWoPm ? "Approve PM" : canApproveWoKp ? "Approve KP" : canApproveWoAdvisor ? "Approve QA" : "Approve KD"}
                   </button>
                 )}
 

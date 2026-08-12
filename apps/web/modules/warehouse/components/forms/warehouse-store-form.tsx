@@ -6,6 +6,7 @@ import { z } from "zod";
 import { MapPinned, Loader2 } from "lucide-react";
 import type { WarehouseStorageLocationRecord } from "@smsystem/contracts/warehouse";
 import { useEffect } from "react";
+import { ActionButton, CompactInput, CompactSelect, CompactTextarea, FieldLabel } from "@/shared/ui/compact";
 
 const storeSchema = z.object({
   storageLocationId: z.string().min(1, "Lokasi wajib dipilih"),
@@ -62,61 +63,47 @@ export function WarehouseStoreForm({ initialValues, locations, isPending, onSubm
     }
   }, [selectedLocationId, locations, setValue]);
 
-  const inputCls =
-    "h-9 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-2.5 text-[12px] text-foreground outline-none transition-colors focus:border-primary/30 [color-scheme:dark]";
-
-  const darkSelectStyle = {
-    backgroundColor: "var(--card)",
-    color: "var(--card-foreground)",
-  } as const;
-
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-3 md:grid-cols-2">
         <label className="grid gap-2 text-sm text-foreground/75">
-          <span>Lokasi</span>
-          <select
+          <FieldLabel required>Lokasi</FieldLabel><CompactSelect
             {...register("storageLocationId")}
-            className={inputCls}
-            style={darkSelectStyle}
+            value={selectedLocationId}
           >
-            <option value="" style={darkSelectStyle}>Pilih lokasi</option>
+            <option value="">Pilih lokasi</option>
             {locations.map((location) => (
               <option
                 key={location.storageLocationId}
                 value={String(location.storageLocationId)}
-                style={darkSelectStyle}
               >
                 {location.label}
               </option>
             ))}
-          </select>
+          </CompactSelect>
           {errors.storageLocationId && <span className="text-xs text-destructive">{errors.storageLocationId.message}</span>}
         </label>
         
         <label className="grid gap-2 text-sm text-foreground/75">
-          <span>Detail lokasi</span>
-          <input {...register("locationDetail")} className={inputCls} />
+          <FieldLabel>Detail lokasi</FieldLabel><CompactInput {...register("locationDetail")} />
         </label>
         
         <label className="grid gap-2 text-sm text-foreground/75 md:col-span-2">
-          <span>Catatan</span>
-          <textarea
+          <FieldLabel>Catatan</FieldLabel><CompactTextarea
             {...register("notes")}
-            className="min-h-24 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-sm text-foreground outline-none focus:border-primary/30"
+            rows={3}
           />
         </label>
       </div>
       
       <div className="mt-5 flex justify-end">
-        <button
+        <ActionButton variant="success"
           type="submit"
           disabled={isPending || !isValid}
-          className="inline-flex items-center gap-2 rounded-full bg-primary px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-primary-foreground disabled:opacity-50"
         >
           {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <MapPinned className="h-3.5 w-3.5" />}
           {isPending ? "Menyimpan..." : "Konfirmasi tersimpan"}
-        </button>
+        </ActionButton>
       </div>
     </form>
   );

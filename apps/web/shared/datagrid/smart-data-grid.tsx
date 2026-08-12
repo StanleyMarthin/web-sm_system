@@ -42,6 +42,7 @@ interface SmartDataGridProps {
     meta?: string | null;
   } | null;
   filters?: SmartDataGridFilterDefinition[];
+  headerFilterFields?: string[];
   sortOptions?: SmartDataGridSortOption[];
   savedViews?: SmartDataGridSavedView[];
   exportHref?: string;
@@ -169,7 +170,7 @@ export function SmartDataGrid({
   searchMinLength = 0,
   searchSuggestionFields = [],
   searchSuggestionFormatter,
-  filters = [], sortOptions = [], savedViews = [],
+  filters = [], headerFilterFields = [], sortOptions = [], savedViews = [],
   exportHref, bulkInsert, onBulkSubmit,
   isBulkSubmitting = false, bulkSubmitLabel = "Simpan Bulk",
   emptyMessage = "Belum ada data untuk query saat ini.",
@@ -186,7 +187,6 @@ export function SmartDataGrid({
   showControls = true,
 }: SmartDataGridProps) {
   const gridState = useDataGridState(state);
-  void filters;
   void sortOptions;
   const [bulkModeOpen, setBulkModeOpen] = useState(false);
   const [bulkInput, setBulkInput] = useState("");
@@ -278,6 +278,20 @@ export function SmartDataGrid({
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
           {headerActions}
+          {headerFilterFields.map((field) => {
+            const filter = filters.find((item) => item.field === field);
+            if (!filter) return null;
+            return (
+              <div key={filter.field} className="min-w-36">
+                <SearchableSelect
+                  value={state.filters.find((item) => item.field === filter.field)?.value ?? ""}
+                  onChange={(value) => gridState.setFilter(filter.field, value)}
+                  options={filter.options}
+                  placeholder={filter.label}
+                />
+              </div>
+            );
+          })}
           {savedViews.map((view) => (
             <button key={view.id} type="button"
               onClick={() => gridState.applySavedView(view)}

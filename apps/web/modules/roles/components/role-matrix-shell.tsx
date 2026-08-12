@@ -104,7 +104,7 @@ const approvalBlueprints: ApprovalBlueprint[] = [
   },
   {
     key: "advisor",
-    label: "Advisor",
+    label: "QA",
     roleLevel: "220",
     approvalRank: "2",
     note: "Pengawas teknis dan validasi lintas pekerjaan divisi.",
@@ -1220,7 +1220,7 @@ export function RoleMatrixShell({
               }
               disabled={!canEditProfile || isReservedSuperAdmin}
               className="h-8 w-full border border-border dark:border-white/10 bg-muted dark:bg-background px-2 text-[11px] font-mono text-foreground dark:text-foreground outline-none focus:border-primary/40 disabled:cursor-not-allowed disabled:opacity-70"
-              placeholder="Contoh: advisor upholstery, admin gudang bahan"
+              placeholder="Contoh: QA upholstery, admin gudang bahan"
             />
           </label>
 

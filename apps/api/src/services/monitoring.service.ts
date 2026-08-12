@@ -18,6 +18,7 @@ import {
 import type { WebSession } from "@/services/auth/session.service";
 import { applyDefaultDivisionIdFilter } from "@/services/grid/division-default";
 import { TtlCache } from "@/lib/ttl-cache";
+import { notifyMobileEmployees } from "@/services/mobile-notification.service";
 
 interface MonitoringGridResult {
   data: MonitoringTaskRecord[];
@@ -282,6 +283,17 @@ export class DefaultMonitoringService implements MonitoringService {
       input,
     );
     monitoringReferenceCache.delete(monitoringScopeCacheKey(session));
+    await notifyMobileEmployees([input.employeeId], {
+      title: "Update Task",
+      body: `${session.user.fullName} memperbarui task ${input.jobDescription} menjadi ${input.taskStatus}.`,
+      data: {
+        module: "task",
+        taskId: result.planId,
+        plandailyId: result.planId,
+        actualId: result.actualId,
+        status: input.taskStatus,
+      },
+    }, "sm_tasks");
     return result;
   }
 

@@ -721,7 +721,7 @@ export class MySqlWoRepository implements WoRepository {
       { value: "OPEN", label: "Open" },
       { value: "SUBMITTED", label: "Submitted" },
       { value: "PENDING_TARGET_KD_APPROVAL", label: "Menunggu KD Penerima" },
-      { value: "PENDING_ADVISOR_APPROVAL", label: "Menunggu Advisor" },
+      { value: "PENDING_ADVISOR_APPROVAL", label: "Menunggu QA" },
       { value: "PENDING_KP_APPROVAL", label: "Menunggu KP" },
       { value: "PENDING_PM_APPROVAL", label: "Menunggu PM" },
       { value: "APPROVED", label: "Approved" },

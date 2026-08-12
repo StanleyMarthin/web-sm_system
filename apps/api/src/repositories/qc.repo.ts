@@ -108,6 +108,7 @@ export interface QcRepository {
     qcLevels: Array<{ label: string; value: string }>;
   }>;
   findByCoreId(params: ScopeParams & { coreId: string }): Promise<QcQueueRecord | null>;
+  findAssignedEmployeeIds?(coreId: string): Promise<string[]>;
   passInspection(
     context: { actorId: string; qcLevel: string },
     input: { coreId: string; payload: QcPassRequest },
@@ -420,6 +421,16 @@ function baseQcSelectSql(issueStorageReady: boolean): string {
 
 export class MySqlQcRepository implements QcRepository {
   constructor(private readonly poolFactory: () => Pool = getMySqlPool) {}
+
+  async findAssignedEmployeeIds(coreId: string): Promise<string[]> {
+    const [rows] = await this.poolFactory().query<RowDataPacket[]>(
+      `SELECT DISTINCT assigned_user_id AS employeeId
+       FROM sm_jobdesc_plan
+       WHERE core_id = ? AND assigned_user_id IS NOT NULL`,
+      [coreId],
+    );
+    return rows.map((row) => String(row.employeeId)).filter(Boolean);
+  }
 
   async listQueue(params: QcListParams): Promise<QcListPayload> {
     return this.listByMode(params, {

@@ -35,7 +35,7 @@ export function DocumentationManager({ itemId, media, editable }: DocumentationM
     const file = files?.[0];
     if (!file) return;
     if (!ALLOWED_MIME_TYPES.includes(file.type)) {
-      setUploadError(`Tipe file tidak didukung (${file.type || "unknown"}).`);
+      setUploadError(`Tipe file tidak didukung (${file.type || "tidak dikenal"}).`);
       return;
     }
 
@@ -64,7 +64,7 @@ export function DocumentationManager({ itemId, media, editable }: DocumentationM
         if (result.status === 409) router.refresh();
         return;
       }
-      notifySuccess("Tersimpan", mode === "DELETE_MEDIA" ? "Media manual dihapus." : "Visibility media diperbarui.");
+      notifySuccess("Tersimpan", mode === "DELETE_MEDIA" ? "Media manual dihapus." : "Tampilan media diperbarui.");
       router.refresh();
     });
   }
@@ -86,7 +86,7 @@ export function DocumentationManager({ itemId, media, editable }: DocumentationM
             <Upload className="h-3.5 w-3.5" />
             Upload Manual
           </ActionButton>
-          <span className="text-[12px] text-muted-foreground">JPG, PNG, WEBP, MP4. Upload memakai base64 JSON melalui endpoint item.</span>
+          <span className="text-[12px] text-muted-foreground">JPG, PNG, WEBP, MP4.</span>
         </div>
       ) : null}
 
@@ -116,7 +116,7 @@ export function DocumentationManager({ itemId, media, editable }: DocumentationM
                 <figcaption className="mt-2 space-y-2">
                   <div className="flex items-center justify-between gap-2">
                     <SpfSourceBadge value={item.source_type} />
-                    {item.hidden ? <span className="font-mono text-[11px] text-muted-foreground">Hidden</span> : null}
+                    {item.hidden ? <span className="font-mono text-[11px] text-muted-foreground">Disembunyikan</span> : null}
                   </div>
                   <a href={item.url} target="_blank" rel="noopener noreferrer" className="block truncate text-[12px] text-app-accent-ink hover:underline">
                     {item.filename}

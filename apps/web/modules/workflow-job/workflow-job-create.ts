@@ -106,12 +106,10 @@ export function visibleWorkflowJobTypes(
   if (!selectedDivisionId) return references.jobTypes;
   const selectedDivisionOption = references.divisions.find((division) => division.value === selectedDivisionId);
   const selectedParentId = selectedDivisionOption?.parentId ?? null;
-  const selectedParentCode = (selectedDivisionOption?.parentCode ?? selectedDivisionOption?.parentName ?? "").trim().toUpperCase();
-  const includeMechanicParent = selectedParentId !== null && selectedParentCode === "MECHANIC";
   return references.jobTypes.filter((jobType) => {
     if (jobType.divisionId === null || jobType.divisionId === undefined) return true;
     if (String(jobType.divisionId) === selectedDivisionId) return true;
-    return includeMechanicParent && jobType.divisionId === selectedParentId;
+    return jobType.divisionId === selectedParentId;
   });
 }
 

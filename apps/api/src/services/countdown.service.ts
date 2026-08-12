@@ -3,6 +3,8 @@ import type {
   CountdownCreateRequest,
   CountdownDetail,
   CountdownImportResult,
+  CountdownRevisionDecision,
+  CountdownRevisionRequest,
   CountdownTemplateRow,
   CountdownUpdateRequest,
 } from "@smsystem/contracts/countdown";
@@ -10,10 +12,18 @@ import { permissionCodes } from "@smsystem/permissions";
 import ExcelJS from "exceljs";
 import type { WebSession } from "@/services/auth/session.service";
 import { buildGridMeta } from "@/services/grid/paginate";
-import { CountdownRepository } from "@/repositories/countdown.repo";
+import {
+  CountdownRepository,
+  type CountdownDownloadQuery,
+  type CountdownRevisionResult,
+} from "@/repositories/countdown.repo";
 import { sanitizeCountdownGridQuery } from "@/services/countdown/query";
 import { applyDefaultDivisionIdFilter } from "@/services/grid/division-default";
 import { TtlCache } from "@/lib/ttl-cache";
+import {
+  notifyMobileEmployees,
+  resolveEmployeeIdsByPermission,
+} from "@/services/mobile-notification.service";
 import {
   addRowsWorksheet,
   readFirstWorksheetRows,
@@ -51,9 +61,15 @@ export interface CountdownListResult {
   query: ReturnType<typeof sanitizeCountdownGridQuery>;
 }
 
+export type CountdownDetailWithFlags = CountdownDetail & {
+  canRequestRevision: boolean;
+  canApproveRevision: boolean;
+  canApproveMoRevision: boolean;
+};
+
 export interface CountdownService {
   list(session: WebSession, query: GridQueryState): Promise<CountdownListResult>;
-  detail(session: WebSession, countdownId: string): Promise<CountdownDetail | null>;
+  detail(session: WebSession, countdownId: string): Promise<CountdownDetailWithFlags | null>;
   create(session: WebSession, input: CountdownCreateRequest): Promise<CountdownDetail>;
   update(
     session: WebSession,
@@ -61,11 +77,39 @@ export interface CountdownService {
     input: CountdownUpdateRequest,
   ): Promise<CountdownDetail | null>;
   remove(session: WebSession, countdownId: string): Promise<boolean>;
+  requestRevision(session: WebSession, countdownId: string, input: CountdownRevisionRequest): Promise<CountdownRevisionResult>;
+  decideRevision(session: WebSession, countdownId: string, input: CountdownRevisionDecision): Promise<CountdownRevisionResult>;
+  download(session: WebSession, query: CountdownDownloadQuery): Promise<Uint8Array>;
   buildTemplateWorkbook(): Promise<Uint8Array>;
-  importWorkbook(session: WebSession, fileName: string, buffer: Uint8Array): Promise<CountdownImportResult>;
+  importWorkbook(
+    session: WebSession,
+    fileName: string,
+    buffer: Uint8Array,
+    expectedUnitId: string,
+  ): Promise<CountdownImportResult>;
 }
 
 const COUNTDOWN_REFERENCE_CACHE_TTL_MS = 60_000;
+
+const downloadColumns = [
+  ["unitName", "Nama Unit"],
+  ["customerName", "Nama Customer"],
+  ["divisionName", "Divisi"],
+  ["panelName", "Panel"],
+  ["sectionName", "Section"],
+  ["taskCategory", "Kategori Pekerjaan"],
+  ["jobTypeName", "Job Type"],
+  ["targetHoursInitial", "Target Jam Awal"],
+  ["targetHoursRevised", "Target Jam Revisi"],
+  ["totalActualHours", "Jam Aktual"],
+  ["remainingHours", "Sisa Jam"],
+  ["actualProgressPercent", "Progress (%)"],
+  ["status", "Status"],
+  ["startDate", "Tanggal Mulai"],
+  ["deadlineDate", "Deadline"],
+  ["temuanAwal", "Temuan Awal"],
+  ["keterangan", "Keterangan"],
+] as const;
 const countdownReferenceCache = new TtlCache<
   Awaited<ReturnType<CountdownRepository["listFilterReferences"]>>
 >(COUNTDOWN_REFERENCE_CACHE_TTL_MS);
@@ -82,6 +126,54 @@ function canManageCountdown(session: WebSession): boolean {
     session.user.scope.canViewAllUnits &&
     session.user.permissions.includes(permissionCodes.updatePlan)
   );
+}
+
+function canRequestRevision(session: WebSession): boolean {
+  return session.user.permissions.includes(permissionCodes.countdownRequestRevision);
+}
+
+function canApproveRevision(session: WebSession, isAssignedKp: boolean): boolean {
+  return session.user.permissions.includes(permissionCodes.countdownSubmitApproval) &&
+    (session.user.scope.canViewAllUnits || isAssignedKp);
+}
+
+function canApproveMoRevision(session: WebSession): boolean {
+  return session.user.scope.canViewAllUnits &&
+    session.user.permissions.includes(permissionCodes.countdownSubmitApproval);
+}
+
+async function notifyCountdownPlanners(
+  detail: Pick<CountdownDetail, "countdownId" | "carId" | "divisionId" | "unitName" | "panelName" | "sectionName"> & { status: string },
+  title: string,
+  body: string,
+): Promise<void> {
+  await notifyCountdownBestEffort(detail.countdownId, async () => {
+    const recipients = await resolveEmployeeIdsByPermission(
+      permissionCodes.updatePlan,
+      detail.divisionId ?? undefined,
+    );
+    await notifyMobileEmployees(recipients, {
+      title,
+      body,
+      data: {
+        module: "countdown",
+        countdownId: detail.countdownId,
+        carId: detail.carId,
+        status: detail.status,
+      },
+    }, "sm_countdown");
+  });
+}
+
+async function notifyCountdownBestEffort(
+  context: string,
+  send: () => Promise<void>,
+): Promise<void> {
+  try {
+    await send();
+  } catch (error) {
+    console.error("Countdown notification failed", { context, error });
+  }
 }
 
 function normalizeHeader(value: string): string {
@@ -331,12 +423,93 @@ export class DefaultCountdownService implements CountdownService {
     };
   }
 
-  async detail(session: WebSession, countdownId: string): Promise<CountdownDetail | null> {
-    return this.repository.findCountdownDetail({
+  async detail(session: WebSession, countdownId: string): Promise<CountdownDetailWithFlags | null> {
+    const detail = await this.repository.findCountdownDetail({
       employeeId: session.user.employeeId,
       scope: session.user.scope,
       countdownId,
     });
+    if (!detail) return null;
+    const isAssignedKp = session.user.scope.canViewAllUnits ||
+      await this.repository.isCountdownKp(countdownId, session.user.employeeId);
+    return {
+      ...detail,
+      canRequestRevision: canRequestRevision(session) &&
+        (detail.status === "PLAN" || detail.status === "PROSES") &&
+        detail.extensionRequestStatus !== "REQUESTED" &&
+        detail.extensionRequestStatus !== "MO_REVIEW",
+      canApproveRevision: canApproveRevision(session, isAssignedKp) && detail.extensionRequestStatus === "REQUESTED",
+      canApproveMoRevision: canApproveMoRevision(session) && detail.extensionRequestStatus === "MO_REVIEW",
+    };
+  }
+
+  async requestRevision(
+    session: WebSession,
+    countdownId: string,
+    input: CountdownRevisionRequest,
+  ): Promise<CountdownRevisionResult> {
+    if (!canRequestRevision(session)) throw new Error("COUNTDOWN_REVISION_FORBIDDEN");
+    const result = await this.repository.requestCountdownRevision({
+      employeeId: session.user.employeeId,
+      scope: session.user.scope,
+      countdownId,
+      input,
+    });
+    await notifyCountdownBestEffort(`revision-request:${countdownId}`, async () =>
+      notifyMobileEmployees(
+        await resolveEmployeeIdsByPermission(permissionCodes.countdownSubmitApproval, result.divisionId),
+        {
+          title: "Pengajuan Revisi Countdown",
+          body: `Countdown ${countdownId} mengajukan perubahan jam kerja atau deadline.`,
+          data: { module: "countdown", countdownId, carId: result.carId, status: result.status },
+        },
+        "sm_countdown",
+      ),
+    );
+    return result;
+  }
+
+  async decideRevision(
+    session: WebSession,
+    countdownId: string,
+    input: CountdownRevisionDecision,
+  ): Promise<CountdownRevisionResult> {
+    const existing = await this.repository.findCountdownDetail({
+      employeeId: session.user.employeeId,
+      scope: session.user.scope,
+      countdownId,
+    });
+    if (!existing) throw new Error("COUNTDOWN_NOT_FOUND");
+    const isMo = existing.extensionRequestStatus === "MO_REVIEW";
+    const isAssignedKp = session.user.scope.canViewAllUnits ||
+      await this.repository.isCountdownKp(countdownId, session.user.employeeId);
+    if (isMo ? !canApproveMoRevision(session) : !canApproveRevision(session, isAssignedKp)) {
+      throw new Error("COUNTDOWN_REVISION_FORBIDDEN");
+    }
+    const result = await this.repository.decideCountdownRevision({
+      employeeId: session.user.employeeId,
+      scope: session.user.scope,
+      countdownId,
+      input,
+      isMo,
+    });
+    await notifyCountdownBestEffort(`revision-decision:${countdownId}:${result.status}`, async () =>
+      notifyMobileEmployees(
+        await resolveEmployeeIdsByPermission(
+          result.status === "MO_REVIEW"
+            ? permissionCodes.countdownSubmitApproval
+            : permissionCodes.countdownRequestRevision,
+          result.status === "MO_REVIEW" ? undefined : result.divisionId,
+        ),
+        {
+          title: result.status === "MO_REVIEW" ? "Revisi Menunggu Persetujuan MO" : "Revisi Countdown Diproses",
+          body: `Pengajuan revisi countdown ${countdownId} berstatus ${result.status}.`,
+          data: { module: "countdown", countdownId, carId: result.carId, status: result.status },
+        },
+        "sm_countdown",
+      ),
+    );
+    return result;
   }
 
   async create(session: WebSession, input: CountdownCreateRequest): Promise<CountdownDetail> {
@@ -348,6 +521,11 @@ export class DefaultCountdownService implements CountdownService {
       input,
     );
     countdownReferenceCache.delete(countdownScopeCacheKey(session));
+    await notifyCountdownPlanners(
+      detail,
+      "Countdown Baru",
+      `${detail.unitName} - ${detail.panelName ?? detail.sectionName ?? "pekerjaan"} dibuat oleh ${session.user.fullName}.`,
+    );
     return detail;
   }
 
@@ -401,10 +579,22 @@ export class DefaultCountdownService implements CountdownService {
       mergedInput,
     );
     countdownReferenceCache.delete(countdownScopeCacheKey(session));
+    if (detail) {
+      await notifyCountdownPlanners(
+        detail,
+        "Countdown Diperbarui",
+        `${detail.unitName} - ${detail.panelName ?? detail.sectionName ?? "pekerjaan"} diperbarui oleh ${session.user.fullName}.`,
+      );
+    }
     return detail;
   }
 
   async remove(session: WebSession, countdownId: string): Promise<boolean> {
+    const existing = await this.repository.findCountdownDetail({
+      employeeId: session.user.employeeId,
+      scope: session.user.scope,
+      countdownId,
+    });
     const removed = await this.repository.deleteCountdown(
       {
         employeeId: session.user.employeeId,
@@ -414,8 +604,34 @@ export class DefaultCountdownService implements CountdownService {
     );
     if (removed) {
       countdownReferenceCache.delete(countdownScopeCacheKey(session));
+      if (existing) {
+        await notifyCountdownPlanners(
+          { ...existing, status: "DELETED" },
+          "Countdown Dihapus",
+          `${existing.unitName} - ${existing.panelName ?? existing.sectionName ?? "pekerjaan"} dihapus oleh ${session.user.fullName}.`,
+        );
+      }
     }
     return removed;
+  }
+
+  async download(session: WebSession, query: CountdownDownloadQuery): Promise<Uint8Array> {
+    const rows = await this.repository.findCountdownDownload({
+      employeeId: session.user.employeeId,
+      scope: session.user.scope,
+      query,
+    });
+    const workbook = new ExcelJS.Workbook();
+    addRowsWorksheet(
+      workbook,
+      "Countdown",
+      [
+        downloadColumns.map(([, header]) => header),
+        ...rows.map((row) => downloadColumns.map(([field]) => row[field] ?? "")),
+      ],
+      downloadColumns.map(([, header]) => Math.max(14, header.length + 4)),
+    );
+    return writeWorkbookBuffer(workbook);
   }
 
   async buildTemplateWorkbook(): Promise<Uint8Array> {
@@ -445,8 +661,14 @@ export class DefaultCountdownService implements CountdownService {
     session: WebSession,
     _fileName: string,
     buffer: Uint8Array,
+    expectedUnitId: string,
   ): Promise<CountdownImportResult> {
-    const sourceRows = await readFirstWorksheetRows(buffer);
+    let sourceRows: Awaited<ReturnType<typeof readFirstWorksheetRows>>;
+    try {
+      sourceRows = await readFirstWorksheetRows(buffer);
+    } catch {
+      throw new Error("COUNTDOWN_IMPORT_FILE_INVALID");
+    }
     if (!sourceRows) {
       return {
         inserted: 0,
@@ -480,12 +702,47 @@ export class DefaultCountdownService implements CountdownService {
       };
     }
 
-    return this.repository.createCountdownImports(
+    const unitIssues = rows
+      .filter((row) => row.carId !== expectedUnitId)
+      .map((row) => ({
+        rowNumber: row.rowNumber,
+        field: "carId",
+        message: "Unit pada file tidak sesuai; seluruh import dibatalkan.",
+        value: row.carId,
+      }));
+    if (unitIssues.length > 0) {
+      return {
+        inserted: 0,
+        updated: 0,
+        rejected: rows.length,
+        issues: unitIssues,
+      };
+    }
+
+    const result = await this.repository.createCountdownImports(
       {
         employeeId: session.user.employeeId,
         scope: session.user.scope,
       },
       rows,
     );
+    if (result.inserted + result.updated > 0) {
+      await Promise.all(
+        [...new Set(rows.map((row) => Number(row.divisionId)))].map((divisionId) =>
+          notifyCountdownBestEffort(`import:${rows[0]?.carId ?? "unknown"}:${divisionId}`, async () =>
+            notifyMobileEmployees(
+              await resolveEmployeeIdsByPermission(permissionCodes.updatePlan, divisionId),
+              {
+                title: "Import Countdown",
+                body: `${session.user.fullName} mengimport ${result.inserted} countdown baru dan memperbarui ${result.updated} countdown.`,
+                data: { module: "countdown", carId: rows[0]?.carId ?? "", status: "IMPORTED" },
+              },
+              "sm_countdown",
+            ),
+          ),
+        ),
+      );
+    }
+    return result;
   }
 }

@@ -12,7 +12,7 @@ const SourceCollectorShell = dynamic(
     import("@/modules/spf/components/source-collector-shell").then(
       (m) => m.SourceCollectorShell,
     ),
-  { loading: () => <PageDataSkeleton title="Memuat source SMS" /> },
+  { loading: () => <PageDataSkeleton title="Memuat sumber data" /> },
 );
 
 // ─── Query parser ─────────────────────────────────────────────────────────────
@@ -48,7 +48,7 @@ export default async function SourcesPage({ searchParams }: Props) {
   if (!session) redirect("/login");
 
   // Sources hanya bisa dilihat ADMIN — bukan sekadar menyembunyikan tombol.
-  if (session.role !== "ADMIN") redirect("/forbidden");
+  if (!session.canAdmin) redirect("/forbidden");
 
   const query = parseSourceQuery(await searchParams);
   const result = await fetchSpfSources(cookieHeader, query);
@@ -59,8 +59,8 @@ export default async function SourcesPage({ searchParams }: Props) {
   if (!result.payload) {
     return (
       <ModuleUnavailableState
-        module="SPF · Source"
-        title="Data source SMS tidak tersedia"
+        module="SPF · Sumber"
+        title="Data sumber tidak tersedia"
         message="Server tidak dapat dijangkau atau terjadi kesalahan. Coba muat ulang halaman."
         backHref="/spf/items"
         backLabel="Ke Daftar Item"

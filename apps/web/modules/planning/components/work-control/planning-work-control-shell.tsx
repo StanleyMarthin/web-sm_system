@@ -14,7 +14,7 @@ import { LabourControlPanel } from "./labour-control-panel";
 import { PlanningStepHeader } from "./planning-step-header";
 import { ReviewReleaseStep } from "./review-release-step";
 import { ServiceIntakePage } from "./service-intake-page";
-import { TargetWorkStep } from "./target-work-step";
+import { buildAutoPlanEntries, isTargetEntryComplete, TargetWorkStep } from "./target-work-step";
 import { UnitPriorityStep } from "./unit-priority-step";
 import { UnitProgressStep } from "./unit-progress-step";
 import { applyWarrantyImpact, buildAssessmentCase, buildDeliveryPrediction, buildRecalculationLog, buildSpkSplDecision, computeReadyBlockedHours, type AssessmentOverrideState, type ReadyBlockedHours } from "@/modules/planning/helpers/adaptive-planner";
@@ -29,12 +29,6 @@ import type { UnitProgressData } from "./unit-progress-step";
 
 type WizardStep = 1 | 2 | 3 | 4 | 5;
 type AdaptiveView = "dashboard" | "assessment" | "planner" | "service";
-
-interface PlanningSummaryCardItem {
-  label: string;
-  value: string | number;
-  tone?: "warn" | "ok" | "danger" | "muted";
-}
 
 interface PlanningWorkControlShellProps {
   weekStartDate: string;
@@ -54,32 +48,6 @@ interface PlanningWorkControlShellProps {
   isLoadingUnits?: boolean;
   isLoadingProgress?: boolean;
   isSnapshoting?: boolean;
-}
-
-function SummaryCards({ items }: { items: PlanningSummaryCardItem[] }) {
-  return (
-    <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-      {items.map((item) => {
-        const textColor =
-          item.tone === "ok"
-            ? "text-success"
-            : item.tone === "warn"
-              ? "text-app-accent-ink"
-              : item.tone === "danger"
-                ? "text-destructive"
-                : item.tone === "muted"
-                  ? "text-muted-foreground"
-                  : "text-foreground";
-
-        return (
-          <div key={item.label} className="border border-border bg-card px-4 py-3">
-            <p className="font-mono text-[15px] uppercase tracking-[0.12em] text-muted-foreground">{item.label}</p>
-            <p className={`mt-1 font-mono text-[20px] font-semibold tabular-nums ${textColor}`}>{item.value}</p>
-          </div>
-        );
-      })}
-    </div>
-  );
 }
 
 function emptyReadyBlocked(): ReadyBlockedHours {
@@ -111,7 +79,7 @@ export function PlanningWorkControlShell({
   isLoadingProgress,
   isSnapshoting,
 }: PlanningWorkControlShellProps) {
-  const [adaptiveView, setAdaptiveView] = useState<AdaptiveView>("dashboard");
+  const [adaptiveView, setAdaptiveView] = useState<AdaptiveView>("planner");
   const [step, setStep] = useState<WizardStep>(1);
   const [maxReachedStep, setMaxReachedStep] = useState<WizardStep>(1);
   const [selectedUnitIds, setSelectedUnitIds] = useState<string[]>([]);
@@ -127,6 +95,7 @@ export function PlanningWorkControlShell({
   const [message, setMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isPreparingPlan, setIsPreparingPlan] = useState(false);
 
   useEffect(() => {
     const selectedIds = new Set(selectedUnitIds);
@@ -166,8 +135,8 @@ export function PlanningWorkControlShell({
   async function handleNext() {
     if (step === 1) {
       if (selectedUnitIds.length === 0) return;
+      setIsPreparingPlan(true);
       await onFetchProgress(selectedUnitIds);
-      setAdaptiveView("dashboard");
       goToStep(2);
     } else if (step === 2) {
       goToStep(3);
@@ -200,7 +169,6 @@ export function PlanningWorkControlShell({
     }
   }
 
-  const selectedUnits = units.filter((unit) => selectedUnitIds.includes(unit.carId));
   const selectedProgressUnits = unitProgressData.filter((unit) => selectedUnitIds.includes(unit.carId));
   const readyBlockedByUnit = selectedProgressUnits.reduce<Record<string, ReadyBlockedHours>>((accumulator, unit) => {
     accumulator[unit.carId] = computeReadyBlockedHours(unitBomById[unit.carId] ?? null);
@@ -330,19 +298,12 @@ export function PlanningWorkControlShell({
     };
   });
 
-  const totalTargetHours = targetEntries.reduce((sum, entry) => sum + entry.targetHours, 0);
-  const totalAvailableCapacity = divisionCapacity.reduce((sum, division) => sum + division.availableCapacityHours, 0);
   const totalReadyHours = Object.values(readyBlockedByUnit).reduce((sum, item) => sum + item.readyHours, 0);
   const totalBlockedHours = Object.values(readyBlockedByUnit).reduce((sum, item) => sum + item.blockedHours, 0);
   const totalTargetByDivision = targetEntries.reduce<Record<number, number>>((accumulator, entry) => {
     accumulator[entry.divisionId] = (accumulator[entry.divisionId] ?? 0) + entry.targetHours;
     return accumulator;
   }, {});
-  const totalOvertimeNeed = adaptiveCapacitySnapshots.reduce((sum, division) => {
-    const targetHours = totalTargetByDivision[Number(division.divisionId)] ?? 0;
-    return sum + Math.max(0, targetHours - division.availableHours);
-  }, 0);
-  const hasHighRisk = selectedUnits.some((unit) => unit.riskLevel === "HIGH" || unit.riskLevel === "CRITICAL");
   const labourSummaries = selectedProgressUnits.map((unit) =>
     {
       const override = labourOverrideByUnit[unit.carId];
@@ -385,14 +346,6 @@ export function PlanningWorkControlShell({
       ...selectedProgressUnits.flatMap((unit) => unit.involvedDivisions.map((division) => [String(division.divisionId), division.divisionName] as const)),
     ],
   );
-
-  const summaryItems: PlanningSummaryCardItem[] = [
-    { label: "Unit Dipilih", value: selectedUnitIds.length, tone: selectedUnitIds.length > 0 ? "ok" : "muted" },
-    { label: "Target Jam", value: totalTargetHours > 0 ? `${totalTargetHours.toFixed(0)} jam` : "—", tone: totalTargetHours > 0 ? undefined : "muted" },
-    { label: "Jam Tersedia", value: totalAvailableCapacity > 0 ? `${totalAvailableCapacity.toFixed(0)} jam` : "—", tone: totalAvailableCapacity > 0 ? undefined : "muted" },
-    { label: "Kekurangan Jam", value: totalOvertimeNeed > 0 ? `${totalOvertimeNeed.toFixed(0)} jam` : "Cukup", tone: totalOvertimeNeed > 0 ? "warn" : "ok" },
-    { label: "Status Delivery", value: hasHighRisk ? "Kritis" : selectedUnitIds.length > 0 ? "Aman" : "—", tone: hasHighRisk ? "danger" : selectedUnitIds.length > 0 ? "ok" : "muted" },
-  ];
 
   const divisionOptions = adaptiveCapacitySnapshots.map((division) => ({
     divisionId: Number(division.divisionId),
@@ -442,6 +395,28 @@ export function PlanningWorkControlShell({
       qcLastStatus: job.qcLastStatus,
     })),
   }));
+
+  useEffect(() => {
+    if (!isPreparingPlan || isLoadingProgress) return;
+
+    const selectedTargetUnits = targetWorkUnits.filter((unit) => selectedUnitIds.includes(unit.carId));
+    if (selectedTargetUnits.length !== selectedUnitIds.length) {
+      setIsPreparingPlan(false);
+      return;
+    }
+
+    const defaultFinishDate = new Date(
+      new Date(weekStartDate).getTime() + 5 * 24 * 60 * 60 * 1000,
+    ).toISOString().split("T")[0];
+    const autoEntries = selectedTargetUnits.flatMap((unit) => buildAutoPlanEntries(unit, defaultFinishDate));
+    const nextStep = autoEntries.every(isTargetEntryComplete) ? 5 : 4;
+    setTargetEntries(autoEntries);
+    setMaxReachedStep(nextStep);
+    setStep(nextStep);
+    setIsPreparingPlan(false);
+  // targetWorkUnits is derived from the fetched progress payload.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoadingProgress, isPreparingPlan, selectedUnitIds, unitProgressData, weekStartDate]);
 
   const reviewUnits: ReviewUnit[] = targetEntries
     .map((entry) => {
@@ -592,14 +567,14 @@ export function PlanningWorkControlShell({
       <section className="border border-border bg-card px-4 py-3">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <p className="font-mono text-[14px] uppercase tracking-[0.14em] text-muted-foreground">Work Control</p>
-            <h2 className="mt-0.5 text-[15px] font-mono text-foreground">Minggu ini kerja apa, unit mana</h2>
-            <p className="mt-1 text-[15px] text-muted-foreground">Pantau kondisi &gt; atur target &gt; cek siap kerja &gt; service masuk</p>
+            <h2 className="text-[15px] font-mono text-foreground">{activeViewCopy[adaptiveView].title}</h2>
+            <p className="mt-1 text-[15px] text-muted-foreground">{activeViewCopy[adaptiveView].help}</p>
+            <p className="mt-2 font-mono text-[14px] uppercase tracking-[0.12em] text-muted-foreground">{periodLabel}</p>
           </div>
           <div className="flex flex-wrap gap-2">
             {[
-              { id: "dashboard", label: "Dashboard" },
-              { id: "planner", label: "Atur Target" },
+              { id: "planner", label: "Mulai Planning" },
+              { id: "dashboard", label: "Ringkasan" },
               { id: "assessment", label: "Cek Siap Kerja" },
               { id: "service", label: "Service Masuk" },
             ].map((tab) => {
@@ -622,26 +597,12 @@ export function PlanningWorkControlShell({
             })}
           </div>
         </div>
-
+        {!canManage && (
+          <p className="mt-3 border border-primary/30 bg-primary/[0.08] px-3 py-2 font-mono text-[14px] uppercase tracking-[0.12em] text-app-accent-ink">
+            Mode baca saja
+          </p>
+        )}
       </section>
-
-      <section className="border border-border bg-card px-4 py-3 flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <p className="font-mono text-[14px] uppercase tracking-[0.14em] text-muted-foreground">Work Control</p>
-          <h2 className="text-[15px] font-mono text-foreground">{activeViewCopy[adaptiveView].title}</h2>
-          <p className="mt-1 text-[15px] text-muted-foreground">{activeViewCopy[adaptiveView].help}</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="border border-border px-3 py-1.5 font-mono text-[14px] uppercase tracking-[0.12em] text-muted-foreground">{periodLabel}</span>
-          {!canManage && (
-            <span className="border border-primary/30 bg-primary/[0.08] px-3 py-1.5 font-mono text-[14px] uppercase tracking-[0.12em] text-app-accent-ink">
-              Mode baca saja
-            </span>
-          )}
-        </div>
-      </section>
-
-      <SummaryCards items={summaryItems} />
 
       {adaptiveView === "dashboard" && (
         <div className="space-y-4">
@@ -657,16 +618,18 @@ export function PlanningWorkControlShell({
             onWarrantyChange={handleWarrantyChange}
             onStartPlanning={() => setAdaptiveView("planner")}
           />
-          <CriticalPathPanel result={selectedCriticalPath} jobNames={jobNamesById} divisionNames={divisionNamesById} />
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-            <BomPlanningPanel snapshots={bomPlanningSnapshots} />
-            <LabourControlPanel
-              summaries={labourSummaries}
-              divisionRows={labourDivisionRows}
-              unitNames={unitNameById}
-              onSaveOverride={handleSaveLabourOverride}
-            />
-          </div>
+          {selectedUnitIds.length > 0 && (
+            <details className="border border-border bg-card px-5 py-4">
+              <summary className="cursor-pointer font-mono text-[14px] uppercase tracking-[0.12em] text-muted-foreground">Analisis lanjutan</summary>
+              <div className="mt-4 space-y-4">
+                <CriticalPathPanel result={selectedCriticalPath} jobNames={jobNamesById} divisionNames={divisionNamesById} />
+                <div className="grid gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+                  <BomPlanningPanel snapshots={bomPlanningSnapshots} />
+                  <LabourControlPanel summaries={labourSummaries} divisionRows={labourDivisionRows} unitNames={unitNameById} onSaveOverride={handleSaveLabourOverride} />
+                </div>
+              </div>
+            </details>
+          )}
         </div>
       )}
 
@@ -683,13 +646,21 @@ export function PlanningWorkControlShell({
 
       {adaptiveView === "planner" && (
         <>
-          <PlanningStepHeader
-            currentStep={step}
-            maxReachedStep={maxReachedStep}
-            onStepClick={(nextStep) => {
-              if (nextStep <= maxReachedStep) goToStep(nextStep);
-            }}
-          />
+          {maxReachedStep > 1 && !isPreparingPlan && (
+            <PlanningStepHeader
+              currentStep={step}
+              maxReachedStep={maxReachedStep}
+              onStepClick={(nextStep) => {
+                if (nextStep <= maxReachedStep) goToStep(nextStep);
+              }}
+            />
+          )}
+
+          {isPreparingPlan && (
+            <div className="border border-primary/25 bg-primary/[0.06] px-4 py-4 text-[15px] text-foreground" role="status">
+              Menyiapkan target dari progress, countdown, dan kapasitas terbaru…
+            </div>
+          )}
 
           {step === 1 && (
             <UnitPriorityStep
@@ -701,7 +672,7 @@ export function PlanningWorkControlShell({
             />
           )}
 
-          {step === 2 && (
+          {step === 2 && !isPreparingPlan && (
             <UnitProgressStep
               units={unitProgressData}
               onNext={() => void handleNext()}

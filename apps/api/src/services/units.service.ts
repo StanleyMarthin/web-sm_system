@@ -4,6 +4,8 @@ import type {
   UnitBoardRow,
   UnitWorkspace,
   UpdateUnitRequest,
+  UnitClient,
+  UnitClientUnit,
 } from "@smsystem/contracts/unit";
 import type { UnitBomWorkspace } from "@smsystem/contracts/unit-bom";
 import type {
@@ -29,6 +31,7 @@ export interface UnitBoardListResult {
 
 export interface UnitsService {
   listUnits(session: WebSession, query: GridQueryState): Promise<UnitBoardListResult>;
+  listUnitClients(session: WebSession, query: { search?: string; selected?: string }): Promise<{ clients: UnitClient[]; selectedClient: { name: string; units: UnitClientUnit[] } | null }>;
   getUnitSummary(session: WebSession, unitId: string): Promise<UnitBoardRow | null>;
   getUnitWorkspace(session: WebSession, unitId: string): Promise<UnitWorkspace | null>;
   getUnitBom(session: WebSession, unitId: string): Promise<UnitBomWorkspace | null>;
@@ -64,6 +67,15 @@ export class DefaultUnitsService implements UnitsService {
       meta: buildGridMeta(payload.total, normalized.page, normalized.limit),
       query: normalized,
     };
+  }
+
+  async listUnitClients(session: WebSession, query: { search?: string; selected?: string }) {
+    return this.repository.findUnitClients({
+      employeeId: session.user.employeeId,
+      scope: session.user.scope,
+      search: query.search,
+      selected: query.selected,
+    });
   }
 
   async getUnitSummary(session: WebSession, unitId: string): Promise<UnitBoardRow | null> {

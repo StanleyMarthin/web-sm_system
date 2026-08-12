@@ -1,45 +1,38 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowDown, ArrowUp, Check, Edit3, X } from "lucide-react";
+import { Check, Edit3, Images, Minus, Plus, X } from "lucide-react";
 import type { ItemRequest, SpfItem, SpfPagination, SpfSourceStatus } from "@/shared/api/spf-contracts";
-import type { SpfRole } from "@/shared/auth/admin-session";
 import { mutateSpf } from "@/shared/api/spf";
-import { ActionButton, CompactInput, CompactTextarea, EmptyRow } from "@/shared/ui/compact";
+import { ActionButton, CompactTextarea, EmptyRow } from "@/shared/ui/compact";
 import { useSweetAlert } from "@/shared/ui/sweet-alert";
 import { SpfDataTable } from "./spf-data-table";
-import { SpfSourceBadge } from "./spf-source-badge";
-import { SpfSourceStatusBadge } from "./spf-status-badge";
 
 interface ItemListProps {
   rows: readonly SpfItem[];
   meta: SpfPagination;
-  role: SpfRole;
+  canAdmin: boolean;
   editable?: boolean;
+  onOpenDocumentation?: (itemId: string) => void;
 }
 
 type DraftEdit = {
   customer_description: string;
-  work_status: string;
-  progress: number;
 };
 
-export function CuratedItemEditor({ rows, role, editable = true }: ItemListProps) {
+export function CuratedItemEditor({ rows, canAdmin, editable = true, onOpenDocumentation }: ItemListProps) {
   const router = useRouter();
   const { alertElement, notifyError, notifySuccess } = useSweetAlert();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<DraftEdit | null>(null);
   const [isPending, startTransition] = useTransition();
-  const canEdit = editable && role === "ADMIN";
+  const canEdit = editable && canAdmin;
 
   function startEdit(item: SpfItem) {
     setEditingId(item.id);
     setDraft({
       customer_description: item.customer_description,
-      work_status: item.work_status,
-      progress: item.progress,
     });
   }
 
@@ -60,7 +53,7 @@ export function CuratedItemEditor({ rows, role, editable = true }: ItemListProps
         if (result.status === 409) router.refresh();
         return;
       }
-      notifySuccess("Tersimpan", "Kurasi item diperbarui.");
+      notifySuccess("Tersimpan", "Isi laporan item diperbarui.");
       setEditingId(null);
       setDraft(null);
       router.refresh();
@@ -70,17 +63,11 @@ export function CuratedItemEditor({ rows, role, editable = true }: ItemListProps
   function saveEdit(item: SpfItem) {
     if (!draft) return;
     if (!draft.customer_description.trim()) {
-      notifyError("Validasi", "Customer description wajib diisi.");
-      return;
-    }
-    if (draft.progress < 0 || draft.progress > 100) {
-      notifyError("Validasi", "Progress wajib 0-100.");
+      notifyError("Validasi", "Isi laporan wajib diisi.");
       return;
     }
     updateItem(item, {
       customer_description: draft.customer_description.trim(),
-      work_status: draft.work_status.trim() || item.work_status,
-      progress: draft.progress,
     });
   }
 
@@ -97,10 +84,12 @@ export function CuratedItemEditor({ rows, role, editable = true }: ItemListProps
       {alertElement}
       <SpfDataTable
         rows={rows}
-        minWidth={1180}
-        emptyMessage="Belum ada item SPF."
+        minWidth={1120}
+        emptyMessage="Belum ada item."
         columns={[
-          { key: "source", label: "Sumber", render: (item) => <SpfSourceBadge value={item.source_type} /> },
+          { key: "panel", label: "Panel / Part", render: (item) => <span className="font-semibold text-foreground">{item.panel_name ?? item.panel ?? item.panel_id ?? "-"}</span> },
+          { key: "jobdesc", label: "Deskripsi Teknis", render: (item) => <span className="text-muted-foreground">{item.original_description || item.work_type || "-"}</span> },
+          { key: "status", label: "Status", render: (item) => <span className="font-mono text-[11px] uppercase text-foreground">{item.work_status || "-"}</span> },
           {
             key: "desc",
             label: "Isi Laporan",
@@ -114,61 +103,45 @@ export function CuratedItemEditor({ rows, role, editable = true }: ItemListProps
                 <p className="text-[12px] text-muted-foreground">{item.original_description || "-"}</p>
               </div>
             ) : (
-              <div className="max-w-[420px]">
-                <Link href={`/spf/items/${item.id}`} className="font-medium text-foreground hover:text-app-accent-ink hover:underline">
-                  {item.customer_description}
-                </Link>
-                <p className="mt-1 text-[12px] text-muted-foreground">{item.original_description || "-"}</p>
-              </div>
+              <p className="max-w-[420px] whitespace-pre-wrap leading-5 text-foreground">{item.customer_description}</p>
             ),
           },
-          { key: "panel", label: "Panel/Part", render: (item) => item.panel_name ?? item.panel ?? item.panel_id ?? "-" },
-          {
-            key: "status",
-            label: "Status",
-            render: (item) => editingId === item.id && draft ? (
-              <CompactInput value={draft.work_status} onChange={(event) => setDraft({ ...draft, work_status: event.target.value })} />
-            ) : item.work_status,
-          },
-          {
-            key: "progress",
-            label: "Progress",
-            render: (item) => editingId === item.id && draft ? (
-              <CompactInput
-                type="number"
-                min={0}
-                max={100}
-                value={draft.progress}
-                onChange={(event) => setDraft({ ...draft, progress: Number(event.target.value) })}
-              />
-            ) : `${item.progress}%`,
-          },
-          { key: "docs", label: "Dok.", render: (item) => item.documentation_count },
-          { key: "spf", label: "SPF", render: (item) => <SpfSourceStatusBadge status={item.spf_status} /> },
           {
             key: "order",
             label: "Urut",
             render: (item) => (
               <div className="flex items-center gap-1">
-                <span className="font-mono text-[12px]">{item.display_order}</span>
                 {canEdit && item.spf_status === "INCLUDED" ? (
-                  <>
-                    <button type="button" onClick={() => move(item, -1)} className="border border-border p-1 text-muted-foreground hover:bg-muted">
-                      <ArrowUp className="h-3.5 w-3.5" />
-                    </button>
-                    <button type="button" onClick={() => move(item, 1)} className="border border-border p-1 text-muted-foreground hover:bg-muted">
-                      <ArrowDown className="h-3.5 w-3.5" />
-                    </button>
-                  </>
+                  <button type="button" aria-label="Turunkan nomor urut" onClick={() => move(item, -1)} className="border border-border p-1 text-muted-foreground hover:bg-muted"><Minus className="h-3.5 w-3.5" /></button>
+                ) : null}
+                <span className="min-w-6 text-center font-mono text-[12px] font-semibold">{item.display_order}</span>
+                {canEdit && item.spf_status === "INCLUDED" ? (
+                  <button type="button" aria-label="Naikkan nomor urut" onClick={() => move(item, 1)} className="border border-border p-1 text-muted-foreground hover:bg-muted"><Plus className="h-3.5 w-3.5" /></button>
                 ) : null}
               </div>
+            ),
+          },
+          {
+            key: "publish",
+            label: "Publish",
+            render: (item) => (
+              <button
+                type="button"
+                role="switch"
+                aria-checked={item.spf_status === "INCLUDED"}
+                disabled={!canEdit || isPending}
+                onClick={() => updateItem(item, { spf_status: item.spf_status === "INCLUDED" ? "EXCLUDED" : "INCLUDED" })}
+                className={`inline-flex h-7 min-w-16 items-center justify-center border px-2 font-mono text-[10px] font-semibold uppercase tracking-[0.08em] disabled:cursor-not-allowed disabled:opacity-55 ${item.spf_status === "INCLUDED" ? "border-success/35 bg-success/10 text-success" : "border-border text-muted-foreground"}`}
+              >
+                {item.spf_status === "INCLUDED" ? "Ready" : "Tidak"}
+              </button>
             ),
           },
           {
             key: "action",
             label: "Aksi",
             render: (item) => {
-              if (!canEdit) return <span className="text-[12px] text-muted-foreground">Read-only</span>;
+              if (!canEdit) return <span className="text-[12px] text-muted-foreground">Hanya lihat</span>;
               if (editingId === item.id) {
                 return (
                   <div className="flex flex-wrap gap-1.5">
@@ -182,11 +155,11 @@ export function CuratedItemEditor({ rows, role, editable = true }: ItemListProps
                   <ActionButton onClick={() => startEdit(item)} disabled={isPending}>
                     <Edit3 className="h-3.5 w-3.5" />Edit
                   </ActionButton>
-                  {item.spf_status === "INCLUDED" ? (
-                    <ActionButton variant="danger" disabled={isPending} onClick={() => updateItem(item, { spf_status: "EXCLUDED" })}>Exclude</ActionButton>
-                  ) : (
-                    <ActionButton variant="success" disabled={isPending} onClick={() => updateItem(item, { spf_status: "INCLUDED" })}>Include</ActionButton>
-                  )}
+                  {onOpenDocumentation ? (
+                    <ActionButton onClick={() => onOpenDocumentation(item.id)}>
+                      <Images className="h-3.5 w-3.5" />Dokumen ({item.documentation_count})
+                    </ActionButton>
+                  ) : null}
                 </div>
               );
             },

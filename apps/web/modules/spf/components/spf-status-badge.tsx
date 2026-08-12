@@ -14,12 +14,26 @@ const SOURCE_STATUS_STYLES: Record<SpfSourceStatus, string> = {
   EXCLUDED: "border-border bg-muted text-muted-foreground dark:border-white/[0.08] dark:bg-white/[0.04]",
 };
 
+const PERIOD_STATUS_LABELS: Record<SpfPeriodStatus, string> = {
+  DRAFT: "Draft",
+  WAITING_APPROVAL: "Waiting Approval",
+  APPROVED: "Approved",
+  PUBLISHED: "Published",
+  REJECTED: "Rejected",
+};
+
+const SOURCE_STATUS_LABELS: Record<SpfSourceStatus, string> = {
+  READY: "Ready",
+  INCLUDED: "Included",
+  EXCLUDED: "Excluded",
+};
+
 export function SpfStatusBadge({ status }: { status: SpfPeriodStatus | string }) {
   const key = status as SpfPeriodStatus;
   const className = PERIOD_STATUS_STYLES[key] ?? PERIOD_STATUS_STYLES.DRAFT;
   return (
     <span className={`inline-flex h-6 items-center border px-2 font-mono text-[11px] font-semibold uppercase tracking-[0.08em] ${className}`}>
-      {status.replaceAll("_", " ")}
+      {PERIOD_STATUS_LABELS[key] ?? status.replaceAll("_", " ")}
     </span>
   );
 }
@@ -29,7 +43,7 @@ export function SpfSourceStatusBadge({ status }: { status: SpfSourceStatus | str
   const className = SOURCE_STATUS_STYLES[key] ?? SOURCE_STATUS_STYLES.READY;
   return (
     <span className={`inline-flex h-6 items-center border px-2 font-mono text-[11px] font-semibold uppercase tracking-[0.08em] ${className}`}>
-      {status}
+      {SOURCE_STATUS_LABELS[key] ?? status}
     </span>
   );
 }

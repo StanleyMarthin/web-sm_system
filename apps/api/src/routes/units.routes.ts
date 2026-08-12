@@ -37,6 +37,24 @@ async function requireViewUnitsSession(
   return { session: sessionResult.session };
 }
 
+export function canReadUnitClients(permissions: readonly string[]) {
+  return (
+    permissions.includes(permissionCodes.viewUnits) ||
+    permissions.includes(permissionCodes.spfAdmin) ||
+    permissions.includes(permissionCodes.spfPublish)
+  );
+}
+
+async function requireUnitClientsSession(request: Request, authService: AuthService) {
+  const sessionResult = await requireSession(request, authService);
+  if ("response" in sessionResult) return sessionResult;
+  const permissions = sessionResult.session.user.permissions;
+  if (canReadUnitClients(permissions)) {
+    return { session: sessionResult.session };
+  }
+  return { response: errorResponse(request, "Anda belum memiliki akses ke data client SPF.", 403, "SPF_CLIENT_FORBIDDEN") };
+}
+
 async function requireUnitDetailSession(
   request: Request,
   authService: AuthService,
@@ -231,6 +249,24 @@ export async function handleUnitsListRoute(
         query: result.query,
       }),
     );
+  } catch (error) {
+    return mapUnitsError(request, error);
+  }
+}
+
+export async function handleUnitClientsRoute(
+  request: Request,
+  authService: AuthService,
+  unitsService: UnitsService,
+): Promise<Response> {
+  const sessionResult = await requireUnitClientsSession(request, authService);
+  if ("response" in sessionResult) return sessionResult.response;
+  const url = new URL(request.url);
+  const search = url.searchParams.get("search")?.trim().slice(0, 255) || undefined;
+  const selected = url.searchParams.get("selected")?.trim().slice(0, 255) || undefined;
+  try {
+    const data = await unitsService.listUnitClients(sessionResult.session, { search, selected });
+    return successResponse(request, "Daftar client dari unit siap.", data);
   } catch (error) {
     return mapUnitsError(request, error);
   }

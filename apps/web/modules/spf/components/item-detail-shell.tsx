@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import { ItemForm } from "./forms/item-form";
 import { ItemMedia } from "./item-media";
 import type { SpfItem, SpfMedia } from "@/shared/api/spf-contracts";
-import type { SpfRole } from "@/shared/auth/admin-session";
 import { ActionButton, PageHeader, SectionCard } from "@/shared/ui/compact";
 import { useSweetAlert } from "@/shared/ui/sweet-alert";
 import { mutateSpf } from "@/shared/api/spf";
@@ -14,14 +13,14 @@ import { mutateSpf } from "@/shared/api/spf";
 interface ItemDetailShellProps {
   item: Readonly<SpfItem>;
   media: readonly SpfMedia[];
-  role: SpfRole;
+  canAdmin: boolean;
   editable: boolean;
 }
 
 export function ItemDetailShell({
   item,
   media,
-  role,
+  canAdmin,
   editable,
 }: ItemDetailShellProps) {
   const router = useRouter();
@@ -31,8 +30,8 @@ export function ItemDetailShell({
 
   async function handleDeleteItem() {
     const confirmed = await confirm({
-      title: `Hapus Item #${item.id}`,
-      description: `Apakah Anda yakin ingin menghapus item "${item.work_type}" untuk Car #${item.car_id}? Aksi ini tidak dapat dibatalkan.`,
+      title: "Hapus Item",
+      description: `Apakah Anda yakin ingin menghapus item "${item.work_type}" untuk unit ${item.car_id}? Aksi ini tidak dapat dibatalkan.`,
       tone: "warning",
       confirmLabel: "Hapus Item",
       cancelLabel: "Batal",
@@ -51,7 +50,7 @@ export function ItemDetailShell({
         return;
       }
 
-      notifySuccess("Berhasil", `Item #${item.id} telah dihapus.`);
+      notifySuccess("Berhasil", "Item telah dihapus.");
       // Replace URL to list so back button doesn't land on deleted detail
       router.replace("/spf/items");
     });
@@ -67,7 +66,7 @@ export function ItemDetailShell({
           <ol className="flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground dark:text-foreground/45">
             <li>
               <Link href="/spf/items" className="hover:underline">
-                Item SPF
+                Daftar Item
               </Link>
             </li>
             <li>/</li>
@@ -78,7 +77,7 @@ export function ItemDetailShell({
           eyebrow={`ID #${item.id}`}
           title={item.work_type}
           actions={
-            role === "ADMIN" && editable ? (
+            canAdmin && editable ? (
               <div className="flex items-center gap-2">
                 <ActionButton variant="primary" onClick={() => setEditOpen(true)}>
                   Edit Item
@@ -123,7 +122,7 @@ export function ItemDetailShell({
               <p className="font-mono text-[12px] text-foreground dark:text-foreground">
                 {item.period_id ? (
                   <Link
-                    href={`/spf/periods/${item.period_id}`}
+                    href={`/spf/periods?period=${encodeURIComponent(item.period_id)}`}
                     className="text-app-accent-ink hover:underline dark:text-app-accent-ink/80"
                   >
                     Periode #{item.period_id} →
@@ -176,9 +175,7 @@ export function ItemDetailShell({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/35 p-4 backdrop-blur-[1px] dark:bg-background/80">
           <div className="w-full max-w-lg border border-border bg-white p-6 shadow-2xl dark:border-white/[0.08] dark:bg-popover">
             <div className="mb-4 flex items-center justify-between">
-              <h2 className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground dark:text-foreground/50">
-                Edit Item #{item.id}
-              </h2>
+              <h2 className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground dark:text-foreground/50">Edit Item</h2>
               <button
                 type="button"
                 onClick={() => setEditOpen(false)}

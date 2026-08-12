@@ -57,7 +57,7 @@ export function PortalPreview({ period, items, adminPreview = false }: PortalPre
         <div className="mt-4 space-y-3">
           {items.length === 0 ? (
             <p className="border border-dashed border-border px-3 py-6 text-center text-[13px] text-muted-foreground">
-              Belum ada item INCLUDED untuk preview.
+              Belum ada item yang ditampilkan untuk preview.
             </p>
           ) : (
             items.map((item, index) => (

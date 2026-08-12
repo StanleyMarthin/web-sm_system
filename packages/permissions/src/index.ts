@@ -114,16 +114,16 @@ const permissionMetaCatalog: Record<string, PermissionMeta> = {
     audience: "SHARED",
   },
   [permissionCodes.countdownSubmitApproval]: {
-    platforms: ["MOBILE"],
-    audience: "MOBILE",
+    platforms: ["WEB", "MOBILE"],
+    audience: "SHARED",
   },
   [permissionCodes.countdownMarkQcReady]: {
     platforms: ["MOBILE"],
     audience: "MOBILE",
   },
   [permissionCodes.countdownRequestRevision]: {
-    platforms: ["MOBILE"],
-    audience: "MOBILE",
+    platforms: ["WEB", "MOBILE"],
+    audience: "SHARED",
   },
   [permissionCodes.updatePlan]: { platforms: ["WEB", "MOBILE"], audience: "SHARED" },
   [permissionCodes.createTask]: { platforms: ["WEB", "MOBILE"], audience: "SHARED" },

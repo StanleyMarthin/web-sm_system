@@ -1,7 +1,7 @@
 "use client";
 
 import type { CountdownBoardRow } from "@smsystem/contracts/countdown";
-import type { GridFilter, GridQueryState } from "@smsystem/contracts/grid";
+import type { GridQueryState } from "@smsystem/contracts/grid";
 import {
   createCountdownRecord,
   deleteCountdownRecord,
@@ -15,19 +15,24 @@ import type {
   SmartDataGridCellValue,
   SmartDataGridColumn,
   SmartDataGridFilterDefinition,
-  SmartDataGridSavedView,
   SmartDataGridSortOption,
 } from "@/shared/datagrid/types";
 import {
-  ActionButton, MetricBar, PageHeader,
+  ActionButton, CompactSelect, FieldLabel, PageHeader,
 } from "@/shared/ui/compact";
 import { parseHHMMToDecimal } from "@/shared/format/time";
 import { CountdownBoardForm, type CountdownFormValues } from "./forms/countdown-board-form";
 import { Download, FileText, FileUp, Pencil, Plus, RefreshCcw, Trash2, Upload, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSweetAlert } from "@/shared/ui/sweet-alert";
+import { formatCountdownImportIssue, formatCountdownStatus } from "../countdown-copy";
+import {
+  buildCountdownExportParams,
+  resolveCountdownEntryMode,
+  type CountdownEntryMode,
+} from "../countdown-dialog";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                               */
@@ -90,30 +95,6 @@ function formatNumber(value: number): string {
   return value.toFixed(2).replace(/\.00$/u, "");
 }
 
-function formatWorkdayAlias(hours: number): string {
-  const totalHours = Math.max(0, hours);
-  if (totalHours <= 0) return "0j / 0 hari kerja";
-  let remaining = totalHours;
-  const cursor = new Date();
-  cursor.setHours(0, 0, 0, 0);
-  let workdays = 0;
-
-  for (let guard = 0; guard < 370; guard += 1) {
-    const day = cursor.getDay();
-    const capacity = day === 0 ? 0 : day === 6 ? 5 : 8;
-    if (capacity > 0) {
-      workdays += 1;
-      remaining -= capacity;
-      if (remaining <= 0.0001) {
-        return `${formatNumber(totalHours)}j / ${workdays} hari kerja`;
-      }
-    }
-    cursor.setDate(cursor.getDate() + 1);
-  }
-
-  return `${formatNumber(totalHours)}j`;
-}
-
 /* ------------------------------------------------------------------ */
 /*  Grid config                                                         */
 /* ------------------------------------------------------------------ */
@@ -130,22 +111,6 @@ const sortOptions: SmartDataGridSortOption[] = [
   { label: "Status", value: "status" },
   { label: "Sisa Jam", value: "remainingHours" },
   { label: "Progress", value: "actualProgressPercent" },
-];
-
-const savedViews: SmartDataGridSavedView[] = [
-  { id: "all-countdowns", label: "Semua", sortBy: "deadlineDate", sortDirection: "asc", filters: [] },
-  {
-    id: "additional-only", label: "Tambahan", sortBy: "deadlineDate", sortDirection: "asc",
-    filters: [{ field: "taskCategory", operator: "eq", value: "ADDITIONAL" } satisfies GridFilter]
-  },
-  {
-    id: "wo-only", label: "WO", sortBy: "deadlineDate", sortDirection: "asc",
-    filters: [{ field: "taskCategory", operator: "eq", value: "WO" } satisfies GridFilter]
-  },
-  {
-    id: "wov-only", label: "WOV", sortBy: "deadlineDate", sortDirection: "asc",
-    filters: [{ field: "taskCategory", operator: "eq", value: "WOV" } satisfies GridFilter]
-  },
 ];
 
 function buildCountdownColumns(
@@ -198,11 +163,11 @@ function buildCountdownColumns(
       renderCell: (v) => <span className="tabular-nums">{formatDecimalToHHMM(Number(v)) || "00:00"}</span>
     },
     { 
-      key: "totalActualHours", label: "Actual", kind: "text", align: "right",
+      key: "totalActualHours", label: "Aktual", kind: "text", align: "right",
       renderCell: (v) => <span className="tabular-nums">{formatDecimalToHHMM(Number(v)) || "00:00"}</span>
     },
     { 
-      key: "remainingHours", label: "Remaining", kind: "text", align: "right",
+      key: "remainingHours", label: "Sisa", kind: "text", align: "right",
       renderCell: (v) => <span className="tabular-nums">{formatDecimalToHHMM(Number(v)) || "00:00"}</span>
     },
     { key: "actualProgressPercent", label: "Progress %", kind: "number", align: "right" },
@@ -214,14 +179,14 @@ function buildCountdownColumns(
       align: "center",
       filterKey: "status",
       filterOptions: [
-        { label: "PLAN", value: "PLAN" },
-        { label: "PROSES", value: "PROSES" },
-        { label: "QC_READY", value: "QC_READY" },
-        { label: "DONE", value: "DONE" },
+        { label: formatCountdownStatus("PLAN"), value: "PLAN" },
+        { label: formatCountdownStatus("PROSES"), value: "PROSES" },
+        { label: formatCountdownStatus("QC_READY"), value: "QC_READY" },
+        { label: formatCountdownStatus("DONE"), value: "DONE" },
       ],
     },
     {
-      key: "isOverdue", label: "Risk", kind: "text", align: "center",
+      key: "isOverdue", label: "Risiko", kind: "text", align: "center",
       renderCell: (_v, row) => (
         <span className={[
           "inline-flex border px-2 py-0.5 text-[10px] font-mono uppercase tracking-[0.1em]",
@@ -229,12 +194,12 @@ function buildCountdownColumns(
             ? "border-destructive/30 bg-destructive/[0.06] text-destructive"
             : "border-success/20 bg-success/[0.06] text-success",
         ].join(" ")}>
-          {row.isOverdue ? "Overdue" : "On Track"}
+          {row.isOverdue ? "Terlambat" : "Sesuai Jadwal"}
         </span>
       ),
     },
     {
-      key: "action", label: "Action", kind: "text", align: "center",
+      key: "action", label: "Tindakan", kind: "text", align: "center",
       renderCell: (_v, row) => (
         <div className="flex flex-wrap items-center justify-center gap-1">
           <Link href={`/countdown/${String(row.countdownId ?? "")}`}
@@ -249,7 +214,7 @@ function buildCountdownColumns(
               </button>
               <button type="button" onClick={() => onDelete(toBoardRow(row))}
                 className="inline-flex items-center gap-1 border border-destructive/20 px-2 py-0.5 text-[10px] font-mono uppercase tracking-[0.1em] text-destructive/80 hover:bg-destructive/[0.06] transition-colors">
-                <Trash2 className="h-3 w-3" />Del
+                <Trash2 className="h-3 w-3" />Hapus
               </button>
             </>
           )}
@@ -263,10 +228,10 @@ function buildCountdownFilters(references: CountdownReferences): SmartDataGridFi
   return [
     {
       field: "status", label: "Status", options: [
-        { label: "PLAN", value: "PLAN" },
-        { label: "PROSES", value: "PROSES" },
-        { label: "QC_READY", value: "QC_READY" },
-        { label: "DONE", value: "DONE" },
+        { label: formatCountdownStatus("PLAN"), value: "PLAN" },
+        { label: formatCountdownStatus("PROSES"), value: "PROSES" },
+        { label: formatCountdownStatus("QC_READY"), value: "QC_READY" },
+        { label: formatCountdownStatus("DONE"), value: "DONE" },
       ]
     },
     { field: "divisionId", label: "Divisi", options: references.divisions },
@@ -283,7 +248,8 @@ export function CountdownBoardShell({ rows, references, canManage, meta, state }
   const router = useRouter();
   const sweetAlert = useSweetAlert();
   const [isUploading, setIsUploading] = useState(false);
-  const [uploadOpen, setUploadOpen] = useState(false);
+  const [entryMode, setEntryMode] = useState<CountdownEntryMode>("manual");
+  const [uploadUnitId, setUploadUnitId] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -292,6 +258,10 @@ export function CountdownBoardShell({ rows, references, canManage, meta, state }
     issues: Array<{ rowNumber: number; field: string; message: string; value: string | null }>;
   } | null>(null);
   const [editorMode, setEditorMode] = useState<"create" | "edit" | null>(null);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exportUnitId, setExportUnitId] = useState("");
+  const [exportDivisionId, setExportDivisionId] = useState("");
+  const [exportStatus, setExportStatus] = useState("");
   const [initialFormValues, setInitialFormValues] = useState<CountdownFormValues | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const saveInFlightRef = useRef(false);
@@ -305,14 +275,6 @@ export function CountdownBoardShell({ rows, references, canManage, meta, state }
   // Resolve label untuk display di UI
   const activeUnitLabel = references.units.find((u) => u.value === activeUnitId)?.label ?? null;
   const activeDivisionLabel = references.divisions.find((d) => d.value === activeDivisionId)?.label ?? null;
-
-  const summary = useMemo(() => ({
-    total: rows.length,
-    done: rows.filter((r) => r.status === "DONE").length,
-    additional: rows.filter((r) => r.taskCategory === "ADDITIONAL").length,
-    overdue: rows.filter((r) => r.isOverdue).length,
-    remainingHours: rows.reduce((s, r) => s + r.remainingHours, 0),
-  }), [rows]);
 
   useEffect(() => {
     if (!message) {
@@ -328,18 +290,19 @@ export function CountdownBoardShell({ rows, references, canManage, meta, state }
       return;
     }
 
-    sweetAlert.notifyError("Aksi belum jalan", error);
+    sweetAlert.notifyError("Tindakan gagal", error);
     setError(null);
   }, [error, sweetAlert]);
 
   function openCreateCountdown() {
     setError(null); setMessage(null); setImportResult(null);
-    setEditorMode("create"); setInitialFormValues(null);
+    setEntryMode("manual"); setUploadUnitId(activeUnitId ?? "");
+    setSelectedFile(null); setEditorMode("create"); setInitialFormValues(null);
   }
 
   function openEditCountdown(row: CountdownBoardRow) {
     setError(null); setMessage(null); setImportResult(null);
-    setEditorMode("edit"); setInitialFormValues({
+    setEntryMode("manual"); setEditorMode("edit"); setInitialFormValues({
       countdownId: row.countdownId,
       carId: row.carId,
       divisionId: row.divisionId ? String(row.divisionId) : "",
@@ -359,57 +322,52 @@ export function CountdownBoardShell({ rows, references, canManage, meta, state }
     });
   }
 
-  function closeEditor() { setEditorMode(null); setInitialFormValues(null); }
+  function closeEditor() { setEditorMode(null); setInitialFormValues(null); setSelectedFile(null); }
 
   async function submitImport() {
     if (!selectedFile) { setError("Pilih file Excel terlebih dahulu."); return; }
-    if (!activeUnitId) { setError("Filter unit wajib dipilih sebelum upload."); return; }
+    if (!uploadUnitId) { setError("Unit wajib dipilih sebelum mengunggah."); return; }
     setError(null); setMessage(null); setImportResult(null);
     setIsUploading(true);
     try {
-      const result = await uploadCountdownWorkbook(selectedFile, { unitId: activeUnitId });
+      const result = await uploadCountdownWorkbook(selectedFile, { unitId: uploadUnitId });
       if (!result.success) { setError(result.message); return; }
       setImportResult(result.result);
-      setMessage(`Import selesai. Inserted ${result.result.inserted}, rejected ${result.result.rejected}.`);
+      setMessage(`Impor selesai. ${result.result.inserted} data ditambahkan, ${result.result.rejected} data ditolak.`);
       setSelectedFile(null);
-      setUploadOpen(false);
       router.refresh();
     } finally { setIsUploading(false); }
   }
 
   async function handleTemplateDownload() {
-    if (!activeUnitId) {
-      setError("Pilih filter unit terlebih dahulu sebelum download template.");
+    if (!uploadUnitId) {
+      setError("Pilih unit terlebih dahulu sebelum mengunduh templat.");
       return;
     }
     setError(null); setMessage(null);
-    const result = await downloadCountdownTemplate({ unitId: activeUnitId });
+    const result = await downloadCountdownTemplate({ unitId: uploadUnitId });
     if (!result.success) { setError(result.message); return; }
-    setMessage(`Template countdown untuk unit "${activeUnitLabel}" berhasil didownload.`);
+    const unitLabel = references.units.find((unit) => unit.value === uploadUnitId)?.label ?? uploadUnitId;
+    setMessage(`Templat countdown untuk unit “${unitLabel}” berhasil diunduh.`);
   }
 
   async function handleCountdownDownload() {
-    if (!activeUnitId) {
-      setError("Pilih filter unit terlebih dahulu sebelum download countdown.");
+    const params = buildCountdownExportParams(exportUnitId, exportDivisionId, exportStatus);
+    if (!params) {
+      setError("Pilih unit terlebih dahulu sebelum mengunduh countdown.");
       return;
     }
     setError(null); setMessage(null);
 
-    const result = await downloadCountdownWorkbook({
-      unitId: activeUnitId,
-      divisionId: activeDivisionId ?? undefined,
-      // Backend behavior:
-      // - Jika divisionId ada → 1 sheet, sheet name = nama divisi itu
-      // - Jika divisionId tidak ada → multi-sheet, tiap sheet = satu divisi
-      //   (sheet name = divisionName, isi = countdown rows divisi tersebut)
-    });
+    const result = await downloadCountdownWorkbook(params);
 
     if (!result.success) { setError(result.message); return; }
 
-    const sheetDesc = activeDivisionId
-      ? `sheet "${activeDivisionLabel}"`
-      : "semua divisi (multi-sheet)";
-    setMessage(`Download countdown unit "${activeUnitLabel}" — ${sheetDesc} berhasil.`);
+    const unitLabel = references.units.find((unit) => unit.value === exportUnitId)?.label ?? exportUnitId;
+    const divisionLabel = references.divisions.find((division) => division.value === exportDivisionId)?.label;
+    const filterDescription = divisionLabel ? `divisi “${divisionLabel}”` : "semua divisi";
+    setMessage(`Countdown unit ${unitLabel} berhasil diunduh untuk ${filterDescription}.`);
+    setExportOpen(false);
   }
 
   async function handleSaveCountdown(data: CountdownFormValues) {
@@ -490,7 +448,7 @@ export function CountdownBoardShell({ rows, references, canManage, meta, state }
       {/* ── Header ── */}
       <PageHeader
         eyebrow="Countdown"
-        title="Countdown board"
+        title="Daftar Countdown"
         actions={
           <>
             {canManage ? (
@@ -498,41 +456,23 @@ export function CountdownBoardShell({ rows, references, canManage, meta, state }
                 <ActionButton variant="success" onClick={openCreateCountdown}>
                   <Plus className="h-3 w-3" />Tambah Jobdesc
                 </ActionButton>
-                <ActionButton
-                  variant="primary"
-                  onClick={() => {
-                    if (!activeUnitId) {
-                      setError("Pilih filter unit terlebih dahulu sebelum upload.");
-                      return;
-                    }
-                    setUploadOpen(true);
-                  }}
-                >
-                  <FileUp className="h-3 w-3" />Upload Excel
-                </ActionButton>
               </>
             ) : null}
 
             {/* Download Countdown — tombol baru */}
             <ActionButton
-              onClick={() => void handleCountdownDownload()}
-              disabled={!activeUnitId}
-              title={!activeUnitId ? "Pilih filter unit terlebih dahulu" : `Download countdown ${activeUnitLabel}`}
+              onClick={() => {
+                setExportUnitId(activeUnitId ?? "");
+                setExportDivisionId(activeDivisionId ?? "");
+                setExportStatus(String(state.filters?.find((filter) => filter.field === "status")?.value ?? ""));
+                setExportOpen(true);
+              }}
             >
-              <Download className="h-3 w-3" />Download
-            </ActionButton>
-
-            {/* Download Template */}
-            <ActionButton
-              onClick={() => void handleTemplateDownload()}
-              disabled={!activeUnitId}
-              title={!activeUnitId ? "Pilih filter unit terlebih dahulu" : `Download template untuk ${activeUnitLabel}`}
-            >
-              <FileText className="h-3 w-3" />Template
+              <Download className="h-3 w-3" />Unduh
             </ActionButton>
 
             <ActionButton onClick={() => router.refresh()}>
-              <RefreshCcw className="h-3 w-3" />Refresh
+              <RefreshCcw className="h-3 w-3" />Muat Ulang
             </ActionButton>
           </>
         }
@@ -556,45 +496,52 @@ export function CountdownBoardShell({ rows, references, canManage, meta, state }
           ) : null}
           {!activeUnitId ? (
             <span className="border border-primary/20 bg-primary/[0.06] px-2 py-0.5 text-[10px] font-mono text-app-accent-ink">
-              ⚠ Pilih unit untuk aktifkan download & upload
+              Filter unit belum dipilih
             </span>
           ) : null}
         </div>
       ) : (
         <div className="flex items-center gap-2 border border-white/[0.04] bg-white/[0.02] px-3 py-2">
           <span className="text-[10px] font-mono text-foreground/25">
-            Pilih filter Unit untuk mengaktifkan Download & Upload Excel
+            Belum ada filter tabel aktif
           </span>
         </div>
       )}
 
-      {/* ── Metrics ── */}
-      <MetricBar items={[
-        { label: "Total Pengerjaan", value: summary.total },
-        { label: "Selesai", value: summary.done, tone: "up" },
-        { label: "Sisa Jam", value: formatWorkdayAlias(summary.remainingHours), tone: "muted" },
-        { label: "Overdue", value: summary.overdue, tone: summary.overdue > 0 ? "down" : undefined },
-        { label: "Total Jobdesc Tambahan", value: summary.additional },
-      ]} />
-
       {sweetAlert.alertElement}
 
       {canManage && editorMode ? (
-        <div className="fixed inset-0 z-[80] bg-black/60 backdrop-blur-[1px]">
-          <div className="absolute inset-y-0 right-0 w-full max-w-4xl overflow-y-auto border-l border-white/[0.08] bg-popover p-4 shadow-2xl">
-            <div className="mb-4 flex items-center justify-between gap-2">
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-2 backdrop-blur-[1px] sm:p-4">
+          <div role="dialog" aria-modal="true" aria-labelledby="countdown-entry-title" className="flex max-h-[calc(100svh-1rem)] w-full max-w-5xl flex-col overflow-hidden border border-border bg-card shadow-2xl sm:max-h-[calc(100svh-2rem)]">
+            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-4 py-3 sm:px-5">
               <div className="flex items-center gap-2">
                 <Pencil className="h-3.5 w-3.5 text-success" />
-                <p className="text-[12px] font-medium text-foreground">
+                <p id="countdown-entry-title" className="text-sm font-semibold text-foreground">
                   {editorMode === "edit" ? "Edit Jobdesc" : "Tambah Jobdesc"}
                 </p>
               </div>
               <ActionButton onClick={closeEditor}><X className="h-3 w-3" />Tutup</ActionButton>
             </div>
-
+            {editorMode === "create" ? (
+              <div className="flex shrink-0 gap-1 border-b border-border bg-background px-4 py-2 sm:px-5">
+                {(["manual", "upload"] as const).map((mode) => (
+                  <ActionButton
+                    key={mode}
+                    variant={entryMode === mode ? "primary" : undefined}
+                    aria-pressed={entryMode === mode}
+                    onClick={() => { setEntryMode(mode); setImportResult(null); }}
+                  >
+                    {mode === "manual" ? <Pencil className="h-3 w-3" /> : <FileUp className="h-3 w-3" />}
+                    {mode === "manual" ? "Manual" : "Unggah Excel"}
+                  </ActionButton>
+                ))}
+              </div>
+            ) : null}
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-5">
+            {resolveCountdownEntryMode(editorMode, entryMode) === "manual" ? (
               <CountdownBoardForm
                 initialValues={initialFormValues}
-                editorMode={editorMode as "create" | "edit"}
+                editorMode={editorMode}
                 references={references}
                 isSaving={isSaving}
                 onCancel={closeEditor}
@@ -602,73 +549,67 @@ export function CountdownBoardShell({ rows, references, canManage, meta, state }
                   void handleSaveCountdown(data);
                 }}
               />
+            ) : (
+              <div className="mx-auto max-w-xl space-y-4">
+                <div>
+                  <FieldLabel required>Unit</FieldLabel>
+                  <CompactSelect value={uploadUnitId} onChange={(event) => setUploadUnitId(event.target.value)}>
+                    <option value="">Pilih unit</option>
+                    {references.units.map((unit) => <option key={unit.value} value={unit.value}>{unit.label}</option>)}
+                  </CompactSelect>
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-2 border border-border bg-background px-3 py-2">
+                  <p className="text-[11px] text-muted-foreground">Gunakan templat agar kolom Excel sesuai.</p>
+                  <ActionButton disabled={!uploadUnitId} onClick={() => void handleTemplateDownload()}>
+                    <FileText className="h-3 w-3" />Unduh Templat
+                  </ActionButton>
+                </div>
+                <input
+                  type="file"
+                  accept=".xlsx"
+                  disabled={!uploadUnitId}
+                  onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
+                  className="block w-full border border-border bg-background p-2 text-[11px] text-muted-foreground disabled:cursor-not-allowed disabled:opacity-40 file:mr-2 file:border-0 file:bg-primary/10 file:px-2 file:py-1 file:text-[10px] file:uppercase file:tracking-wider file:text-app-accent-ink"
+                />
+                {importResult ? (
+                  <div className="border border-border bg-background px-3 py-2 text-[11px] text-muted-foreground">
+                    <p>Ditambahkan: {importResult.inserted}. Diperbarui: {importResult.updated}. Ditolak: {importResult.rejected}.</p>
+                    {importResult.issues.length > 0 ? (
+                      <div className="mt-2 space-y-1 text-destructive/80">
+                        {importResult.issues.map((issue) => {
+                          const [field, issueMessage] = formatCountdownImportIssue(issue.field, issue.message);
+                          return <p key={`${issue.rowNumber}-${issue.field}`}>Baris {issue.rowNumber}. Kolom {field}. {issueMessage}</p>;
+                        })}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+                <div className="flex justify-end border-t border-border pt-3">
+                  <ActionButton variant="primary" disabled={isUploading || !uploadUnitId || !selectedFile} onClick={() => void submitImport()}>
+                    <Upload className="h-3 w-3" />{isUploading ? "Mengunggah…" : "Unggah"}
+                  </ActionButton>
+                </div>
+              </div>
+            )}
+            </div>
           </div>
         </div>
       ) : null}
 
-      {canManage && uploadOpen ? (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 px-4 backdrop-blur-[1px]">
-          <div className="w-full max-w-xl border border-white/[0.08] bg-popover p-4 shadow-2xl">
-            {/* Header */}
-            <div className="mb-4 flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <FileUp className="h-3.5 w-3.5 text-app-accent-ink" />
-                <p className="text-[12px] font-mono text-foreground">Upload Excel Countdown</p>
-              </div>
-              <ActionButton onClick={() => setUploadOpen(false)}><X className="h-3 w-3" />Tutup</ActionButton>
+      {exportOpen ? (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-4 backdrop-blur-[1px]">
+          <div role="dialog" aria-modal="true" aria-labelledby="countdown-export-title" className="flex max-h-[calc(100svh-2rem)] w-full max-w-lg flex-col overflow-hidden border border-border bg-card shadow-2xl">
+            <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-3">
+              <p id="countdown-export-title" className="text-sm font-semibold text-foreground">Unduh Countdown</p>
+              <ActionButton onClick={() => setExportOpen(false)}><X className="h-3 w-3" />Tutup</ActionButton>
             </div>
-
-            {/* Unit context — wajib ada */}
-            {activeUnitId ? (
-              <div className="mb-3 border border-primary/15 bg-primary/[0.04] px-3 py-2">
-                <p className="text-[10px] font-mono text-app-accent-ink/70 uppercase tracking-[0.12em]">Upload untuk unit</p>
-                <p className="mt-0.5 text-[12px] font-mono text-foreground">{activeUnitLabel}</p>
-                {activeDivisionLabel ? (
-                  <p className="mt-0.5 text-[10px] font-mono text-foreground/40">Divisi: {activeDivisionLabel}</p>
-                ) : null}
-              </div>
-            ) : (
-              <div className="mb-3 border border-destructive/20 bg-destructive/[0.05] px-3 py-2">
-                <p className="text-[11px] font-mono text-destructive">
-                  ⚠ Filter unit belum dipilih. Tutup modal ini dan pilih filter unit dari grid terlebih dahulu.
-                </p>
-              </div>
-            )}
-
-            {/* File input */}
-            <input
-              type="file"
-              accept=".xlsx,.xls"
-              disabled={!activeUnitId}
-              onChange={(e) => setSelectedFile(e.target.files?.[0] ?? null)}
-              className="block w-full border border-white/[0.06] bg-white/[0.03] p-2 text-[11px] font-mono text-foreground/50 disabled:cursor-not-allowed disabled:opacity-40 file:mr-2 file:border-0 file:bg-primary/10 file:px-2 file:py-1 file:text-[10px] file:font-mono file:uppercase file:tracking-wider file:text-app-accent-ink"
-            />
-
-            {/* Import result */}
-            {importResult ? (
-              <div className="mt-3 border border-white/[0.05] bg-white/[0.02] px-2.5 py-2 text-[11px] font-mono text-foreground/60">
-                <p>Inserted: {importResult.inserted} · Updated: {importResult.updated} · Rejected: {importResult.rejected}</p>
-                {importResult.issues.length > 0 ? (
-                  <div className="mt-1.5 space-y-0.5 text-destructive/80">
-                    {importResult.issues.map((issue) => (
-                      <p key={`${issue.rowNumber}-${issue.field}`}>
-                        Row {issue.rowNumber} · {issue.field} · {issue.message}
-                      </p>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-
-            <div className="mt-4 flex justify-end">
-              <ActionButton
-                variant="primary"
-                disabled={isUploading || !activeUnitId || !selectedFile}
-                onClick={() => void submitImport()}
-              >
-                <Upload className="h-3 w-3" />
-                {isUploading ? "Uploading..." : "Upload"}
-              </ActionButton>
+            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
+              <div><FieldLabel required>Unit</FieldLabel><CompactSelect value={exportUnitId} onChange={(event) => setExportUnitId(event.target.value)}><option value="">Pilih unit</option>{references.units.map((unit) => <option key={unit.value} value={unit.value}>{unit.label}</option>)}</CompactSelect></div>
+              <div><FieldLabel>Divisi</FieldLabel><CompactSelect value={exportDivisionId} onChange={(event) => setExportDivisionId(event.target.value)}><option value="">Semua divisi</option>{references.divisions.map((division) => <option key={division.value} value={division.value}>{division.label}</option>)}</CompactSelect></div>
+              <div><FieldLabel>Status</FieldLabel><CompactSelect value={exportStatus} onChange={(event) => setExportStatus(event.target.value)}><option value="">Semua status</option>{["PLAN", "PROSES", "QC_READY", "DONE"].map((status) => <option key={status} value={status}>{formatCountdownStatus(status)}</option>)}</CompactSelect></div>
+            </div>
+            <div className="flex shrink-0 justify-end border-t border-border px-4 py-3">
+              <ActionButton variant="primary" disabled={!exportUnitId} onClick={() => void handleCountdownDownload()}><Download className="h-3 w-3" />Unduh</ActionButton>
             </div>
           </div>
         </div>
@@ -677,12 +618,12 @@ export function CountdownBoardShell({ rows, references, canManage, meta, state }
       {/* ── Data grid ── */}
       <SmartDataGrid
         viewportClassName="max-h-[calc(100svh-260px)]"
-        title="Countdown Board"
-        description="Monitor countdown per unit, divisi, panel, section, dan status kerja."
+        title="Daftar Countdown"
+        description="Pantau countdown berdasarkan unit, divisi, panel, bagian, dan status pekerjaan."
         columns={columns} rows={rows} meta={meta} state={state}
-        searchPlaceholder="Cari unit / panel / section / job type / status..."
-        filters={filters} sortOptions={sortOptions} savedViews={savedViews}
-        emptyMessage="Belum ada countdown yang sesuai query saat ini."
+        searchPlaceholder="Cari unit, panel, bagian, jenis pekerjaan, atau status…"
+        filters={filters} headerFilterFields={["unitId", "divisionId", "status"]} sortOptions={sortOptions}
+        emptyMessage="Belum ada countdown yang sesuai pencarian saat ini."
       />
     </div>
   );

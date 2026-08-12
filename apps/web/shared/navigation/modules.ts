@@ -131,28 +131,16 @@ const navigationModules: NavigationItem[] = [
     group: "Operations",
     subItems: [
       {
-        id: "spf-items",
-        label: "Item Restorasi",
-        href: "/spf/items",
-        permission: permissionCodes.profileView,
-      },
-      {
         id: "spf-periods",
         label: "Periode SPF",
         href: "/spf/periods",
-        permission: permissionCodes.profileView,
+        permission: permissionCodes.spfAdmin,
       },
       {
         id: "spf-clients",
-        label: "Client / Customer",
+        label: "Client",
         href: "/spf/clients",
-        permission: permissionCodes.profileView,
-      },
-      {
-        id: "spf-url-generator",
-        label: "URL Generator",
-        href: "/spf/url-generator",
-        permission: permissionCodes.profileView,
+        permission: permissionCodes.spfAdmin,
       },
     ],
   },
@@ -322,12 +310,16 @@ function hasNodePermission(
   item: Pick<NavigationItem, "id" | "permission">,
   permissions: readonly string[],
 ) {
-  if (item.id === "spf" || item.id.startsWith("spf-")) {
-    return true;
-  }
-
   if (item.id === "requests" || item.id.startsWith("requests-")) {
     return hasRequestAccess(permissions);
+  }
+
+  if (item.id === "spf" || item.id === "spf-periods") {
+    return [permissionCodes.spfAdmin, permissionCodes.spfApprove, permissionCodes.spfPublish].some((permission) => permissions.includes(permission));
+  }
+
+  if (item.id === "spf-clients") {
+    return [permissionCodes.spfAdmin, permissionCodes.spfPublish].some((permission) => permissions.includes(permission));
   }
 
   if (item.permission) {
@@ -376,12 +368,15 @@ function filterSubItems(
   return filteredItems;
 }
 
-export function buildNavigation(permissions: readonly string[]): NavigationItem[] {
+export function buildNavigation(permissions: readonly string[], roleName?: string): NavigationItem[] {
+  const effectivePermissions = roleName?.trim().toLowerCase() === "mis"
+    ? Object.values(permissionCodes)
+    : permissions;
   const filteredItems: NavigationItem[] = [];
 
   for (const item of navigationModules) {
-    const filteredSubItems = filterSubItems(item.subItems, permissions);
-    const selfAllowed = hasNodePermission(item, permissions);
+    const filteredSubItems = filterSubItems(item.subItems, effectivePermissions);
+    const selfAllowed = hasNodePermission(item, effectivePermissions);
 
     if (!selfAllowed && filteredSubItems.length === 0) {
       continue;

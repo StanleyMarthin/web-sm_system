@@ -25,22 +25,22 @@ export function SourceCollectorShell({
               </Link>
             </li>
             <li>/</li>
-            <li className="text-foreground dark:text-foreground">Source SMS DB</li>
+            <li className="text-foreground dark:text-foreground">Sumber Data</li>
           </ol>
         </nav>
         <PageHeader
           eyebrow="SPF Admin"
-          title="SMS Database Source Collector"
+          title="Pengumpulan Sumber Data"
         />
       </div>
 
       {/* Notice Banner */}
       <div className="rounded border border-primary/20 bg-primary/5 p-3 dark:border-primary/15 dark:bg-primary/8">
         <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-app-accent-ink font-semibold dark:text-app-accent-ink/90">
-          💡 Catatan Pengumpulan Source
+          💡 Catatan Pengumpulan Sumber
         </p>
         <p className="mt-1 text-[12px] leading-5 text-muted-foreground dark:text-foreground/75">
-          Proses pengumpulan (COLLECT) akan menyalin item mentah dari basis data SMS ke dalam item pekerjaan SPF untuk diproses lebih lanjut. Mengumpulkan data tidak memodifikasi atau menghapus data mentah pada SMS DB.
+          Proses pengumpulan akan menyalin pekerjaan mentah dari database SMS ke dalam item SPF untuk diproses lebih lanjut. Mengumpulkan data tidak mengubah atau menghapus data asli.
         </p>
       </div>
 

@@ -4,6 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2, PackagePlus, Pencil } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
+import { ActionButton, CompactInput, CompactSelect, FieldLabel } from "@/shared/ui/compact";
 
 const warehouseItemFormSchema = z.object({
   itemId: z.string().nullable(),
@@ -23,14 +24,6 @@ interface WarehouseItemFormProps {
   onSubmit: (data: WarehouseItemFormValues) => void;
 }
 
-const inputCls =
-  "h-9 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-2.5 text-[12px] text-foreground outline-none transition-colors focus:border-primary/30 [color-scheme:dark]";
-
-const darkSelectStyle = {
-  backgroundColor: "var(--card)",
-  color: "var(--card-foreground)",
-} as const;
-
 export function WarehouseItemForm({
   initialValues,
   isPending,
@@ -39,6 +32,7 @@ export function WarehouseItemForm({
   const isEditing = initialValues?.itemId != null;
   const {
     register,
+    watch,
     handleSubmit,
     formState: { errors, isValid },
   } = useForm<WarehouseItemFormValues>({
@@ -54,50 +48,35 @@ export function WarehouseItemForm({
     },
     mode: "onChange",
   });
+  const itemCategory = watch("itemCategory");
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-      <div className="grid gap-4 md:grid-cols-2">
-        <label className="grid gap-2 text-sm text-foreground/75">
-          <span>Kategori</span>
-          <select {...register("itemCategory")} className={inputCls} style={darkSelectStyle}>
-            <option value="BAHAN" style={darkSelectStyle}>Bahan</option>
-            <option value="TOOLS" style={darkSelectStyle}>Tools</option>
-          </select>
-        </label>
+      <div className="grid gap-3 md:grid-cols-2">
+        <label><FieldLabel>Kategori</FieldLabel><CompactSelect {...register("itemCategory")} value={itemCategory}>
+          <option value="BAHAN">Bahan</option><option value="TOOLS">Tools</option>
+        </CompactSelect></label>
 
-        <label className="grid gap-2 text-sm text-foreground/75">
-          <span>Kode</span>
-          <input {...register("itemCode")} className={inputCls} />
-        </label>
+        <label><FieldLabel>Kode</FieldLabel><CompactInput {...register("itemCode")} /></label>
 
-        <label className="grid gap-2 text-sm text-foreground/75 md:col-span-2">
-          <span>Nama barang</span>
-          <input {...register("itemName")} className={inputCls} />
+        <label className="md:col-span-2"><FieldLabel required>Nama barang</FieldLabel><CompactInput {...register("itemName")} />
           {errors.itemName ? <span className="text-xs text-destructive">{errors.itemName.message}</span> : null}
         </label>
 
-        <label className="grid gap-2 text-sm text-foreground/75">
-          <span>Satuan</span>
-          <input {...register("uom")} className={inputCls} />
-        </label>
+        <label><FieldLabel>Satuan</FieldLabel><CompactInput {...register("uom")} /></label>
 
         <label className="flex h-9 items-center gap-2 self-end rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 text-sm text-foreground/75">
           <input type="checkbox" {...register("isActive")} />
           Aktif
         </label>
 
-        <label className="grid gap-2 text-sm text-foreground/75 md:col-span-2">
-          <span>Keterangan</span>
-          <input {...register("description")} className={inputCls} />
-        </label>
+        <label className="md:col-span-2"><FieldLabel>Keterangan</FieldLabel><CompactInput {...register("description")} /></label>
       </div>
 
       <div className="mt-5 flex justify-end">
-        <button
+        <ActionButton variant="success"
           type="submit"
           disabled={isPending || !isValid}
-          className="inline-flex items-center gap-2 rounded-full bg-primary px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-primary-foreground disabled:opacity-50"
         >
           {isPending ? (
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -107,7 +86,7 @@ export function WarehouseItemForm({
             <PackagePlus className="h-3.5 w-3.5" />
           )}
           {isEditing ? "Simpan barang" : "Tambah barang"}
-        </button>
+        </ActionButton>
       </div>
     </form>
   );

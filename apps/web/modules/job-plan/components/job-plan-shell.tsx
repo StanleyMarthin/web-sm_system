@@ -230,6 +230,18 @@ function isDraftStatus(status: JobPlanStatus): boolean {
   return status === "DRAFT";
 }
 
+function matchesWorkDivision(
+  rowDivisionId: number | null | undefined,
+  selectedDivisionId: string,
+  divisions: JobPlanGridReference["divisions"],
+): boolean {
+  if (!selectedDivisionId) return true;
+  if (String(rowDivisionId ?? "") === selectedDivisionId) return true;
+
+  const selectedDivision = divisions.find((division) => division.value === selectedDivisionId);
+  return selectedDivision?.parentId != null && String(rowDivisionId ?? "") === String(selectedDivision.parentId);
+}
+
 function getModeLabel(mode: JobPlanMode): string {
   switch (mode) {
     case "overtime":
@@ -972,8 +984,7 @@ export function JobPlanShell({
   function getCountdownRowsForDivision() {
     return references.countdowns.filter(
       (countdown) =>
-        !workspaceForm.divisionId ||
-        String(countdown.divisionId ?? "") === workspaceForm.divisionId,
+        matchesWorkDivision(countdown.divisionId, workspaceForm.divisionId, references.divisions),
     );
   }
 
@@ -1017,8 +1028,7 @@ export function JobPlanShell({
   function getWorkOrdersForDivision() {
     return references.workOrders.filter(
       (workOrder) =>
-        !workspaceForm.divisionId ||
-        String(workOrder.divisionId ?? "") === workspaceForm.divisionId,
+        matchesWorkDivision(workOrder.divisionId, workspaceForm.divisionId, references.divisions),
     );
   }
 
@@ -1061,7 +1071,7 @@ export function JobPlanShell({
 
   function getCountdownRowsByDivision(divisionId: string) {
     return references.countdowns.filter(
-      (countdown) => !divisionId || String(countdown.divisionId ?? "") === divisionId,
+      (countdown) => matchesWorkDivision(countdown.divisionId, divisionId, references.divisions),
     );
   }
 
@@ -1147,13 +1157,10 @@ export function JobPlanShell({
         panelQuery: selectedCountdown.panelName ?? selectedCountdown.panelSectionName ?? "-",
         referenceId: selectedCountdown.value,
         targetHours: formatDurationHHMM(targetHours),
-        jobDescription:
-          [selectedCountdown.jobName, selectedCountdown.panelName ?? selectedCountdown.panelSectionName]
-            .filter(Boolean)
-            .join(" · ") || selectedCountdown.label || "",
+        jobDescription: getCountdownInstruction(selectedCountdown),
         instructionQuery:
           selectedCountdown.jobName ?? selectedCountdown.label ?? "",
-        note: `Sumber: Countdown ${selectedCountdown.value}`,
+        note: "",
       },
       transferMode,
     );
@@ -1515,7 +1522,7 @@ export function JobPlanShell({
 
     const shouldSubmit = await sweetAlert.confirm({
       title: "Kirim draft ke approval?",
-      description: `${selectedRows.length} draft akan dikirim ke alur KD → Advisor (jika ada) → KP → PM/MP.`,
+      description: `${selectedRows.length} draft akan dikirim ke alur KD -> QA (jika ada) -> KP -> PM/MP.`,
       tone: "warning",
       confirmLabel: "Kirim Draft",
     });
@@ -1774,7 +1781,7 @@ export function JobPlanShell({
         const planStatus = row.status as string | null | undefined;
         if (actualStatus === "DONE") {
           return (
-            <span className="inline-flex items-center gap-1 border border-primary/30 bg-primary/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.1em] text-app-accent-ink">
+            <span className="inline-flex items-center gap-1 border border-success/30 bg-success/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.1em] text-success">
               Sudah Dikerjakan
             </span>
           );
@@ -2015,17 +2022,6 @@ export function JobPlanShell({
     }
 
     if (row.source === "additional") {
-      const selectedDivision = references.divisions.find(
-        (division) => division.value === workspaceForm.divisionId,
-      );
-      const selectedParentId = selectedDivision?.parentId ?? null;
-      const selectedParentCode = (
-        selectedDivision?.parentCode ??
-        selectedDivision?.parentName ??
-        ""
-      ).trim().toUpperCase();
-      const includeMechanicParent = selectedParentId !== null && selectedParentCode === "MECHANIC";
-
       return (
         <CompactSelect
           value={row.jobTypeId}
@@ -2037,8 +2033,7 @@ export function JobPlanShell({
               (jobType) =>
                 !workspaceForm.divisionId ||
                 jobType.divisionId === null ||
-                String(jobType.divisionId ?? "") === workspaceForm.divisionId ||
-                (includeMechanicParent && jobType.divisionId === selectedParentId),
+                matchesWorkDivision(jobType.divisionId, workspaceForm.divisionId, references.divisions),
             )
             .map((jobType) => (
               <option key={jobType.value} value={jobType.value}>

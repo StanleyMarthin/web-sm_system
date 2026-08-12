@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Search } from "lucide-react";
 import { CompactInput, FieldLabel } from "@/shared/ui/compact";
+import { getApiBaseUrl } from "@/shared/api/config";
 
 export interface VehicleOption {
   value: string;
@@ -43,13 +44,14 @@ export function VehicleCombobox({
 }: VehicleComboboxProps) {
   const [loadedVehicles, setLoadedVehicles] = useState<VehicleOption[]>([]);
   const [query, setQuery] = useState("");
+  const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(!vehicles);
 
   useEffect(() => {
     if (vehicles) return;
     let cancelled = false;
     setLoading(true);
-    fetch("/api/units?limit=100", { credentials: "include", cache: "no-store" })
+    fetch(`${getApiBaseUrl()}/api/units?limit=100`, { credentials: "include", cache: "no-store" })
       .then((response) => (response.ok ? response.json() : null))
       .then((body) => {
         if (cancelled) return;
@@ -75,49 +77,60 @@ export function VehicleCombobox({
   }, [options, query]);
 
   const selected = options.find((option) => option.value === value);
+  const displayValue = query || selected?.label || (allowManual ? value : "");
 
   return (
-    <div className="space-y-2">
+    <div
+      className="space-y-2"
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) setIsOpen(false);
+      }}
+    >
       <FieldLabel required>{label}</FieldLabel>
       <div className="relative">
         <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
         <CompactInput
-          value={query}
+          value={displayValue}
           onChange={(event) => {
             setQuery(event.target.value);
+            setIsOpen(true);
             if (allowManual) onChange(event.target.value.trim());
           }}
+          onFocus={() => setIsOpen(true)}
           disabled={disabled}
-          placeholder={selected ? selected.label : loading ? "Memuat unit..." : "Cari unit atau customer"}
+          placeholder={loading ? "Memuat unit..." : "Cari unit atau customer"}
           className="pl-8"
         />
       </div>
 
-      <div className="max-h-48 overflow-y-auto border border-border dark:border-white/[0.06]">
-        {filtered.length > 0 ? (
-          filtered.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              disabled={disabled}
-              onClick={() => {
-                onChange(option.value);
-                setQuery("");
-              }}
-              className={`flex w-full flex-col px-3 py-2 text-left text-[13px] hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
-                value === option.value ? "bg-primary/10 text-app-accent-ink" : "text-foreground"
-              }`}
-            >
-              <span className="font-mono text-[12px] font-semibold">{option.value}</span>
-              <span className="text-[12px] text-muted-foreground">{option.label}</span>
-            </button>
-          ))
-        ) : (
-          <div className="px-3 py-3 text-[12px] text-muted-foreground">
-            {allowManual ? "Tidak ada hasil. Nilai yang diketik akan dipakai sebagai car_id." : "Tidak ada unit dari endpoint kendaraan."}
-          </div>
-        )}
-      </div>
+      {isOpen ? (
+        <div className="max-h-48 overflow-y-auto border border-border dark:border-white/[0.06]">
+          {filtered.length > 0 ? (
+            filtered.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                disabled={disabled}
+                onClick={() => {
+                  onChange(option.value);
+                  setQuery("");
+                  setIsOpen(false);
+                }}
+                className={`flex w-full flex-col px-3 py-2 text-left text-[13px] hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+                  value === option.value ? "bg-primary/10 text-app-accent-ink" : "text-foreground"
+                }`}
+              >
+                <span className="text-[13px] font-semibold text-foreground">{option.label}</span>
+                <span className="font-mono text-[11px] text-muted-foreground">{option.value}</span>
+              </button>
+            ))
+          ) : (
+            <div className="px-3 py-3 text-[12px] text-muted-foreground">
+              {loading ? "Memuat unit..." : allowManual ? "Tidak ada hasil. Nilai yang diketik akan dipakai sebagai ID unit." : "Tidak ada unit yang cocok."}
+            </div>
+          )}
+        </div>
+      ) : null}
     </div>
   );
 }

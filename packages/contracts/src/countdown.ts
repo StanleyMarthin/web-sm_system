@@ -1,4 +1,5 @@
 import { gridMetaSchema, gridQueryStateSchema } from "@smsystem/contracts/grid";
+import { galleryPhotoTypeSchema } from "./gallery";
 import { z } from "zod";
 
 export const countdownTaskCategorySchema = z.enum([
@@ -9,6 +10,15 @@ export const countdownTaskCategorySchema = z.enum([
 ]);
 
 export const countdownStatusSchema = z.enum(["PLAN", "PROSES", "QC_READY", "DONE"]);
+
+export const countdownRevisionStatusSchema = z.enum([
+  "REQUESTED",
+  "MO_REVIEW",
+  "APPROVED",
+  "REJECTED",
+]);
+
+const countdownRevisionDateSchema = z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/u);
 
 export const countdownBoardRowSchema = z.object({
   countdownId: z.string(),
@@ -36,6 +46,11 @@ export const countdownBoardRowSchema = z.object({
   workdayAlias: z.string().nullable().optional(),
   actualProgressPercent: z.number(),
   status: z.string(),
+  extensionRequestStatus: countdownRevisionStatusSchema.nullable(),
+  requestedExtensionHours: z.number().nonnegative(),
+  requestedDeadline: z.string().nullable(),
+  revisionReason: z.string().nullable(),
+  countRevision: z.number().int().nonnegative(),
   startDate: z.string().nullable(),
   deadlineDate: z.string().nullable(),
   createdAt: z.string().nullable(),
@@ -102,8 +117,18 @@ export const countdownBoardEnvelopeSchema = z.object({
   query: gridQueryStateSchema,
 });
 
+export const countdownDetailPhotoSchema = z.object({
+  photoId: z.string(),
+  type: galleryPhotoTypeSchema,
+  url: z.string(),
+  caption: z.string().nullable(),
+  uploader: z.string().nullable(),
+  time: z.string(),
+});
+
 export const countdownDetailEntrySchema = z.object({
   detailId: z.string(),
+  actualId: z.string().nullable(),
   entryType: z.string(),
   employeeId: z.string().nullable(),
   employeeName: z.string(),
@@ -114,6 +139,8 @@ export const countdownDetailEntrySchema = z.object({
   billedHours: z.number(),
   progressPercent: z.number(),
   taskStatus: z.string(),
+  dailyNotes: z.string().nullable(),
+  photos: z.array(countdownDetailPhotoSchema),
 });
 
 export const countdownDetailSchema = countdownBoardRowSchema.extend({
@@ -127,6 +154,21 @@ export const countdownDetailEnvelopeSchema = z.object({
     countdown: countdownDetailSchema,
   }),
   canManage: z.boolean().optional(),
+  canRequestRevision: z.boolean().optional(),
+  canApproveRevision: z.boolean().optional(),
+  canApproveMoRevision: z.boolean().optional(),
+});
+
+export const countdownRevisionRequestSchema = z.object({
+  requestedHours: z.number().positive(),
+  requestedDeadline: countdownRevisionDateSchema,
+  reason: z.string().trim().min(1).max(1000),
+});
+
+export const countdownRevisionDecisionSchema = z.object({
+  isApproved: z.boolean(),
+  approvedHours: z.number().nonnegative(),
+  approvedDeadline: countdownRevisionDateSchema,
 });
 
 export const countdownImportIssueSchema = z.object({
@@ -200,3 +242,5 @@ export type CountdownImportResult = z.infer<typeof countdownImportResultSchema>;
 export type CountdownTemplateRow = z.infer<typeof countdownTemplateRowSchema>;
 export type CountdownCreateRequest = z.infer<typeof countdownCreateRequestSchema>;
 export type CountdownUpdateRequest = z.infer<typeof countdownUpdateRequestSchema>;
+export type CountdownRevisionRequest = z.infer<typeof countdownRevisionRequestSchema>;
+export type CountdownRevisionDecision = z.infer<typeof countdownRevisionDecisionSchema>;

@@ -12,7 +12,7 @@ const paginationRequest = {
 const text = (max: number) => z.string().trim().min(1).max(max);
 const optionalText = (max: number) => z.string().trim().max(max).optional().or(z.literal(""));
 const idArraySchema = z.array(requestIdSchema).max(500);
-const sourceTypeSchema = z.enum(["SYSTEM", "MANUAL"]);
+const sourceTypeSchema = z.enum(["SYSTEM", "MANUAL", "EXCEL"]);
 
 const ALLOWED_ITEM_SORTS = ["created_at", "updated_at", "work_type", "car_id", "display_order"] as const;
 const ALLOWED_PERIOD_SORTS = ["created_at", "updated_at", "title", "date_start", "date_end"] as const;
@@ -45,7 +45,6 @@ const sourceRequestSchema = z.discriminatedUnion("mode", [
     spf_status: z.enum(SPF_SOURCE_STATUSES).optional(),
     technical_only: z.boolean().optional(),
     exclude_repetition: z.boolean().optional(),
-    period_id: z.string().optional(),
     ...paginationRequest,
   }),
   z.object({
@@ -97,6 +96,12 @@ const itemRequestSchema = z.discriminatedUnion("mode", [
     mime_type: z.enum(["image/jpeg", "image/png", "image/webp", "video/mp4"]),
     file_data: z.string().min(1),
   }),
+  z.object({
+    mode: z.literal("ADD_MEDIA_URL"),
+    item_id: requestIdSchema,
+    media_url: z.string().trim().url().max(2048),
+    media_type: z.enum(["PHOTO", "VIDEO"]),
+  }),
   z.object({ mode: z.literal("DELETE_MEDIA"), media_id: requestIdSchema }),
   z.object({
     mode: z.literal("HIDE_MEDIA"),
@@ -109,6 +114,7 @@ const periodRequestSchema = z.discriminatedUnion("mode", [
   z.object({
     mode: z.literal("LIST"),
     car_id: z.string().trim().optional(),
+    unit: z.string().trim().max(255).optional(),
     year: z.string().trim().optional(),
     date_start: z.string().optional(),
     date_end: z.string().optional(),
@@ -158,11 +164,25 @@ const clientRequestSchema = z.discriminatedUnion("mode", [
   }),
   z.object({ mode: z.literal("DETAIL"), client_id: requestIdSchema }),
   z.object({
+    mode: z.literal("CREATE"),
+    name: text(255),
+    status: z.enum(["ACTIVE", "INACTIVE"]).optional(),
+    access_code: z.string().trim().min(8).max(255).optional(),
+  }),
+  z.object({
+    mode: z.literal("UPDATE"),
+    client_id: requestIdSchema,
+    name: optionalText(255),
+    status: z.enum(["ACTIVE", "INACTIVE"]).optional(),
+  }),
+  z.object({
     mode: z.literal("SET_ACCESS_CODE"),
     client_id: requestIdSchema,
-    access_code: z.string().trim().min(4).max(255),
+    access_code: z.string().trim().min(8).max(255),
   }),
   z.object({ mode: z.literal("RESET_ACCESS_CODE"), client_id: requestIdSchema }),
+  z.object({ mode: z.literal("REVEAL_CREDENTIALS"), client_id: requestIdSchema }),
+  z.object({ mode: z.literal("PREVIEW"), client_id: requestIdSchema }),
 ]);
 
 export const requestSchemas = {
@@ -211,6 +231,7 @@ export const spfItemSchema = z.object({
   work_date: nullableString,
   period_id: requestIdSchema.nullable().optional(),
   spf_status: z.enum(SPF_SOURCE_STATUSES).optional(),
+  is_included: z.coerce.number().int().min(0).max(1).optional(),
   exclusion_reason: nullableString,
   display_order: z.coerce.number().int().min(0).optional(),
   documentation_checked: z.coerce.boolean().optional(),
@@ -230,11 +251,12 @@ export const spfItemSchema = z.object({
   panel_id: item.panel_id == null ? null : String(item.panel_id),
   customer_description: item.customer_description ?? item.description ?? "",
   original_description: item.original_description ?? item.description ?? "",
-  work_status: item.work_status ?? item.work_type ?? "-",
-  work_type: item.work_type ?? item.work_status ?? "-",
+  work_status: item.work_status ?? "-",
+  work_type: item.work_type ?? "-",
   description: item.description ?? item.customer_description ?? "",
   progress: item.progress ?? 0,
   spf_status: item.spf_status ?? "READY",
+  is_included: item.is_included ?? (item.spf_status === "INCLUDED" ? 1 : 0),
   display_order: item.display_order ?? 0,
   documentation_checked: item.documentation_checked ?? false,
   documentation_count: item.documentation_count ?? item.media_count ?? 0,
@@ -276,6 +298,8 @@ export const spfPeriodSchema = z.object({
   period_id: requestIdSchema.optional(),
   car_id: requestIdSchema.optional(),
   car_name: z.string().optional(),
+  unit_name: nullableString,
+  client_name: nullableString,
   title: z.string().nullable().optional(),
   description: nullableString,
   workflow_status: z.enum(SPF_PERIOD_STATUSES).optional(),
@@ -309,6 +333,7 @@ export const spfPeriodSchema = z.object({
     id,
     period_id: id,
     car_id: p.car_id == null ? "" : String(p.car_id),
+    car_name: p.car_name ?? (p.unit_name ? `${p.unit_name}${p.client_name ? ` – ${p.client_name}` : ""}` : undefined),
     title: p.title ?? id,
     workflow_status: p.workflow_status ?? status,
     status,
@@ -371,6 +396,7 @@ export const spfClientVehicleSchema = z.object({
   cover_url: z.string().nullable().optional(),
   visible: z.coerce.boolean().optional(),
   display_order: z.coerce.number().int().min(0).optional(),
+  last_period_update: nullableString,
   updated_at: z.string().nullable().optional(),
 }).passthrough().transform((v) => ({
   ...v,
@@ -408,7 +434,9 @@ export const spfClientSchema = z.object({
   last_report_title: nullableString,
   last_report_at: nullableString,
   access_code_status: nullableString,
+  access_code: nullableString,
   status: z.string().nullable().optional(),
+  portal_url: nullableString,
   updated_at: z.string().nullable().optional(),
   vehicles: z.array(spfClientVehicleSchema).optional(),
   timeline: z.array(spfTimelineSchema).optional(),
@@ -508,6 +536,7 @@ export const spfCollectEnvelopeSchema = z.object({
   data: z.object({
     inserted: z.number().int().nonnegative().optional(),
     ignored: z.number().int().nonnegative().optional(),
+    item_ids: z.array(z.string()).optional(),
   }),
 });
 

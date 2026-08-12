@@ -36,7 +36,14 @@ async function CountdownDetailPageContent({ params }: CountdownDetailPageProps) 
     );
   }
 
-  return <CountdownDetailShell countdown={payload.data.countdown} />;
+  return (
+    <CountdownDetailShell
+      countdown={payload.data.countdown}
+      canRequestRevision={payload.canRequestRevision}
+      canApproveRevision={payload.canApproveRevision}
+      canApproveMoRevision={payload.canApproveMoRevision}
+    />
+  );
 }
 
 

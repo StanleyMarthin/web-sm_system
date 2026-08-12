@@ -43,13 +43,13 @@ export default async function ItemDetailPage({ params }: Props) {
 
   // Item yang sudah ada di periode workflow tidak bisa diedit lagi.
   // Backend tetap menjadi penjaga akhir setiap mode.
-  const editable = session.role === "ADMIN" && item.period_id === null;
+  const editable = session.canAdmin && item.period_id === null;
 
   return (
     <ItemDetailShell
       item={item}
       media={media}
-      role={session.role}
+      canAdmin={session.canAdmin}
       editable={editable}
     />
   );

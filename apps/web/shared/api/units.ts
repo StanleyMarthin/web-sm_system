@@ -3,6 +3,7 @@ import {
   unitBoardEnvelopeSchema,
   unitBoardRowSchema,
   unitMutationEnvelopeSchema,
+  unitClientsEnvelopeSchema,
   unitWorkspaceEnvelopeSchema,
   type CreateUnitRequest,
   type UpdateUnitRequest,
@@ -120,6 +121,20 @@ export async function fetchUnitBoard(
       payload: null,
       status: 503,
     };
+  }
+}
+
+export async function fetchUnitClients(cookieHeader: string, query: { search?: string; selected?: string } = {}) {
+  const params = new URLSearchParams();
+  if (query.search) params.set("search", query.search);
+  if (query.selected) params.set("selected", query.selected);
+  const suffix = params.size > 0 ? `?${params.toString()}` : "";
+  try {
+    const response = await fetch(`${getApiBaseUrl()}/api/units/clients${suffix}`, buildServerOrBrowserRequestInit(cookieHeader));
+    if (!response.ok) return { payload: null, status: response.status };
+    return { payload: unitClientsEnvelopeSchema.parse(await response.json()).data, status: response.status };
+  } catch {
+    return { payload: null, status: 503 };
   }
 }
 

@@ -40,8 +40,9 @@ export function isReservedSuperadminRole(
          normalized.includes("superadmin");
 }
 
-function isAdvisorRole(roleName: string | null | undefined): boolean {
-  return normalizeRoleName(roleName).includes("advisor");
+export function isQaRole(roleName: string | null | undefined): boolean {
+  const normalized = normalizeRoleName(roleName);
+  return normalized.includes("advisor") || ["adv", "qa", "quality_assurance"].includes(normalized);
 }
 
 function isGlobalDivisionAccessRole(roleName: string | null | undefined): boolean {
@@ -103,7 +104,7 @@ export function normalizeReservedRoleProfile(
     return buildRoleProfileWithScopeBasis(roleProfile, "GLOBAL");
   }
 
-  if (isAdvisorRole(roleName)) {
+  if (isQaRole(roleName)) {
     return buildRoleProfileWithScopeBasis(roleProfile, "ASSIGNED_DIVISIONS");
   }
 
@@ -122,7 +123,7 @@ export function normalizeReservedScope(
     };
   }
 
-  if (isAdvisorRole(roleName)) {
+  if (isQaRole(roleName)) {
     return normalizeAdvisorScope(scope);
   }
 
@@ -135,7 +136,7 @@ export function normalizeReservedAuthUser(user: AuthUser): AuthUser {
                   user.divisionName?.toLowerCase().includes("mis") ||
                   user.grade?.toLowerCase() === "mis";
   const isGlobalDivisionRole = isGlobalDivisionAccessRole(user.roleName);
-  const isAdvisor = isAdvisorRole(user.roleName);
+  const isAdvisor = isQaRole(user.roleName);
 
   if (!isSuper && !isGlobalDivisionRole && !isAdvisor) {
     return user;

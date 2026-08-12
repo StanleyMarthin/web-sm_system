@@ -5,6 +5,8 @@ import type {
   UnitBoardRow,
   UnitWorkspace,
   UpdateUnitRequest,
+  UnitClient,
+  UnitClientUnit,
 } from "@smsystem/contracts/unit";
 import type {
   UnitBomDocument,
@@ -58,6 +60,9 @@ interface UnitBoardRowPacket extends RowDataPacket {
 interface AggregateCountPacket extends RowDataPacket {
   total: number;
 }
+
+interface UnitClientPacket extends RowDataPacket { name: string; unitCount: number; }
+interface UnitClientUnitPacket extends RowDataPacket { unitId: string; unitName: string; status: string; }
 
 interface UnitDependencyCountPacket extends RowDataPacket {
   total: number;
@@ -1193,6 +1198,53 @@ export class UnitsRepository {
     return {
       rows: rows.map(mapUnitBoardRow),
       total: countRows[0]?.total ?? 0,
+    };
+  }
+
+  async findUnitClients(params: ScopeParams & { search?: string; selected?: string }): Promise<{
+    clients: UnitClient[];
+    selectedClient: { name: string; units: UnitClientUnit[] } | null;
+  }> {
+    const pool = this.poolFactory();
+    const listParams: unknown[] = [];
+    const clauses = ["NULLIF(TRIM(ub.customerName), '') IS NOT NULL"];
+    const scopeClause = buildScopeWhereClause(params.scope, params.employeeId, listParams);
+    if (scopeClause) clauses.push(scopeClause);
+    if (params.search?.trim()) {
+      clauses.push("(ub.customerName LIKE ? OR ub.unitName LIKE ?)");
+      const term = `%${params.search.trim()}%`;
+      listParams.push(term, term);
+    }
+
+    // ponytail: capped at 100 distinct clients; add cursor pagination when the fleet exceeds this ceiling.
+    const [clients] = (await pool.query(
+      `SELECT MIN(TRIM(ub.customerName)) AS name, COUNT(*) AS unitCount
+       FROM (${unitBoardBaseSql()}) ub
+       WHERE ${clauses.join(" AND ")}
+       GROUP BY LOWER(TRIM(ub.customerName))
+       ORDER BY MIN(TRIM(ub.customerName)) ASC
+       LIMIT 100`,
+      listParams,
+    )) as [UnitClientPacket[], unknown];
+
+    if (!params.selected?.trim()) return { clients: clients.map((row) => ({ name: row.name, unitCount: Number(row.unitCount) })), selectedClient: null };
+
+    const detailParams: unknown[] = [];
+    const detailClauses = ["LOWER(TRIM(ub.customerName)) = LOWER(TRIM(?))"];
+    detailParams.push(params.selected.trim());
+    const detailScope = buildScopeWhereClause(params.scope, params.employeeId, detailParams);
+    if (detailScope) detailClauses.push(detailScope);
+    const [units] = (await pool.query(
+      `SELECT ub.unitId, ub.unitName, ub.status
+       FROM (${unitBoardBaseSql()}) ub
+       WHERE ${detailClauses.join(" AND ")}
+       ORDER BY ub.unitName ASC`,
+      detailParams,
+    )) as [UnitClientUnitPacket[], unknown];
+
+    return {
+      clients: clients.map((row) => ({ name: row.name, unitCount: Number(row.unitCount) })),
+      selectedClient: units.length > 0 ? { name: params.selected.trim(), units } : null,
     };
   }
 

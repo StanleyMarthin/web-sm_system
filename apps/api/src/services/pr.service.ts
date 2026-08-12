@@ -16,6 +16,11 @@ import { MySqlAuditRepository } from "@/repositories/audit.repo";
 import { MySqlPrRepository, type PrRepository } from "@/repositories/pr.repo";
 import type { WebSession } from "@/services/auth/session.service";
 import { buildGridMeta } from "@/services/grid/paginate";
+import { permissionCodes } from "@smsystem/permissions";
+import {
+  notifyMobileEmployees,
+  resolveEmployeeIdsByPermission,
+} from "@/services/mobile-notification.service";
 
 interface PrListResult {
   data: PrRecord[];
@@ -56,6 +61,30 @@ function buildPrQueryCacheKey(
     scope: session.user.scope,
     query,
   });
+}
+
+async function notifyPr(
+  employeeIds: string[],
+  prId: string,
+  title: string,
+  body: string,
+  status: string,
+): Promise<void> {
+  await notifyMobileEmployees(employeeIds, {
+    title,
+    body,
+    data: { module: "pr", reqId: prId, status },
+  }, "sm_pr");
+}
+
+async function notifyPrApprovers(prId: string, body: string, status: string): Promise<void> {
+  await notifyPr(
+    await resolveEmployeeIdsByPermission(permissionCodes.prApprove),
+    prId,
+    "Approval Purchase Request",
+    body,
+    status,
+  );
 }
 
 export interface PrService {
@@ -153,6 +182,12 @@ export class DefaultPrService implements PrService {
       newValue: input,
     });
 
+    await notifyPrApprovers(
+      result.prId,
+      `PR baru ${result.prId} menunggu persetujuan Anda.`,
+      result.accTracking,
+    );
+
     return result;
   }
 
@@ -175,6 +210,18 @@ export class DefaultPrService implements PrService {
       oldValue: detail,
       newValue: input,
     });
+    if (result.accTracking === "APPROVED") {
+      await notifyPr(
+        [detail.header.requestedBy], prId, "Update Purchase Request",
+        `PR ${detail.header.prNumber} telah diperbarui.`, result.status,
+      );
+    } else {
+      await notifyPrApprovers(
+        prId,
+        `PR ${detail.header.prNumber} diperbarui dan menunggu persetujuan.`,
+        result.accTracking,
+      );
+    }
     return result;
   }
 
@@ -218,6 +265,21 @@ export class DefaultPrService implements PrService {
       },
       newValue: result,
     });
+    if (result.accTracking === "APPROVED") {
+      await notifyPr(
+        [detail.header.requestedBy],
+        prId,
+        "Purchase Request Disetujui",
+        `PR ${detail.header.prNumber} telah disetujui.`,
+        result.status,
+      );
+    } else {
+      await notifyPrApprovers(
+        prId,
+        `PR ${detail.header.prNumber} menunggu persetujuan tahap berikutnya.`,
+        result.accTracking,
+      );
+    }
     return result;
   }
 
@@ -253,6 +315,10 @@ export class DefaultPrService implements PrService {
       },
       newValue: result,
     });
+    await notifyPr(
+      [detail.header.requestedBy], prId, "Update Purchase Request",
+      `PR ${detail.header.prNumber} telah dipesan.`, result.status,
+    );
     return result;
   }
 
@@ -288,6 +354,10 @@ export class DefaultPrService implements PrService {
       },
       newValue: result,
     });
+    await notifyPr(
+      [detail.header.requestedBy], prId, "Purchase Request Tiba",
+      `Barang PR ${detail.header.prNumber} telah diterima.`, result.status,
+    );
     return result;
   }
 
@@ -319,6 +389,10 @@ export class DefaultPrService implements PrService {
       },
       newValue: result,
     });
+    await notifyPr(
+      [detail.header.requestedBy], prId, "Purchase Request Dibatalkan",
+      `PR ${detail.header.prNumber} dibatalkan: ${input.reason}`, result.status,
+    );
     return result;
   }
 }

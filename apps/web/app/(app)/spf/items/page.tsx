@@ -96,7 +96,7 @@ export default async function ItemsPage({ searchParams }: Props) {
     <ItemListShell
       rows={result.payload.items}
       meta={result.payload.meta}
-      role={session.role}
+      canAdmin={session.canAdmin}
     />
   );
 }

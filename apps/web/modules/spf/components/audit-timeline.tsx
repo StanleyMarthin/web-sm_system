@@ -39,7 +39,7 @@ export function AuditTimeline({ period }: { period: SpfPeriod }) {
   }).filter((row): row is NonNullable<typeof row> => Boolean(row));
 
   if (rows.length === 0) {
-    return <p className="text-[13px] text-muted-foreground">Audit belum tersedia dari backend.</p>;
+    return <p className="text-[13px] text-muted-foreground">Riwayat belum tersedia.</p>;
   }
 
   return (
@@ -60,12 +60,12 @@ export function AuditTimeline({ period }: { period: SpfPeriod }) {
       ))}
       {period.rejection_reason ? (
         <div className="border border-destructive/20 bg-destructive/5 px-3 py-2 text-[13px] text-destructive">
-          Reject reason: {period.rejection_reason}
+          Alasan penolakan: {period.rejection_reason}
         </div>
       ) : null}
       {period.unpublish_reason ? (
         <div className="border border-primary/25 bg-primary/8 px-3 py-2 text-[13px] text-app-accent-ink">
-          Unpublish reason: {period.unpublish_reason}
+          Alasan pembatalan terbit: {period.unpublish_reason}
         </div>
       ) : null}
     </div>

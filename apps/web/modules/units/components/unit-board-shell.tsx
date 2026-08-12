@@ -253,7 +253,7 @@ export function UnitBoardShell({ rows, meta, state, user }: UnitBoardShellProps)
     },
     { key: "customerName", label: "Customer", kind: "text" },
     { key: "kpName", label: "KP", kind: "text" },
-    { key: "advisorName", label: "Advisor", kind: "text" },
+    { key: "advisorName", label: "QA", kind: "text" },
     { key: "targetDeliveryDate", label: "Target", kind: "mono" },
     { key: "etaDate", label: "ETA", kind: "mono" },
     {

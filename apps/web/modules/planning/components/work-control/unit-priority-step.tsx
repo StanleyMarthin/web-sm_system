@@ -91,6 +91,9 @@ export function UnitPriorityStep({
         <h2 className="mt-1 text-[15px] font-mono text-foreground">
           Pilih Unit yang Mau Dikejar
         </h2>
+        <p className="mt-1 text-[14px] text-muted-foreground">
+          Pilih unit saja. Target jam, divisi, prioritas, dan deadline akan disiapkan otomatis untuk direview.
+        </p>
       </div>
 
       {/* Search & filter bar */}
@@ -218,7 +221,7 @@ export function UnitPriorityStep({
             onClick={onNext}
             className="inline-flex h-8 items-center gap-2 border border-primary/40 bg-primary/[0.04] px-4 font-mono text-[14px] font-semibold uppercase tracking-[0.12em] text-app-accent-ink transition-colors hover:bg-primary/10"
           >
-            Lanjut ke Progress →
+            Buat Rencana →
           </button>
         </div>
       )}

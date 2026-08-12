@@ -6,19 +6,19 @@ import { useRouter } from "next/navigation";
 import { CheckCircle2, Eye, Send, UploadCloud, XCircle } from "lucide-react";
 import { mutateSpf } from "@/shared/api/spf";
 import type { PeriodRequest, SpfPeriodStatus } from "@/shared/api/spf-contracts";
-import type { SpfRole } from "@/shared/auth/admin-session";
+import type { SpfCapabilities } from "@/shared/auth/admin-session";
 import { ActionButton, CompactTextarea, FieldLabel } from "@/shared/ui/compact";
 import { useSweetAlert } from "@/shared/ui/sweet-alert";
 import { SpfDialog } from "./spf-dialog";
 
 type WorkflowAction = "SUBMIT" | "APPROVE" | "REJECT" | "PUBLISH" | "UNPUBLISH";
 
-function getAllowedActions(role: SpfRole, status: SpfPeriodStatus): WorkflowAction[] {
+export function getAllowedActions(permissions: SpfCapabilities, status: SpfPeriodStatus): WorkflowAction[] {
   const actions: WorkflowAction[] = [];
-  if (role === "ADMIN" && (status === "DRAFT" || status === "REJECTED")) actions.push("SUBMIT");
-  if (role === "APPROVER" && status === "WAITING_APPROVAL") actions.push("APPROVE", "REJECT");
-  if (role === "PUBLISHER" && status === "APPROVED") actions.push("PUBLISH");
-  if (role === "PUBLISHER" && status === "PUBLISHED") actions.push("UNPUBLISH");
+  if (permissions.canAdmin && (status === "DRAFT" || status === "REJECTED")) actions.push("SUBMIT");
+  if (permissions.canApprove && status === "WAITING_APPROVAL") actions.push("APPROVE", "REJECT");
+  if (permissions.canPublish && status === "APPROVED") actions.push("PUBLISH");
+  if (permissions.canPublish && status === "PUBLISHED") actions.push("UNPUBLISH");
   return actions;
 }
 
@@ -49,17 +49,18 @@ const ACTION_ICONS: Record<WorkflowAction, ReactNode> = {
 interface PeriodWorkflowBarProps {
   periodId: string | number;
   status: SpfPeriodStatus;
-  role: SpfRole;
+  permissions: SpfCapabilities;
+  submitBlockedReason?: string;
 }
 
-export function PeriodWorkflowBar({ periodId, status, role }: PeriodWorkflowBarProps) {
+export function PeriodWorkflowBar({ periodId, status, permissions, submitBlockedReason }: PeriodWorkflowBarProps) {
   const router = useRouter();
   const { alertElement, confirm, notifyError, notifySuccess } = useSweetAlert();
   const [isPending, startTransition] = useTransition();
   const [reasonAction, setReasonAction] = useState<"REJECT" | "UNPUBLISH" | null>(null);
   const [reason, setReason] = useState("");
   const [reasonError, setReasonError] = useState<string | null>(null);
-  const allowedActions = getAllowedActions(role, status);
+  const allowedActions = getAllowedActions(permissions, status);
 
   function onConflict(message: string) {
     notifyError("Data telah berubah", message || "Data telah berubah. Halaman akan diperbarui.");
@@ -67,6 +68,10 @@ export function PeriodWorkflowBar({ periodId, status, role }: PeriodWorkflowBarP
   }
 
   async function execute(action: WorkflowAction, actionReason?: string) {
+    if (action === "SUBMIT" && submitBlockedReason) {
+      notifyError("Periode belum siap diajukan", submitBlockedReason);
+      return;
+    }
     if (action === "REJECT" || action === "UNPUBLISH") {
       if (!actionReason) {
         setReasonAction(action);
@@ -158,7 +163,7 @@ export function PeriodWorkflowBar({ periodId, status, role }: PeriodWorkflowBarP
               setReason(event.target.value);
               setReasonError(null);
             }}
-            placeholder="Tuliskan alasan agar audit trail jelas."
+            placeholder="Tuliskan alasan agar riwayat jelas."
             aria-describedby={reasonError ? "spf-workflow-reason-error" : undefined}
           />
           {reasonError ? <p id="spf-workflow-reason-error" className="text-[12px] text-destructive">{reasonError}</p> : null}

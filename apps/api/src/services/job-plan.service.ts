@@ -30,7 +30,7 @@ import {
 } from "@/repositories/job-plan.repo";
 import { getRedisClient } from "@/redis/client";
 import type { WebSession } from "@/services/auth/session.service";
-import { sendPushNotification } from "@/services/push-notification.service";
+import { notifyMobileEmployees } from "@/services/mobile-notification.service";
 import { addRowsWorksheet, writeWorkbookBuffer } from "@/services/excel";
 
 interface JobPlanListResult {
@@ -804,8 +804,11 @@ export class DefaultJobPlanService implements JobPlanService {
       },
     });
 
-    // Send FCM push notifications to approvers — fire-and-forget
-    void this.notifyApproversForSubmit(draftRows, session.user.fullName);
+    await this.notifySubmittedPlans(
+      draftRows.map((draft) => draft.carId).filter((id): id is string => Boolean(id)),
+      result.createdIds,
+      session.user.fullName,
+    );
 
     return {
       createdIds: result.createdIds,
@@ -815,55 +818,89 @@ export class DefaultJobPlanService implements JobPlanService {
     };
   }
 
-  /**
-   * Fire-and-forget: resolve approvers for all cars in the submitted drafts,
-   * then send FCM push notifications to KP / advisor / KD.
-   */
-  private async notifyApproversForSubmit(
-    drafts: JobPlanDraftRecord[],
+  private async notifySubmittedPlans(
+    carIds: string[],
+    planIds: string[],
     actorName: string,
   ): Promise<void> {
     try {
-      // Collect unique car IDs from drafts (ADDITIONAL type has carId directly;
-      // COUNTDOWN type may also include carId if the frontend populated it)
-      const carIds = [
-        ...new Set(drafts.map((d) => d.carId).filter((id): id is string => Boolean(id))),
-      ];
-
-      if (carIds.length === 0) {
-        return;
-      }
-
-      const approvers = await this.repository.getApproversForCars(carIds);
-
-      // Collect unique recipient employee IDs (KP, advisor, KD)
-      const recipientIds = [
-        ...new Set(
-          approvers.flatMap(({ kpId, advisorId, kdId }) =>
-            [kpId, advisorId, kdId].filter((id): id is string => Boolean(id)),
-          ),
-        ),
-      ];
-
-      if (recipientIds.length === 0) {
-        return;
-      }
-
-      const planCount = drafts.length;
-      await sendPushNotification(
-        recipientIds,
-        {
-          title: "Job Plan Baru Menunggu Persetujuan",
-          body: `${actorName} mengajukan ${planCount} rencana kerja yang perlu disetujui.`,
-        },
-        {
-          type: "JOB_PLAN_SUBMIT",
-          actorName,
-          planCount: String(planCount),
-        },
+      const approvers = await this.repository.getApproversForCars([...new Set(carIds)]);
+      const recipients = approvers.flatMap(({ kpId, advisorId, kdId }) =>
+        [kpId, advisorId, kdId].filter((id): id is string => Boolean(id)),
       );
+      await notifyMobileEmployees(recipients, {
+        title: "Job Plan Baru Menunggu Persetujuan",
+        body: `${actorName} mengajukan ${planIds.length} rencana kerja yang perlu disetujui.`,
+        data: {
+          planId: planIds[0] ?? "",
+          status: "PENDING",
+          module: "job_plan",
+        },
+      }, "sm_job_plan");
     } catch (err) {
-      console.error("[job-plan] notifyApproversForSubmit error:", err);
+      console.error("[job-plan] notification error:", err);
+    }
+  }
+
+  private async notifySubmittedCorePlans(
+    session: WebSession,
+    coreIds: string[],
+    planIds: string[],
+  ): Promise<void> {
+    try {
+      const references = await this.repository.listReferences({
+        employeeId: session.user.employeeId,
+        scope: session.user.scope,
+        mode: "all",
+        countdownIds: [...new Set(coreIds)],
+      });
+      await this.notifySubmittedPlans(
+        references.countdowns.map((countdown) => countdown.carId),
+        planIds,
+        session.user.fullName,
+      );
+    } catch (error) {
+      console.error("[job-plan] notification recipient lookup error:", error);
+    }
+  }
+
+  private async notifyPlanStatus(plan: JobPlanRecord, recipient = plan.assignedUserId): Promise<void> {
+    const waitingFor = plan.status === "PENDING_ADV" ? "QA" : "KP";
+    await notifyMobileEmployees([recipient], {
+      title: plan.status === "PLAN"
+        ? "Job Plan Disetujui"
+        : plan.status === "REJECTED"
+          ? "Job Plan Ditolak"
+          : `Job Plan Menunggu Persetujuan ${waitingFor}`,
+      body: plan.status === "PLAN"
+        ? `Job plan ${plan.unitName} - ${plan.panelName ?? plan.jobName ?? "pekerjaan"} sudah disetujui dan siap dijalankan.`
+        : plan.status === "REJECTED"
+          ? `Job plan ${plan.unitName} - ${plan.panelName ?? plan.jobName ?? "pekerjaan"} ditolak. Silakan cek catatan penolakan.`
+          : `Job plan ${plan.unitName} - ${plan.panelName ?? plan.jobName ?? "pekerjaan"} untuk ${plan.assignedUserName} sedang menunggu persetujuan Anda.`,
+      data: { planId: plan.planId, coreId: plan.coreId, status: plan.status, module: "job_plan" },
+    }, "sm_job_plan");
+  }
+
+  private async notifyUpdatedPlan(session: WebSession, plan: JobPlanRecord): Promise<void> {
+    if (plan.status === "PLAN" || plan.status === "REJECTED") {
+      return this.notifyPlanStatus(plan);
+    }
+    if (plan.status !== "PENDING_ADV" && plan.status !== "PENDING_KP") return;
+
+    try {
+      const references = await this.repository.listReferences({
+        employeeId: session.user.employeeId,
+        scope: session.user.scope,
+        mode: "all",
+        countdownIds: [plan.coreId],
+      });
+      const carId = references.countdowns.find(({ value }) => value === plan.coreId)?.carId;
+      if (!carId) return;
+      const approver = (await this.repository.getApproversForCars([carId]))[0];
+      const recipient = plan.status === "PENDING_ADV" ? approver?.advisorId : approver?.kpId;
+      if (recipient) await this.notifyPlanStatus(plan, recipient);
+    } catch (error) {
+      console.error("[job-plan] status notification error:", error);
     }
   }
 
@@ -948,6 +985,12 @@ export class DefaultJobPlanService implements JobPlanService {
       },
     });
 
+    await this.notifySubmittedCorePlans(
+      session,
+      expandedPlans.map((plan) => plan.coreId),
+      result.createdIds,
+    );
+
     return {
       createdIds: result.createdIds,
       updatedPlanId: null,
@@ -1012,6 +1055,12 @@ export class DefaultJobPlanService implements JobPlanService {
         isRework: input.isRework,
       },
     });
+
+    await this.notifySubmittedPlans(
+      input.rows.map((row) => row.carId).filter((id): id is string => Boolean(id)),
+      result.createdIds,
+      session.user.fullName,
+    );
 
     return {
       createdIds: result.createdIds,
@@ -1087,6 +1136,8 @@ export class DefaultJobPlanService implements JobPlanService {
         note: input.note,
       },
     });
+
+    await this.notifyUpdatedPlan(session, { ...existing, status: result.status });
 
     return {
       createdIds: [],

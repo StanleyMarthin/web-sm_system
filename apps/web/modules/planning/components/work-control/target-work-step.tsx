@@ -95,6 +95,57 @@ function buildTargetOutputLabel(job: TargetWorkJob): string {
   return panel ? `${job.jobName} — ${panel}` : job.jobName;
 }
 
+export function buildAutoPlanEntries(
+  unit: TargetWorkUnit,
+  defaultFinishDate: string,
+): TargetWorkEntry[] {
+  const entries = unit.involvedDivisions
+    .filter((division) => division.pendingHours > 0)
+    .map((division) => {
+      const job = unit.jobs
+        .filter(isOpenJob)
+        .filter((item) => item.divisionId && Number(item.divisionId) === division.divisionId)
+        .sort((a, b) => b.remainingHours - a.remainingHours)[0];
+
+      return {
+        id: crypto.randomUUID(),
+        carId: unit.carId,
+        targetOutput: job ? buildTargetOutputLabel(job) : "",
+        divisionId: division.divisionId,
+        targetHours: Math.max(0, job?.remainingHours ?? division.pendingHours),
+        targetFinishDate: job?.deadlineDate || unit.suggestedFinishDate || defaultFinishDate,
+        priority: unit.riskLevel === "CRITICAL" ? "URGENT" : unit.riskLevel === "HIGH" ? "IMPORTANT" : "NORMAL",
+        riskLevel: unit.riskLevel,
+        isHold: false,
+        notes: job ? "Auto-plan dari countdown" : "",
+      } satisfies TargetWorkEntry;
+    });
+
+  return entries.length > 0
+    ? entries
+    : [{
+        id: crypto.randomUUID(),
+        carId: unit.carId,
+        targetOutput: "",
+        divisionId: unit.involvedDivisions[0]?.divisionId ?? 0,
+        targetHours: 0,
+        targetFinishDate: unit.suggestedFinishDate || defaultFinishDate,
+        priority: unit.riskLevel === "CRITICAL" ? "URGENT" : unit.riskLevel === "HIGH" ? "IMPORTANT" : "NORMAL",
+        riskLevel: unit.riskLevel,
+        isHold: false,
+        notes: "",
+      }];
+}
+
+export function isTargetEntryComplete(entry: TargetWorkEntry): boolean {
+  return entry.isHold || (
+    entry.divisionId > 0 &&
+    entry.targetHours > 0 &&
+    entry.targetOutput.trim().length > 0 &&
+    entry.targetFinishDate.trim().length > 0
+  );
+}
+
 function buildJobConsideration(job: TargetWorkJob, selectedDivisionId: number): string {
   const parts: string[] = [];
   if (job.divisionId && Number(job.divisionId) === selectedDivisionId) {
@@ -545,60 +596,13 @@ export function TargetWorkStep({
     ]);
   }
 
-  const isValid = entries.every(
-    (e) =>
-      e.isHold || (
-        e.divisionId > 0 &&
-        e.targetHours > 0 &&
-        e.targetOutput.trim().length > 0 &&
-        e.targetFinishDate.trim().length > 0
-      ),
-  );
+  const isValid = entries.length > 0 && entries.every(isTargetEntryComplete);
 
   function handleAutoPlan(unit: TargetWorkUnit) {
     if (unit.involvedDivisions.length === 0) return;
 
-    // Bersihkan entry kosong/sebelumnya untuk unit ini
     const otherEntries = entries.filter((e) => e.carId !== unit.carId);
-    const autoEntries: TargetWorkEntry[] = unit.involvedDivisions
-      .filter((d) => d.pendingHours > 0)
-      .map((d) => {
-        const countdownJob = unit.jobs
-          .filter(isOpenJob)
-          .filter((job) => job.divisionId && Number(job.divisionId) === d.divisionId)
-          .sort((a, b) => b.remainingHours - a.remainingHours)[0];
-
-        return {
-          id: crypto.randomUUID(),
-          carId: unit.carId,
-          targetOutput: countdownJob ? buildTargetOutputLabel(countdownJob) : "",
-          divisionId: d.divisionId,
-          targetHours: Math.max(0, countdownJob?.remainingHours ?? d.pendingHours),
-          targetFinishDate: countdownJob?.deadlineDate || unit.suggestedFinishDate || defaultFinishDate,
-          priority: "NORMAL",
-          riskLevel: unit.riskLevel,
-          isHold: false,
-          notes: countdownJob ? "Auto-plan dari countdown" : "",
-        };
-      });
-
-    // Jika tidak ada pending hours, setidaknya buat 1 entry kosong
-    if (autoEntries.length === 0) {
-      autoEntries.push({
-        id: crypto.randomUUID(),
-        carId: unit.carId,
-        targetOutput: "",
-        divisionId: unit.involvedDivisions[0]?.divisionId ?? 0,
-        targetHours: 0,
-        targetFinishDate: unit.suggestedFinishDate || defaultFinishDate,
-        priority: "NORMAL",
-        riskLevel: unit.riskLevel,
-        isHold: false,
-        notes: "",
-      });
-    }
-
-    onEntriesChange([...otherEntries, ...autoEntries]);
+    onEntriesChange([...otherEntries, ...buildAutoPlanEntries(unit, defaultFinishDate)]);
   }
 
   const activeUnit = units.find((u) => u.carId === selectedCarId);
@@ -623,7 +627,7 @@ export function TargetWorkStep({
                onClick={() => handleAutoPlan(activeUnit)}
                className="flex h-8 items-center gap-1.5 border border-success/25 bg-success/[0.08] px-3 font-mono text-[14px] uppercase tracking-[0.12em] text-success transition-colors hover:bg-success/[0.14]"
              >
-               ✨ Auto-Plan
+               Isi Otomatis
              </button>
           )}
         </div>

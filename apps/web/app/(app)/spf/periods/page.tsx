@@ -1,8 +1,8 @@
 import dynamic from "next/dynamic";
 import { headers } from "next/headers";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { requireAdminSession } from "@/shared/auth/admin-session";
-import { fetchSpfPeriods } from "@/shared/api/spf";
+import { fetchSpfPeriodDetail, fetchSpfPeriods, fetchSpfSources } from "@/shared/api/spf";
 import { ModuleUnavailableState } from "@/shared/ui/module-unavailable-state";
 import { PageDataSkeleton } from "@/shared/ui/page-data-skeleton";
 
@@ -17,10 +17,20 @@ const PeriodListShell = dynamic(
 
 // ─── Query parser ─────────────────────────────────────────────────────────────
 // Menolak key asing dan nilai invalid; menggunakan safe defaults.
+const PeriodDetailShell = dynamic(
+  () => import("@/modules/spf/components/period-detail-shell").then((m) => m.PeriodDetailShell),
+  { loading: () => <PageDataSkeleton title="Memuat detail periode SPF" /> },
+);
+
+const PeriodWizard = dynamic(
+  () => import("@/modules/spf/components/forms/period-form").then((m) => m.PeriodWizard),
+  { loading: () => <PageDataSkeleton title="Memuat form periode SPF" /> },
+);
+
 function parsePeriodListQuery(
   searchParams: Record<string, string | string[] | undefined>,
 ): {
-  car_id?: string;
+  unit?: string;
   year?: string;
   date_start?: string;
   date_end?: string;
@@ -48,7 +58,7 @@ function parsePeriodListQuery(
       ? status
       : undefined;
   return {
-    car_id: first("car_id") || undefined,
+    unit: first("unit") || undefined,
     year: first("tahun") || first("year") || undefined,
     date_start: first("date_start") || undefined,
     date_end: first("date_end") || undefined,
@@ -71,7 +81,65 @@ export default async function PeriodsPage({ searchParams }: Props) {
 
   if (!session) redirect("/login");
 
-  const query = parsePeriodListQuery(await searchParams);
+  const params = await searchParams;
+  const permissions = {
+    canAdmin: session.canAdmin,
+    canApprove: session.canApprove,
+    canPublish: session.canPublish,
+  };
+
+  if (params.create === "1") {
+    if (!session.canAdmin) redirect("/forbidden");
+    return <PeriodWizard />;
+  }
+
+  const selected = typeof params.period === "string" ? params.period : "";
+
+  if (selected) {
+    if (selected.length > 100 || !/^[\w.\-]+$/u.test(selected)) notFound();
+
+    const detail = await fetchSpfPeriodDetail(cookieHeader, selected);
+
+    if (detail.status === 401) redirect("/login");
+    if (detail.status === 403) redirect("/forbidden");
+    if (detail.status === 404) notFound();
+
+    if (!detail.payload) {
+      return (
+        <ModuleUnavailableState
+          module="SPF · Periode"
+          title="Detail periode tidak tersedia"
+          message="Data periode belum bisa dimuat. Coba lagi beberapa saat."
+        />
+      );
+    }
+
+    const { period, items, media } = detail.payload;
+
+    const sources = session.canAdmin && (period.status === "DRAFT" || period.status === "REJECTED")
+      ? await fetchSpfSources(cookieHeader, {
+          car_id: period.car_id,
+          date_start: period.date_start ?? undefined,
+          date_end: period.date_end ?? undefined,
+          technical_only: true,
+          limit: 100,
+          offset: 0,
+        })
+      : null;
+
+    return (
+      <PeriodDetailShell
+        period={period}
+        items={items}
+        media={media}
+        permissions={permissions}
+        sources={sources?.payload?.sources}
+        sourceMeta={sources?.payload?.meta}
+      />
+    );
+  }
+
+  const query = parsePeriodListQuery(params);
   const result = await fetchSpfPeriods(cookieHeader, query);
 
   if (result.status === 401) redirect("/login");
@@ -93,7 +161,7 @@ export default async function PeriodsPage({ searchParams }: Props) {
     <PeriodListShell
       rows={result.payload.periods}
       meta={result.payload.meta}
-      role={session.role}
+      canAdmin={session.canAdmin}
     />
   );
 }

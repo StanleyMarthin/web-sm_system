@@ -18,7 +18,7 @@ export default async function ProtectedLayout({
   }
 
   return (
-    <AppShell user={user} navigation={buildNavigation(user.permissions)}>
+    <AppShell user={user} navigation={buildNavigation(user.permissions, user.roleName)}>
       {children}
     </AppShell>
   );

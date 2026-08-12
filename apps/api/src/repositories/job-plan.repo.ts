@@ -284,9 +284,17 @@ function buildScopeWhereClause(
 
   if (scope.divisionIds.length > 0) {
     clauses.push(
-      `${countdownAlias}.division_id IN (${scope.divisionIds.map(() => "?").join(", ")})`,
+      `(
+        ${countdownAlias}.division_id IN (${scope.divisionIds.map(() => "?").join(", ")})
+        OR EXISTS (
+          SELECT 1
+          FROM sm_divisi selected_division
+          WHERE selected_division.id IN (${scope.divisionIds.map(() => "?").join(", ")})
+            AND selected_division.parent_id = ${countdownAlias}.division_id
+        )
+      )`,
     );
-    params.push(...scope.divisionIds);
+    params.push(...scope.divisionIds, ...scope.divisionIds);
   }
 
   if (scope.unitIds.length > 0) {
@@ -346,6 +354,23 @@ async function hasScopeAccess(
     scope.divisionIds.includes(params.divisionId)
   ) {
     return true;
+  }
+
+  if (params.divisionId !== null && scope.divisionIds.length > 0) {
+    const [rows] = (await connection.query(
+      `
+        SELECT 1 AS ok
+        FROM sm_divisi
+        WHERE id IN (${scope.divisionIds.map(() => "?").join(", ")})
+          AND parent_id = ?
+        LIMIT 1
+      `,
+      [...scope.divisionIds, params.divisionId],
+    )) as [Array<RowDataPacket & { ok: number }>, unknown];
+
+    if (rows.length > 0) {
+      return true;
+    }
   }
 
   if (!scope.canViewAssignedUnits) {
@@ -476,8 +501,16 @@ function buildFilterClauses(query: JobPlanGridQuery, params: unknown[]): string[
     }
 
     if (filter.field === "divisionId") {
-      clauses.push("jc.division_id = ?");
-      params.push(filter.value);
+      clauses.push(`(
+        jc.division_id = ?
+        OR EXISTS (
+          SELECT 1
+          FROM sm_divisi selected_division
+          WHERE selected_division.id = ?
+            AND selected_division.parent_id = jc.division_id
+        )
+      )`);
+      params.push(filter.value, filter.value);
       continue;
     }
 
@@ -820,13 +853,15 @@ async function getAdditionalContext(
         COALESCE(c.unit_name, c.id) AS unitName,
         mp.id AS panelId,
         mp.name AS panelName,
-        selected_division.id AS divisionId,
-        selected_division.name AS divisionName,
+        COALESCE(parent_division.id, selected_division.id) AS divisionId,
+        COALESCE(parent_division.name, selected_division.name) AS divisionName,
         mjt.id AS jobTypeId,
         mjt.job_name AS jobName
       FROM cars c
       JOIN sm_divisi selected_division
         ON selected_division.id = ?
+      LEFT JOIN sm_divisi parent_division
+        ON parent_division.id = selected_division.parent_id
       JOIN master_panels mp
         ON mp.id = ?
        AND (mp.car_id IS NULL OR mp.car_id = c.id)
@@ -851,18 +886,11 @@ async function checkAllowedJobTypeForDivision(
       SELECT mjt.id
       FROM master_job_types mjt
       LEFT JOIN sm_divisi selected_division ON selected_division.id = ?
-      LEFT JOIN sm_divisi parent_division ON parent_division.id = selected_division.parent_id
       WHERE mjt.id = ?
         AND (
           mjt.division_id IS NULL
           OR mjt.division_id = ?
-          OR (
-            mjt.division_id = selected_division.parent_id
-            AND (
-              UPPER(COALESCE(parent_division.name, '')) = 'MECHANIC'
-              OR UPPER(COALESCE(parent_division.code, '')) = 'MECHANIC'
-            )
-          )
+          OR mjt.division_id = selected_division.parent_id
         )
       LIMIT 1
     `,
@@ -1301,10 +1329,18 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
             SELECT 1
             FROM sm_jobdesc_countdown jc_unit
             WHERE jc_unit.car_id = c.id
-              AND jc_unit.division_id IN (${params.scope.divisionIds.map(() => "?").join(", ")})
+              AND (
+                jc_unit.division_id IN (${params.scope.divisionIds.map(() => "?").join(", ")})
+                OR EXISTS (
+                  SELECT 1
+                  FROM sm_divisi selected_division
+                  WHERE selected_division.id IN (${params.scope.divisionIds.map(() => "?").join(", ")})
+                    AND selected_division.parent_id = jc_unit.division_id
+                )
+              )
           )`,
         );
-        unitParams.push(...params.scope.divisionIds);
+        unitParams.push(...params.scope.divisionIds, ...params.scope.divisionIds);
       }
 
       if (params.scope.canViewAssignedUnits) {
@@ -1336,9 +1372,17 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
 
       if (params.scope.divisionIds.length > 0) {
         workOrderScopeClauses.push(
-          `COALESCE(wo.to_div_id, wo.from_div_id) IN (${params.scope.divisionIds.map(() => "?").join(", ")})`,
+          `(
+            COALESCE(wo.to_div_id, wo.from_div_id) IN (${params.scope.divisionIds.map(() => "?").join(", ")})
+            OR EXISTS (
+              SELECT 1
+              FROM sm_divisi selected_division
+              WHERE selected_division.id IN (${params.scope.divisionIds.map(() => "?").join(", ")})
+                AND selected_division.parent_id = COALESCE(wo.to_div_id, wo.from_div_id)
+            )
+          )`,
         );
-        workOrderParams.push(...params.scope.divisionIds);
+        workOrderParams.push(...params.scope.divisionIds, ...params.scope.divisionIds);
       }
 
       if (params.scope.canViewAssignedUnits) {
@@ -1393,10 +1437,18 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
             SELECT 1
             FROM sm_jobdesc_countdown jc_panel
             WHERE jc_panel.panel_id = mp.id
-              AND jc_panel.division_id IN (${params.scope.divisionIds.map(() => "?").join(", ")})
+              AND (
+                jc_panel.division_id IN (${params.scope.divisionIds.map(() => "?").join(", ")})
+                OR EXISTS (
+                  SELECT 1
+                  FROM sm_divisi selected_division
+                  WHERE selected_division.id IN (${params.scope.divisionIds.map(() => "?").join(", ")})
+                    AND selected_division.parent_id = jc_panel.division_id
+                )
+              )
           )`,
         );
-        panelParams.push(...params.scope.divisionIds);
+        panelParams.push(...params.scope.divisionIds, ...params.scope.divisionIds);
       }
     }
 
@@ -1410,13 +1462,8 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
             OR EXISTS (
               SELECT 1
               FROM sm_divisi selected_division
-              JOIN sm_divisi parent_division ON parent_division.id = selected_division.parent_id
               WHERE selected_division.id IN (${params.scope.divisionIds.map(() => "?").join(", ")})
                 AND mjt.division_id = selected_division.parent_id
-                AND (
-                  UPPER(COALESCE(parent_division.name, '')) = 'MECHANIC'
-                  OR UPPER(COALESCE(parent_division.code, '')) = 'MECHANIC'
-                )
             )
           )
         `
@@ -1727,7 +1774,7 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
       statuses: [
         { value: "DRAFT", label: "DRAFT" },
         { value: "PENDING", label: "PENDING" },
-        { value: "PENDING_ADV", label: "PENDING_ADV" },
+        { value: "PENDING_ADV", label: "Menunggu QA" },
         { value: "PENDING_KP", label: "PENDING_KP" },
         { value: "PENDING_MP", label: "PENDING_MP" },
         { value: "PLAN", label: "PLAN" },

@@ -31,6 +31,7 @@ import {
 } from "@/routes/users.routes";
 import { DefaultUsersService, type UsersService } from "@/services/users.service";
 import { handleImageProxyRoute } from "@/routes/proxy.routes";
+import { handleNotificationsRoute } from "@/routes/notification.routes";
 import {
   handlePermissionsListRoute,
   handleRolesReferencesRoute,
@@ -60,14 +61,18 @@ import {
   handleUnitPanelsRoute,
   handleUnitWorkspaceRoute,
   handleUnitsListRoute,
+  handleUnitClientsRoute,
 } from "@/routes/units.routes";
 import { DefaultUnitsService, type UnitsService } from "@/services/units.service";
 import {
   handleCountdownCreateRoute,
   handleCountdownDeleteRoute,
   handleCountdownDetailRoute,
+  handleCountdownDownloadRoute,
   handleCountdownImportRoute,
   handleCountdownListRoute,
+  handleCountdownRevisionApprovalRoute,
+  handleCountdownRevisionRequestRoute,
   handleCountdownTemplateRoute,
   handleCountdownUpdateRoute,
 } from "@/routes/countdown.routes";
@@ -468,6 +473,7 @@ export function createApiFetchHandler(dependencies: AppDependencies = {}) {
     { method: "GET", pattern: "/api/dashboard/bootstrap", handler: (request) => handleDashboardBootstrapRoute(request, getAuthService()) },
     { method: "GET", pattern: "/api/dashboard/summary", handler: (request) => handleDashboardSummaryRoute(request, getAuthService(), getDashboardService()) },
     { method: "GET", pattern: "/api/proxy/image", handler: (request) => handleImageProxyRoute(request, getAuthService()) },
+    { method: "GET", pattern: "/api/notifications", handler: (request) => handleNotificationsRoute(request, getAuthService()) },
     { method: "GET", pattern: "/api/users", handler: (request) => handleUsersListRoute(request, getAuthService(), getUsersService()) },
     { method: "POST", pattern: "/api/users", handler: (request) => handleUsersCreateRoute(request, getAuthService(), getUsersService()) },
     { method: "GET", pattern: "/api/users/export", handler: (request) => handleUsersExportRoute(request, getAuthService(), getUsersService()) },
@@ -494,8 +500,12 @@ export function createApiFetchHandler(dependencies: AppDependencies = {}) {
     { method: "PUT", pattern: /^\/api\/roles\/(\d+)$/, handler: (request, match) => handleRolesUpdateRoute(request, Number.parseInt(match![1], 10), getAuthService(), getRolesService()) },
     { method: "PATCH", pattern: /^\/api\/roles\/(\d+)$/, handler: (request, match) => handleRolesUpdateRoute(request, Number.parseInt(match![1], 10), getAuthService(), getRolesService()) },
     { method: "GET", pattern: "/api/units", handler: (request) => handleUnitsListRoute(request, getAuthService(), getUnitsService()) },
+    { method: "GET", pattern: "/api/units/clients", handler: (request) => handleUnitClientsRoute(request, getAuthService(), getUnitsService()) },
     { method: "POST", pattern: "/api/units", handler: (request) => handleUnitsListRoute(request, getAuthService(), getUnitsService()) },
     { method: "GET", pattern: "/api/countdown", handler: (request) => handleCountdownListRoute(request, getAuthService(), getCountdownService()) },
+    { method: "GET", pattern: "/api/countdown/download", handler: (request) => handleCountdownDownloadRoute(request, getAuthService(), getCountdownService()) },
+    { method: "POST", pattern: /^\/api\/countdown\/([^/]+)\/revision$/, handler: (request, match) => handleCountdownRevisionRequestRoute(request, match![1], getAuthService(), getCountdownService()) },
+    { method: "PUT", pattern: /^\/api\/countdown\/([^/]+)\/revision\/approval$/, handler: (request, match) => handleCountdownRevisionApprovalRoute(request, match![1], getAuthService(), getCountdownService()) },
     { method: "POST", pattern: "/api/countdown", handler: (request) => handleCountdownCreateRoute(request, getAuthService(), getCountdownService()) },
     { method: "GET", pattern: "/api/job-plan", handler: (request) => handleJobPlanListRoute(request, getAuthService(), getJobPlanService()) },
     { method: "GET", pattern: "/api/monitoring/today", handler: (request) => handleMonitoringTodayRoute(request, getAuthService(), getMonitoringService()) },

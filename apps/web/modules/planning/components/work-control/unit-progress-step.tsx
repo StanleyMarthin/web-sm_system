@@ -66,7 +66,13 @@ function statusBadge(status: string) {
     return "border-success/30 text-success";
   }
   if (s === "in_progress" || s === "on_progress") {
-    return "border-primary/30 text-app-accent-ink";
+    return "border-warning/30 text-warning";
+  }
+  if (s === "pending") {
+    return "border-destructive/30 text-destructive";
+  }
+  if (s === "plan") {
+    return "border-border text-muted-foreground";
   }
   return "border-border text-muted-foreground";
 }

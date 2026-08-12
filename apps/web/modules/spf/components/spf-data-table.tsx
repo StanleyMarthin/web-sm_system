@@ -13,11 +13,13 @@ export function SpfDataTable<T extends { id?: string }>({
   columns,
   emptyMessage,
   minWidth = 900,
+  onRowClick,
 }: {
   rows: readonly T[];
   columns: readonly SpfDataTableColumn<T>[];
   emptyMessage: string;
   minWidth?: number;
+  onRowClick?: (row: T) => void;
 }) {
   if (rows.length === 0) {
     return <EmptyRow message={emptyMessage} />;
@@ -42,7 +44,15 @@ export function SpfDataTable<T extends { id?: string }>({
           {rows.map((row, index) => (
             <tr
               key={row.id ?? String(index)}
-              className="border-b border-border last:border-b-0 hover:bg-muted/40 dark:border-white/[0.04] dark:hover:bg-white/[0.02]"
+              tabIndex={onRowClick ? 0 : undefined}
+              onClick={() => onRowClick?.(row)}
+              onKeyDown={(event) => {
+                if (onRowClick && (event.key === "Enter" || event.key === " ")) {
+                  event.preventDefault();
+                  onRowClick(row);
+                }
+              }}
+              className={`border-b border-border last:border-b-0 hover:bg-muted/40 dark:border-white/[0.04] dark:hover:bg-white/[0.02] ${onRowClick ? "cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring" : ""}`}
             >
               {columns.map((column) => (
                 <td key={column.key} className={`px-3 py-2.5 align-top ${column.className ?? ""}`}>

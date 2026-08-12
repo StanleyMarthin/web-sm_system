@@ -1,6 +1,7 @@
 import "server-only";
 import { cache } from "react";
 import type { AuthUser } from "@smsystem/contracts/auth";
+import { permissionCodes } from "@smsystem/permissions";
 import { fetchCurrentUser } from "@/shared/auth/server";
 
 // ─── SPF Role type ────────────────────────────────────────────────────────────
@@ -11,32 +12,24 @@ export type SpfRole = (typeof SPF_ROLES)[number];
 export type AdminSession = Readonly<{
   employeeId: string;
   role: SpfRole;
+  canAdmin: boolean;
+  canApprove: boolean;
+  canPublish: boolean;
   user: AuthUser;
 }>;
 
 // ─── Permission → SPF role mapping ───────────────────────────────────────────
 // Backend smsystem memegang otoritas akhir pada setiap mode.
 // Mapping ini mencegah UI dan BFF membuat claim berbeda.
-const PERMISSION_TO_ROLE: Record<string, SpfRole> = {
-  // Hak publish laporan SPF ke portal klien
-  "spf:publish": "PUBLISHER",
-  // Hak menyetujui atau menolak laporan SPF
-  "spf:approve": "APPROVER",
-  // Hak membuat, mengedit, dan mengirim laporan SPF
-  "spf:admin": "ADMIN",
-};
+export type SpfCapabilities = Pick<AdminSession, "canAdmin" | "canApprove" | "canPublish">;
 
-function deriveSpfRole(permissions: string[], roleName?: string): SpfRole {
-  // Prioritas: PUBLISHER > APPROVER > ADMIN
-  for (const perm of ["spf:publish", "spf:approve", "spf:admin"] as const) {
-    if (permissions.includes(perm)) {
-      return PERMISSION_TO_ROLE[perm]!;
-    }
-  }
-  // Fallback: Jika user terautentikasi di ERP namun claim 'spf:*' spesifik belum
-  // ditambahkan ke database RBAC, berikan akses ADMIN secara default agar
-  // pengguna yang terverifikasi tidak terpental.
-  return "ADMIN";
+function deriveSpfCapabilities(permissions: readonly string[], roleName?: string): SpfCapabilities {
+  const isMis = roleName?.trim().toLowerCase() === "mis";
+  return {
+    canAdmin: isMis || permissions.includes(permissionCodes.spfAdmin),
+    canApprove: isMis || permissions.includes(permissionCodes.spfApprove),
+    canPublish: isMis || permissions.includes(permissionCodes.spfPublish),
+  };
 }
 
 // ─── requireAdminSession ──────────────────────────────────────────────────────
@@ -55,7 +48,12 @@ export const requireAdminSession = cache(
       return null;
     }
 
-    const role = deriveSpfRole(user.permissions, user.roleName);
-    return { employeeId, role, user };
+    const capabilities = deriveSpfCapabilities(user.permissions, user.roleName);
+    if (!capabilities.canAdmin && !capabilities.canApprove && !capabilities.canPublish) {
+      return null;
+    }
+
+    const role: SpfRole = capabilities.canPublish ? "PUBLISHER" : capabilities.canApprove ? "APPROVER" : "ADMIN";
+    return { employeeId, role, ...capabilities, user };
   },
 );

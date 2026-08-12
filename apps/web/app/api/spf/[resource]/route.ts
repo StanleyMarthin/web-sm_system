@@ -83,7 +83,7 @@ export async function POST(
     });
 
     const headers = new Headers();
-    for (const name of ["content-type", "content-disposition"]) {
+    for (const name of ["content-type", "content-disposition", "cache-control"]) {
       const value = upstream.headers.get(name);
       if (value) headers.set(name, value);
     }

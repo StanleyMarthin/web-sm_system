@@ -4,6 +4,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Loader2, PackagePlus, Pencil } from "lucide-react";
+import { ActionButton, CompactInput, CompactSelect, FieldLabel } from "@/shared/ui/compact";
 
 const locationSchema = z.object({
   storageLocationId: z.number().nullable(),
@@ -28,6 +29,7 @@ export function WarehouseLocationForm({ initialValues, isPending, onSubmit }: Wa
 
   const {
     register,
+    watch,
     handleSubmit,
     formState: { errors, isValid },
   } = useForm<LocationFormValues>({
@@ -43,42 +45,33 @@ export function WarehouseLocationForm({ initialValues, isPending, onSubmit }: Wa
     },
     mode: "onChange",
   });
-
-  const inputCls =
-    "h-9 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-2.5 text-[12px] text-foreground outline-none transition-colors focus:border-primary/30 [color-scheme:dark]";
+  const locationType = watch("locationType");
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-      <div className="grid gap-4 md:grid-cols-2">
-        <label className="grid gap-2 text-sm text-foreground/75">
-          <span>Tipe lokasi</span>
-          <select {...register("locationType")} className={inputCls}>
+      <div className="grid gap-3 md:grid-cols-2">
+        <label><FieldLabel>Tipe lokasi</FieldLabel><CompactSelect {...register("locationType")} value={locationType}>
             <option value="GUDANG">Gudang</option>
             <option value="WORKSHOP">Workshop</option>
             <option value="UNIT">Unit</option>
-          </select>
+          </CompactSelect>
           {errors.locationType && <span className="text-xs text-destructive">{errors.locationType.message}</span>}
         </label>
         
-        <label className="grid gap-2 text-sm text-foreground/75">
-          <span>Label</span>
-          <input {...register("label")} className={inputCls} />
+        <label><FieldLabel required>Label</FieldLabel><CompactInput {...register("label")} />
           {errors.label && <span className="text-xs text-destructive">{errors.label.message}</span>}
         </label>
         
         <label className="grid gap-2 text-sm text-foreground/75">
-          <span>Zona</span>
-          <input {...register("zone")} className={inputCls} />
+          <FieldLabel>Zona</FieldLabel><CompactInput {...register("zone")} />
         </label>
         
         <label className="grid gap-2 text-sm text-foreground/75">
-          <span>Rak</span>
-          <input {...register("rack")} className={inputCls} />
+          <FieldLabel>Rak</FieldLabel><CompactInput {...register("rack")} />
         </label>
         
         <label className="grid gap-2 text-sm text-foreground/75">
-          <span>Shelf</span>
-          <input {...register("shelf")} className={inputCls} />
+          <FieldLabel>Shelf</FieldLabel><CompactInput {...register("shelf")} />
         </label>
         
         <label className="flex h-9 items-center gap-2 self-end rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 text-sm text-foreground/75">
@@ -88,14 +81,13 @@ export function WarehouseLocationForm({ initialValues, isPending, onSubmit }: Wa
       </div>
       
       <div className="mt-5 flex justify-end">
-        <button
+        <ActionButton variant="success"
           type="submit"
           disabled={isPending || !isValid}
-          className="inline-flex items-center gap-2 rounded-full bg-primary px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-primary-foreground disabled:opacity-50"
         >
           {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : isEditing ? <Pencil className="h-3.5 w-3.5" /> : <PackagePlus className="h-3.5 w-3.5" />}
           {isPending ? "Menyimpan..." : isEditing ? "Simpan Perubahan" : "Simpan Lokasi"}
-        </button>
+        </ActionButton>
       </div>
     </form>
   );

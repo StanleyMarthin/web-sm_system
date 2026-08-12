@@ -174,7 +174,9 @@ function jobStatusMeta(status: string | null | undefined) {
     case "QC_READY":
       return { label: "QC", className: "border-info/30 bg-info/[0.07] text-info", dot: "bg-info" };
     case "PROSES":
-      return { label: "PROSES", className: "border-primary/25 bg-primary/[0.07] text-app-accent-ink", dot: "bg-primary" };
+      return { label: "PROSES", className: "border-warning/30 bg-warning/[0.07] text-warning", dot: "bg-warning" };
+    case "PENDING":
+      return { label: "PENDING", className: "border-destructive/30 bg-destructive/[0.07] text-destructive", dot: "bg-destructive" };
     case "PLAN":
       return { label: "PLAN", className: "border-border bg-muted text-muted-foreground", dot: "bg-muted-foreground" };
     default:

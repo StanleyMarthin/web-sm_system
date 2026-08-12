@@ -9,32 +9,25 @@ import { ActionButton, CompactInput, CompactTextarea, FieldLabel, PageHeader, Se
 import { VehicleCombobox } from "../vehicle-combobox";
 import { TechnicalJobdescSelector } from "../source-collector";
 import { ManualJobdescForm } from "./item-form";
-import { CuratedItemEditor } from "../item-list";
-import { DocumentationManager } from "../item-media";
-import { PortalPreview } from "../portal-preview";
 
-type WizardStep = 1 | 2 | 3 | 4 | 5 | 6;
+type WizardStep = 1 | 2 | 3;
 
 interface PeriodWizardDraft {
   car_id: string;
-  year: string;
   date_start: string;
   date_end: string;
   description: string;
   selected_source_keys: string[];
   selected_item_ids: string[];
-  documentation_checked: boolean;
 }
 
 const EMPTY_DRAFT: PeriodWizardDraft = {
   car_id: "",
-  year: String(new Date().getFullYear()),
   date_start: "",
   date_end: "",
   description: "",
   selected_source_keys: [],
   selected_item_ids: [],
-  documentation_checked: false,
 };
 
 function storageKey(periodId?: string) {
@@ -52,11 +45,7 @@ function validateDraft(draft: PeriodWizardDraft, items: readonly SpfItem[]) {
   if (!draft.date_start || !draft.date_end) errors.push("Rentang periode wajib diisi.");
   if (draft.date_start && draft.date_end && draft.date_end < draft.date_start) errors.push("Tanggal selesai harus setelah atau sama dengan tanggal mulai.");
   const included = items.filter((item) => item.spf_status === "INCLUDED");
-  if (included.length === 0) errors.push("Minimal satu item INCLUDED.");
-  if (included.some((item) => !item.customer_description.trim())) errors.push("Customer description setiap item INCLUDED wajib terisi.");
-  if (included.some((item) => item.progress < 0 || item.progress > 100)) errors.push("Progress item wajib berada pada rentang 0-100.");
-  if (!draft.documentation_checked) errors.push("Dokumentasi wajib diperiksa.");
-  if (included.some((item) => (item.documentation_count ?? 0) === 0)) warnings.push("Ada item INCLUDED tanpa dokumentasi.");
+  if (included.length === 0 && draft.selected_source_keys.length === 0 && draft.selected_item_ids.length === 0) errors.push("Pilih minimal satu sumber data atau tambahkan item manual.");
   return { errors, warnings };
 }
 
@@ -86,7 +75,6 @@ export function PeriodWizard({ period }: { period?: SpfPeriod }) {
       setDraft({
         ...EMPTY_DRAFT,
         car_id: period.car_id,
-        year: period.date_start?.slice(0, 4) || String(new Date().getFullYear()),
         date_start: period.date_start ?? "",
         date_end: period.date_end ?? "",
         description: period.description ?? "",
@@ -116,25 +104,28 @@ export function PeriodWizard({ period }: { period?: SpfPeriod }) {
     void mutateSpf<{ periods: SpfPeriod[]; items?: SpfPeriod[] }>("period", {
       mode: "LIST",
       car_id: draft.car_id,
-      year: draft.year,
+      year: draft.date_start?.slice(0, 4) || undefined,
       limit: 100,
       offset: 0,
     }).then((result) => {
       if (!cancelled && result.success) setPeriods(result.data.periods ?? result.data.items ?? []);
     });
-    void mutateSpf<{ items: SpfItem[] }>("item", {
-      mode: "LIST",
-      car_id: draft.car_id,
-      period_id: period?.id,
-      limit: 100,
-      offset: 0,
-    }).then((result) => {
-      if (!cancelled && result.success) setItems(result.data.items ?? []);
-    });
+    if (period?.id) {
+      void mutateSpf<{ items: SpfItem[] }>("item", {
+        mode: "LIST",
+        period_id: period.id,
+        limit: 100,
+        offset: 0,
+      }).then((result) => {
+        if (!cancelled && result.success) setItems(result.data.items ?? []);
+      });
+    } else {
+      setItems([]);
+    }
     return () => {
       cancelled = true;
     };
-  }, [draft.car_id, draft.date_end, draft.date_start, draft.year, period?.id]);
+  }, [draft.car_id, draft.date_end, draft.date_start, period?.id]);
 
   const overlapWarnings = useMemo(
     () => periods.filter((row) => row.id !== period?.id && row.date_start && row.date_end && draft.date_start <= row.date_end && draft.date_end >= row.date_start),
@@ -154,7 +145,8 @@ export function PeriodWizard({ period }: { period?: SpfPeriod }) {
       const sourceIds = draft.selected_source_keys
         .filter((key) => !key.startsWith("MANUAL:"))
         .map(sourceIdFromKey);
-      const itemIds = Array.from(new Set([...draft.selected_item_ids, ...items.filter((item) => item.spf_status === "INCLUDED").map((item) => item.id)]));
+      const attachedItemIds = new Set(items.filter((item) => item.spf_status === "INCLUDED").map((item) => String(item.id)));
+      const newItemIds = Array.from(new Set(draft.selected_item_ids.filter((id) => !attachedItemIds.has(id))));
       const result = await mutateSpf<Record<string, unknown>>("period", period
         ? {
             mode: "UPDATE",
@@ -162,7 +154,7 @@ export function PeriodWizard({ period }: { period?: SpfPeriod }) {
             date_start: draft.date_start,
             date_end: draft.date_end,
             description: draft.description || undefined,
-            item_ids: itemIds,
+            item_ids: newItemIds,
             source_ids: sourceIds,
           }
         : {
@@ -171,7 +163,7 @@ export function PeriodWizard({ period }: { period?: SpfPeriod }) {
             date_start: draft.date_start,
             date_end: draft.date_end,
             description: draft.description || undefined,
-            item_ids: itemIds,
+            item_ids: newItemIds,
             source_ids: sourceIds,
           });
 
@@ -185,7 +177,7 @@ export function PeriodWizard({ period }: { period?: SpfPeriod }) {
       window.localStorage.removeItem(storageKey(period?.id));
       setServerSuccess("Draft periode berhasil disimpan.");
       const nextId = String(result.data.period_id ?? result.data.id ?? period?.id ?? "");
-      router.push(nextId ? `/spf/periods/${encodeURIComponent(nextId)}` : "/spf/periods");
+      router.push(nextId ? `/spf/periods?period=${encodeURIComponent(nextId)}` : "/spf/periods");
       router.refresh();
     });
   }
@@ -194,12 +186,30 @@ export function PeriodWizard({ period }: { period?: SpfPeriod }) {
     setStep(next);
   }
 
+  function reloadItems() {
+    if (!period?.id) return;
+    void mutateSpf<{ items: SpfItem[] }>("item", {
+      mode: "LIST",
+      period_id: period.id,
+      limit: 100,
+      offset: 0,
+    }).then((result) => {
+      if (result.success) setItems(result.data.items ?? []);
+    });
+  }
+
+  function handleManualCreated(itemId: string) {
+    if (!itemId) return;
+    setDraft((current) => ({ ...current, selected_item_ids: Array.from(new Set([...current.selected_item_ids, itemId])) }));
+    reloadItems();
+  }
+
   return (
     <section className="space-y-4" aria-labelledby="period-wizard-title">
       <PageHeader eyebrow="SPF Admin" title={period ? `Edit Draft ${period.id}` : "Buat Periode"} />
 
-      <div className="grid gap-2 md:grid-cols-6">
-        {[1, 2, 3, 4, 5, 6].map((item) => (
+      <div className="grid gap-2 md:grid-cols-3">
+        {[1, 2, 3].map((item) => (
           <button
             key={item}
             type="button"
@@ -208,20 +218,16 @@ export function PeriodWizard({ period }: { period?: SpfPeriod }) {
               step === item ? "border-primary bg-primary/10 text-app-accent-ink" : "border-border text-muted-foreground dark:border-white/[0.08]"
             }`}
           >
-            Step {item}
+            Langkah {item}
           </button>
         ))}
       </div>
 
       {step === 1 ? (
-        <SectionCard label="Step 1 - Unit dan Periode">
+        <SectionCard label="Langkah 1 · Unit dan Periode">
           <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
             <VehicleCombobox value={draft.car_id} onChange={(value) => setDraft({ ...draft, car_id: value })} />
-            <div className="grid gap-3 md:grid-cols-3">
-              <div>
-                <FieldLabel required>Tahun</FieldLabel>
-                <CompactInput value={draft.year} onChange={(event) => setDraft({ ...draft, year: event.target.value })} />
-              </div>
+            <div className="grid gap-3 md:grid-cols-2">
               <div>
                 <FieldLabel required>Tanggal mulai</FieldLabel>
                 <CompactInput type="date" value={draft.date_start} onChange={(event) => setDraft({ ...draft, date_start: event.target.value })} />
@@ -236,91 +242,73 @@ export function PeriodWizard({ period }: { period?: SpfPeriod }) {
             <FieldLabel>Deskripsi internal</FieldLabel>
             <CompactTextarea rows={3} value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} />
           </div>
-          <div className="border border-border bg-muted/30 px-3 py-2 text-[12px] text-muted-foreground dark:border-white/[0.06]">
-            Backend akan menghasilkan period_id otomatis dengan format <span className="font-mono text-foreground">{"{CAR_ID}-{YYYY}-{MM}-{SEQUENCE}"}</span>.
-          </div>
           {overlapWarnings.length > 0 ? (
             <div className="border border-primary/25 bg-primary/8 px-3 py-2 text-[12px] text-app-accent-ink">
               <AlertTriangle className="mr-1 inline h-3.5 w-3.5" />
-              Rentang bertabrakan dengan {overlapWarnings.length} periode existing.
+              Rentang bertabrakan dengan {overlapWarnings.length} periode yang sudah ada.
             </div>
           ) : null}
         </SectionCard>
       ) : null}
 
       {step === 2 ? (
-        <SectionCard label="Step 2 - Pilih Sumber Data">
+        <SectionCard label="Langkah 2 · Pilih Sumber Data">
           <div className="mb-3 flex gap-2">
             <ActionButton variant={activeSourceTab === "SYSTEM" ? "primary" : "default"} onClick={() => setActiveSourceTab("SYSTEM")}>Tarik dari Sistem</ActionButton>
             <ActionButton variant={activeSourceTab === "MANUAL" ? "primary" : "default"} onClick={() => setActiveSourceTab("MANUAL")}>Buat Manual</ActionButton>
           </div>
           {activeSourceTab === "SYSTEM" ? (
-            <TechnicalJobdescSelector
-              sources={sources}
-              selectedIds={draft.selected_source_keys}
-              onSelectionChange={(ids) => setDraft({ ...draft, selected_source_keys: ids })}
-            />
+          <TechnicalJobdescSelector
+            sources={sources}
+            selectedIds={draft.selected_source_keys}
+            onSelectionChange={(ids) => setDraft({ ...draft, selected_source_keys: ids })}
+          />
           ) : (
-            <ManualJobdescForm mode="CREATE" carId={draft.car_id} periodId={period?.id} onSuccess={() => router.refresh()} />
+            <ManualJobdescForm mode="CREATE" carId={draft.car_id} periodId={period?.id} onCreated={handleManualCreated} />
           )}
         </SectionCard>
       ) : null}
 
       {step === 3 ? (
-        <SectionCard label="Step 3 - Kurasi Isi Periode">
-          <CuratedItemEditor
-            rows={items}
-            meta={{ total: items.length, limit: Math.max(1, items.length), offset: 0, hasNextPage: false }}
-            role="ADMIN"
-            editable
-          />
-        </SectionCard>
-      ) : null}
-
-      {step === 4 ? (
-        <SectionCard label="Step 4 - Dokumentasi">
-          <div className="space-y-4">
-            {items.length === 0 ? <p className="text-[13px] text-muted-foreground">Simpan atau tarik item terlebih dahulu untuk melihat dokumentasi per item.</p> : null}
-            {items.map((item) => (
-              <SectionCard key={item.id} label={item.customer_description || item.id}>
-                <DocumentationManager itemId={item.id} media={[]} editable />
-              </SectionCard>
-            ))}
-            <label className="flex items-center gap-2 text-[13px] text-foreground">
-              <input
-                type="checkbox"
-                checked={draft.documentation_checked}
-                onChange={(event) => setDraft({ ...draft, documentation_checked: event.target.checked })}
-              />
-              Dokumentasi sudah diperiksa.
-            </label>
+        <SectionCard label="Langkah 3 · Review & Simpan Draft">
+          <div className="grid gap-3 md:grid-cols-2">
+            <div>
+              <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground">Unit</p>
+              <p className="mt-1 text-[13px] font-medium text-foreground">{draft.car_id || "-"}</p>
+            </div>
+            <div>
+              <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground">Rentang Tanggal</p>
+              <p className="mt-1 text-[13px] font-medium text-foreground">{draft.date_start && draft.date_end ? `${draft.date_start} - ${draft.date_end}` : "-"}</p>
+            </div>
+            <div>
+              <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground">Sumber Terpilih</p>
+              <p className="mt-1 text-[13px] font-medium text-foreground">{draft.selected_source_keys.length} pekerjaan</p>
+            </div>
+            <div>
+              <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground">Item Manual</p>
+              <p className="mt-1 text-[13px] font-medium text-foreground">{draft.selected_item_ids.length} item</p>
+            </div>
           </div>
-        </SectionCard>
-      ) : null}
-
-      {step === 5 ? (
-        <SectionCard label="Step 5 - Review">
-          <PortalPreview period={{ ...(period ?? { id: "DRAFT", title: "Draft", status: "DRAFT", workflow_status: "DRAFT", created_by: "-", created_at: "", updated_at: "" }), ...draft }} items={items.filter((item) => item.spf_status === "INCLUDED")} adminPreview />
+          {draft.description ? (
+            <p className="mt-3 whitespace-pre-wrap text-[13px] text-muted-foreground">{draft.description}</p>
+          ) : null}
           {validation.errors.length > 0 || validation.warnings.length > 0 ? (
-            <div className="space-y-2">
+            <div className="mt-3 space-y-2">
               {validation.errors.map((error) => <p key={error} className="border border-destructive/20 bg-destructive/5 px-3 py-2 text-[12px] text-destructive">{error}</p>)}
               {validation.warnings.map((warning) => <p key={warning} className="border border-primary/25 bg-primary/8 px-3 py-2 text-[12px] text-app-accent-ink">{warning}</p>)}
             </div>
           ) : (
-            <p className="inline-flex items-center gap-2 text-[13px] text-success"><CheckCircle2 className="h-4 w-4" />Validasi review lolos.</p>
+            <p className="mt-3 inline-flex items-center gap-2 text-[13px] text-success"><CheckCircle2 className="h-4 w-4" />Siap disimpan sebagai draft.</p>
           )}
-        </SectionCard>
-      ) : null}
-
-      {step === 6 ? (
-        <SectionCard label="Step 6 - Simpan Draft">
           <p className="text-[13px] text-muted-foreground">
-            Tombol ini hanya menyimpan DRAFT. Submit approval tetap dilakukan dari detail periode setelah admin memeriksa ulang laporan.
+            Draft disimpan lalu item dari sumber akan dimasukkan otomatis. Approval tetap dilakukan dari detail periode.
           </p>
-          <ActionButton variant="primary" disabled={isPending} onClick={createOrSaveDraft}>
-            <Save className="h-3.5 w-3.5" />
-            {isPending ? "Menyimpan..." : "Simpan DRAFT"}
-          </ActionButton>
+          <div className="mt-3">
+            <ActionButton variant="primary" disabled={isPending} onClick={createOrSaveDraft}>
+              <Save className="h-3.5 w-3.5" />
+              {isPending ? "Menyimpan..." : "Simpan Draft"}
+            </ActionButton>
+          </div>
         </SectionCard>
       ) : null}
 
@@ -332,7 +320,7 @@ export function PeriodWizard({ period }: { period?: SpfPeriod }) {
           <ChevronLeft className="h-3.5 w-3.5" />
           Sebelumnya
         </ActionButton>
-        <ActionButton disabled={step === 6} variant="primary" onClick={() => go((step + 1) as WizardStep)}>
+        <ActionButton disabled={step === 3} variant="primary" onClick={() => go((step + 1) as WizardStep)}>
           Berikutnya
           <ChevronRight className="h-3.5 w-3.5" />
         </ActionButton>

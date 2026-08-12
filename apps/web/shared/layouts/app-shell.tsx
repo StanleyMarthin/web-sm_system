@@ -34,6 +34,7 @@ import { useCallback, useState, useRef, useEffect, useMemo } from "react";
 import { SERIF_STYLE } from "@/lib/constants";
 import type { NavigationItem, NavigationSubItem } from "@/shared/navigation/modules";
 import { logoutFromWeb } from "@/shared/auth/client";
+import { NotificationInbox } from "@/shared/notifications/notification-inbox";
 
 interface AppShellProps {
   user: AuthUser;
@@ -420,6 +421,8 @@ export function AppShell({ user, navigation, children }: AppShellProps) {
               {activeChildLabel || activeParentLabel || "Dashboard"}
             </h1>
           </div>
+
+          {user.permissions.includes("LIST_NOTIFICATIONS") ? <NotificationInbox /> : null}
 
           {/* Right section: User profile dropdown */}
           <div className="flex items-center relative" ref={profileMenuRef}>

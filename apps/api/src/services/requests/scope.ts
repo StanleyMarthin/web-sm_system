@@ -1,4 +1,5 @@
 import type { WebSession } from "@/services/auth/session.service";
+import { isQaRole } from "@/services/rbac/reserved-role";
 
 function normalizeRoleName(roleName: string | null | undefined): string {
   return roleName?.trim().toLowerCase().replace(/[\s-]+/gu, "_") ?? "";
@@ -10,8 +11,7 @@ function isTechnicalDivisionLead(session: WebSession): boolean {
 }
 
 function isAdvisor(session: WebSession): boolean {
-  const roleName = normalizeRoleName(session.user.roleName);
-  return roleName.includes("advisor") || session.user.roleProfile?.approvalRank === 2;
+  return isQaRole(session.user.roleName) || session.user.roleProfile?.approvalRank === 2;
 }
 
 export function applyRequestsVisibilityScope(session: WebSession): WebSession {

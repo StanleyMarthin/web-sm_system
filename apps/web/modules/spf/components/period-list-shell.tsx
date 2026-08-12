@@ -7,13 +7,12 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Plus, RotateCcw, Search } from "lucide-react";
 import { PeriodList } from "./period-list";
 import type { SpfPagination, SpfPeriod, SpfPeriodStatus } from "@/shared/api/spf-contracts";
-import type { SpfRole } from "@/shared/auth/admin-session";
 import { ActionButton, CompactInput, PageHeader, SectionCard } from "@/shared/ui/compact";
 
 interface PeriodListShellProps {
   rows: readonly SpfPeriod[];
   meta: SpfPagination;
-  role: SpfRole;
+  canAdmin: boolean;
 }
 
 const STATUS_OPTIONS: Array<{ value: "" | SpfPeriodStatus; label: string }> = [
@@ -25,18 +24,18 @@ const STATUS_OPTIONS: Array<{ value: "" | SpfPeriodStatus; label: string }> = [
   { value: "PUBLISHED", label: "Published" },
 ];
 
-export function PeriodListShell({ rows, meta, role }: PeriodListShellProps) {
+export function PeriodListShell({ rows, meta, canAdmin }: PeriodListShellProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [carId, setCarId] = useState(searchParams.get("car_id") ?? "");
+  const [unit, setUnit] = useState(searchParams.get("unit") ?? "");
   const [year, setYear] = useState(searchParams.get("tahun") ?? searchParams.get("year") ?? "");
   const [dateStart, setDateStart] = useState(searchParams.get("date_start") ?? "");
   const [dateEnd, setDateEnd] = useState(searchParams.get("date_end") ?? "");
   const [workflowStatus, setWorkflowStatus] = useState(searchParams.get("workflow_status") ?? "");
   const [search, setSearch] = useState(searchParams.get("search") ?? "");
   const activeFilterCount = useMemo(
-    () => [carId, year, dateStart, dateEnd, workflowStatus, search].filter(Boolean).length,
-    [carId, dateEnd, dateStart, search, workflowStatus, year],
+    () => [unit, year, dateStart, dateEnd, workflowStatus, search].filter(Boolean).length,
+    [unit, dateEnd, dateStart, search, workflowStatus, year],
   );
 
   function applyFilters(event?: FormEvent) {
@@ -46,7 +45,7 @@ export function PeriodListShell({ rows, meta, role }: PeriodListShellProps) {
       if (value.trim()) params.set(key, value.trim());
       else params.delete(key);
     };
-    setOrDelete("car_id", carId);
+    setOrDelete("unit", unit);
     setOrDelete("tahun", year);
     setOrDelete("date_start", dateStart);
     setOrDelete("date_end", dateEnd);
@@ -58,7 +57,7 @@ export function PeriodListShell({ rows, meta, role }: PeriodListShellProps) {
   }
 
   function resetFilters() {
-    setCarId("");
+    setUnit("");
     setYear("");
     setDateStart("");
     setDateEnd("");
@@ -71,11 +70,11 @@ export function PeriodListShell({ rows, meta, role }: PeriodListShellProps) {
     <section aria-labelledby="spf-period-title" className="space-y-4">
       <PageHeader
         eyebrow="SPF Admin"
-        title="Periode Laporan"
+        title="Periode SPF"
         actions={
-          role === "ADMIN" ? (
+          canAdmin ? (
             <Link
-              href="/spf/periods/new"
+              href="/spf/periods?create=1"
               className="inline-flex h-9 items-center gap-1.5 border border-primary/35 px-3 font-mono text-[12px] font-medium uppercase tracking-[0.08em] text-app-accent-ink transition-colors hover:bg-primary/10"
             >
               <Plus className="h-3.5 w-3.5" />
@@ -85,11 +84,11 @@ export function PeriodListShell({ rows, meta, role }: PeriodListShellProps) {
         }
       />
 
-      <SectionCard label="Filter Server-Side">
+      <SectionCard label="Filter Periode">
         <form onSubmit={applyFilters} className="grid gap-3 lg:grid-cols-[1fr_120px_150px_150px_190px_1.3fr_auto]">
           <div>
-            <label className="mb-1 block font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground">car_id</label>
-            <CompactInput value={carId} onChange={(event) => setCarId(event.target.value)} placeholder="PORSCHE930_ADRIAN" />
+            <label className="mb-1 block font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground">Nama Unit</label>
+            <CompactInput value={unit} onChange={(event) => setUnit(event.target.value)} placeholder="Cari nama unit" />
           </div>
           <div>
             <label className="mb-1 block font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground">Tahun</label>
@@ -124,7 +123,7 @@ export function PeriodListShell({ rows, meta, role }: PeriodListShellProps) {
         </form>
       </SectionCard>
 
-      <PeriodList rows={rows} meta={meta} role={role} />
+      <PeriodList rows={rows} meta={meta} />
     </section>
   );
 }

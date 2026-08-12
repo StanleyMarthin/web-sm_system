@@ -7,6 +7,9 @@ export const userStatusSchema = z.enum(["ACTIVE", "INACTIVE"]);
 export const userReferenceOptionSchema = z.object({
   label: z.string(),
   value: z.string(),
+  parentId: z.number().int().nullable().optional(),
+  parentName: z.string().nullable().optional(),
+  parentCode: z.string().nullable().optional(),
   scopeBasis: roleScopeBasisSchema.optional(),
   approvalRank: z.number().int().min(0).max(999).nullable().optional(),
   webEnabled: z.boolean().optional(),

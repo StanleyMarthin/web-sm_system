@@ -3,6 +3,8 @@ import {
   countdownBoardEnvelopeSchema,
   countdownDetailEnvelopeSchema,
   countdownImportEnvelopeSchema,
+  countdownRevisionDecisionSchema,
+  countdownRevisionRequestSchema,
   countdownUpdateRequestSchema,
 } from "@smsystem/contracts/countdown";
 import { getApiBaseUrl } from "@/shared/api/config";
@@ -194,12 +196,42 @@ export async function deleteCountdownRecord(countdownId: string) {
   };
 }
 
+async function submitCountdownRevisionAction(
+  countdownId: string,
+  path: string,
+  method: "POST" | "PUT",
+  input: Record<string, unknown>,
+) {
+  const response = await fetch(`${getApiBaseUrl()}/api/countdown/${countdownId}/${path}`, {
+    method,
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) return { ...(await parseFailure(response)), success: false as const };
+  return { success: true as const };
+}
+
+export function requestCountdownRevision(
+  countdownId: string,
+  input: { requestedHours: number; requestedDeadline: string; reason: string },
+) {
+  return submitCountdownRevisionAction(countdownId, "revision", "POST", countdownRevisionRequestSchema.parse(input));
+}
+
+export function approveCountdownRevision(
+  countdownId: string,
+  input: { isApproved: boolean; approvedHours: number; approvedDeadline: string },
+) {
+  return submitCountdownRevisionAction(countdownId, "revision/approval", "PUT", countdownRevisionDecisionSchema.parse(input));
+}
+
 export async function uploadCountdownWorkbook(file: File, params: { unitId: string }) {
   const formData = new FormData();
   formData.set("file", file);
+  formData.set("unitId", params.unitId);
 
-  const qs = toUrlSearchParams({ unitId: params.unitId }).toString();
-  const response = await fetch(`${getApiBaseUrl()}/api/countdown/import?${qs}`, {
+  const response = await fetch(`${getApiBaseUrl()}/api/countdown/import`, {
     method: "POST",
     credentials: "include",
     body: formData,
@@ -250,9 +282,10 @@ export async function downloadCountdownTemplate(params: { unitId: string }) {
   };
 }
 
-export async function downloadCountdownWorkbook(params: { unitId: string; divisionId?: string }) {
+export async function downloadCountdownWorkbook(params: { unitId: string; divisionId?: string; status?: string }) {
   const query: Record<string, string> = { unitId: params.unitId };
   if (params.divisionId) query.divisionId = params.divisionId;
+  if (params.status) query.status = params.status;
   const qs = toUrlSearchParams(query).toString();
   
   const response = await fetch(`${getApiBaseUrl()}/api/countdown/download?${qs}`, {
@@ -272,7 +305,7 @@ export async function downloadCountdownWorkbook(params: { unitId: string; divisi
   const url = window.URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `countdown-export-${params.unitId}${params.divisionId ? `-${params.divisionId}` : ""}.xlsx`;
+  link.download = `countdown-export-${params.unitId}${params.divisionId ? `-${params.divisionId}` : ""}${params.status ? `-${params.status}` : ""}.xlsx`;
   document.body.append(link);
   link.click();
   link.remove();

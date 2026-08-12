@@ -15,6 +15,11 @@ import { MySqlAuditRepository } from "@/repositories/audit.repo";
 import { MySqlVendorRepository, type VendorRepository } from "@/repositories/vendor.repo";
 import type { WebSession } from "@/services/auth/session.service";
 import { buildGridMeta } from "@/services/grid/paginate";
+import { permissionCodes } from "@smsystem/permissions";
+import {
+  notifyMobileEmployees,
+  resolveEmployeeIdsByPermission,
+} from "@/services/mobile-notification.service";
 
 interface VendorListResult {
   data: VendorRecord[];
@@ -65,6 +70,30 @@ function buildVendorQueryCacheKey(
     scope: session.user.scope,
     query,
   });
+}
+
+async function notifyWov(
+  employeeIds: string[],
+  wovId: string,
+  title: string,
+  body: string,
+  status: string,
+): Promise<void> {
+  await notifyMobileEmployees(employeeIds, {
+    title,
+    body,
+    data: { module: "wov", reqId: wovId, status },
+  }, "sm_wov");
+}
+
+async function notifyWovApprovers(wovId: string, body: string, status: string): Promise<void> {
+  await notifyWov(
+    await resolveEmployeeIdsByPermission(permissionCodes.vendorApprove),
+    wovId,
+    "Approval WO Vendor",
+    body,
+    status,
+  );
 }
 
 export interface VendorService {
@@ -149,6 +178,12 @@ export class DefaultVendorService implements VendorService {
       newValue: input,
     });
 
+    await notifyWovApprovers(
+      result.wovId,
+      `WOV baru ${result.wovId} menunggu persetujuan Anda.`,
+      result.accTracking,
+    );
+
     return result;
   }
 
@@ -170,6 +205,21 @@ export class DefaultVendorService implements VendorService {
       oldValue: detail.ticket,
       newValue: input,
     });
+    if (result.accTracking === "APPROVED") {
+      await notifyWov(
+        detail.ticket.requestedBy ? [detail.ticket.requestedBy] : [],
+        wovId,
+        "Update WO Vendor",
+        `WOV ${detail.ticket.wovNumber} telah diperbarui.`,
+        result.status,
+      );
+    } else {
+      await notifyWovApprovers(
+        wovId,
+        `WOV ${detail.ticket.wovNumber} diperbarui dan menunggu persetujuan.`,
+        result.accTracking,
+      );
+    }
     return result;
   }
 
@@ -209,6 +259,21 @@ export class DefaultVendorService implements VendorService {
       },
       newValue: result,
     });
+    if (result.accTracking === "APPROVED") {
+      await notifyWov(
+        detail.ticket.requestedBy ? [detail.ticket.requestedBy] : [],
+        wovId,
+        "WO Vendor Disetujui",
+        `WOV ${detail.ticket.wovNumber} telah disetujui.`,
+        result.status,
+      );
+    } else {
+      await notifyWovApprovers(
+        wovId,
+        `WOV ${detail.ticket.wovNumber} menunggu persetujuan tahap berikutnya.`,
+        result.accTracking,
+      );
+    }
     return result;
   }
 
@@ -244,6 +309,13 @@ export class DefaultVendorService implements VendorService {
       },
       newValue: result,
     });
+    await notifyWov(
+      detail.ticket.requestedBy ? [detail.ticket.requestedBy] : [],
+      wovId,
+      "Update WO Vendor",
+      `Status WOV ${detail.ticket.wovNumber} menjadi ${result.status}.`,
+      result.status,
+    );
     return result;
   }
 
@@ -278,6 +350,13 @@ export class DefaultVendorService implements VendorService {
       },
       newValue: result,
     });
+    await notifyWov(
+      detail.ticket.requestedBy ? [detail.ticket.requestedBy] : [],
+      wovId,
+      "WO Vendor Diterima",
+      `WOV ${detail.ticket.wovNumber} telah diterima.`,
+      result.status,
+    );
     return result;
   }
 
@@ -308,6 +387,13 @@ export class DefaultVendorService implements VendorService {
       },
       newValue: result,
     });
+    await notifyWov(
+      detail.ticket.requestedBy ? [detail.ticket.requestedBy] : [],
+      wovId,
+      "WO Vendor Dibatalkan",
+      `WOV ${detail.ticket.wovNumber} dibatalkan: ${input.reason}`,
+      result.status,
+    );
     return result;
   }
 }

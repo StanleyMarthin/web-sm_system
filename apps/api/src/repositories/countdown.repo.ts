@@ -4,9 +4,11 @@ import type {
   CountdownCreateRequest,
   CountdownDetail,
   CountdownImportResult,
+  CountdownRevisionDecision,
+  CountdownRevisionRequest,
   CountdownTemplateRow,
 } from "@smsystem/contracts/countdown";
-import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
+import type { Pool, PoolConnection, ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { randomUUID } from "node:crypto";
 import { getMySqlPool } from "@/db/mysql";
 import type { CountdownGridQuery } from "@/services/countdown/query";
@@ -37,6 +39,11 @@ interface CountdownBoardRowPacket extends RowDataPacket {
   remainingHours: number;
   actualProgressPercent: number;
   status: string;
+  extensionRequestStatus: "REQUESTED" | "MO_REVIEW" | "APPROVED" | "REJECTED" | null;
+  requestedExtensionHours: number;
+  requestedDeadline: string | null;
+  revisionReason: string | null;
+  countRevision: number;
   startDate: string | null;
   deadlineDate: string | null;
   createdAt: string | null;
@@ -69,6 +76,11 @@ interface CountdownDetailRowPacket extends RowDataPacket {
   remainingHours: number;
   actualProgressPercent: number;
   status: string;
+  extensionRequestStatus: "REQUESTED" | "MO_REVIEW" | "APPROVED" | "REJECTED" | null;
+  requestedExtensionHours: number;
+  requestedDeadline: string | null;
+  revisionReason: string | null;
+  countRevision: number;
   startDate: string | null;
   deadlineDate: string | null;
   createdAt: string | null;
@@ -78,6 +90,7 @@ interface CountdownDetailRowPacket extends RowDataPacket {
 
 interface CountdownEntryRowPacket extends RowDataPacket {
   detailId: string;
+  actualId: string | null;
   entryType: string;
   employeeId: string | null;
   employeeName: string;
@@ -88,10 +101,31 @@ interface CountdownEntryRowPacket extends RowDataPacket {
   billedHours: number;
   progressPercent: number;
   taskStatus: string;
+  dailyNotes: string | null;
+}
+
+interface CountdownEntryPhotoRowPacket extends RowDataPacket {
+  actualId: string;
+  photoId: string;
+  type: "BEFORE" | "PROCESS" | "AFTER" | "DEFECT";
+  url: string;
+  caption: string | null;
+  uploader: string | null;
+  time: string;
 }
 
 interface CountdownMetaRowPacket extends RowDataPacket {
   total: number;
+}
+
+interface CountdownRevisionRowPacket extends RowDataPacket {
+  countdownId: string;
+  carId: string;
+  divisionId: number;
+  status: string;
+  extensionRequestStatus: string | null;
+  timeExtensionHours: number;
+  targetHoursInitial: number;
 }
 
 interface ValidationPacket extends RowDataPacket {
@@ -210,10 +244,18 @@ function buildScopeWhereClause(
   }
 
   if (scope.divisionIds.length > 0) {
-    params.push(...scope.divisionIds);
     clauses.push(
-      `${alias}.division_id IN (${scope.divisionIds.map(() => "?").join(", ")})`,
+      `(
+        ${alias}.division_id IN (${scope.divisionIds.map(() => "?").join(", ")})
+        OR EXISTS (
+          SELECT 1
+          FROM sm_divisi selected_division
+          WHERE selected_division.id IN (${scope.divisionIds.map(() => "?").join(", ")})
+            AND selected_division.parent_id = ${alias}.division_id
+        )
+      )`,
     );
+    params.push(...scope.divisionIds, ...scope.divisionIds);
   }
 
   if (scope.unitIds.length > 0) {
@@ -264,8 +306,16 @@ function buildFilterClauses(query: CountdownGridQuery, params: unknown[]): strin
     }
 
     if (filter.field === "divisionId") {
-      clauses.push("cd.division_id = ?");
-      params.push(filter.value);
+      clauses.push(`(
+        cd.division_id = ?
+        OR EXISTS (
+          SELECT 1
+          FROM sm_divisi selected_division
+          WHERE selected_division.id = ?
+            AND selected_division.parent_id = cd.division_id
+        )
+      )`);
+      params.push(filter.value, filter.value);
       continue;
     }
 
@@ -350,18 +400,11 @@ async function checkAllowedJobType(
       SELECT mjt.id
       FROM master_job_types mjt
       LEFT JOIN sm_divisi selected_division ON selected_division.id = ?
-      LEFT JOIN sm_divisi parent_division ON parent_division.id = selected_division.parent_id
       WHERE mjt.id = ?
         AND (
           mjt.division_id IS NULL
           OR mjt.division_id = ?
-          OR (
-            mjt.division_id = selected_division.parent_id
-            AND (
-              UPPER(COALESCE(parent_division.name, '')) = 'MECHANIC'
-              OR UPPER(COALESCE(parent_division.code, '')) = 'MECHANIC'
-            )
-          )
+          OR mjt.division_id = selected_division.parent_id
         )
       LIMIT 1
     `,
@@ -369,6 +412,23 @@ async function checkAllowedJobType(
   );
 
   return rows.length > 0;
+}
+
+async function resolveWorkDivisionId(
+  connection: Pick<PoolConnection, "query">,
+  divisionId: number,
+): Promise<number> {
+  const [rows] = await connection.query<Array<RowDataPacket & { workDivisionId: number }>>(
+    `
+      SELECT COALESCE(parent_id, id) AS workDivisionId
+      FROM sm_divisi
+      WHERE id = ?
+      LIMIT 1
+    `,
+    [divisionId],
+  );
+
+  return rows[0]?.workDivisionId ?? divisionId;
 }
 
 function buildOrderBy(sortBy: CountdownGridQuery["sortBy"], direction: "asc" | "desc"): string {
@@ -425,6 +485,11 @@ function countdownSelectSql(): string {
       ROUND(COALESCE(cd.remaining_hours, GREATEST(COALESCE(cd.target_hours_revised, cd.target_hours_initial + cd.time_extension_hours, cd.target_hours_initial) - COALESCE(cd.total_actual_hours, 0), 0)), 2) AS remainingHours,
       ROUND(COALESCE(cd.actual_progress_percent, 0), 2) AS actualProgressPercent,
       COALESCE(cd.status, 'PLAN') AS status,
+      cd.extension_request_status AS extensionRequestStatus,
+      ROUND(COALESCE(cd.requested_extension_hours, 0), 2) AS requestedExtensionHours,
+      DATE_FORMAT(cd.requested_deadline, '%Y-%m-%d') AS requestedDeadline,
+      cd.revision_reason AS revisionReason,
+      COALESCE(cd.count_revisi, 0) AS countRevision,
       DATE_FORMAT(cd.start_date, '%Y-%m-%d') AS startDate,
       DATE_FORMAT(cd.deadline_date, '%Y-%m-%d') AS deadlineDate,
       DATE_FORMAT(cd.created_at, '%Y-%m-%d %H:%i:%s') AS createdAt,
@@ -464,6 +529,11 @@ function mapCountdownBoardRow(row: CountdownBoardRowPacket): CountdownBoardRow {
     workdayAlias: _build_workday_alias(Number(row.remainingHours ?? 0)),
     actualProgressPercent: Number(row.actualProgressPercent ?? 0),
     status: row.status,
+    extensionRequestStatus: row.extensionRequestStatus,
+    requestedExtensionHours: Number(row.requestedExtensionHours ?? 0),
+    requestedDeadline: row.requestedDeadline,
+    revisionReason: row.revisionReason,
+    countRevision: Number(row.countRevision ?? 0),
     startDate: row.startDate,
     deadlineDate: row.deadlineDate,
     createdAt: row.createdAt,
@@ -472,11 +542,20 @@ function mapCountdownBoardRow(row: CountdownBoardRowPacket): CountdownBoardRow {
   };
 }
 
-function mapCountdownDetailRow(row: CountdownDetailRowPacket, details: CountdownEntryRowPacket[]): CountdownDetail {
+function mapCountdownDetailRow(
+  row: CountdownDetailRowPacket,
+  details: CountdownEntryRowPacket[],
+  photos: CountdownEntryPhotoRowPacket[],
+): CountdownDetail {
+  const photosByActualId = new Map<string, CountdownEntryPhotoRowPacket[]>();
+  for (const photo of photos) {
+    photosByActualId.set(photo.actualId, [...(photosByActualId.get(photo.actualId) ?? []), photo]);
+  }
   return {
     ...mapCountdownBoardRow(row),
     details: details.map((detail) => ({
       detailId: detail.detailId,
+      actualId: detail.actualId,
       entryType: detail.entryType,
       employeeId: detail.employeeId,
       employeeName: detail.employeeName,
@@ -487,6 +566,15 @@ function mapCountdownDetailRow(row: CountdownDetailRowPacket, details: Countdown
       billedHours: Number(detail.billedHours ?? 0),
       progressPercent: Number(detail.progressPercent ?? 0),
       taskStatus: detail.taskStatus,
+      dailyNotes: detail.dailyNotes,
+      photos: (detail.actualId ? photosByActualId.get(detail.actualId) : undefined)?.map((photo) => ({
+        photoId: photo.photoId,
+        type: photo.type,
+        url: photo.url,
+        caption: photo.caption,
+        uploader: photo.uploader,
+        time: photo.time,
+      })) ?? [],
     })),
   };
 }
@@ -559,6 +647,19 @@ async function hasImportScopeAccess(
 
   if (scope.divisionIds.includes(divisionId)) {
     return true;
+  }
+
+  if (scope.divisionIds.length > 0) {
+    const [rows] = await connection.query<ValidationPacket[]>(
+      `SELECT id FROM sm_divisi
+       WHERE id IN (${scope.divisionIds.map(() => "?").join(", ")})
+         AND parent_id = ?
+       LIMIT 1`,
+      [...scope.divisionIds, divisionId],
+    );
+    if (rows.length > 0) {
+      return true;
+    }
   }
 
   if (!scope.canViewAssignedUnits) {
@@ -713,6 +814,8 @@ async function normalizeAndValidateCountdownMutation(
     }
   }
 
+  const workDivisionId = await resolveWorkDivisionId(connection, divisionId);
+
   if (prerequisiteCoreId) {
     const prerequisiteExists = await checkExists(
       connection,
@@ -737,7 +840,7 @@ async function normalizeAndValidateCountdownMutation(
 
   return {
     carId,
-    divisionId,
+    divisionId: workDivisionId,
     panelId,
     taskCategory: taskCategory as NormalizedCountdownMutationInput["taskCategory"],
     sectionName,
@@ -757,6 +860,19 @@ async function normalizeAndValidateCountdownMutation(
 export interface CountdownBoardListPayload {
   rows: CountdownBoardRow[];
   total: number;
+}
+
+export interface CountdownRevisionResult {
+  countdownId: string;
+  status: "REQUESTED" | "MO_REVIEW" | "APPROVED" | "REJECTED";
+  carId: string;
+  divisionId: number;
+}
+
+export interface CountdownDownloadQuery {
+  unitId: string;
+  divisionId?: string;
+  status?: string;
 }
 
 export class CountdownRepository {
@@ -805,6 +921,44 @@ export class CountdownRepository {
     };
   }
 
+  async findCountdownDownload(
+    params: ScopeParams & { query: CountdownDownloadQuery },
+  ): Promise<CountdownBoardRow[]> {
+    const pool = this.poolFactory();
+    const whereParams: unknown[] = [];
+    const query: CountdownGridQuery = {
+      page: 1,
+      limit: 100,
+      search: "",
+      sortBy: "updatedAt",
+      sortDirection: "desc",
+      view: null,
+      filters: [
+        { field: "unitId", operator: "eq", value: params.query.unitId },
+        ...(params.query.divisionId
+          ? [{ field: "divisionId" as const, operator: "eq" as const, value: params.query.divisionId }]
+          : []),
+        ...(params.query.status
+          ? [{ field: "status" as const, operator: "eq" as const, value: params.query.status }]
+          : []),
+      ],
+    };
+    const clauses = [
+      buildScopeWhereClause(params.scope, params.employeeId, whereParams),
+      ...buildFilterClauses(query, whereParams),
+    ].filter(Boolean);
+    const [rows] = await pool.query<CountdownBoardRowPacket[]>(
+      `
+        ${countdownSelectSql()}
+        WHERE ${clauses.join(" AND ")}
+        ORDER BY ${buildOrderBy(query.sortBy, query.sortDirection)}
+      `,
+      whereParams,
+    );
+
+    return rows.map(mapCountdownBoardRow);
+  }
+
   async findCountdownDetail(
     params: ScopeParams & { countdownId: string },
   ): Promise<CountdownDetail | null> {
@@ -835,25 +989,233 @@ export class CountdownRepository {
     const [detailRows] = await pool.query<CountdownEntryRowPacket[]>(
       `
         SELECT
-          id AS detailId,
-          entry_type AS entryType,
-          employee_id AS employeeId,
-          employee_name AS employeeName,
-          employee_role AS employeeRole,
-          DATE_FORMAT(work_date, '%Y-%m-%d') AS workDate,
-          TIME_FORMAT(start_time, '%H:%i') AS startTime,
-          TIME_FORMAT(finish_time, '%H:%i') AS finishTime,
-          ROUND(COALESCE(billed_hours, 0), 2) AS billedHours,
-          ROUND(COALESCE(progress_percent, 0), 2) AS progressPercent,
-          task_status AS taskStatus
-        FROM sm_jobdesc_countdown_detail
-        WHERE countdown_id = ?
-        ORDER BY work_date DESC, start_time DESC
+          detail.id AS detailId,
+          detail.ref_actual_id AS actualId,
+          detail.entry_type AS entryType,
+          detail.employee_id AS employeeId,
+          detail.employee_name AS employeeName,
+          detail.employee_role AS employeeRole,
+          DATE_FORMAT(detail.work_date, '%Y-%m-%d') AS workDate,
+          TIME_FORMAT(detail.start_time, '%H:%i') AS startTime,
+          TIME_FORMAT(detail.finish_time, '%H:%i') AS finishTime,
+          ROUND(COALESCE(detail.billed_hours, 0), 2) AS billedHours,
+          ROUND(COALESCE(detail.progress_percent, 0), 2) AS progressPercent,
+          detail.task_status AS taskStatus,
+          NULLIF(TRIM(actual.daily_notes), '') AS dailyNotes
+        FROM sm_jobdesc_countdown_detail detail
+        LEFT JOIN sm_jobdesc_actual actual ON actual.id = detail.ref_actual_id
+        WHERE detail.countdown_id = ?
+        ORDER BY detail.work_date DESC, detail.start_time DESC
       `,
       [params.countdownId],
     );
 
-    return mapCountdownDetailRow(summary, detailRows);
+    const [photoRows] = await pool.query<CountdownEntryPhotoRowPacket[]>(
+      `
+        SELECT
+          photos.actualId,
+          photos.photoId,
+          photos.type,
+          photos.url,
+          photos.caption,
+          photos.uploader,
+          photos.time
+        FROM (
+          SELECT
+            tp.actual_id AS actualId,
+            tp.id AS photoId,
+            tp.photo_type AS type,
+            tp.photo_url AS url,
+            tp.caption,
+            uploader.full_name AS uploader,
+            DATE_FORMAT(COALESCE(tp.uploaded_at, CURRENT_TIMESTAMP), '%Y-%m-%d %H:%i:%s') AS time
+          FROM sm_work_photos_temp tp
+          JOIN sm_jobdesc_actual actual ON actual.id = tp.actual_id
+          JOIN sm_jobdesc_plan plan ON plan.id = actual.plandaily_id
+          LEFT JOIN sm_employee uploader ON uploader.employee_id = tp.uploaded_by
+          WHERE plan.core_id = ?
+
+          UNION ALL
+
+          SELECT
+            ledger.actual_id AS actualId,
+            lp.id AS photoId,
+            lp.photo_type AS type,
+            lp.photo_url AS url,
+            lp.caption,
+            COALESCE(lp.taken_by_name, uploader.full_name) AS uploader,
+            DATE_FORMAT(COALESCE(lp.taken_at, lp.created_at), '%Y-%m-%d %H:%i:%s') AS time
+          FROM sm_work_ledger_photos lp
+          JOIN sm_work_ledger ledger ON ledger.id = lp.ledger_id
+          LEFT JOIN sm_employee uploader ON uploader.employee_id = lp.taken_by
+          WHERE ledger.countdown_id = ?
+            AND ledger.actual_id IS NOT NULL
+        ) photos
+        ORDER BY photos.time DESC
+      `,
+      [params.countdownId, params.countdownId],
+    );
+
+    return mapCountdownDetailRow(summary, detailRows, photoRows);
+  }
+
+  async requestCountdownRevision(
+    params: ScopeParams & { countdownId: string; input: CountdownRevisionRequest },
+  ): Promise<CountdownRevisionResult> {
+    const connection = await this.poolFactory().getConnection();
+    try {
+      await connection.beginTransaction();
+      const revision = await this.lockRevision(connection, params);
+      if (revision.status !== "PLAN" && revision.status !== "PROSES") {
+        throw new Error("COUNTDOWN_REVISION_STATUS_INVALID");
+      }
+      if (revision.extensionRequestStatus === "REQUESTED" || revision.extensionRequestStatus === "MO_REVIEW") {
+        throw new Error("COUNTDOWN_REVISION_ALREADY_REQUESTED");
+      }
+      await connection.execute(
+        `UPDATE sm_jobdesc_countdown
+         SET extension_request_status = 'REQUESTED', requested_extension_hours = ?,
+             requested_deadline = ?, revision_reason = ?, user_update = ?, updated_at = NOW()
+         WHERE id = ?`,
+        [
+          params.input.requestedHours,
+          params.input.requestedDeadline,
+          params.input.reason,
+          params.employeeId,
+          params.countdownId,
+        ],
+      );
+      await connection.commit();
+      return { countdownId: params.countdownId, status: "REQUESTED", carId: revision.carId, divisionId: revision.divisionId };
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
+
+  async decideCountdownRevision(
+    params: ScopeParams & { countdownId: string; input: CountdownRevisionDecision; isMo: boolean },
+  ): Promise<CountdownRevisionResult> {
+    const connection = await this.poolFactory().getConnection();
+    try {
+      await connection.beginTransaction();
+      const revision = await this.lockRevision(connection, params);
+      const requiredStatus = params.isMo ? "MO_REVIEW" : "REQUESTED";
+      if (revision.extensionRequestStatus !== requiredStatus) {
+        throw new Error("COUNTDOWN_REVISION_STATUS_INVALID");
+      }
+      if (!params.isMo && !params.scope.canViewAllUnits && !await this.isActiveCountdownKp(connection, revision.carId, params.employeeId)) {
+        throw new Error("COUNTDOWN_REVISION_FORBIDDEN");
+      }
+
+      let nextStatus: CountdownRevisionResult["status"] = params.input.isApproved ? "APPROVED" : "REJECTED";
+      if (params.input.isApproved) {
+        const extension = Number(revision.timeExtensionHours ?? 0) + params.input.approvedHours;
+        const target = Number(revision.targetHoursInitial ?? 0) + extension;
+        if (!params.isMo) {
+          const [budgetRows] = await connection.query<Array<RowDataPacket & { allocatedHours: number | null }>>(
+            `SELECT pm_allocated_hours AS allocatedHours FROM sm_unit_budgets
+             WHERE car_id = ? AND division_id = ? LIMIT 1 FOR UPDATE`,
+            [revision.carId, revision.divisionId],
+          );
+          const [usageRows] = await connection.query<Array<RowDataPacket & { totalUsed: number }>>(
+            `SELECT COALESCE(SUM(target_hours_revised), 0) AS totalUsed
+             FROM sm_jobdesc_countdown WHERE car_id = ? AND division_id = ? AND id <> ?`,
+            [revision.carId, revision.divisionId, params.countdownId],
+          );
+          const budget = budgetRows[0]?.allocatedHours;
+          if (!budgetRows[0] || (budget !== null && budget !== undefined && Number(usageRows[0]?.totalUsed ?? 0) + target > Number(budget))) {
+            nextStatus = "MO_REVIEW";
+          }
+        }
+
+        if (nextStatus === "MO_REVIEW") {
+          await connection.execute(
+            `UPDATE sm_jobdesc_countdown SET extension_request_status = 'MO_REVIEW', user_update = ?, updated_at = NOW() WHERE id = ?`,
+            [params.employeeId, params.countdownId],
+          );
+        } else {
+          if (params.isMo) {
+            const [budgetUpdate] = await connection.execute<ResultSetHeader>(
+              `UPDATE sm_unit_budgets
+               SET pm_allocated_hours = pm_allocated_hours + ?, kd_allocated_hours = kd_allocated_hours + ?
+               WHERE car_id = ? AND division_id = ?`,
+              [params.input.approvedHours, params.input.approvedHours, revision.carId, revision.divisionId],
+            );
+            if (budgetUpdate.affectedRows !== 1) {
+              throw new Error("COUNTDOWN_UNIT_BUDGET_NOT_FOUND");
+            }
+          }
+          await connection.execute(
+            `UPDATE sm_jobdesc_countdown
+             SET extension_request_status = 'APPROVED', time_extension_hours = ?, target_hours_revised = ?,
+                 remaining_hours = GREATEST(? - COALESCE(total_actual_hours, 0), 0), deadline_date = ?,
+                 count_revisi = count_revisi + 1, user_update = ?, updated_at = NOW()
+             WHERE id = ?`,
+            [extension, target, target, params.input.approvedDeadline, params.employeeId, params.countdownId],
+          );
+        }
+      } else {
+        await connection.execute(
+          `UPDATE sm_jobdesc_countdown SET extension_request_status = 'REJECTED', user_update = ?, updated_at = NOW() WHERE id = ?`,
+          [params.employeeId, params.countdownId],
+        );
+      }
+      await connection.commit();
+      return { countdownId: params.countdownId, status: nextStatus, carId: revision.carId, divisionId: revision.divisionId };
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
+
+  private async lockRevision(
+    connection: PoolConnection,
+    params: ScopeParams & { countdownId: string },
+  ): Promise<CountdownRevisionRowPacket> {
+    const [rows] = await connection.query<CountdownRevisionRowPacket[]>(
+      `SELECT id AS countdownId, car_id AS carId, division_id AS divisionId, status,
+              extension_request_status AS extensionRequestStatus,
+              COALESCE(time_extension_hours, 0) AS timeExtensionHours,
+              COALESCE(target_hours_initial, 0) AS targetHoursInitial
+       FROM sm_jobdesc_countdown WHERE id = ? FOR UPDATE`,
+      [params.countdownId],
+    );
+    const revision = rows[0];
+    if (!revision) throw new Error("COUNTDOWN_NOT_FOUND");
+    if (!await hasImportScopeAccess(connection, params.scope, params.employeeId, revision.carId, Number(revision.divisionId))) {
+      throw new Error("SCOPE_FORBIDDEN");
+    }
+    return revision;
+  }
+
+  async isCountdownKp(countdownId: string, employeeId: string): Promise<boolean> {
+    const [rows] = await this.poolFactory().query<ValidationPacket[]>(
+      `SELECT cpa.car_id AS id
+       FROM sm_jobdesc_countdown cd
+       JOIN car_project_assignment cpa ON cpa.car_id = cd.car_id
+       WHERE cd.id = ? AND cpa.kp_id = ? AND cpa.ended_at IS NULL
+       LIMIT 1`,
+      [countdownId, employeeId],
+    );
+    return rows.length > 0;
+  }
+
+  private async isActiveCountdownKp(
+    connection: PoolConnection,
+    carId: string,
+    employeeId: string,
+  ): Promise<boolean> {
+    const [rows] = await connection.query<ValidationPacket[]>(
+      `SELECT car_id AS id FROM car_project_assignment
+       WHERE car_id = ? AND kp_id = ? AND ended_at IS NULL LIMIT 1`,
+      [carId, employeeId],
+    );
+    return rows.length > 0;
   }
 
   async listFilterReferences(params: ScopeParams): Promise<CountdownReferenceOptions> {

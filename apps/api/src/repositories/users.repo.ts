@@ -27,6 +27,9 @@ interface UserRow extends RowDataPacket {
 interface ReferenceRow extends RowDataPacket {
   value: number;
   label: string;
+  parentId: number | null;
+  parentName: string | null;
+  parentCode: string | null;
   scopeBasis: string | null;
   approvalRank: number | null;
   webEnabled: number | null;
@@ -61,7 +64,13 @@ export interface UsersRepository {
   }): Promise<{ rows: UserRecord[]; total: number }>;
   findByEmployeeId(employeeId: string): Promise<UserRecord | null>;
   listRoleOptions(): Promise<Array<{ label: string; value: string }>>;
-  listDivisionOptions(): Promise<Array<{ label: string; value: string }>>;
+  listDivisionOptions(): Promise<Array<{
+    label: string;
+    value: string;
+    parentId?: number | null;
+    parentName?: string | null;
+    parentCode?: string | null;
+  }>>;
   create(input: CreateUserRequest & { passwordHash: string }): Promise<UserRecord>;
   update(employeeId: string, input: UpdateUserRequest): Promise<UserRecord>;
   resetPassword(employeeId: string, passwordHash: string): Promise<void>;
@@ -454,19 +463,37 @@ export class MySqlUsersRepository implements UsersRepository {
     }));
   }
 
-  async listDivisionOptions(): Promise<Array<{ label: string; value: string }>> {
+  async listDivisionOptions(): Promise<Array<{
+    label: string;
+    value: string;
+    parentId: number | null;
+    parentName: string | null;
+    parentCode: string | null;
+  }>> {
     const pool = this.poolFactory();
     const [rows] = (await pool.query(
       `
-        SELECT id AS value, name AS label
-        FROM sm_divisi
-        ORDER BY name ASC
+        SELECT
+          d.id AS value,
+          CASE
+            WHEN parent.id IS NULL THEN d.name
+            ELSE CONCAT(parent.name, ' / ', d.name)
+          END AS label,
+          d.parent_id AS parentId,
+          parent.name AS parentName,
+          parent.code AS parentCode
+        FROM sm_divisi d
+        LEFT JOIN sm_divisi parent ON parent.id = d.parent_id
+        ORDER BY COALESCE(parent.name, d.name) ASC, parent.id IS NOT NULL ASC, d.name ASC
       `,
     )) as [ReferenceRow[], unknown];
 
     return rows.map((row) => ({
       label: row.label,
       value: String(row.value),
+      parentId: row.parentId,
+      parentName: row.parentName,
+      parentCode: row.parentCode,
     }));
   }
 

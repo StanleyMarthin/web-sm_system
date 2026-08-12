@@ -17,6 +17,11 @@ import {
 } from "@/repositories/wo.repo";
 import type { WebSession } from "@/services/auth/session.service";
 import { buildGridMeta } from "@/services/grid/paginate";
+import { permissionCodes } from "@smsystem/permissions";
+import {
+  notifyMobileEmployees,
+  resolveEmployeeIdsByPermission,
+} from "@/services/mobile-notification.service";
 
 interface WoListResult {
   data: WoRecord[];
@@ -67,6 +72,48 @@ function buildWoQueryCacheKey(
     scope: session.user.scope,
     query,
   });
+}
+
+const WO_APPROVER_PERMISSION: Partial<Record<WoStatus, string>> = {
+  OPEN: permissionCodes.woApprove,
+  SUBMITTED: permissionCodes.woApprove,
+  PENDING_TARGET_KD_APPROVAL: permissionCodes.woApprove,
+  PENDING_ADVISOR_APPROVAL: permissionCodes.woApproveAdvisor,
+  PENDING_KP_APPROVAL: permissionCodes.woApprove,
+  PENDING_PM_APPROVAL: permissionCodes.woApprovePm,
+};
+
+async function notifyWoApprovers(
+  status: WoStatus,
+  divisionId: number | null,
+  woId: string,
+  body: string,
+): Promise<void> {
+  const permission = WO_APPROVER_PERMISSION[status];
+  if (!permission) return;
+  const recipients = await resolveEmployeeIdsByPermission(permission, divisionId ?? undefined);
+  await notifyMobileEmployees(recipients, {
+    title: "Approval Work Order",
+    body,
+    data: { module: "wo", reqId: woId, woId, status },
+  }, "sm_wo");
+}
+
+async function notifyWoRequesterDivision(
+  divisionId: number | null,
+  woId: string,
+  status: WoStatus,
+  body: string,
+): Promise<void> {
+  const recipients = await resolveEmployeeIdsByPermission(
+    permissionCodes.woCreate,
+    divisionId ?? undefined,
+  );
+  await notifyMobileEmployees(recipients, {
+    title: "Update Work Order",
+    body,
+    data: { module: "wo", reqId: woId, woId, status },
+  }, "sm_wo");
 }
 
 export interface WoService {
@@ -226,6 +273,13 @@ export class DefaultWoService implements WoService {
       },
     });
 
+    await notifyWoApprovers(
+      "PENDING_TARGET_KD_APPROVAL",
+      input.toDivisionId,
+      result.woId,
+      `WO baru ${result.woId} menunggu persetujuan Anda.`,
+    );
+
     return result;
   }
 
@@ -243,6 +297,21 @@ export class DefaultWoService implements WoService {
       oldValue: detail.ticket,
       newValue: input,
     });
+    if (WO_APPROVER_PERMISSION[detail.ticket.status]) {
+      await notifyWoApprovers(
+        detail.ticket.status,
+        input.toDivisionId,
+        woId,
+        `WO ${detail.ticket.woNumber} diperbarui dan menunggu persetujuan.`,
+      );
+    } else {
+      await notifyWoRequesterDivision(
+        detail.ticket.fromDivisionId,
+        woId,
+        detail.ticket.status,
+        `WO ${detail.ticket.woNumber} telah diperbarui.`,
+      );
+    }
     return result;
   }
 
@@ -306,6 +375,22 @@ export class DefaultWoService implements WoService {
       },
     });
 
+    if (result.status === "APPROVED") {
+      await notifyWoRequesterDivision(
+        detail.ticket.fromDivisionId,
+        woId,
+        result.status,
+        `WO ${detail.ticket.woNumber} telah disetujui.`,
+      );
+    } else {
+      await notifyWoApprovers(
+        result.status,
+        detail.ticket.toDivisionId,
+        woId,
+        `WO ${detail.ticket.woNumber} menunggu persetujuan tahap berikutnya.`,
+      );
+    }
+
     return {
       woId,
       status: result.status,
@@ -348,6 +433,13 @@ export class DefaultWoService implements WoService {
       },
     });
 
+    await notifyWoRequesterDivision(
+      detail.ticket.fromDivisionId,
+      woId,
+      "REJECTED",
+      `WO ${detail.ticket.woNumber} ditolak: ${reason}`,
+    );
+
     return {
       woId,
       status: "REJECTED",
@@ -389,6 +481,13 @@ export class DefaultWoService implements WoService {
         status: "DONE",
       },
     });
+
+    await notifyWoRequesterDivision(
+      detail.ticket.fromDivisionId,
+      woId,
+      "DONE",
+      `WO ${detail.ticket.woNumber} telah selesai.`,
+    );
 
     return {
       woId,

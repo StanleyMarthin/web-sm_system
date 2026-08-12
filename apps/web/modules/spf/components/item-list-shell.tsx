@@ -5,16 +5,15 @@ import { useRouter } from "next/navigation";
 import { ItemList } from "./item-list";
 import { ItemForm } from "./forms/item-form";
 import type { SpfItem, SpfPagination } from "@/shared/api/spf-contracts";
-import type { SpfRole } from "@/shared/auth/admin-session";
 import { ActionButton, CompactInput, PageHeader } from "@/shared/ui/compact";
 
 interface ItemListShellProps {
   rows: readonly SpfItem[];
   meta: SpfPagination;
-  role: SpfRole;
+  canAdmin: boolean;
 }
 
-export function ItemListShell({ rows, meta, role }: ItemListShellProps) {
+export function ItemListShell({ rows, meta, canAdmin }: ItemListShellProps) {
   const router = useRouter();
   const [isCreateOpen, setCreateOpen] = useState(false);
   const [carIdFilter, setCarIdFilter] = useState("");
@@ -50,7 +49,7 @@ export function ItemListShell({ rows, meta, role }: ItemListShellProps) {
         title="Daftar Item Restorasi"
         actions={
           <div className="flex items-center gap-2">
-            {role === "ADMIN" && (
+            {canAdmin && (
               <ActionButton
                 variant="primary"
                 onClick={() => setCreateOpen(true)}
@@ -76,7 +75,7 @@ export function ItemListShell({ rows, meta, role }: ItemListShellProps) {
           </label>
           <CompactInput
             id="filter-car-id"
-            placeholder="Filter Nama Mobil"
+            placeholder="Cari nama mobil"
             value={carIdFilter}
             onChange={(e) => setCarIdFilter(e.target.value)}
           />
@@ -86,11 +85,11 @@ export function ItemListShell({ rows, meta, role }: ItemListShellProps) {
             htmlFor="filter-period-id"
             className="block font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground dark:text-foreground/45 mb-1"
           >
-            Period ID
+            Periode
           </label>
           <CompactInput
             id="filter-period-id"
-            placeholder="Filter Period ID"
+            placeholder="Cari periode"
             value={periodIdFilter}
             onChange={(e) => setPeriodIdFilter(e.target.value)}
           />
@@ -104,7 +103,7 @@ export function ItemListShell({ rows, meta, role }: ItemListShellProps) {
       </form>
 
       {/* List Component */}
-      <ItemList rows={rows} meta={meta} role={role} />
+      <ItemList rows={rows} meta={meta} canAdmin={canAdmin} />
 
       {/* Create Modal */}
       {isCreateOpen && (
