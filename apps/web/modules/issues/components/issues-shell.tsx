@@ -207,6 +207,8 @@ export function IssuesShell({
       const result = await createIssue({
         carId: data.carId,
         divisionId: data.divisionId ? Number.parseInt(data.divisionId, 10) : null,
+        planId: data.planId || null,
+        countdownId: data.countdownId || null,
         issueType: data.issueType.trim(),
         severity: data.severity as IssueSeverity,
         title: data.title.trim(),
@@ -322,7 +324,7 @@ export function IssuesShell({
 
       <SmartDataGrid
         viewportClassName="max-h-[calc(100svh-260px)]"
-        title="Issue Log"
+        title="Pembahasan"
         description="Server-side grid untuk issue QC reject, temuan teknis, hambatan produksi, dan issue manual."
         rows={rows}
         columns={columns}

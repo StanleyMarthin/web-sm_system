@@ -8,6 +8,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { BomTrackerTab } from "@/modules/units/components/bom-tracker-tab";
 import { MasterPanelManager } from "@/modules/units/components/master-panel-manager";
+import { UnitCatalogTab } from "@/modules/units/components/unit-catalog-tab";
 import { humanizeCodeLabel } from "@/shared/format/humanize";
 
 interface UnitWorkspaceShellProps {
@@ -96,10 +97,10 @@ function gridHref(path: string, filters: Record<string, string | number | null |
   return query ? `${path}?${query}` : path;
 }
 
-type UnitWorkspaceTab = "summary" | "parts-panels" | "master-panel";
+type UnitWorkspaceTab = "summary" | "catalog" | "parts-panels" | "master-panel";
 
 function resolveTab(value: string | null): UnitWorkspaceTab {
-  if (value === "parts-panels" || value === "master-panel") return value;
+  if (value === "catalog" || value === "parts-panels" || value === "master-panel") return value;
   return "summary";
 }
 
@@ -191,6 +192,7 @@ export function UnitWorkspaceShell({
         <div className="flex flex-wrap items-center gap-2">
           {([
             { id: "summary", label: "Summary" },
+            { id: "catalog", label: "Catalog & Pendataan" },
             { id: "parts-panels", label: "Parts & Panels" },
             { id: "master-panel", label: "Master Panel" },
           ] as const).map((tab) => (
@@ -410,6 +412,8 @@ export function UnitWorkspaceShell({
             )}
           </section>
         </div>
+      ) : activeTab === "catalog" ? (
+        <UnitCatalogTab unitId={unit.unitId} unitName={unit.unitName} />
       ) : activeTab === "parts-panels" ? (
         <BomTrackerTab
           carId={unit.unitId}

@@ -6,6 +6,7 @@ const CODE_LABELS: Record<string, string> = {
   APPROVED: "Disetujui",
   REJECTED: "Ditolak",
   DONE: "Selesai",
+  DELIVERED: "Selesai Delivery",
   CLOSED: "Ditutup",
   CANCELLED: "Dibatalkan",
   CANCEL: "Dibatalkan",

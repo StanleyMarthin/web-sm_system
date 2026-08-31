@@ -1,3 +1,8 @@
+/* Hallmark · pre-emit critique: P5 H5 E4 S5 R5 V4 */
+/* Hallmark · component: report toolbar · genre: editorial · theme: existing project tokens
+ * states: default · hover · focus · active · disabled · loading · error · success
+ * contrast: existing application token contract
+ */
 "use client";
 
 import type {
@@ -8,14 +13,15 @@ import type {
   ReportSummaryItem,
   ReportType,
 } from "@smsystem/contracts/reports";
-import { reportTypeOptions } from "@smsystem/contracts/reports";
+import { encodeGridFilterToken } from "@smsystem/contracts/grid";
 import { BarChart3, Download, RefreshCcw } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useState, useTransition } from "react";
 import { SmartDataGrid } from "@/shared/datagrid/smart-data-grid";
 import type { SmartDataGridColumn } from "@/shared/datagrid/types";
-import { CompactDateRangeInput } from "@/shared/ui/compact";
+import { useDataGridState } from "@/shared/datagrid/use-data-grid-state";
+import { CompactDateInput, CompactDateRangeInput, SearchableSelect } from "@/shared/ui/compact";
 
 interface ReportsShellProps {
   activeType: ReportType;
@@ -49,15 +55,16 @@ function SummaryCard({
 }
 
 function buildExportHref(
-  pathname: string,
-  searchParams: URLSearchParams,
   activeType: ReportType,
-  format: "csv" | "xlsx",
+  dateFrom: string,
+  dateTo: string,
+  filters: Record<string, string>,
 ) {
-  const params = new URLSearchParams(searchParams.toString());
-  params.set("format", format);
-  const suffix = params.toString();
-  return `/api/reports/${activeType}/export${suffix ? `?${suffix}` : ""}`;
+  const params = new URLSearchParams({ format: "xlsx", dateFrom, dateTo });
+  for (const [field, value] of Object.entries(filters)) {
+    if (value) params.append("filter", encodeGridFilterToken({ field, operator: "eq", value }));
+  }
+  return `/api/reports/${activeType}/export?${params.toString()}`;
 }
 
 function mapColumns(columns: ReportColumn[]): SmartDataGridColumn[] {
@@ -68,6 +75,12 @@ function mapColumns(columns: ReportColumn[]): SmartDataGridColumn[] {
     align: column.align,
     sticky: column.sticky,
   }));
+}
+
+function addDaysIso(baseDate: string, days: number): string {
+  const date = new Date(`${baseDate}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
 }
 
 export function ReportsShell({
@@ -82,38 +95,29 @@ export function ReportsShell({
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const gridState = useDataGridState(query);
   const [isRefreshing, startRefresh] = useTransition();
-  const [dateFrom, setDateFrom] = useState(query.dateFrom ?? "");
-  const [dateTo, setDateTo] = useState(query.dateTo ?? "");
+  const [exportOpen, setExportOpen] = useState(false);
+  const dateFrom = query.dateFrom ?? new Date().toISOString().slice(0, 10);
+  const dateTo = query.dateTo ?? dateFrom;
+  const activeSpan = searchParams.get("span") === "weekly" || dateFrom !== dateTo ? "weekly" : "daily";
+  const [exportDateFrom, setExportDateFrom] = useState(dateFrom);
+  const [exportDateTo, setExportDateTo] = useState(dateTo);
+  const [exportFilters, setExportFilters] = useState<Record<string, string>>({});
 
-  function applyDateRange() {
-    const params = new URLSearchParams(searchParams.toString());
-    params.set("page", "1");
-
-    if (dateFrom) {
-      params.set("dateFrom", dateFrom);
-    } else {
-      params.delete("dateFrom");
-    }
-
-    if (dateTo) {
-      params.set("dateTo", dateTo);
-    } else {
-      params.delete("dateTo");
-    }
-
-    startRefresh(() => {
-      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
-    });
+  function openExport() {
+    setExportDateFrom(dateFrom);
+    setExportDateTo(dateTo);
+    setExportFilters(Object.fromEntries(query.filters.map((filter) => [filter.field, filter.value])));
+    setExportOpen(true);
   }
 
-  function clearDateRange() {
-    setDateFrom("");
-    setDateTo("");
+  function setPeriod(from: string, to: string, span: "daily" | "weekly") {
     const params = new URLSearchParams(searchParams.toString());
     params.set("page", "1");
-    params.delete("dateFrom");
-    params.delete("dateTo");
+    params.set("dateFrom", from);
+    params.set("dateTo", to);
+    params.set("span", span);
     startRefresh(() => {
       router.replace(`${pathname}?${params.toString()}`, { scroll: false });
     });
@@ -121,84 +125,55 @@ export function ReportsShell({
 
   return (
     <div className="space-y-3">
-      <section className="border border-border dark:border-white/[0.05] bg-white dark:bg-card px-4 py-3">
-        <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
-          <div className="max-w-3xl">
-            <div className="flex items-center gap-3">
-              <div className="flex h-8 w-8 items-center justify-center border border-border dark:border-white/[0.08] bg-muted dark:bg-background">
-                <BarChart3 className="h-5 w-5 text-app-accent-ink" />
-              </div>
-              <div>
-                <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30">
-                  Laporan
-                </p>
-                <h2 className="mt-1 text-[13px] font-medium text-foreground dark:text-foreground">{definition.title}</h2>
-              </div>
-            </div>
-            <p className="mt-2 text-[12px] text-muted-foreground dark:text-foreground/45">{definition.description}</p>
+      <section className="border border-border bg-white dark:border-white/[0.05] dark:bg-card">
+        <div className="flex flex-col gap-3 border-b border-border px-3 py-3 dark:border-white/[0.05] sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-center gap-2">
+            <BarChart3 className="h-4 w-4 shrink-0 text-app-accent-ink" />
+            <h1 className="truncate text-[14px] font-semibold text-foreground">Rekapan</h1>
+            <span className="hidden text-[12px] text-muted-foreground sm:inline">{meta.total} pekerjaan</span>
           </div>
-
-          <button
+          <div className="flex items-center gap-2">
+            <button
             type="button"
+            aria-label="Muat ulang rekapan"
             onClick={() => {
               startRefresh(() => {
                 router.refresh();
               });
             }}
-            className="inline-flex h-8 items-center gap-2 border border-border dark:border-white/[0.08] bg-transparent px-3 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/55 hover:text-foreground dark:text-foreground/80"
+            className="inline-flex h-8 items-center gap-2 border border-border bg-transparent px-3 text-[11px] text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:opacity-50 dark:border-white/[0.08]"
           >
             <RefreshCcw className="h-3.5 w-3.5" />
-            {isRefreshing ? "Memuat..." : "Muat Ulang"}
+            {isRefreshing ? "Memuat" : "Segarkan"}
           </button>
+          {canExport ? (
+            <button type="button" onClick={openExport} className="inline-flex h-8 items-center gap-2 whitespace-nowrap border border-primary/40 px-3 text-[11px] font-semibold text-app-accent-ink hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50">
+              <Download className="h-3.5 w-3.5" />Unduh
+            </button>
+          ) : null}
+          </div>
         </div>
 
-        <div className="mt-3 flex flex-wrap gap-1.5 border-y border-border dark:border-white/[0.05] py-2">
-          {reportTypeOptions.map((option) => (
-            <Link
-              key={option.value}
-              href={`/reports/${option.value}`}
-              className={[
-                "border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.12em] transition-colors",
-                activeType === option.value
-                  ? "border-primary/30 bg-transparent text-app-accent-ink"
-                  : "border-border dark:border-white/[0.08] bg-transparent text-muted-foreground dark:text-foreground/40 hover:text-foreground dark:text-foreground/70",
-              ].join(" ")}
-            >
-              {option.label}
-            </Link>
-          ))}
-        </div>
-
-        <div className="mt-3 grid gap-2 xl:grid-cols-[minmax(0,280px)_auto_auto]">
-          <label className="space-y-1">
-            <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30">
-              Rentang Tanggal
-            </span>
-            <CompactDateRangeInput
-              from={dateFrom}
-              to={dateTo}
-              onChange={(range) => {
-                setDateFrom(range.from);
-                setDateTo(range.to);
-              }}
-            />
-          </label>
-
-          <div className="flex items-end gap-2 xl:justify-end">
-            <button
-              type="button"
-              onClick={applyDateRange}
-              className="h-8 border border-primary/40 px-3 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-app-accent-ink transition-colors hover:bg-primary/10"
-            >
-              Terapkan
-            </button>
-            <button
-              type="button"
-              onClick={clearDateRange}
-              className="h-8 border border-border dark:border-white/[0.08] bg-transparent px-3 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/55 hover:text-foreground dark:text-foreground/80"
-            >
-              Reset
-            </button>
+        <div className="flex flex-col gap-2 px-3 py-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex h-9 items-center border border-border p-1 dark:border-white/[0.08]">
+              {(["daily", "weekly"] as const).map((span) => (
+                <button key={span} type="button" onClick={() => setPeriod(dateFrom, span === "weekly" ? addDaysIso(dateFrom, 6) : dateFrom, span)} className={[
+                  "h-7 px-3 text-[11px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
+                  activeSpan === span ? "bg-primary/10 font-semibold text-app-accent-ink" : "text-muted-foreground hover:text-foreground",
+                ].join(" ")}>{span === "daily" ? "Harian" : "Mingguan"}</button>
+              ))}
+            </div>
+            {activeSpan === "weekly" ? (
+              <CompactDateRangeInput from={dateFrom} to={dateTo} onChange={(range) => setPeriod(range.from, range.to, range.from === range.to ? "daily" : "weekly")} selectionBehavior="single-or-range" className="w-full sm:w-64" />
+            ) : (
+              <CompactDateInput value={dateFrom} onChange={(value) => setPeriod(value, value, "daily")} className="w-full sm:w-64" />
+            )}
+          </div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-5">
+            {definition.filters.map((filter) => (
+              <SearchableSelect key={filter.field} value={query.filters.find((item) => item.field === filter.field)?.value ?? ""} onChange={(value) => gridState.setFilter(filter.field, value)} options={filter.options} placeholder={filter.label} />
+            ))}
           </div>
         </div>
       </section>
@@ -210,6 +185,7 @@ export function ReportsShell({
       </section>
 
       <SmartDataGrid
+        showHeader={false}
         viewportClassName="max-h-[calc(100svh-260px)]"
         title={definition.title}
         description={definition.description}
@@ -221,27 +197,35 @@ export function ReportsShell({
         filters={definition.filters}
         sortOptions={definition.sortOptions}
         emptyMessage="Belum ada data untuk filter yang sedang dipakai."
-        headerActions={
-          canExport ? (
-            <>
-              <Link
-                href={buildExportHref(pathname, searchParams, activeType, "xlsx")}
-                className="inline-flex h-8 items-center gap-2 border border-primary/40 px-3 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-app-accent-ink transition-colors hover:bg-primary/10"
-              >
-                <Download className="h-3.5 w-3.5" />
-                Unduh XLSX
-              </Link>
-              <Link
-                href={buildExportHref(pathname, searchParams, activeType, "csv")}
-                className="inline-flex h-8 items-center gap-2 border border-border dark:border-white/[0.08] bg-transparent px-3 font-mono text-[10px] uppercase tracking-[0.12em] text-foreground/65 hover:text-foreground/85"
-                >
-                <Download className="h-3.5 w-3.5" />
-                Unduh CSV
-              </Link>
-            </>
-          ) : null
-        }
       />
+
+      {exportOpen ? (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-4 backdrop-blur-[1px]">
+          <div role="dialog" aria-modal="true" aria-labelledby="rekapan-export-title" className="w-full max-w-lg border border-border bg-card shadow-2xl">
+            <div className="flex items-center justify-between border-b border-border px-4 py-3">
+              <p id="rekapan-export-title" className="text-sm font-semibold text-foreground">Unduh Rekapan</p>
+              <button type="button" onClick={() => setExportOpen(false)} className="border border-border px-3 py-1 text-[11px] text-muted-foreground">Tutup</button>
+            </div>
+            <div className="space-y-3 p-4">
+              <label className="block space-y-1 text-[11px] text-muted-foreground">
+                Periode
+                <CompactDateRangeInput from={exportDateFrom} to={exportDateTo} onChange={(range) => { setExportDateFrom(range.from); setExportDateTo(range.to); }} selectionBehavior="single-or-range" />
+              </label>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {definition.filters.map((filter) => (
+                  <SearchableSelect key={filter.field} value={exportFilters[filter.field] ?? ""} onChange={(value) => setExportFilters((current) => ({ ...current, [filter.field]: value }))} options={filter.options} placeholder={filter.label} />
+                ))}
+              </div>
+              <button type="button" onClick={() => setExportFilters({})} className="text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline">Kosongkan filter</button>
+            </div>
+            <div className="flex justify-end border-t border-border px-4 py-3">
+              <Link href={buildExportHref(activeType, exportDateFrom, exportDateTo, exportFilters)} onClick={() => setExportOpen(false)} className="inline-flex h-8 items-center gap-2 border border-primary/40 px-3 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-app-accent-ink hover:bg-primary/10">
+                <Download className="h-3.5 w-3.5" />Unduh XLSX
+              </Link>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

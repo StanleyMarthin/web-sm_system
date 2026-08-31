@@ -142,14 +142,26 @@ export class DefaultIssuesService implements IssuesService {
     session: WebSession,
     input: IssueCreateRequest,
   ): Promise<IssueMutationResult> {
+    const jobdesc = input.planId
+      ? await this.repository.findJobdescContext({
+          employeeId: session.user.employeeId,
+          scope: session.user.scope,
+          planId: input.planId,
+        })
+      : null;
+    if (input.planId && !jobdesc) throw new Error("JOBDESC_NOT_FOUND");
+
+    const normalizedInput = jobdesc
+      ? { ...input, planId: jobdesc.planId, countdownId: jobdesc.countdownId, carId: jobdesc.carId, divisionId: jobdesc.divisionId }
+      : input;
     const result = await this.repository.create(
       {
         actorId: session.user.employeeId,
         actorName: session.user.fullName,
       },
       {
-        ...input,
-        divisionId: input.divisionId ?? session.user.divisionId ?? null,
+        ...normalizedInput,
+        divisionId: normalizedInput.divisionId ?? session.user.divisionId ?? null,
       },
     );
 
@@ -174,7 +186,7 @@ export class DefaultIssuesService implements IssuesService {
       action: "issues.create",
       module: "issues",
       recordId: issueId,
-      newValue: input,
+      newValue: normalizedInput,
     });
 
     return {

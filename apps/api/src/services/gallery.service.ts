@@ -18,8 +18,8 @@ import { S3GalleryUploadTicketProvider } from "@/services/storage/r2-upload.serv
 import {
   consumeUploadTicketForPublicUrl,
   createUploadNonce,
-  extensionForImageContentType,
-  normalizeAllowedImageContentType,
+  extensionForGalleryMediaContentType,
+  normalizeAllowedGalleryMediaContentType,
   storeUploadTicket,
 } from "@/security/upload-ticket";
 
@@ -220,8 +220,8 @@ export class DefaultGalleryService implements GalleryService {
     const safePanel = sanitizePath(actual.partName || actual.panelName || "Panel");
     const safeDivision = sanitizePath(actual.divisionName || "DIVISI");
     const safeUnit = sanitizePath(actual.unitName || actual.carId);
-    const contentType = normalizeAllowedImageContentType(input.contentType);
-    const safeExtension = extensionForImageContentType(contentType);
+    const contentType = normalizeAllowedGalleryMediaContentType(input.contentType);
+    const safeExtension = extensionForGalleryMediaContentType(contentType);
     const nonce = createUploadNonce();
     const suffix = buildPhotoSuffix(input.photoType);
     const objectKey =
@@ -258,10 +258,23 @@ export class DefaultGalleryService implements GalleryService {
       throw new Error("PHOTO_MUTATION_LOCKED");
     }
 
-    await consumeUploadTicketForPublicUrl({
-      employeeId: session.user.employeeId,
-      publicUrl: input.photoUrl,
-    });
+    const mediaUrl = new URL(input.photoUrl);
+    const isGoogleDriveLink =
+      mediaUrl.protocol === "https:" &&
+      ["drive.google.com", "docs.google.com"].includes(mediaUrl.hostname.toLowerCase());
+    if (!isGoogleDriveLink) {
+      try {
+        await consumeUploadTicketForPublicUrl({
+          employeeId: session.user.employeeId,
+          publicUrl: input.photoUrl,
+        });
+      } catch (error) {
+        if (error instanceof Error && error.message === "INVALID_UPLOAD_TICKET") {
+          throw new Error("INVALID_EXTERNAL_MEDIA_URL");
+        }
+        throw error;
+      }
+    }
 
     const photo = await this.repository.createPhoto({
       actualId: input.actualId,

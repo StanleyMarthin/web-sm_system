@@ -49,7 +49,7 @@ import {
 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { CompactDateRangeInput } from "@/shared/ui/compact";
+import { CompactDateInput, CompactDateRangeInput } from "@/shared/ui/compact";
 import { type WarehouseSectionId } from "@/modules/warehouse/config/workspace";
 import {
   approveWarehouseRequest,
@@ -179,7 +179,7 @@ interface WarehouseShellProps {
       hasNext: boolean;
       hasPrev: boolean;
     };
-    state: GridQueryState;
+    state: WarehouseTransactionQuery;
   };
   locations?: {
     rows: WarehouseStorageLocationRecord[];
@@ -274,6 +274,12 @@ function buildStorageLocationDetail(location: WarehouseStorageLocationRecord): s
 
 function getTransactionDate(state: WarehouseTransactionQuery) {
   return state.dateFrom ?? new Date().toISOString().slice(0, 10);
+}
+
+function addDaysIso(baseDate: string, days: number): string {
+  const date = new Date(`${baseDate}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
 }
 
 function isActiveWarehouseTransaction(row: WarehouseTransactionRecord) {
@@ -672,6 +678,9 @@ export function WarehouseShell({
   const transactionDate =
     transactions ? getTransactionDate(transactions.state) : new Date().toISOString().slice(0, 10);
   const transactionDateEnd = transactions?.state.dateTo ?? transactionDate;
+  const usageDate = usage?.state.dateFrom ?? new Date().toISOString().slice(0, 10);
+  const usageDateEnd = usage?.state.dateTo ?? usageDate;
+  const usageSpan = searchParams.get("span") === "weekly" ? "weekly" : "daily";
   const stockCategoryFilter = useMemo(() => {
     const filters = searchParams.getAll("filter");
     const itemCategoryFilter = filters.find((filter) => filter.startsWith("itemCategory:eq:"));
@@ -812,6 +821,19 @@ export function WarehouseShell({
       params.set("dateFrom", start);
       params.set("dateTo", end || start);
     });
+  }
+
+  function setUsageDateRange(start: string, end: string) {
+    updateSearch((params) => {
+      params.set("tab", "usage");
+      params.set("dateFrom", start);
+      params.set("dateTo", end || start);
+      params.set("span", start === end ? "daily" : "weekly");
+    });
+  }
+
+  function setUsageSpan(span: "daily" | "weekly") {
+    setUsageDateRange(usageDate, span === "weekly" ? addDaysIso(usageDate, 6) : usageDate);
   }
 
   function setStockCategory(value: string) {
@@ -2023,6 +2045,20 @@ export function WarehouseShell({
                 <p className="text-[10px] uppercase tracking-[0.16em] text-app-accent-ink/80">Gudang</p>
                 <h2 className="mt-1 text-lg font-semibold text-foreground dark:text-foreground">Bahan keluar</h2>
               </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center gap-1 border border-border p-1">
+                  {(["daily", "weekly"] as const).map((span) => (
+                    <button key={span} type="button" onClick={() => setUsageSpan(span)} className={[
+                      "px-3 py-1.5 text-[10px] uppercase tracking-wider",
+                      usageSpan === span ? "bg-primary/10 text-app-accent-ink" : "text-muted-foreground",
+                    ].join(" ")}>{span === "daily" ? "Harian" : "Mingguan"}</button>
+                  ))}
+                </div>
+                {usageSpan === "weekly" ? (
+                  <CompactDateRangeInput from={usageDate} to={usageDateEnd} onChange={(range) => setUsageDateRange(range.from, range.to)} selectionBehavior="single-or-range" className="w-64" />
+                ) : (
+                  <CompactDateInput value={usageDate} onChange={(value) => setUsageDateRange(value, value)} className="w-64" />
+                )}
               <button
                 type="button"
                 onClick={() => startRefresh(() => router.refresh())}
@@ -2031,6 +2067,7 @@ export function WarehouseShell({
                 <RefreshCcw className="h-3.5 w-3.5" />
                 {isRefreshing ? "Memuat" : "Refresh"}
               </button>
+              </div>
             </div>
           </section>
           <SmartDataGrid

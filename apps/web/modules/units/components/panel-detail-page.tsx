@@ -2308,6 +2308,7 @@ function WorkflowBuilder({
       isPriority: jobPlanDraftForm.isPriority,
       deadlineDate: node.deadlineDate ?? null,
       isRework: false,
+      isNonTechnicalJob: false,
     };
 
     setIsSavingJobPlanDraft(true);

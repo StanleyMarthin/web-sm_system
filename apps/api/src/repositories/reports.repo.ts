@@ -131,6 +131,9 @@ const ITEM_CATEGORY_OPTIONS = buildOptionRows([
   "CONSUMABLE",
 ]);
 const CASH_SOURCE_OPTIONS = buildOptionRows(["PR", "VENDOR_WO", "MATERIAL_USAGE"]);
+const WORK_TYPE_OPTIONS = buildOptionRows(["NORMAL", "PENGULANGAN"]);
+const HOUR_TYPE_OPTIONS = buildOptionRows(["NORMAL", "LEMBUR"]);
+const MATERIAL_USAGE_OPTIONS = buildOptionRows(["DENGAN_BAHAN", "TANPA_BAHAN"]);
 
 export interface ReportsRepository {
   getReportData(params: ReportDataParams): Promise<ReportDataset>;
@@ -193,6 +196,8 @@ export class MySqlReportsRepository implements ReportsRepository {
         return this.listMaterialCost(params);
       case "cash-flow":
         return this.listCashFlow(params);
+      case "ar-labour":
+        return this.listArLabour(params);
     }
   }
 
@@ -348,6 +353,17 @@ export class MySqlReportsRepository implements ReportsRepository {
       .map((row) => row.value)
       .filter((value): value is string => Boolean(value))
       .map((value) => ({ value, label: value }));
+  }
+
+  private async listCarOptions(scope: AuthScope): Promise<Array<{ value: string; label: string }>> {
+    if (!scope.canViewAllUnits && scope.unitIds.length === 0) return [];
+    const params: unknown[] = [];
+    const where = scope.canViewAllUnits ? "" : `WHERE c.id IN (${scope.unitIds.map(() => "?").join(", ")})`;
+    if (!scope.canViewAllUnits) params.push(...scope.unitIds);
+    const [rows] = await this.pool.query<Array<RowDataPacket & { id: string; name: string }>>(
+      `SELECT c.id, COALESCE(c.unit_name, c.id) name FROM ${this.tables.cars} c ${where} ORDER BY name`, params,
+    );
+    return rows.map((row) => ({ value: row.id, label: row.name }));
   }
 
   private async listDeliveryAccuracy(params: ReportDataParams): Promise<ReportDataset> {
@@ -616,6 +632,67 @@ export class MySqlReportsRepository implements ReportsRepository {
         divisionId: await this.listDivisionOptions(params.scope),
         taskStatus: TASK_STATUS_OPTIONS,
       },
+    };
+  }
+
+  private async listArLabour(params: ReportDataParams): Promise<ReportDataset> {
+    const queryParams: unknown[] = [];
+    const conditions: string[] = [];
+    const scopeClause = this.buildScopeClause(params.scope, params.employeeId, queryParams, {
+      car: "wl.car_id",
+      division: "wl.division_id",
+      employee: "wl.employee_id",
+    });
+    if (scopeClause) conditions.push(scopeClause);
+    this.pushDateRange(conditions, queryParams, params.query, "wl.work_date");
+    this.pushSearch(conditions, queryParams, params.query.search, ["c.unit_name", "d.name", "p.jobdescription", "wl.employee_name"]);
+    for (const filter of params.query.filters) {
+      if (filter.field === "divisionId") { conditions.push("CAST(wl.division_id AS CHAR) = ?"); queryParams.push(filter.value); }
+      else if (filter.field === "carId") { conditions.push("wl.car_id = ?"); queryParams.push(filter.value); }
+      else if (filter.field === "workType") conditions.push(filter.value === "PENGULANGAN" ? "p.is_rework = 1" : "COALESCE(p.is_rework, 0) = 0");
+      else if (filter.field === "hourType") conditions.push(filter.value === "LEMBUR" ? "wl.overtime_hours > 0" : "wl.overtime_hours = 0");
+      else if (filter.field === "materialUsage") conditions.push(filter.value === "DENGAN_BAHAN" ? "materials.materials IS NOT NULL" : "materials.materials IS NULL");
+    }
+    const whereClause = this.buildWhereClause(conditions);
+    const sortColumn = ({ workDate: "wl.work_date", durationHours: "wl.duration_hours", unitName: "unitName" } as Record<string, string>)[params.query.sortBy] ?? "wl.work_date";
+    const direction = params.query.sortDirection === "asc" ? "ASC" : "DESC";
+    const listParams = [...queryParams];
+    const pagination = this.buildPagination(params.query, params.exportAll, listParams);
+    const joins = `
+      FROM ${this.tables.ledger} wl
+      JOIN ${this.coreDb}.sm_jobdesc_plan p ON p.id = wl.plan_id
+      LEFT JOIN ${this.tables.cars} c ON c.id = wl.car_id
+      LEFT JOIN ${this.tables.divisions} d ON d.id = wl.division_id
+      LEFT JOIN (
+        SELECT countdown_id, usage_date,
+          GROUP_CONCAT(DISTINCT item_name ORDER BY item_name SEPARATOR ', ') AS materials
+        FROM ${this.tables.materialUsage}
+        GROUP BY countdown_id, usage_date
+      ) materials ON materials.countdown_id = wl.countdown_id
+        AND materials.usage_date = wl.work_date`;
+    const [rows] = await this.pool.query<GenericRow[]>(`
+      SELECT DATE_FORMAT(wl.work_date, '%Y-%m-%d') workDate, wl.car_id carId,
+        COALESCE(c.unit_name, wl.car_id) unitName, d.name divisionName,
+        p.jobdescription jobDescription, wl.employee_name employeeName,
+        IF(COALESCE(p.is_rework, 0) = 1, 'PENGULANGAN', 'NORMAL') workType,
+        IF(wl.overtime_hours > 0, 'LEMBUR', 'NORMAL') hourType,
+        wl.duration_hours durationHours, COALESCE(materials.materials, '-') materials,
+        DATE_FORMAT(wl.submitted_at, '%Y-%m-%d %H:%i') submittedAt
+      ${joins} ${whereClause}
+      ORDER BY ${sortColumn} ${direction}, wl.id DESC ${pagination}`, listParams);
+    const [countRows] = await this.pool.query<CountRow[]>(`SELECT COUNT(*) total ${joins} ${whereClause}`, queryParams);
+    const [summaryRows] = await this.pool.query<GenericRow[]>(`SELECT COALESCE(SUM(wl.duration_hours),0) totalHours, COALESCE(SUM(wl.overtime_hours),0) overtimeHours, COUNT(DISTINCT wl.car_id) units, COUNT(*) totalRows ${joins} ${whereClause}`, queryParams);
+    const summary = summaryRows[0];
+    return {
+      rows: rows.map((row) => ({ workDate: toStringValue(row.workDate), unitName: toStringValue(row.unitName), divisionName: toStringValue(row.divisionName), jobDescription: toStringValue(row.jobDescription), employeeName: toStringValue(row.employeeName), workType: toStringValue(row.workType), hourType: toStringValue(row.hourType), durationHours: toNumber(row.durationHours), materials: toStringValue(row.materials), submittedAt: toStringValue(row.submittedAt) })),
+      total: toNumber(countRows[0]?.total),
+      summary: [
+        { label: "Total Jam", value: toNumber(summary?.totalHours).toFixed(2), helper: "Total jam final pada filter aktif." },
+        { label: "Jam Lembur", value: toNumber(summary?.overtimeHours).toFixed(2), helper: "Bagian lembur yang siap ditagihkan." },
+        { label: "Unit", value: String(toNumber(summary?.units)), helper: "Unit unik yang masuk laporan." },
+        { label: "Baris Ledger", value: String(toNumber(summary?.totalRows)), helper: "Snapshot aktual final tanpa duplikasi." },
+      ],
+      filterOptions: { divisionId: await this.listDivisionOptions(params.scope), carId: await this.listCarOptions(params.scope), workType: WORK_TYPE_OPTIONS, hourType: HOUR_TYPE_OPTIONS, materialUsage: MATERIAL_USAGE_OPTIONS },
     };
   }
 

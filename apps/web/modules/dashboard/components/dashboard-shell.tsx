@@ -2,6 +2,7 @@
 
 import type { AuthUser } from "@smsystem/contracts/auth";
 import type { DashboardSummaryPayload } from "@smsystem/contracts/dashboard";
+import type { CalendarDayOverride } from "@smsystem/contracts/calendar";
 import type { IssueRecord } from "@smsystem/contracts/issue";
 import type { JobPlanRecord } from "@smsystem/contracts/job-plan";
 import type { QcQueueRecord } from "@smsystem/contracts/qc";
@@ -13,7 +14,7 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { DashboardFilterParams } from "@/shared/api/dashboard";
 import type { PlanningWorkspacePayload } from "@/shared/api/planning";
 import { SearchableSelect } from "@/shared/ui/compact";
@@ -28,6 +29,7 @@ interface DashboardShellProps {
   qcRework?: QcQueueRecord[];
   issueLogRows?: IssueRecord[];
   jobPlanRows?: JobPlanRecord[];
+  holidayOverrides?: CalendarDayOverride[];
 }
 
 type SpkWorkType = "all" | "normal" | "lembur";
@@ -615,6 +617,7 @@ function InteractiveCalendar({
   selectedUnitId,
   filters,
   onSelectDate,
+  holidayByDate,
 }: {
   rows: CalRow[];
   asOfDate?: string;
@@ -622,6 +625,7 @@ function InteractiveCalendar({
   selectedUnitId?: string;
   filters?: DashboardFilterParams;
   onSelectDate: (date: string) => void;
+  holidayByDate?: Record<string, string>;
 }) {
   const initialDate = selectedDate || (asOfDate ?? new Date().toISOString()).split("T")[0]!;
   const [viewDate, setViewDate] = useState(() => {
@@ -724,11 +728,13 @@ function InteractiveCalendar({
 
           const scheduledUnits = unitsByDate.get(cell.dateStr) ?? [];
           const margin = scheduledUnits.length > 0 ? deadlineMargin(daysRemaining(cell.dateStr, asOfDate)) : null;
+          const holidayLabel = holidayByDate?.[cell.dateStr] ?? null;
           const dayState = getCalendarDayState({
             dateStr: cell.dateStr,
             selectedDate,
             todayStr,
             scheduledUnitCount: scheduledUnits.length,
+            isHoliday: holidayLabel != null,
           });
 
           return (
@@ -774,6 +780,14 @@ function InteractiveCalendar({
                   ) : null}
                 </span>
               ) : null}
+              {holidayLabel ? (
+                <span
+                  className="mt-auto self-start max-w-full truncate border border-destructive/30 bg-destructive/10 px-1 py-0.5 font-mono text-[11px] uppercase leading-none text-destructive"
+                  title={holidayLabel}
+                >
+                  {holidayLabel}
+                </span>
+              ) : null}
               {dayState.isToday ? (
                 <span className="mt-auto self-start border border-primary/30 px-1 py-0.5 font-mono text-[11px] uppercase leading-none text-app-accent-ink">
                   Hari ini
@@ -797,6 +811,7 @@ export function DashboardShell({
   qcRework = [],
   issueLogRows = [],
   jobPlanRows = [],
+  holidayOverrides = [],
 }: DashboardShellProps) {
   const router = useRouter();
   const [spkWorkType, setSpkWorkType] = useState<SpkWorkType>("all");
@@ -867,6 +882,16 @@ export function DashboardShell({
       targetDeliveryDate: row.targetDeliveryDate,
     })),
   ].filter((row, index, array) => array.findIndex((item) => item.carId === row.carId) === index);
+
+  const holidayByDate = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const override of holidayOverrides) {
+      if (override.mode === "LIBUR") {
+        map[override.date] = override.note ?? "Libur";
+      }
+    }
+    return map;
+  }, [holidayOverrides]);
 
   const top5Deadline = calendarRows
     .filter((row) => row.targetDeliveryDate)
@@ -1005,6 +1030,7 @@ export function DashboardShell({
                   unitId: activeUnitId || null,
                 })
               }
+              holidayByDate={holidayByDate}
             />
           </div>
         </Card>

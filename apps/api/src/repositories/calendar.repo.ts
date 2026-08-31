@@ -792,7 +792,7 @@ export class MySqlCalendarRepository implements CalendarRepository {
   async listDeliveryRiskRows(params: ScopeParams): Promise<UnitCapacitySnapshot[]> {
     const pool = this.poolFactory();
     const queryParams: unknown[] = [];
-    const whereClauses: string[] = [];
+    const whereClauses: string[] = ["COALESCE(c.status, 'In_Progress') <> 'DONE'"];
     const scopeWhere = buildScopeWhereClause(
       params.scope,
       params.employeeId,

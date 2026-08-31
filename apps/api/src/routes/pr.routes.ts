@@ -60,6 +60,19 @@ function mapPrError(request: Request, error: unknown): Response {
       return errorResponse(request, "PR tidak ditemukan.", 404, "PR_NOT_FOUND");
     }
 
+    if (error.message === "UNIT_PANEL_NOT_FOUND") {
+      return errorResponse(request, "Master panel tidak ditemukan.", 404, "UNIT_PANEL_NOT_FOUND");
+    }
+
+    if (error.message === "PR_REQUIRES_COUNTDOWN") {
+      return errorResponse(
+        request,
+        "Jobdesc harus dibuat sebelum mengajukan pembelian part ini.",
+        409,
+        "PR_REQUIRES_COUNTDOWN",
+      );
+    }
+
     if (error.message === "INVALID_UPLOAD_CONTENT_TYPE") {
       return errorResponse(
         request,

@@ -4,6 +4,7 @@ import { getRedisClient } from "@/redis/client";
 
 const UPLOAD_TICKET_TTL_SECONDS = 10 * 60;
 export const MAX_IMAGE_UPLOAD_BYTES = 10 * 1024 * 1024;
+export const MAX_VIDEO_UPLOAD_BYTES = 25 * 1024 * 1024;
 
 const IMAGE_EXTENSIONS_BY_CONTENT_TYPE = {
   "image/jpeg": "jpg",
@@ -12,6 +13,7 @@ const IMAGE_EXTENSIONS_BY_CONTENT_TYPE = {
 } as const;
 
 type AllowedImageContentType = keyof typeof IMAGE_EXTENSIONS_BY_CONTENT_TYPE;
+export type AllowedGalleryMediaContentType = AllowedImageContentType | "video/mp4";
 
 interface UploadTicketRecord {
   nonce: string;
@@ -66,6 +68,24 @@ export function extensionForImageContentType(
   contentType: AllowedImageContentType,
 ): string {
   return IMAGE_EXTENSIONS_BY_CONTENT_TYPE[contentType];
+}
+
+export function normalizeAllowedGalleryMediaContentType(contentType: string): AllowedGalleryMediaContentType {
+  const normalized = contentType.split(";")[0]?.trim().toLowerCase();
+  return normalized === "video/mp4" ? normalized : normalizeAllowedImageContentType(contentType);
+}
+
+export function extensionForGalleryMediaContentType(contentType: AllowedGalleryMediaContentType): string {
+  return contentType === "video/mp4" ? "mp4" : extensionForImageContentType(contentType);
+}
+
+export function parseGalleryMediaContentLength(value: string | null, contentType: string): number {
+  if (!value) throw new Error("UPLOAD_SIZE_REQUIRED");
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) throw new Error("INVALID_UPLOAD_SIZE");
+  const limit = contentType === "video/mp4" ? MAX_VIDEO_UPLOAD_BYTES : MAX_IMAGE_UPLOAD_BYTES;
+  if (parsed > limit) throw new Error("UPLOAD_TOO_LARGE");
+  return parsed;
 }
 
 export function parseUploadContentLength(value: string | null): number {

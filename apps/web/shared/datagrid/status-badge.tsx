@@ -28,6 +28,7 @@ export function DataGridStatusBadge({ value }: StatusBadgeProps) {
     "TRUE",
     "YES",
     "GREEN",
+    "DELIVERED",
     "QC_READY",
     "RESOLVED",
   ].includes(normalizedValue);

@@ -1,7 +1,9 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
+import type { CalendarDayOverride } from "@smsystem/contracts/calendar";
 import { DashboardShell } from "@/modules/dashboard/components/dashboard-shell";
+import { fetchCalendarDayOverrides } from "@/shared/api/calendar";
 import { fetchDashboardSummary } from "@/shared/api/dashboard";
 import { fetchIssueGrid } from "@/shared/api/issues";
 import { fetchJobPlanGrid } from "@/shared/api/job-plan";
@@ -95,6 +97,7 @@ async function DashboardDeferredShell({
   issueGridPromise,
   normalJobPlanPromise,
   overtimeJobPlanPromise,
+  holidayOverrides,
 }: {
   summary: DashboardSummaryData;
   currentUser: CurrentUserData;
@@ -105,6 +108,7 @@ async function DashboardDeferredShell({
   issueGridPromise: Promise<IssueGridResult>;
   normalJobPlanPromise: Promise<JobPlanGridResult>;
   overtimeJobPlanPromise: Promise<JobPlanGridResult>;
+  holidayOverrides: CalendarDayOverride[];
 }) {
   const [
     planningResult,
@@ -135,6 +139,7 @@ async function DashboardDeferredShell({
         ...(normalJobPlanResult.payload?.data ?? []),
         ...(overtimeJobPlanResult.payload?.data ?? []),
       ]}
+      holidayOverrides={holidayOverrides}
     />
   );
 }
@@ -167,9 +172,14 @@ async function DashboardPageContent({ searchParams }: DashboardPageProps) {
   const [
     { payload, status },
     { user },
+    { payload: holidayPayload },
   ] = await Promise.all([
     fetchDashboardSummary(cookieHeader, summaryFilters),
     fetchCurrentUser(cookieHeader),
+    fetchCalendarDayOverrides(cookieHeader, {
+      startDate: `${new Date().getFullYear() - 1}-01-01`,
+      endDate: `${new Date().getFullYear() + 1}-12-31`,
+    }),
   ]);
 
   if (status === 403) redirect("/forbidden");
@@ -194,6 +204,7 @@ async function DashboardPageContent({ searchParams }: DashboardPageProps) {
   const issueGridPromise = fetchIssueGrid(cookieHeader, issueSearchParams);
   const normalJobPlanPromise = fetchJobPlanGrid(cookieHeader, jobPlanSearchParams, "normal");
   const overtimeJobPlanPromise = fetchJobPlanGrid(cookieHeader, jobPlanSearchParams, "overtime");
+  const holidayOverrides = holidayPayload?.data ?? [];
 
   return (
     <Suspense
@@ -207,6 +218,7 @@ async function DashboardPageContent({ searchParams }: DashboardPageProps) {
           qcRework={[]}
           issueLogRows={[]}
           jobPlanRows={[]}
+          holidayOverrides={holidayOverrides}
         />
       }
     >
@@ -220,6 +232,7 @@ async function DashboardPageContent({ searchParams }: DashboardPageProps) {
         issueGridPromise={issueGridPromise}
         normalJobPlanPromise={normalJobPlanPromise}
         overtimeJobPlanPromise={overtimeJobPlanPromise}
+        holidayOverrides={holidayOverrides}
       />
     </Suspense>
   );

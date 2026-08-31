@@ -2482,6 +2482,15 @@ export class MySqlWarehouseRepository implements WarehouseRepository {
       conditions.push(scopeClause);
     }
 
+    if (params.query.dateFrom) {
+      conditions.push("mu.usage_date >= ?");
+      queryParams.push(params.query.dateFrom);
+    }
+    if (params.query.dateTo) {
+      conditions.push("mu.usage_date <= ?");
+      queryParams.push(params.query.dateTo);
+    }
+
     if (params.query.search) {
       const value = `%${params.query.search}%`;
       conditions.push(

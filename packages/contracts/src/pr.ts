@@ -143,6 +143,7 @@ export const createPrItemSchema = z.object({
 
 export const createPrRequestSchema = z.object({
   carId: z.string().trim().min(1).max(64),
+  panelId: z.number().int().positive().nullable().optional().default(null),
   divisionName: z.string().trim().max(100).nullable().optional().default(null),
   targetDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u).nullable().optional().default(null),
   priority: z.string().trim().nullable().optional().default("NORMAL"),
@@ -194,6 +195,7 @@ export type PrSummary = z.infer<typeof prSummarySchema>;
 export type PrGridReference = z.infer<typeof prGridReferenceSchema>;
 export type PrGridQuery = z.infer<typeof prGridQuerySchema>;
 export type PrMutationResult = z.infer<typeof prMutationResultSchema>;
+export type CreatePrInput = z.input<typeof createPrRequestSchema>;
 export type CreatePrRequest = z.infer<typeof createPrRequestSchema>;
 export type ApprovePrRequest = z.infer<typeof approvePrRequestSchema>;
 export type OrderPrRequest = z.infer<typeof orderPrRequestSchema>;

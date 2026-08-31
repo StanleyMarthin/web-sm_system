@@ -4,7 +4,7 @@ import type {
   GalleryPhotoRecord,
   GalleryPhotoType,
 } from "@smsystem/contracts/gallery";
-import { Download, Eye, LoaderCircle, Trash2, Upload } from "lucide-react";
+import { Download, ExternalLink, Eye, LoaderCircle, Trash2, Upload } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -19,10 +19,14 @@ import { fmtDateTime } from "@/shared/format/humanize";
 import { GalleryUploadForm, type UploadFormValues } from "./forms/gallery-upload-form";
 import { GalleryPhotoEditForm, type EditFormValues } from "./forms/gallery-photo-edit-form";
 
-const inputCls =
-  "h-9 border border-white/[0.08] bg-white/[0.03] px-2.5 text-[12px] font-mono text-foreground outline-none transition-colors focus:border-primary/30 [color-scheme:dark]";
+function isDriveUrl(url: string): boolean {
+  if (!URL.canParse(url)) return false;
+  return ["drive.google.com", "docs.google.com"].includes(new URL(url).hostname.toLowerCase());
+}
 
-const photoTypes: GalleryPhotoType[] = ["BEFORE", "PROCESS", "AFTER", "DEFECT"];
+function isVideoUrl(url: string): boolean {
+  return URL.canParse(url) && new URL(url).pathname.toLowerCase().endsWith(".mp4");
+}
 
 function humanizePhotoType(photoType: GalleryPhotoType): string {
   switch (photoType) {
@@ -127,7 +131,7 @@ export function GalleryPhotoDrawer({
 
   const selectedPhotos = useMemo(() => {
     const photoRows = detail?.data.photos ?? [];
-    return photoRows.filter((photo) => selectedPhotoIds.includes(photo.photoId));
+    return photoRows.filter((photo) => selectedPhotoIds.includes(photo.photoId) && !isDriveUrl(photo.photoUrl));
   }, [detail, selectedPhotoIds]);
 
   async function refreshDetail() {
@@ -186,6 +190,14 @@ export function GalleryPhotoDrawer({
     setError(null);
 
     try {
+      const isVideo = data.file.type === "video/mp4";
+      const limit = (isVideo ? 25 : 10) * 1024 * 1024;
+      if (!["image/jpeg", "image/png", "image/webp", "video/mp4"].includes(data.file.type)) {
+        throw new Error("Gunakan JPG, PNG, WEBP, atau MP4.");
+      }
+      if (data.file.size > limit) {
+        throw new Error(`Ukuran ${isVideo ? "video" : "foto"} maksimal ${isVideo ? 25 : 10} MB.`);
+      }
       const photoUrl = await uploadFileToR2({
         actualId: detail.data.actual.actualId,
         photoType: data.photoType,
@@ -211,6 +223,27 @@ export function GalleryPhotoDrawer({
           ? uploadError.message
           : "Upload foto gagal.",
       );
+    } finally {
+      setIsUploading(false);
+    }
+  }
+
+  async function handleDriveLink(data: { photoType: GalleryPhotoType; caption: string; url: string }) {
+    if (!detail?.data.actual) return;
+    setIsUploading(true);
+    setError(null);
+    try {
+      const result = await createGalleryPhoto({
+        actualId: detail.data.actual.actualId,
+        photoType: data.photoType,
+        photoUrl: data.url,
+        caption: data.caption.trim() || null,
+      });
+      if (!result.success) throw new Error(result.message);
+      await refreshDetail();
+      router.refresh();
+    } catch (linkError) {
+      setError(linkError instanceof Error ? linkError.message : "Link belum bisa disimpan.");
     } finally {
       setIsUploading(false);
     }
@@ -354,7 +387,7 @@ export function GalleryPhotoDrawer({
         <div className="flex flex-col gap-4 border-b border-white/[0.08] pb-6 md:flex-row md:items-start md:justify-between">
           <div>
             <p className="text-[10px] font-mono uppercase tracking-[0.14em] text-app-accent-ink">
-              Foto Pengerjaan
+              Dokumentasi Pengerjaan
             </p>
             <h2 className="mt-2 text-[15px] font-mono text-foreground">
               {detail?.data.actual.unitName ?? "Memuat foto..."}
@@ -415,7 +448,7 @@ export function GalleryPhotoDrawer({
               <div className="border border-white/[0.06] bg-white/[0.03] p-4">
                 <div className="flex items-center gap-2">
                   <Upload className="h-4 w-4 text-app-accent-ink" />
-                  <h3 className="text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/50">Tambah Foto</h3>
+                  <h3 className="text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/50">Tambah Foto / Video</h3>
                 </div>
 
                 <GalleryUploadForm
@@ -424,6 +457,9 @@ export function GalleryPhotoDrawer({
                   defaultCaption={detail.data.actual.jobDescription ?? ""}
                   onSubmit={(data) => {
                     void handleUpload(data);
+                  }}
+                  onSubmitLink={(data) => {
+                    void handleDriveLink(data);
                   }}
                 />
 
@@ -440,7 +476,7 @@ export function GalleryPhotoDrawer({
               ) : null}
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <h3 className="text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/50">Daftar Foto</h3>
+                  <h3 className="text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/50">Daftar Media</h3>
                 </div>
                 {canDownloadPhotos ? (
                   <button
@@ -458,7 +494,7 @@ export function GalleryPhotoDrawer({
 
               {detail.data.photos.length === 0 ? (
                 <div className="mt-4 border border-white/[0.06] bg-black/20 px-4 py-8 text-center text-[12px] font-mono text-foreground/35">
-                  Belum ada foto di jobdesc ini.
+                  Belum ada media di jobdesc ini.
                 </div>
               ) : (
                 <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -478,6 +514,7 @@ export function GalleryPhotoDrawer({
                         <label className="absolute left-2.5 top-2.5 z-10 flex h-5 w-5 cursor-pointer items-center justify-center border border-white/20 bg-black/50 backdrop-blur-sm">
                           <input
                             type="checkbox"
+                            disabled={isDriveUrl(photo.photoUrl)}
                             checked={isSelected}
                             onChange={(event) => {
                               setSelectedPhotoIds((current) =>
@@ -495,21 +532,19 @@ export function GalleryPhotoDrawer({
                           {humanizePhotoType(photo.photoType)}
                         </span>
 
-                        {/* Gambar */}
-                        <button
-                          type="button"
-                          onClick={() => window.open(getProxiedImageUrl(photo.photoUrl), "_blank", "noopener,noreferrer")}
-                          className="group block aspect-video w-full overflow-hidden bg-black/40"
-                        >
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={getProxiedImageUrl(photo.photoUrl)}
-                            alt={photo.caption ?? photo.photoType}
-                            loading="lazy"
-                            decoding="async"
-                            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                          />
-                        </button>
+                        {isDriveUrl(photo.photoUrl) ? (
+                          <button type="button" onClick={() => window.open(photo.photoUrl, "_blank", "noopener,noreferrer")} className="flex aspect-video w-full flex-col items-center justify-center gap-2 bg-black/40 text-foreground/60 hover:text-foreground">
+                            <ExternalLink className="h-7 w-7" />
+                            <span className="text-[12px]">Buka Google Drive</span>
+                          </button>
+                        ) : isVideoUrl(photo.photoUrl) ? (
+                          <video src={photo.photoUrl} className="aspect-video w-full bg-black object-contain" controls preload="metadata" />
+                        ) : (
+                          <button type="button" onClick={() => window.open(getProxiedImageUrl(photo.photoUrl), "_blank", "noopener,noreferrer")} className="group block aspect-video w-full overflow-hidden bg-black/40">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={getProxiedImageUrl(photo.photoUrl)} alt={photo.caption ?? photo.photoType} loading="lazy" decoding="async" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
+                          </button>
+                        )}
 
                         {/* Body card */}
                         <div className="flex flex-1 flex-col gap-3 p-3">
@@ -541,19 +576,19 @@ export function GalleryPhotoDrawer({
                           <div className="mt-auto flex flex-wrap gap-1.5 border-t border-white/[0.06] pt-3">
                             <button
                               type="button"
-                              onClick={() => window.open(getProxiedImageUrl(photo.photoUrl), "_blank", "noopener,noreferrer")}
+                              onClick={() => window.open(isDriveUrl(photo.photoUrl) || isVideoUrl(photo.photoUrl) ? photo.photoUrl : getProxiedImageUrl(photo.photoUrl), "_blank", "noopener,noreferrer")}
                               className="inline-flex items-center gap-1 border border-white/[0.08] px-2.5 py-1 text-[11px] font-mono text-foreground/60 hover:text-foreground transition-colors"
                             >
                               <Eye className="h-3 w-3" />
                               Lihat
                             </button>
 
-                            {canDownloadPhotos ? (
+                            {canDownloadPhotos && !isDriveUrl(photo.photoUrl) ? (
                               <button
                                 type="button"
                                 onClick={() => {
                                   void downloadUrl(
-                                    getProxiedImageUrl(photo.photoUrl) as string,
+                                    (isVideoUrl(photo.photoUrl) ? photo.photoUrl : getProxiedImageUrl(photo.photoUrl)) as string,
                                     buildDownloadFileName(
                                       photo,
                                     ),
@@ -606,7 +641,7 @@ export function GalleryPhotoDrawer({
             <input
               ref={replaceInputRef}
               type="file"
-              accept="image/*"
+              accept="image/jpeg,image/png,image/webp,video/mp4"
               className="hidden"
               onChange={(event) => {
                 const file = event.target.files?.[0];

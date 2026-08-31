@@ -62,4 +62,19 @@ describe("DefaultMonitoringService mobile notification", () => {
       "sm_tasks",
     ]]);
   });
+
+  it("submits one actual to the immutable ledger", async () => {
+    const ledgerCalls: unknown[][] = [];
+    const submitActualToLedger = mock(async (...args: unknown[]) => {
+      ledgerCalls.push(args);
+      return { ledgerId: "LEDGER-1", alreadySubmitted: false };
+    });
+    const service = new DefaultMonitoringService({ submitActualToLedger } as never);
+    const result = await service.submitActualToLedger({
+      user: { employeeId: "KD-1", fullName: "Kepala Divisi", scope: {} },
+    } as never, "ACT-1");
+
+    expect(result).toEqual({ ledgerId: "LEDGER-1", alreadySubmitted: false });
+    expect(ledgerCalls.length).toBe(1);
+  });
 });

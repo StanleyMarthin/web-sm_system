@@ -26,6 +26,10 @@ export default async function ReportsTypePage({
     notFound();
   }
 
+  if (reportType.data !== "ar-labour") {
+    redirect("/reports/ar-labour");
+  }
+
   const requestHeaders = await headers();
   const cookieHeader = requestHeaders.get("cookie") ?? "";
   const [{ payload, status }, { user, status: userStatus }] = await Promise.all([
@@ -44,7 +48,7 @@ export default async function ReportsTypePage({
   if (!payload || !user) {
     return (
       <ModuleUnavailableState
-        module="Reports"
+        module="Rekapan"
         title="Laporan belum bisa dimuat"
         message="Data laporan atau sesi aktif belum terbaca saat ini."
       />

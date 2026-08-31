@@ -846,11 +846,14 @@ function unitBoardBaseSql(): string {
       COALESCE(advisor.full_name, '-') AS advisorName,
       DATE_FORMAT(c.contract_delivery_date, '%Y-%m-%d') AS targetDeliveryDate,
       CASE
+        WHEN UPPER(COALESCE(c.status, '')) = 'DONE'
+          THEN DATE_FORMAT(c.contract_delivery_date, '%Y-%m-%d')
         WHEN cd.remainingHours > 0
           THEN DATE_FORMAT(DATE_ADD(CURDATE(), INTERVAL CEIL(cd.remainingHours / 8) DAY), '%Y-%m-%d')
-        ELSE DATE_FORMAT(CURDATE(), '%Y-%m-%d')
+        ELSE DATE_FORMAT(c.contract_delivery_date, '%Y-%m-%d')
       END AS etaDate,
       CASE
+        WHEN UPPER(COALESCE(c.status, '')) = 'DONE' THEN 'DELIVERED'
         WHEN c.contract_delivery_date IS NULL THEN 'UNKNOWN'
         WHEN c.contract_delivery_date < CURDATE() THEN 'RED'
         WHEN DATEDIFF(c.contract_delivery_date, CURDATE()) <= 2 THEN 'ORANGE'
@@ -1392,6 +1395,7 @@ export class UnitsRepository {
       ORANGE: "Target delivery sudah kritis dan butuh akselerasi.",
       RED: "Target delivery sudah terlewati.",
       UNKNOWN: "Belum ada target delivery kontrak.",
+      DELIVERED: "Unit sudah diserahkan ke customer.",
     };
 
     return {

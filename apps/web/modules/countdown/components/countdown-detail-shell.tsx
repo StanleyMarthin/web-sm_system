@@ -226,6 +226,53 @@ export function CountdownDetailShell({
         </div>
       </section>
 
+      <section id="dokumentasi" className="border border-border bg-card dark:border-white/[0.06]">
+        <div className="flex items-center justify-between gap-3 border-b border-border px-3 py-2.5 dark:border-white/[0.06]">
+          <div className="flex items-center gap-2">
+            <Camera className="h-4 w-4 text-app-accent-ink" />
+            <h2 className="text-sm font-semibold text-foreground">Dokumentasi</h2>
+          </div>
+          <span className="font-mono text-[10px] uppercase text-muted-foreground">
+            {countdown.details.reduce((total, detail) => total + detail.photos.length, 0)} foto
+          </span>
+        </div>
+        <div className="p-3">
+          {(() => {
+            const photos = countdown.details.flatMap((detail) =>
+              detail.photos.map((photo) => ({ ...photo, workDate: detail.workDate, employeeName: detail.employeeName })),
+            );
+            if (photos.length === 0) {
+              return <p className="text-xs text-muted-foreground">Belum ada dokumentasi foto untuk countdown ini.</p>;
+            }
+            return (
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+                {photos.map((photo) => {
+                  const url = resolveCountdownPhotoUrl(photo.url);
+                  const content = (
+                    <>
+                      <div className="aspect-[4/3] overflow-hidden bg-muted">
+                        {/* eslint-disable-next-line @next/next/no-img-element -- URL dokumentasi berasal dari storage dinamis. */}
+                        <img src={url ?? undefined} alt={photo.caption || `Dokumentasi ${photoLabels[photo.type]}`} loading="lazy" className="h-full w-full object-cover transition-opacity hover:opacity-90" />
+                      </div>
+                      <div className="p-2">
+                        <p className="font-mono text-[10px] font-semibold uppercase text-app-accent-ink">{photoLabels[photo.type]}</p>
+                        {photo.caption ? <p className="mt-0.5 line-clamp-2 text-[11px] text-muted-foreground">{photo.caption}</p> : null}
+                        {photo.workDate ? <p className="mt-0.5 font-mono text-[10px] text-muted-foreground">{photo.workDate} · {photo.employeeName ?? "-"}</p> : null}
+                      </div>
+                    </>
+                  );
+                  return url ? (
+                    <a key={photo.photoId} href={url} target="_blank" rel="noreferrer" className="overflow-hidden border border-border bg-background transition-colors hover:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:border-white/[0.08]" aria-label={`Buka dokumentasi ${photoLabels[photo.type]}`}>{content}</a>
+                  ) : (
+                    <div key={photo.photoId} className="overflow-hidden border border-border bg-background opacity-60 dark:border-white/[0.08]">{content}</div>
+                  );
+                })}
+              </div>
+            );
+          })()}
+        </div>
+      </section>
+
       {countdown.extensionRequestStatus || countdown.countRevision > 0 ? (
         <section className="border border-border bg-card px-3 py-2.5 dark:border-white/[0.06]">
           <div className="flex flex-wrap items-center justify-between gap-3">

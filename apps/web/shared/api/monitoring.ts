@@ -3,6 +3,7 @@ import {
   monitoringDivisionDetailEnvelopeSchema,
   monitoringDivisionEnvelopeSchema,
   monitoringActualMutationEnvelopeSchema,
+  monitoringLedgerMutationEnvelopeSchema,
   monitoringGridEnvelopeSchema,
   monitoringTaskListEnvelopeSchema,
   monitoringUnitEnvelopeSchema,
@@ -286,4 +287,14 @@ export async function createMonitoringActual(input: CreateMonitoringActualReques
     success: true as const,
     result: payload.data,
   };
+}
+
+export async function submitMonitoringActualToLedger(actualId: string) {
+  const response = await fetch(`${getApiBaseUrl()}/api/monitoring/actual/${encodeURIComponent(actualId)}/ledger`, { method: "POST", credentials: "include" });
+  if (!response.ok) {
+    const failure = await parseFailure(response);
+    return { success: false as const, message: failure.message ?? "Actual gagal dimasukkan ke report." };
+  }
+  const payload = monitoringLedgerMutationEnvelopeSchema.parse(await response.json());
+  return { success: true as const, result: payload.data, message: payload.message };
 }

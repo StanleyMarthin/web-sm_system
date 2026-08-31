@@ -391,7 +391,7 @@ export const warehouseMaterialUsageEnvelopeSchema = z.object({
   message: z.string(),
   data: z.array(warehouseMaterialUsageRecordSchema),
   meta: gridMetaSchema,
-  query: gridQueryStateSchema,
+  query: warehouseTransactionQuerySchema,
 });
 
 export const warehouseStorageLocationRecordSchema = z.object({

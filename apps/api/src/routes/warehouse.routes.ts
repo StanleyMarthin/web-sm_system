@@ -474,6 +474,7 @@ async function handleWarehouseGridRoute(
     query: ReturnType<typeof sanitizeWarehouseGenericGridQuery>;
   }>,
   cacheResponse = false,
+  defaultToday = false,
 ) {
   const sessionResult = await requireWarehouseSession(request, authService, permission);
   if ("response" in sessionResult) {
@@ -481,10 +482,16 @@ async function handleWarehouseGridRoute(
   }
 
   try {
+    const searchParams = new URL(request.url).searchParams;
+    if (defaultToday && !searchParams.has("dateFrom")) {
+      const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jakarta" }).format(new Date());
+      searchParams.set("dateFrom", today);
+      searchParams.set("dateTo", today);
+    }
     const query = applyDefaultDivisionIdFilter(
       sessionResult.session,
       sanitizeWarehouseGenericGridQuery(
-        new URL(request.url).searchParams,
+        searchParams,
         fallbackSortBy,
       ),
     );
@@ -641,6 +648,8 @@ export function handleWarehouseMaterialUsageRoute(
     permissionCodes.warehouseView,
     "usageDate",
     warehouseService.listMaterialUsage.bind(warehouseService),
+    false,
+    true,
   );
 }
 

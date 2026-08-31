@@ -1,7 +1,7 @@
 import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import type { ApiEnv } from "@/config/env";
-import { MAX_IMAGE_UPLOAD_BYTES } from "@/security/upload-ticket";
+import { MAX_IMAGE_UPLOAD_BYTES, MAX_VIDEO_UPLOAD_BYTES } from "@/security/upload-ticket";
 import type { GalleryUploadTicketProvider } from "@/services/gallery.service";
 
 function stripTrailingSlash(value: string): string {
@@ -53,7 +53,8 @@ export class S3GalleryUploadTicketProvider implements GalleryUploadTicketProvide
     if (!Number.isSafeInteger(input.contentLength) || input.contentLength <= 0) {
       throw new Error("INVALID_UPLOAD_SIZE");
     }
-    if (input.contentLength > MAX_IMAGE_UPLOAD_BYTES) {
+    const maxBytes = input.contentType === "video/mp4" ? MAX_VIDEO_UPLOAD_BYTES : MAX_IMAGE_UPLOAD_BYTES;
+    if (input.contentLength > maxBytes) {
       throw new Error("UPLOAD_TOO_LARGE");
     }
 

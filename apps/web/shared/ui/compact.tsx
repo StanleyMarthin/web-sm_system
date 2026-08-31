@@ -639,7 +639,7 @@ export function SearchableSelect({
   }, []);
 
   const selected = options.find((o) => o.value === value);
-  const showSearch = options.length > 4;
+  const showSearch = options.length > 3;
   const filtered = options.filter((o) => o.label.toLowerCase().includes(search.toLowerCase()));
 
   return (

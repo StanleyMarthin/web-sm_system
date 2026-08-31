@@ -523,3 +523,26 @@ export async function handleMonitoringActualCreateRoute(
     );
   }
 }
+
+export async function handleMonitoringLedgerSubmitRoute(
+  request: Request,
+  actualId: string,
+  authService: AuthService,
+  monitoringService: MonitoringService,
+): Promise<Response> {
+  const sessionResult = await requireMonitoringSession(request, authService);
+  if ("response" in sessionResult) return sessionResult.response;
+  try {
+    const result = await monitoringService.submitActualToLedger(sessionResult.session, actualId);
+    return withCors(request, Response.json({
+      success: true,
+      message: result.alreadySubmitted ? "Actual sudah masuk report." : "Actual berhasil dimasukkan ke report.",
+      data: result,
+    }, { status: result.alreadySubmitted ? 200 : 201 }));
+  } catch (error) {
+    if (error instanceof Error && error.message === "ACTUAL_NOT_FOUND") return errorResponse(request, "Actual tidak ditemukan.", 404, "ACTUAL_NOT_FOUND");
+    if (error instanceof Error && error.message === "ACTUAL_NOT_READY") return errorResponse(request, "Actual belum selesai dan belum dapat dimasukkan ke report.", 409, "ACTUAL_NOT_READY");
+    console.error("[monitoring] ledger submit failed", error);
+    return errorResponse(request, "Actual gagal dimasukkan ke report.", 500, "LEDGER_SUBMIT_FAILED");
+  }
+}

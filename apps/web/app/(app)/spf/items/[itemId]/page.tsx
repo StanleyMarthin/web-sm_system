@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { requireAdminSession } from "@/shared/auth/admin-session";
 import { fetchSpfItemDetail } from "@/shared/api/spf";
+import { fetchCountdownBoard } from "@/shared/api/countdown";
 import { ModuleUnavailableState } from "@/shared/ui/module-unavailable-state";
 import { ItemDetailShell } from "@/modules/spf/components/item-detail-shell";
 
@@ -40,6 +41,16 @@ export default async function ItemDetailPage({ params }: Props) {
   }
 
   const { item, media } = result.payload;
+  const historyResult = item.panel_name
+    ? await fetchCountdownBoard(cookieHeader, {
+        unitId: item.car_id,
+        filter: `sectionName:eq:${item.panel_name}`,
+        limit: "100",
+        page: "1",
+        sortBy: "updatedAt",
+        sortDirection: "desc",
+      })
+    : { payload: null, status: 200 };
 
   // Item yang sudah ada di periode workflow tidak bisa diedit lagi.
   // Backend tetap menjadi penjaga akhir setiap mode.
@@ -49,6 +60,7 @@ export default async function ItemDetailPage({ params }: Props) {
     <ItemDetailShell
       item={item}
       media={media}
+      history={historyResult.payload?.data ?? []}
       canAdmin={session.canAdmin}
       editable={editable}
     />

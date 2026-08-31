@@ -17,11 +17,11 @@ import type {
   WorkingDay,
   UnitEtaRecord,
 } from "@smsystem/contracts/calendar";
-import { ChevronLeft, ChevronRight, Settings2, Save, Car } from "lucide-react";
+import { ChevronLeft, ChevronRight, RefreshCw, Settings2, Save, Car } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { upsertWeeklyConfig } from "@/shared/api/calendar";
-import { ActionButton, PageHeader, SectionCard } from "@/shared/ui/compact";
+import { syncNationalHolidays, upsertWeeklyConfig } from "@/shared/api/calendar";
+import { ActionButton, PageHeader, SectionCard, Toast } from "@/shared/ui/compact";
 import { CalendarDayModal } from "./calendar-day-modal";
 
 interface PlanningCalendarViewProps {
@@ -94,6 +94,12 @@ export function PlanningCalendarView({
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncConfirmYear, setSyncConfirmYear] = useState<string | null>(null);
+  const [syncToast, setSyncToast] = useState<{
+    variant: "ok" | "err";
+    message: string;
+  } | null>(null);
 
   // Settings form
   const latestConfig = weeklyConfigs[0];
@@ -221,6 +227,23 @@ export function PlanningCalendarView({
     }
   }
 
+  async function runHolidaySync(year: string) {
+    setIsSyncing(true);
+    setSyncConfirmYear(null);
+    setSyncToast(null);
+    try {
+      const result = await syncNationalHolidays(year);
+      if (!result.success) {
+        setSyncToast({ variant: "err", message: result.message });
+        return;
+      }
+      setSyncToast({ variant: "ok", message: result.message });
+      router.refresh();
+    } finally {
+      setIsSyncing(false);
+    }
+  }
+
   return (
     <div className="space-y-3">
       <div className="grid gap-2 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
@@ -229,10 +252,18 @@ export function PlanningCalendarView({
             title="Kalender kerja bengkel"
             eyebrow="Hari kerja · libur · kapasitas harian"
             actions={(
-              <ActionButton onClick={() => setShowSettings((value) => !value)} variant={showSettings ? "primary" : "default"}>
-                <Settings2 className="h-3.5 w-3.5" />
-                {showSettings ? "Tutup Aturan" : "Atur Jam"}
-              </ActionButton>
+              <>
+                {canManage && (
+                  <ActionButton onClick={() => setSyncConfirmYear(currentStart.slice(0, 4))} disabled={isSyncing}>
+                    <RefreshCw className={`h-3.5 w-3.5 ${isSyncing ? "animate-spin" : ""}`} />
+                    {isSyncing ? "Menyinkronkan..." : "Sinkron Hari Libur"}
+                  </ActionButton>
+                )}
+                <ActionButton onClick={() => setShowSettings((value) => !value)} variant={showSettings ? "primary" : "default"}>
+                  <Settings2 className="h-3.5 w-3.5" />
+                  {showSettings ? "Tutup Aturan" : "Atur Jam"}
+                </ActionButton>
+              </>
             )}
           />
           <p className="max-w-2xl text-[14px] leading-5 text-muted-foreground dark:text-muted-foreground">
@@ -293,7 +324,30 @@ export function PlanningCalendarView({
         </SectionCard>
       </div>
 
+      {/* Konfirmasi sinkronisasi hari libur */}
+      {syncConfirmYear && (
+        <div className="flex flex-wrap items-center justify-between gap-3 border border-primary/25 bg-primary/[0.04] px-4 py-3">
+          <p className="text-[14px] leading-5 text-app-accent-ink">
+            Sinkronkan hari libur nasional tahun {syncConfirmYear}? Pengaturan manual di
+            tanggal yang sama akan diganti dengan data nasional.
+          </p>
+          <div className="flex items-center gap-2">
+            <ActionButton onClick={() => setSyncConfirmYear(null)} disabled={isSyncing}>
+              Batal
+            </ActionButton>
+            <ActionButton
+              variant="primary"
+              onClick={() => void runHolidaySync(syncConfirmYear)}
+              disabled={isSyncing}
+            >
+              Ya, Sinkronkan
+            </ActionButton>
+          </div>
+        </div>
+      )}
+
       {/* Feedback */}
+      {syncToast && <Toast message={syncToast.message} variant={syncToast.variant} />}
       {message && (
         <div className="border border-success/25 bg-success/[0.05] px-4 py-2 text-[14px] text-success">
           {message}

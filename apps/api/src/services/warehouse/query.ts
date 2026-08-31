@@ -117,5 +117,7 @@ export function sanitizeWarehouseGenericGridQuery(
     sortDirection: resolveSortDirection(gridQuery),
     filters,
     view: null,
+    dateFrom: searchParams.get("dateFrom"),
+    dateTo: searchParams.get("dateTo"),
   });
 }

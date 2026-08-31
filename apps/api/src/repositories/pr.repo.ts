@@ -450,6 +450,39 @@ async function nextPrNumber(
   return `${prefix}/${String(maxSequence + 1).padStart(3, "0")}/${month}/${year}`;
 }
 
+async function assertPanelHasCountdown(
+  connection: PoolConnection,
+  coreDb: string,
+  carId: string,
+  panelId: number,
+): Promise<void> {
+  const [panelRows] = await connection.query<RowDataPacket[]>(
+    `
+      SELECT id
+      FROM ${qualifyTable(coreDb, "master_panels")}
+      WHERE id = ? AND car_id = ?
+      LIMIT 1
+    `,
+    [panelId, carId],
+  );
+  if (panelRows.length === 0) {
+    throw new Error("UNIT_PANEL_NOT_FOUND");
+  }
+
+  const [countdownRows] = await connection.query<RowDataPacket[]>(
+    `
+      SELECT id
+      FROM ${qualifyTable(coreDb, "sm_jobdesc_countdown")}
+      WHERE panel_id = ?
+      LIMIT 1
+    `,
+    [panelId],
+  );
+  if (countdownRows.length === 0) {
+    throw new Error("PR_REQUIRES_COUNTDOWN");
+  }
+}
+
 export interface PrRepository {
   list(params: PrListParams): Promise<{ rows: PrRecord[]; total: number; summary: PrSummary }>;
   listCritical(params: ScopeParams): Promise<PrRecord[]>;
@@ -668,6 +701,14 @@ export class MySqlPrRepository implements PrRepository {
 
     try {
       await connection.beginTransaction();
+      if (input.panelId) {
+        await assertPanelHasCountdown(
+          connection,
+          this.env.DB_NAME,
+          input.carId,
+          input.panelId,
+        );
+      }
       const prefix = derivePrPrefix(input.divisionName ?? context.divisionName);
       const prNumber = await nextPrNumber(connection, this.env.PURCHASE_DB_NAME, prefix);
       const prId = randomUUID();
@@ -678,6 +719,7 @@ export class MySqlPrRepository implements PrRepository {
             id,
             pr_number,
             car_id,
+            panel_id,
             requested_by,
             requested_by_name,
             division_name,
@@ -686,12 +728,13 @@ export class MySqlPrRepository implements PrRepository {
             acc_tracking,
             status,
             notes
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PENDING_ADV', 'OPEN', ?)
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING_ADV', 'OPEN', ?)
         `,
         [
           prId,
           prNumber,
           input.carId,
+          input.panelId ?? null,
           context.actorId,
           context.actorName,
           input.divisionName ?? context.divisionName,

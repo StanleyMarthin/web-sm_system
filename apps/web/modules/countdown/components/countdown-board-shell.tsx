@@ -22,7 +22,7 @@ import {
 } from "@/shared/ui/compact";
 import { parseHHMMToDecimal } from "@/shared/format/time";
 import { CountdownBoardForm, type CountdownFormValues } from "./forms/countdown-board-form";
-import { Download, FileText, FileUp, Pencil, Plus, RefreshCcw, Trash2, Upload, X } from "lucide-react";
+import { Camera, Download, FileText, FileUp, Pencil, Plus, RefreshCcw, Trash2, Upload, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -205,6 +205,10 @@ function buildCountdownColumns(
           <Link href={`/countdown/${String(row.countdownId ?? "")}`}
             className="border border-primary/30 bg-primary/[0.06] px-2 py-0.5 text-[10px] font-mono uppercase tracking-[0.1em] text-app-accent-ink hover:bg-primary/[0.12] transition-colors">
             Detail
+          </Link>
+          <Link href={`/countdown/${String(row.countdownId ?? "")}#dokumentasi`}
+            className="inline-flex items-center gap-1 border border-border px-2 py-0.5 text-[10px] font-mono uppercase tracking-[0.1em] text-foreground/55 hover:border-primary/30 hover:text-app-accent-ink transition-colors">
+            <Camera className="h-3 w-3" />Dokumentasi
           </Link>
           {canManage && (
             <>

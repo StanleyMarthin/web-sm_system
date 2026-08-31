@@ -99,6 +99,33 @@ function buildJobPlanDraftKey(employeeId: string): string {
   return `jobplan:web:draft:${employeeId}`;
 }
 
+function normalizeMobileDraftItem(item: unknown): JobPlanDraftRecord | null {
+  if (!item || typeof item !== "object") return null;
+  const source = item as Record<string, unknown>;
+  const targetHours =
+    typeof source.targetHours === "number"
+      ? source.targetHours
+      : Number.parseFloat(String(source.targetHours ?? source.target_hours ?? ""));
+  try {
+    return jobPlanDraftRecordSchema.parse({
+      coreId: String(source.coreId ?? source.draftItemId ?? source.core_id ?? ""),
+      assignedUserId: String(source.assignedUserId ?? source.assigned_user_id ?? source.employeeId ?? ""),
+      taskDate: String(source.taskDate ?? source.task_date ?? ""),
+      targetHours,
+      startTime: source.startTime ?? source.start_time ?? null,
+      finishTime: source.finishTime ?? source.finish_time ?? null,
+      jobDescription: String(
+        source.jobDescription ?? source.jobdescription ?? source.job_desc ?? source.panelName ?? source.panel_name ?? "",
+      ),
+      note: source.note ?? source.catatan ?? source.pok ?? null,
+      isOvertime: Boolean(source.isOvertime ?? source.is_overtime),
+      isPriority: Boolean(source.isPriority ?? source.is_priority),
+    });
+  } catch {
+    return null;
+  }
+}
+
 function mapDraftToRecord(draft: JobPlanDraftRecord): JobPlanRecord {
   return {
     planId: draft.draftItemId,
@@ -122,7 +149,7 @@ function mapDraftToRecord(draft: JobPlanDraftRecord): JobPlanRecord {
     isPriority: draft.isPriority,
     status: "DRAFT",
     jobDescription: draft.jobDescription,
-    instructionText: draft.jobDescription,
+    instructionText: draft.note ?? draft.jobDescription,
     note: draft.note ?? null,
     draftSourceType: draft.sourceType,
     draftCarId: draft.carId ?? null,
@@ -130,6 +157,7 @@ function mapDraftToRecord(draft: JobPlanDraftRecord): JobPlanRecord {
     draftJobTypeId: draft.jobTypeId ?? null,
     draftDeadlineDate: draft.deadlineDate ?? null,
     draftIsRework: draft.isRework,
+    draftIsNonTechnicalJob: draft.isNonTechnicalJob,
     availablePlanHours: null,
     remainingHours: null,
     progressPercent: null,
@@ -544,29 +572,38 @@ export class DefaultJobPlanService implements JobPlanService {
 
   private async readDrafts(employeeId: string): Promise<JobPlanDraftRecord[]> {
     const redis = await this.redisFactory();
-    const raw = await redis.get(buildJobPlanDraftKey(employeeId));
+    const raw = await redis.get(buildJobPlanDraftKey(employeeId)) ?? await redis.get(`jobplan:draft:${employeeId}`);
     if (!raw) {
       return [];
     }
 
-    const payload = JSON.parse(raw) as unknown;
-    if (!Array.isArray(payload)) {
+    try {
+      const payload = JSON.parse(raw) as unknown;
+      const items = Array.isArray(payload) ? payload : (payload as { items?: unknown[] })?.items ?? [];
+      return items
+        .map((item) => normalizeMobileDraftItem(item))
+        .filter((item): item is JobPlanDraftRecord => item !== null);
+    } catch {
       return [];
     }
-
-    return payload.map((item) => jobPlanDraftRecordSchema.parse(item));
   }
 
   private async writeDrafts(employeeId: string, drafts: JobPlanDraftRecord[]) {
     const redis = await this.redisFactory();
-    const key = buildJobPlanDraftKey(employeeId);
+    const webKey = buildJobPlanDraftKey(employeeId);
+    const mobileKey = `jobplan:draft:${employeeId}`;
 
     if (drafts.length === 0) {
-      await redis.del(key);
+      await redis.del(webKey);
+      await redis.del(mobileKey);
       return;
     }
 
-    await redis.set(key, JSON.stringify(drafts), {
+    await redis.set(webKey, JSON.stringify(drafts), {
+      EX: JOB_PLAN_DRAFT_TTL_SECONDS,
+    });
+    // Mirror ke key mobile (sm_job_plan) agar draft web muncul di aplikasi mobile.
+    await redis.set(mobileKey, JSON.stringify({ items: drafts }), {
       EX: JOB_PLAN_DRAFT_TTL_SECONDS,
     });
   }

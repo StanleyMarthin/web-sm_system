@@ -8,6 +8,15 @@ function resolveDate(value: string | null): string | null {
   return normalized ? normalized : null;
 }
 
+function todayInJakarta(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Jakarta",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
 export function sanitizeReportQuery(
   type: ReportType,
   searchParams: URLSearchParams,
@@ -17,6 +26,7 @@ export function sanitizeReportQuery(
   const allowedSorts = new Set(config.sortOptions.map((option) => option.value));
   const allowedFilters = new Set(config.filterConfigs.map((filter) => filter.field));
   const filters = gridQuery.filters.filter((filter) => allowedFilters.has(filter.field));
+  const defaultDate = type === "ar-labour" ? todayInJakarta() : null;
 
   return reportQuerySchema.parse({
     ...gridQuery,
@@ -25,7 +35,7 @@ export function sanitizeReportQuery(
       : config.defaultSortBy,
     sortDirection: gridQuery.sortDirection || config.defaultSortDirection,
     filters,
-    dateFrom: resolveDate(searchParams.get("dateFrom")),
-    dateTo: resolveDate(searchParams.get("dateTo")),
+    dateFrom: resolveDate(searchParams.get("dateFrom")) ?? defaultDate,
+    dateTo: resolveDate(searchParams.get("dateTo")) ?? defaultDate,
   });
 }

@@ -216,8 +216,8 @@ function mapJobPlanRow(row: JobPlanRow): JobPlanRecord {
     panelSectionName: row.panelSectionName,
     jobName: row.jobName,
     masterJobName: row.masterJobName ?? row.jobName ?? row.jobDescription ?? row.panelName ?? "-",
-    assignedUserId: row.assignedUserId,
-    assignedUserName: row.assignedUserName,
+    assignedUserId: row.assignedUserId ?? "",
+    assignedUserName: row.assignedUserName ?? "",
     targetHours: Number(row.targetHours),
     targetDailyHours: Number(row.targetHours),
     targetTotalHours:
@@ -230,7 +230,7 @@ function mapJobPlanRow(row: JobPlanRow): JobPlanRecord {
     isPriority: toBoolean(row.isPriority),
     status: row.status as JobPlanStatus,
     jobDescription: row.jobDescription,
-    instructionText: row.jobDescription,
+    instructionText: row.note ?? row.jobDescription,
     note: row.note,
     availablePlanHours:
       row.availablePlanHours === null ? null : Number(row.availablePlanHours),
@@ -560,7 +560,7 @@ function buildListSelectSql(): string {
       p.core_id AS coreId,
       DATE_FORMAT(p.task_date, '%Y-%m-%d') AS taskDate,
       COALESCE(c.unit_name, jc.car_id, NULLIF(jc.section_name, ''), p.jobdescription, '-') AS unitName,
-      jc.division_id AS divisionId,
+      COALESCE(jc.division_id, NULL) AS divisionId,
       d.name AS divisionName,
       COALESCE(mp.name, jc.section_name) AS panelName,
       jc.section_name AS panelSectionName,
@@ -591,7 +591,7 @@ function buildListSelectSql(): string {
       latest_actual.progres AS actualProgressPercent,
       latest_actual.break_duration_minutes AS actualBreakMinutes
     FROM sm_jobdesc_plan p
-    JOIN sm_jobdesc_countdown jc ON jc.id = p.core_id
+    LEFT JOIN sm_jobdesc_countdown jc ON jc.id = p.core_id
     LEFT JOIN cars c ON c.id = jc.car_id
     LEFT JOIN sm_divisi d ON d.id = jc.division_id
     LEFT JOIN master_panels mp ON mp.id = jc.panel_id
@@ -1024,6 +1024,7 @@ async function createNonTechnicalCountdownInTransaction(
     jobTypeId: string | null;
     taskDate: string;
     deadlineDate: string;
+    targetHoursInitial: number;
     note: string | null;
   },
 ): Promise<CountdownContextRow> {
@@ -1063,7 +1064,7 @@ async function createNonTechnicalCountdownInTransaction(
         requested_deadline,
         revision_reason,
         last_qc_level
-      ) VALUES (?, ?, ?, 'ADDITIONAL', NULL, NULL, NULL, ?, ?, 0, 0, 0, 0, 0, 0, 'PLAN', NULL, ?, ?, ?, NULL, NULL, 0, ?, ?, NULL, 0, NULL, ?, NULL)
+      ) VALUES (?, ?, ?, 'ADDITIONAL', NULL, NULL, NULL, ?, ?, ?, 0, ?, 0, ?, 0, 'PLAN', NULL, ?, ?, ?, NULL, NULL, 0, ?, ?, NULL, 0, NULL, ?, NULL)
     `,
     [
       countdownId,
@@ -1071,6 +1072,9 @@ async function createNonTechnicalCountdownInTransaction(
       input.divisionId,
       input.sectionName,
       input.jobTypeId,
+      input.targetHoursInitial,
+      input.targetHoursInitial,
+      input.targetHoursInitial,
       now,
       input.taskDate,
       input.deadlineDate,
@@ -1119,6 +1123,22 @@ async function resolveWorkspaceCountdown(
     return assertCountdownAccessible(connection, params, existingCountdown.coreId);
   }
 
+  if (row.isNonTechnicalJob) {
+    if (!row.divisionId) {
+      throw new Error("ADDITIONAL_REFERENCE_INCOMPLETE");
+    }
+    return createNonTechnicalCountdownInTransaction(connection, { actorId: params.employeeId }, {
+      carId: row.carId || null,
+      divisionId: row.divisionId,
+      sectionName: row.jobDescription.trim(),
+      jobTypeId: row.jobTypeId || null,
+      taskDate: workspaceMeta.taskDate,
+      deadlineDate: workspaceMeta.deadlineDate,
+      targetHoursInitial: workspaceMeta.projectTargetHours,
+      note: row.note ?? null,
+    });
+  }
+
   if (!row.carId || !row.divisionId || !row.panelId || !row.jobTypeId) {
     const divisionId = row.divisionId ?? null;
     if (divisionId !== null && await isNonTechnicalDivisionId(connection, divisionId)) {
@@ -1129,6 +1149,7 @@ async function resolveWorkspaceCountdown(
         jobTypeId: row.jobTypeId || null,
         taskDate: workspaceMeta.taskDate,
         deadlineDate: workspaceMeta.deadlineDate,
+        targetHoursInitial: workspaceMeta.projectTargetHours,
         note: row.note ?? null,
       });
     }
@@ -1239,7 +1260,7 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
       `
         SELECT COUNT(*) AS total
         FROM sm_jobdesc_plan p
-        JOIN sm_jobdesc_countdown jc ON jc.id = p.core_id
+        LEFT JOIN sm_jobdesc_countdown jc ON jc.id = p.core_id
         LEFT JOIN cars c ON c.id = jc.car_id
         LEFT JOIN sm_divisi d ON d.id = jc.division_id
         LEFT JOIN sm_employee e ON e.employee_id = p.assigned_user_id
@@ -1256,7 +1277,7 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
           SUM(CASE WHEN p.status = 'PLAN' THEN 1 ELSE 0 END) AS approvedCount,
           SUM(CASE WHEN p.is_overtime = 1 THEN 1 ELSE 0 END) AS overtimeCount
         FROM sm_jobdesc_plan p
-        JOIN sm_jobdesc_countdown jc ON jc.id = p.core_id
+        LEFT JOIN sm_jobdesc_countdown jc ON jc.id = p.core_id
         LEFT JOIN cars c ON c.id = jc.car_id
         LEFT JOIN sm_divisi d ON d.id = jc.division_id
         LEFT JOIN sm_employee e ON e.employee_id = p.assigned_user_id
@@ -1916,7 +1937,7 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
       for (const row of input.rows) {
         const isManualNonTechnical =
           row.source === "additional" &&
-          (await isNonTechnicalDivisionId(connection, row.divisionId ?? null));
+          (row.isNonTechnicalJob || await isNonTechnicalDivisionId(connection, row.divisionId ?? null));
         const countdown = await resolveWorkspaceCountdown(connection, params, row, {
           projectTargetHours,
           taskDate: input.taskDate,
@@ -2008,7 +2029,24 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
 
       for (const draft of drafts) {
         if (draft.sourceType === "ADDITIONAL") {
-          const isManualNonTechnical = await isNonTechnicalDivisionId(
+          if (draft.isNonTechnicalJob) {
+            const scheduleSegments = buildJobPlanScheduleSegments({ taskDate: draft.taskDate, requestedMode: draft.isOvertime ? "overtime" : "normal", targetHours: draft.targetHours });
+            for (const segment of scheduleSegments) {
+              const planId = `PLAN-${randomUUID().replace(/-/gu, "").slice(0, 20).toUpperCase()}`;
+              await connection.execute(
+                `INSERT INTO sm_jobdesc_plan (
+                  id, core_id, task_date, jobdescription, assigned_user_id,
+                  target_start_hours, target_finish_hours, dailyTargetHours,
+                  is_overtime, is_rework, isPriority, status, acc_tracking, note,
+                  car_id, division_id, unit_name, panel_name, section_name, source_type
+                ) VALUES (?, NULL, ?, ?, ?, ?, ?, SEC_TO_TIME(? * 3600), ?, ?, ?, 'PENDING_KP', 0, ?, ?, ?, ?, NULL, ?, 'NON_TECHNICAL')`,
+                [planId, draft.taskDate, draft.jobDescription, draft.assignedUserId, segment.startTime, segment.finishTime, segment.targetHours, segment.mode === "overtime" ? 1 : 0, draft.isRework ? 1 : 0, draft.isPriority ? 1 : 0, draft.note ?? null, draft.carId, draft.divisionId, draft.unitName, draft.jobDescription],
+              );
+              createdIds.push(planId);
+            }
+            continue;
+          }
+          const isManualNonTechnical = draft.isNonTechnicalJob || await isNonTechnicalDivisionId(
             connection,
             draft.divisionId ?? null,
           );
@@ -2026,6 +2064,7 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
             jobDescription: draft.jobDescription,
             note: draft.note ?? null,
             isPriority: draft.isPriority,
+            isNonTechnicalJob: draft.isNonTechnicalJob,
           };
           const countdown = await resolveWorkspaceCountdown(connection, params, row, {
             projectTargetHours: draft.targetHours,
@@ -2033,7 +2072,7 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
             deadlineDate: draft.deadlineDate ?? draft.taskDate,
           });
           const initialStatus = isManualNonTechnical
-            ? "PLAN"
+            ? "PENDING_KP"
             : await resolveInitialSubmittedStatus(
                 connection,
                 countdown.carId,

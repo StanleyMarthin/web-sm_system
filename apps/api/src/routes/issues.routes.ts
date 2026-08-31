@@ -89,6 +89,10 @@ function mapIssuesError(request: Request, error: unknown): Response {
       return errorResponse(request, "Issue tidak ditemukan.", 404, "ISSUE_NOT_FOUND");
     }
 
+    if (error.message === "JOBDESC_NOT_FOUND") {
+      return errorResponse(request, "Jobdesc tidak ditemukan atau tidak dapat diakses.", 404, "JOBDESC_NOT_FOUND");
+    }
+
     if (error.message === "INVALID_STATUS_TRANSITION") {
       return errorResponse(
         request,

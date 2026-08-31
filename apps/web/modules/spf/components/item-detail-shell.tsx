@@ -3,16 +3,20 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { Camera } from "lucide-react";
+import type { CountdownBoardRow } from "@smsystem/contracts/countdown";
 import { ItemForm } from "./forms/item-form";
 import { ItemMedia } from "./item-media";
 import type { SpfItem, SpfMedia } from "@/shared/api/spf-contracts";
 import { ActionButton, PageHeader, SectionCard } from "@/shared/ui/compact";
 import { useSweetAlert } from "@/shared/ui/sweet-alert";
 import { mutateSpf } from "@/shared/api/spf";
+import { DataGridStatusBadge } from "@/shared/datagrid/status-badge";
 
 interface ItemDetailShellProps {
   item: Readonly<SpfItem>;
   media: readonly SpfMedia[];
+  history: readonly CountdownBoardRow[];
   canAdmin: boolean;
   editable: boolean;
 }
@@ -20,6 +24,7 @@ interface ItemDetailShellProps {
 export function ItemDetailShell({
   item,
   media,
+  history,
   canAdmin,
   editable,
 }: ItemDetailShellProps) {
@@ -163,6 +168,49 @@ export function ItemDetailShell({
             {item.description}
           </p>
         </div>
+      </SectionCard>
+
+      {/* Riwayat Panel/Part */}
+      <SectionCard label={`Riwayat Panel/Part (${history.length})`}>
+        {history.length > 0 ? (
+          <div className="divide-y divide-border dark:divide-white/[0.05]">
+            {history.map((row) => (
+              <div key={row.countdownId} className="grid gap-2 py-2 md:grid-cols-[minmax(10rem,1.4fr)_minmax(7rem,1fr)_5rem_auto_auto] md:items-center">
+                <div className="min-w-0">
+                  <p className="truncate text-[13px] font-semibold text-foreground">
+                    {row.panelName ?? row.sectionName ?? "-"}
+                  </p>
+                  <p className="truncate text-[11px] text-muted-foreground">
+                    {row.jobTypeName ?? row.sectionName ?? "-"}
+                  </p>
+                </div>
+                <span className="w-fit"><DataGridStatusBadge value={row.status} /></span>
+                <span className="font-mono text-[11px] tabular-nums text-foreground">{row.actualProgressPercent.toFixed(0)}%</span>
+                <span className="font-mono text-[11px] text-muted-foreground">
+                  T {row.targetHoursInitial} · A {row.totalActualHours} · S {row.remainingHours} jam
+                </span>
+                <div className="flex flex-wrap gap-2">
+                  <Link
+                    href={`/countdown/${encodeURIComponent(row.countdownId)}`}
+                    className="inline-flex h-7 items-center border border-border px-2 font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  >
+                    Detail Countdown
+                  </Link>
+                  <Link
+                    href={`/countdown/${encodeURIComponent(row.countdownId)}#dokumentasi`}
+                    className="inline-flex h-7 items-center gap-1 border border-primary/30 px-2 font-mono text-[10px] uppercase tracking-[0.08em] text-app-accent-ink transition-colors hover:bg-primary/10"
+                  >
+                    <Camera className="h-3 w-3" />Dokumentasi
+                  </Link>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-[12px] text-muted-foreground">
+            Belum ada riwayat panel/part untuk bagian ini.
+          </p>
+        )}
       </SectionCard>
 
       {/* Media Gallery Card */}

@@ -65,6 +65,18 @@ interface OptionRow extends RowDataPacket {
   label: string;
 }
 
+interface JobdescOptionRow extends RowDataPacket {
+  value: string;
+  label: string;
+  carId: string;
+  divisionId: number | null;
+  countdownId: string;
+  panelValue: string;
+  panelLabel: string;
+  title: string;
+  description: string;
+}
+
 interface StorageReadyCache {
   checkedAt: number;
   ready: boolean;
@@ -110,8 +122,10 @@ export interface IssuesRepository {
     statuses: Array<{ label: string; value: string }>;
     severities: Array<{ label: string; value: string }>;
     employees: Array<{ label: string; value: string }>;
+    jobdescs: Array<{ value: string; label: string; carId: string; divisionId: number | null; countdownId: string; panelValue: string; panelLabel: string; title: string; description: string }>;
   }>;
   findById(params: ScopeParams & { issueId: string }): Promise<IssueRecord | null>;
+  findJobdescContext(params: ScopeParams & { planId: string }): Promise<{ planId: string; countdownId: string; carId: string; divisionId: number | null } | null>;
   create(params: { actorId: string; actorName: string | null }, input: IssueCreateRequest): Promise<{ issueId: string }>;
   updateStatus(issueId: string, status: Exclude<IssueStatus, "OPEN">, input?: {
     actorId?: string;
@@ -318,6 +332,7 @@ function buildStaticIssueReferences() {
       value: severity,
     })),
     employees: [] as Array<{ label: string; value: string }>,
+    jobdescs: [] as Array<{ value: string; label: string; carId: string; divisionId: number | null; countdownId: string; panelValue: string; panelLabel: string; title: string; description: string }>,
   };
 }
 
@@ -505,43 +520,63 @@ export class MySqlIssuesRepository implements IssuesRepository {
       return buildStaticIssueReferences();
     }
 
-    const queryParams: unknown[] = [];
-    const scopeWhere = buildScopeWhereClause(
-      params.scope,
-      params.employeeId,
-      queryParams,
-      {
-        carId: "il.car_id",
-        divisionId: "il.division_id",
-      },
-    );
-    const whereSql = scopeWhere ? `WHERE ${scopeWhere}` : "";
+    const jobdescParams: unknown[] = [];
+    const jobdescScope = buildScopeWhereClause(params.scope, params.employeeId, jobdescParams, {
+      carId: "cd.car_id",
+      divisionId: "cd.division_id",
+    });
+    const jobdescWhere = ["p.task_date >= DATE_SUB(CURDATE(), INTERVAL 90 DAY)"];
+    if (jobdescScope) jobdescWhere.push(jobdescScope);
 
-    const [unitRows, divisionRows, employeeRows] = await Promise.all([
+    const [unitRows, jobdescRows, divisionRows, employeeRows] = await Promise.all([
       pool.query(
         `
           SELECT DISTINCT
             c.id AS value,
             c.unit_name AS label
-          FROM sm_issue_log il
-          JOIN cars c ON c.id = il.car_id
-          ${whereSql}
+          FROM sm_jobdesc_plan p
+          JOIN sm_jobdesc_countdown cd ON cd.id = p.core_id
+          JOIN cars c ON c.id = cd.car_id
+          WHERE ${jobdescWhere.join(" AND ")}
           ORDER BY c.unit_name ASC
         `,
-        queryParams,
+        jobdescParams,
       ) as Promise<[OptionRow[], unknown]>,
       pool.query(
         `
+          SELECT
+            p.id AS value,
+            CONCAT(c.unit_name, ' · ', COALESCE(d.name, '-'), ' · ', COALESCE(NULLIF(p.jobdescription, ''), NULLIF(cd.section_name, ''), 'Jobdesc')) AS label,
+            cd.car_id AS carId,
+            cd.division_id AS divisionId,
+            cd.id AS countdownId,
+            COALESCE(CAST(cd.panel_id AS CHAR), CONCAT('part:', COALESCE(cd.section_name, '-'))) AS panelValue,
+            CONCAT(COALESCE(mp.name, 'Tanpa Panel'), CASE WHEN NULLIF(cd.section_name, '') IS NULL THEN '' ELSE CONCAT(' · ', cd.section_name) END) AS panelLabel,
+            COALESCE(NULLIF(cd.section_name, ''), NULLIF(p.jobdescription, ''), 'Pembahasan Jobdesc') AS title,
+            COALESCE(NULLIF(p.jobdescription, ''), NULLIF(cd.section_name, ''), 'Tidak ada instruksi kerja.') AS description
+          FROM sm_jobdesc_plan p
+          JOIN sm_jobdesc_countdown cd ON cd.id = p.core_id
+          JOIN cars c ON c.id = cd.car_id
+          LEFT JOIN sm_divisi d ON d.id = cd.division_id
+          LEFT JOIN master_panels mp ON mp.id = cd.panel_id
+          WHERE ${jobdescWhere.join(" AND ")}
+          ORDER BY p.task_date DESC, c.unit_name ASC
+          LIMIT 300
+        `,
+        jobdescParams,
+      ) as Promise<[JobdescOptionRow[], unknown]>,
+      pool.query(
+        `
           SELECT DISTINCT
-            il.division_id AS value,
+            cd.division_id AS value,
             d.name AS label
-          FROM sm_issue_log il
-          LEFT JOIN sm_divisi d ON d.id = il.division_id
-          JOIN cars c ON c.id = il.car_id
-          ${whereSql}
+          FROM sm_jobdesc_plan p
+          JOIN sm_jobdesc_countdown cd ON cd.id = p.core_id
+          LEFT JOIN sm_divisi d ON d.id = cd.division_id
+          WHERE ${jobdescWhere.join(" AND ")}
           ORDER BY d.name ASC
         `,
-        queryParams,
+        jobdescParams,
       ) as Promise<[OptionRow[], unknown]>,
       pool.query(
         `
@@ -558,6 +593,17 @@ export class MySqlIssuesRepository implements IssuesRepository {
       statuses: buildStaticIssueReferences().statuses,
       severities: buildStaticIssueReferences().severities,
       employees: toOptions(employeeRows[0]),
+      jobdescs: jobdescRows[0].map((row) => ({
+        value: row.value,
+        label: row.label,
+        carId: row.carId,
+        divisionId: row.divisionId,
+        countdownId: row.countdownId,
+        panelValue: row.panelValue,
+        panelLabel: row.panelLabel,
+        title: row.title,
+        description: row.description,
+      })),
     };
   }
 
@@ -590,6 +636,24 @@ export class MySqlIssuesRepository implements IssuesRepository {
 
     const row = rows[0];
     return row ? mapIssueRow(row) : null;
+  }
+
+  async findJobdescContext(params: ScopeParams & { planId: string }) {
+    const pool = this.poolFactory();
+    const queryParams: unknown[] = [params.planId];
+    const clauses = ["p.id = ?"];
+    const scope = buildScopeWhereClause(params.scope, params.employeeId, queryParams, {
+      carId: "cd.car_id",
+      divisionId: "cd.division_id",
+    });
+    if (scope) clauses.push(scope);
+    const [rows] = await pool.query<Array<RowDataPacket & { planId: string; countdownId: string; carId: string; divisionId: number | null }>>(
+      `SELECT p.id AS planId, cd.id AS countdownId, cd.car_id AS carId, cd.division_id AS divisionId
+       FROM sm_jobdesc_plan p JOIN sm_jobdesc_countdown cd ON cd.id = p.core_id
+       WHERE ${clauses.join(" AND ")} LIMIT 1`,
+      queryParams,
+    );
+    return rows[0] ?? null;
   }
 
   async create(

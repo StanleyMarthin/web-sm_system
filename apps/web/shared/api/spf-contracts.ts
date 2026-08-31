@@ -13,6 +13,9 @@ const text = (max: number) => z.string().trim().min(1).max(max);
 const optionalText = (max: number) => z.string().trim().max(max).optional().or(z.literal(""));
 const idArraySchema = z.array(requestIdSchema).max(500);
 const sourceTypeSchema = z.enum(["SYSTEM", "MANUAL", "EXCEL"]);
+const mediaSourceTypeSchema = z
+  .enum(["SYSTEM", "MANUAL", "EXCEL", "SMS_DB"])
+  .transform((value) => (value === "SMS_DB" ? "SYSTEM" : value));
 
 const ALLOWED_ITEM_SORTS = ["created_at", "updated_at", "work_type", "car_id", "display_order"] as const;
 const ALLOWED_PERIOD_SORTS = ["created_at", "updated_at", "title", "date_start", "date_end"] as const;
@@ -268,7 +271,7 @@ export type SpfItem = z.infer<typeof spfItemSchema>;
 export const spfMediaSchema = z.object({
   id: requestIdSchema,
   item_id: requestIdSchema,
-  source_type: sourceTypeSchema.optional(),
+  source_type: mediaSourceTypeSchema.optional(),
   r2_key: z.string().optional(),
   url: z.string().optional(),
   file_name: z.string().optional(),

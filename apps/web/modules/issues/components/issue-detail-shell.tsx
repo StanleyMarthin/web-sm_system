@@ -57,7 +57,7 @@ function canQcRecheck(status: IssueStatus): boolean {
 }
 
 function canResolve(status: IssueStatus): boolean {
-  return ["OPEN", "ACKNOWLEDGED", "IN_PROGRESS", "QC_RECHECK", "ESCALATED"].includes(status);
+  return status === "QC_RECHECK";
 }
 
 function canEscalate(status: IssueStatus): boolean {
@@ -84,6 +84,14 @@ export function IssueDetailShell({
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const flow = [
+    { status: "OPEN", label: "Dibuat" },
+    { status: "ACKNOWLEDGED", label: "Ditugaskan" },
+    { status: "IN_PROGRESS", label: "Dikerjakan" },
+    { status: "QC_RECHECK", label: "Diperiksa" },
+    { status: "RESOLVED", label: "Selesai" },
+  ] as const;
+  const activeStep = Math.max(0, flow.findIndex((step) => step.status === issue.status));
 
   async function runAction(action: () => Promise<{ success: boolean; message?: string }>) {
     setIsSubmitting(true);
@@ -130,6 +138,14 @@ export function IssueDetailShell({
       </section>
 
       <section className="rounded-[28px] border border-white/[0.06] bg-card p-6 shadow-[0_0_0_1px_rgba(255,255,255,0.02)]">
+        <div className="mb-6 grid grid-cols-5 gap-1" aria-label="Alur penyelesaian pembahasan">
+          {flow.map((step, index) => (
+            <div key={step.status} className="min-w-0 text-center">
+              <div className={`h-1 ${index <= activeStep ? "bg-primary" : "bg-white/[0.08]"}`} />
+              <p className={`mt-2 truncate text-[10px] ${index <= activeStep ? "text-foreground" : "text-foreground/30"}`}>{step.label}</p>
+            </div>
+          ))}
+        </div>
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div className="max-w-3xl">
             <p className="text-[11px] uppercase tracking-[0.18em] text-app-accent-ink/70">
@@ -175,6 +191,7 @@ export function IssueDetailShell({
               <p>Countdown ID: {issue.countdownId ?? "-"}</p>
               <p>Plan ID: {issue.planId ?? "-"}</p>
               <p>Referensi: {issue.sourceRefId ?? "-"}</p>
+              {issue.planId ? <p className="text-app-accent-ink">Terhubung ke jobdesc</p> : null}
             </div>
           </div>
         </div>
@@ -198,7 +215,7 @@ export function IssueDetailShell({
               </button>
             ) : null}
 
-            {canValidate ? (
+            {canValidate && ["OPEN", "ACKNOWLEDGED", "ESCALATED"].includes(issue.status) ? (
               <div className="space-y-3 rounded-2xl border border-white/[0.06] bg-white/[0.03] p-4">
                 <p className="text-sm text-foreground">Tentukan PIC Issue</p>
                 <select

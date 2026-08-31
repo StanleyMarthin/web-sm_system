@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import type {
   MonitoringQuery,
   MonitoringReferences,
@@ -20,6 +20,7 @@ import type {
 } from "@/shared/datagrid/types";
 import { ActionButton, CompactDateInput, CompactDateRangeInput, EmptyRow, MetricBar, PageHeader, SectionCard } from "@/shared/ui/compact";
 import { fmtTime } from "@/shared/format/humanize";
+import { submitMonitoringActualToLedger } from "@/shared/api/monitoring";
 
 interface MonitoringShellProps {
   activeMode: "all" | "normal" | "overtime";
@@ -104,8 +105,6 @@ const sortOptions: SmartDataGridSortOption[] = [
 
 const savedViews: SmartDataGridSavedView[] = [
   { id: "all-tasks",      label: "All",           sortBy: "taskDate", sortDirection: "desc", filters: [] },
-  { id: "delay-risk",     label: "Delay Risk",    sortBy: "remainingHours", sortDirection: "desc",
-    filters: [{ field: "actualStatus", operator: "eq", value: "ONPROGRESS" } satisfies GridFilter] },
   { id: "pending-submit", label: "Pending Submit", sortBy: "taskDate", sortDirection: "desc",
     filters: [{ field: "actualStatus", operator: "eq", value: "SUBMITTED" } satisfies GridFilter] },
 ];
@@ -122,6 +121,7 @@ export function MonitoringShell({
   const searchParams = useSearchParams();
   const activeDateTo = state.dateTo ?? state.date;
   const isRangeMode = Boolean(state.dateTo && state.dateTo !== state.date);
+  const [ledgerSubmittingId, setLedgerSubmittingId] = useState<string | null>(null);
 
   const columns = useMemo<SmartDataGridColumn[]>(
     () => [
@@ -222,11 +222,36 @@ export function MonitoringShell({
           { label: "Cancel", value: "CANCEL" },
         ],
       },
+      {
+        key: "submittedToLedger",
+        label: "Rekapan",
+        align: "center",
+        renderCell: (_value, row) => row.submittedToLedger ? (
+          <span className="border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-[10px] font-semibold text-emerald-600">Sudah masuk</span>
+        ) : (
+          <span className="border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-[10px] font-semibold text-amber-600">Belum masuk</span>
+        ),
+      },
+      {
+        key: "ledgerAction", label: "Aksi Rekapan", align: "center",
+        renderCell: (_value, row) => {
+          const actualId = String(row.actualId ?? "");
+          if (row.submittedToLedger || !actualId) return "-";
+          return <button type="button" disabled={ledgerSubmittingId === actualId} onClick={async () => {
+            if (!window.confirm("Masukkan actual ini ke work ledger dan report AR? Data akan dikunci.")) return;
+            setLedgerSubmittingId(actualId);
+            const result = await submitMonitoringActualToLedger(actualId);
+            setLedgerSubmittingId(null);
+            if (!result.success) { window.alert(result.message); return; }
+            router.refresh();
+          }} className="border border-primary/40 px-2 py-1 text-[10px] font-semibold text-app-accent-ink disabled:opacity-40">{ledgerSubmittingId === actualId ? "Memproses..." : "Masukkan Rekapan"}</button>;
+        },
+      },
       { key: "monitoringStatus", label: "Monitoring", kind: "status",
         renderCell: (_value, row) => String(row.monitoringStatus ?? "-") },
       { key: "monitoringResult", label: "Catatan Monitoring", widthClassName: "min-w-[180px]" },
     ],
-    [references],
+    [ledgerSubmittingId, references, router],
   );
 
   const filters: SmartDataGridFilterDefinition[] = [
@@ -391,7 +416,6 @@ export function MonitoringShell({
         { label: "Aktif",         value: summary.activeWork, tone: "up" },
         { label: "No Start",      value: summary.noStart,   tone: summary.noStart  > 0 ? "warn" : undefined },
         { label: "No Submit",     value: summary.noSubmit,  tone: summary.noSubmit > 0 ? "warn" : undefined },
-        { label: "Delay Risk",    value: summary.delayRisk, tone: summary.delayRisk > 0 ? "down" : undefined },
         { label: "Lembur Aktif",  value: summary.overtimeCount, tone: summary.overtimeCount > 0 ? "warn" : undefined },
       ]} />
 

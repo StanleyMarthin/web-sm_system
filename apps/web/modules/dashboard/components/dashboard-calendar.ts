@@ -3,6 +3,7 @@ export interface CalendarDayStateInput {
   selectedDate: string;
   todayStr: string;
   scheduledUnitCount: number;
+  isHoliday?: boolean;
 }
 
 export function getCalendarDayState({
@@ -10,6 +11,7 @@ export function getCalendarDayState({
   selectedDate,
   todayStr,
   scheduledUnitCount,
+  isHoliday = false,
 }: CalendarDayStateInput) {
   const isSelected = dateStr === selectedDate;
   const isToday = dateStr === todayStr;
@@ -20,6 +22,8 @@ export function getCalendarDayState({
 
   const tone = isSelected
     ? "border-primary/45 bg-primary/[0.16] text-app-accent-ink ring-1 ring-inset ring-primary/45"
+    : isHoliday
+      ? "border-destructive/25 bg-destructive/[0.05] text-destructive hover:bg-destructive/[0.08] dark:bg-destructive/[0.06] dark:hover:bg-destructive/[0.1]"
     : hasScheduledUnits
       ? "bg-card text-success hover:bg-success/[0.06] dark:text-success dark:hover:bg-success/[0.08]"
       : "bg-card text-muted-foreground hover:bg-muted dark:hover:bg-accent";

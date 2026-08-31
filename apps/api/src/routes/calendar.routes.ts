@@ -13,6 +13,44 @@ import { requirePermission } from "@/middleware/permission.middleware";
 import type { AuthService } from "@/services/auth/auth.service";
 import type { CalendarService } from "@/services/calendar.service";
 
+const HOLIDAY_SOURCE_URL =
+  "https://raw.githubusercontent.com/guangrei/APIHariLibur_V2/main/holidays.json";
+
+export function collectHolidayEntries(
+  raw: unknown,
+  year: string,
+): Array<{ date: string; note: string }> {
+  if (!raw || typeof raw !== "object") {
+    return [];
+  }
+
+  const isValidDate = (date: string): boolean => {
+    const [yearPart, monthPart, dayPart] = date.split("-").map(Number);
+    const parsed = new Date(Date.UTC(yearPart, monthPart - 1, dayPart));
+    return (
+      parsed.getUTCFullYear() === yearPart &&
+      parsed.getUTCMonth() === monthPart - 1 &&
+      parsed.getUTCDate() === dayPart
+    );
+  };
+
+  return Object.entries(raw as Record<string, unknown>)
+    .filter(
+      ([date]) =>
+        /^\d{4}-\d{2}-\d{2}$/.test(date) &&
+        date.startsWith(`${year}-`) &&
+        isValidDate(date),
+    )
+    .map(([date, value]) => ({
+      date,
+      note:
+        typeof (value as { summary?: unknown })?.summary === "string"
+          ? ((value as { summary: string }).summary).slice(0, 200)
+          : "Hari libur nasional",
+    }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
 async function requirePlanningSession(
   request: Request,
   authService: AuthService,
@@ -237,6 +275,80 @@ export async function handleCalendarDayOverrideUpsertRoute(
       "CALENDAR_FAILED",
     );
   }
+}
+
+export async function handleHolidaySyncRoute(
+  request: Request,
+  authService: AuthService,
+  calendarService: CalendarService,
+): Promise<Response> {
+  const sessionResult = await requirePlanningSession(request, authService);
+  if ("response" in sessionResult) {
+    return sessionResult.response;
+  }
+
+  const year = new URL(request.url).searchParams.get("year") ?? "";
+  if (!/^\d{4}$/.test(year)) {
+    return errorResponse(request, "Tahun wajib diisi.", 400, "INVALID_QUERY");
+  }
+
+  let holidays: unknown;
+  try {
+    const response = await fetch(HOLIDAY_SOURCE_URL, {
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (!response.ok) {
+      throw new Error("SOURCE_UNAVAILABLE");
+    }
+    holidays = await response.json();
+  } catch {
+    return errorResponse(
+      request,
+      "Gagal mengambil data hari libur nasional. Coba lagi beberapa saat.",
+      502,
+      "HOLIDAY_SYNC_SOURCE_UNAVAILABLE",
+    );
+  }
+
+  const entries = collectHolidayEntries(holidays, year);
+  if (entries.length === 0) {
+    return withCors(
+      request,
+      Response.json({
+        success: true,
+        message: `Tidak ada hari libur nasional untuk tahun ${year}.`,
+        data: { year, synced: 0 },
+      }),
+    );
+  }
+
+  try {
+    for (const entry of entries) {
+      await calendarService.upsertDayOverride(sessionResult.session, {
+        date: entry.date,
+        mode: "LIBUR",
+        workingHours: 0,
+        overtimeHours: 0,
+        note: entry.note,
+      });
+    }
+  } catch {
+    return errorResponse(
+      request,
+      "Gagal menyimpan hari libur. Coba lagi.",
+      500,
+      "HOLIDAY_SYNC_FAILED",
+    );
+  }
+
+  return withCors(
+    request,
+    Response.json({
+      success: true,
+      message: `${entries.length} hari libur nasional tahun ${year} berhasil disimpan.`,
+      data: { year, synced: entries.length },
+    }),
+  );
 }
 
 export async function handleCapacityPreviewRoute(

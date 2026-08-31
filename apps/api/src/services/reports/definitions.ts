@@ -23,6 +23,37 @@ export interface ReportConfig {
 }
 
 const REPORT_CONFIGS: Record<ReportType, ReportConfig> = {
+  "ar-labour": {
+    type: "ar-labour",
+    title: "Rekapan",
+    description: "Hasil kerja final yang siap diperiksa dan diunduh.",
+    columns: [
+      { key: "workDate", label: "Tanggal", kind: "mono", sticky: true },
+      { key: "unitName", label: "Unit" },
+      { key: "divisionName", label: "Divisi" },
+      { key: "jobDescription", label: "Jobdesc" },
+      { key: "employeeName", label: "PIC" },
+      { key: "workType", label: "Jenis", kind: "status" },
+      { key: "hourType", label: "Jam", kind: "status" },
+      { key: "durationHours", label: "Jam Kerja", kind: "number", align: "right" },
+      { key: "materials", label: "Bahan Digunakan" },
+      { key: "submittedAt", label: "Masuk Report", kind: "mono" },
+    ],
+    sortOptions: [
+      { label: "Tanggal", value: "workDate" },
+      { label: "Jam Kerja", value: "durationHours" },
+      { label: "Unit", value: "unitName" },
+    ],
+    filterConfigs: [
+      { field: "divisionId", label: "Divisi" },
+      { field: "carId", label: "Unit" },
+      { field: "workType", label: "Normal / Pengulangan" },
+      { field: "hourType", label: "Jam Normal / Lembur" },
+      { field: "materialUsage", label: "Penggunaan Bahan" },
+    ],
+    defaultSortBy: "workDate",
+    defaultSortDirection: "desc",
+  },
   "delivery-accuracy": {
     type: "delivery-accuracy",
     title: "Delivery Accuracy",

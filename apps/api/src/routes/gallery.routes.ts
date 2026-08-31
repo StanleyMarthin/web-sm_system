@@ -12,7 +12,10 @@ import { requirePermission } from "@/middleware/permission.middleware";
 import type { AuthService } from "@/services/auth/auth.service";
 import type { GalleryService } from "@/services/gallery.service";
 import { sanitizeGalleryGridQuery } from "@/services/gallery/query";
-import { parseUploadContentLength } from "@/security/upload-ticket";
+import {
+  normalizeAllowedGalleryMediaContentType,
+  parseGalleryMediaContentLength,
+} from "@/security/upload-ticket";
 
 async function requireGalleryViewSession(request: Request, authService: AuthService) {
   const sessionResult = await requireSession(request, authService);
@@ -98,7 +101,7 @@ function mapGalleryError(request: Request, error: unknown): Response {
     if (error.message === "UPLOAD_TOO_LARGE") {
       return errorResponse(
         request,
-        "Ukuran file maksimal 10MB.",
+        "Ukuran foto maksimal 10MB dan video 25MB.",
         413,
         "UPLOAD_TOO_LARGE",
       );
@@ -110,6 +113,15 @@ function mapGalleryError(request: Request, error: unknown): Response {
         "Upload ticket tidak valid atau sudah kedaluwarsa.",
         400,
         "INVALID_UPLOAD_TICKET",
+      );
+    }
+
+    if (error.message === "INVALID_EXTERNAL_MEDIA_URL") {
+      return errorResponse(
+        request,
+        "Link media harus berasal dari Google Drive.",
+        400,
+        "INVALID_EXTERNAL_MEDIA_URL",
       );
     }
   }
@@ -221,8 +233,10 @@ export async function handleGalleryUploadTicketRoute(
       );
     }
 
-    const contentLength = parseUploadContentLength(
+    const allowedContentType = normalizeAllowedGalleryMediaContentType(contentType);
+    const contentLength = parseGalleryMediaContentLength(
       url.searchParams.get("size") ?? url.searchParams.get("contentLength"),
+      allowedContentType,
     );
 
     const ticket = await galleryService.createUploadTicket(
@@ -231,7 +245,7 @@ export async function handleGalleryUploadTicketRoute(
         actualId,
         photoType: parsedPhotoType.data,
         filename,
-        contentType,
+        contentType: allowedContentType,
         contentLength,
       },
     );

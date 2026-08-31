@@ -12,6 +12,7 @@ import type {
   JobPlanStatus,
   JobPlanWorkspaceSource,
 } from "@smsystem/contracts/job-plan";
+import type { UnitPanelRecord } from "@smsystem/contracts/unit-panel";
 import {
   buildJobPlanScheduleSegments,
   calculateJobPlanFinishTime,
@@ -62,6 +63,16 @@ import {
 import { useSweetAlert } from "@/shared/ui/sweet-alert";
 import { humanizeCodeLabel, fmtTime } from "@/shared/format/humanize";
 import { SearchableField } from "@/modules/units/components/shared/SearchableField";
+import {
+  buildPayload as buildUnitPanelPayload,
+  CONDITION_LABEL,
+  emptyForm as emptyUnitPanelForm,
+  LOCATION_LABEL,
+  type PanelFormState,
+  STOCK_STATUS_LABEL,
+  stockStatusForLocation,
+} from "@/modules/units/helpers/unit-panel-form";
+import { createUnitPanel, fetchUnitPanels } from "@/shared/api/units";
 
 interface JobPlanShellProps {
   title: string;
@@ -110,6 +121,29 @@ interface JobPlanEditFormState {
   isPriority: boolean;
 }
 
+export function buildJobPlanEditForm(plan: Pick<
+  JobPlanRecord,
+  | "assignedUserId"
+  | "taskDate"
+  | "targetHours"
+  | "startTime"
+  | "finishTime"
+  | "jobDescription"
+  | "note"
+  | "isPriority"
+>): JobPlanEditFormState {
+  return {
+    assignedUserId: plan.assignedUserId,
+    taskDate: plan.taskDate,
+    targetHours: formatDurationHHMM(plan.targetHours),
+    startTime: plan.startTime ?? "",
+    finishTime: plan.finishTime ?? "",
+    jobDescription: plan.jobDescription,
+    note: plan.note ?? "",
+    isPriority: plan.isPriority,
+  };
+}
+
 interface WorkspaceRowState {
   rowId: string;
   source: JobPlanWorkspaceSource;
@@ -117,6 +151,8 @@ interface WorkspaceRowState {
   carId: string;
   panelKey: string;
   panelId: string;
+  useNewPanel: boolean;
+  newPanelForm: PanelFormState;
   jobTypeId: string;
   assignedUserId: string;
   targetHours: string;
@@ -127,8 +163,25 @@ interface WorkspaceRowState {
   isPriority: boolean;
 }
 
+export function resolveAdditionalPanelSelection(input: {
+  useNewPanel: boolean;
+  newPanelName: string;
+  panelId: string;
+  panelOptions: Array<{ value: string; panelName: string }>;
+}): Pick<JobPlanDraftRecord, "panelId" | "panelName"> {
+  if (input.useNewPanel) {
+    return { panelId: null, panelName: input.newPanelName.trim() || null };
+  }
+
+  return {
+    panelId: input.panelId ? Number(input.panelId) : null,
+    panelName: input.panelOptions.find((panel) => panel.value === input.panelId)?.panelName ?? null,
+  };
+}
+
 interface WorkspaceFormState {
   mode: JobPlanCreateMode;
+  isNonTechnicalJob: boolean;
   divisionId: string;
   taskDate: string;
   deadlineDate: string;
@@ -187,6 +240,8 @@ function createEmptyWorkspaceRow(): WorkspaceRowState {
     carId: "",
     panelKey: "",
     panelId: "",
+    useNewPanel: false,
+    newPanelForm: emptyUnitPanelForm(),
     jobTypeId: "",
     assignedUserId: "",
     targetHours: "",
@@ -375,8 +430,10 @@ export function JobPlanShell({
   const [editForm, setEditForm] = useState<JobPlanEditFormState>(emptyEditForm(state.dateStart));
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
   const [workspaceSubmitting, setWorkspaceSubmitting] = useState(false);
+  const [workspaceUnitPanels, setWorkspaceUnitPanels] = useState<UnitPanelRecord[]>([]);
   const [workspaceForm, setWorkspaceForm] = useState<WorkspaceFormState>({
     mode: "normal",
+    isNonTechnicalJob: false,
     divisionId: "",
     taskDate: state.dateStart,
     deadlineDate: state.window === "weekly" ? state.dateEnd : state.dateStart,
@@ -478,8 +535,8 @@ export function JobPlanShell({
     [references.employees, workspaceForm.divisionId],
   );
   const isWorkspaceNonTechnical = useMemo(
-    () => isNonTechnicalDivision(workspaceForm.divisionId, references.divisions),
-    [references.divisions, workspaceForm.divisionId],
+    () => workspaceForm.isNonTechnicalJob || isNonTechnicalDivision(workspaceForm.divisionId, references.divisions),
+    [references.divisions, workspaceForm.divisionId, workspaceForm.isNonTechnicalJob],
   );
   const additionalPreview = useMemo(() => {
     const row = workspaceForm.rows[0];
@@ -675,10 +732,13 @@ export function JobPlanShell({
       isPriority: row.isPriority,
       deadlineDate: null,
       isRework: false,
+      isNonTechnicalJob: selectedCountdown.isTeknis === false,
     };
   }
 
-  function buildAdditionalDraftRecord(): JobPlanDraftRecord | null {
+  function buildAdditionalDraftRecord(
+    createdPanel?: Pick<JobPlanDraftRecord, "panelId" | "panelName">,
+  ): JobPlanDraftRecord | null {
     const row = workspaceForm.rows[0];
     if (!row) {
       return null;
@@ -692,7 +752,12 @@ export function JobPlanShell({
     const assignedUserName =
       references.employees.find((employee) => employee.value === row.assignedUserId)?.label ??
       row.assignedUserId;
-    const panelName = references.panels.find((panel) => panel.value === row.panelId)?.label ?? null;
+    const panel = createdPanel ?? resolveAdditionalPanelSelection({
+      useNewPanel: row.useNewPanel,
+      newPanelName: row.newPanelForm.name,
+      panelId: row.panelId,
+      panelOptions: getAdditionalPanelOptions(row),
+    });
     const selectedJobType = references.jobTypes.find((jobType) => jobType.value === row.jobTypeId);
     const jobName = selectedJobType?.label ?? row.jobDescription.trim() ?? null;
     const unitName = references.units.find((unit) => unit.value === row.carId)?.label ?? null;
@@ -708,8 +773,8 @@ export function JobPlanShell({
       unitName,
       divisionId: workspaceForm.divisionId ? Number(workspaceForm.divisionId) : null,
       divisionName,
-      panelId: isWorkspaceNonTechnical ? null : row.panelId ? Number(row.panelId) : null,
-      panelName: isWorkspaceNonTechnical ? null : panelName,
+      panelId: isWorkspaceNonTechnical ? null : panel.panelId,
+      panelName: isWorkspaceNonTechnical ? null : panel.panelName,
       jobTypeId: row.jobTypeId || null,
       jobName,
       assignedUserId: row.assignedUserId,
@@ -724,6 +789,7 @@ export function JobPlanShell({
       isPriority: row.isPriority,
       deadlineDate: workspaceForm.deadlineDate,
       isRework: workspaceForm.isRework,
+      isNonTechnicalJob: workspaceForm.isNonTechnicalJob,
     };
   }
 
@@ -756,6 +822,7 @@ export function JobPlanShell({
       isPriority: editForm.isPriority,
       deadlineDate: plan.draftDeadlineDate ?? null,
       isRework: plan.draftIsRework ?? false,
+      isNonTechnicalJob: plan.draftIsNonTechnicalJob ?? false,
     };
   }
 
@@ -788,7 +855,7 @@ export function JobPlanShell({
     setQuickCreateDivisionQuery("");
   }
 
-  function openCreateWorkspace(forceNonTechnical = false) {
+  function openCreateWorkspace() {
     setMessage(null);
     setError(null);
     if (!divisionFilterValue) {
@@ -796,14 +863,10 @@ export function JobPlanShell({
       return;
     }
 
-    if (forceNonTechnical && !isNonTechnicalDivision(divisionFilterValue, references.divisions)) {
-      setError("Pilih divisi non-teknis terlebih dahulu.");
-      return;
-    }
-
     setAddMenuOpen(false);
     setWorkspaceForm({
       mode: "normal",
+      isNonTechnicalJob: false,
       divisionId: divisionFilterValue,
       taskDate: state.dateStart,
       deadlineDate: state.window === "weekly" ? state.dateEnd : state.dateStart,
@@ -830,16 +893,7 @@ export function JobPlanShell({
     setError(null);
     setEditorMode("edit");
     setActivePlan(plan);
-    setEditForm({
-      assignedUserId: plan.assignedUserId,
-      taskDate: plan.taskDate,
-      targetHours: formatDurationHHMM(plan.targetHours),
-      startTime: plan.startTime ?? "",
-      finishTime: plan.finishTime ?? "",
-      jobDescription: plan.jobDescription,
-      note: plan.note ?? "",
-      isPriority: plan.isPriority,
-    });
+    setEditForm(buildJobPlanEditForm(plan));
   }
 
   function closeEditor() {
@@ -923,11 +977,14 @@ export function JobPlanShell({
   }
 
   function handleAdditionalUnitChange(rowId: string, carId: string) {
+    setWorkspaceUnitPanels([]);
     updateWorkspaceRow(rowId, (row) => ({
       ...row,
       carId,
       panelKey: "",
       panelId: "",
+      useNewPanel: false,
+      newPanelForm: emptyUnitPanelForm(),
       jobTypeId: "",
     }));
   }
@@ -1380,9 +1437,9 @@ export function JobPlanShell({
           return;
         }
 
-        const rowIsNonTechnical = isNonTechnicalDivision(workspaceForm.divisionId, references.divisions);
-        if (row.source === "additional" && !rowIsNonTechnical && (!row.carId || !row.panelId || !row.jobTypeId)) {
-          setError("Baris sumber tambahan wajib memilih unit, panel, dan jobdesc tambahan.");
+        const rowIsNonTechnical = isWorkspaceNonTechnical;
+        if (row.source === "additional" && !rowIsNonTechnical && (!row.carId || (!row.panelId && (!row.newPanelForm.name.trim() || !row.newPanelForm.section.trim() || !row.newPanelForm.category.trim())) || !row.jobTypeId)) {
+          setError("Lengkapi unit, panel/part, kategori, section, dan jobdesc tambahan.");
           return;
         }
 
@@ -1399,7 +1456,27 @@ export function JobPlanShell({
         return;
       }
 
-      const draft = buildAdditionalDraftRecord();
+      let createdPanel: Pick<JobPlanDraftRecord, "panelId" | "panelName"> | undefined;
+      if (!isWorkspaceNonTechnical && firstRow.useNewPanel) {
+        if (firstRow.newPanelForm.nodeType === "PART" && !firstRow.newPanelForm.parentId) {
+          setError("Pilih panel parent untuk part.");
+          return;
+        }
+        const panelPayload = buildUnitPanelPayload(firstRow.newPanelForm, { includeParentId: true });
+        const panelResult = await createUnitPanel(firstRow.carId, {
+          ...panelPayload,
+          parentId: firstRow.newPanelForm.nodeType === "PART"
+            ? Number.parseInt(firstRow.newPanelForm.parentId, 10) || null
+            : null,
+        });
+        if (!panelResult.success) {
+          setError(panelResult.message);
+          return;
+        }
+        createdPanel = { panelId: panelResult.result.id, panelName: panelResult.result.name };
+      }
+
+      const draft = buildAdditionalDraftRecord(createdPanel);
       if (!draft) {
         setError("Form tambahan belum lengkap.");
         return;
@@ -1799,6 +1876,24 @@ export function JobPlanShell({
       label: "Catatan Tambahan",
       widthClassName: "min-w-[240px]",
     },
+    {
+      key: "rowActions",
+      label: "Aksi",
+      align: "center",
+      widthClassName: "min-w-[72px]",
+      renderCell: (_value, row) =>
+        isDraftStatus(row.status as JobPlanStatus) ? (
+          <button
+            type="button"
+            onClick={() => openEditEditor(row as unknown as JobPlanRecord)}
+            className="inline-grid h-9 w-9 place-items-center border border-border text-muted-foreground transition-colors hover:border-primary/40 hover:text-app-accent-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring active:translate-y-px"
+            aria-label={`Edit job plan ${String(row.planId)}`}
+            title="Edit"
+          >
+            <Pencil className="h-4 w-4" />
+          </button>
+        ) : null,
+    },
   ];
 
   function renderGridSection(
@@ -1944,31 +2039,83 @@ export function JobPlanShell({
     if (isWorkspaceNonTechnical) {
       return (
         <div className="flex h-[38px] items-center rounded-md border border-white/5 bg-card px-3 text-[12px] text-foreground/35">
-          Tanpa Countdown
+          Tanpa Panel / Part
         </div>
       );
     }
 
     if (row.source === "additional") {
       const panelOptions = getAdditionalPanelOptions(row);
+      const unitPanelRows = workspaceUnitPanels.flatMap((panel) => [panel, ...panel.children]);
+      const categoryOptions = Array.from(new Set(unitPanelRows.map((panel) => panel.category).filter(Boolean)))
+        .map((category) => ({ value: category! }));
+      const sectionOptions = Array.from(new Set(unitPanelRows
+        .filter((panel) => !row.newPanelForm.category || panel.category === row.newPanelForm.category)
+        .map((panel) => panel.section)))
+        .map((section) => ({ value: section }));
+      const parentOptions = workspaceUnitPanels
+        .filter((panel) => panel.nodeType === "PANEL" && (!row.newPanelForm.section || panel.section === row.newPanelForm.section))
+        .map((panel) => ({ value: String(panel.id), label: panel.name }));
+      const updateNewPanelForm = (updater: (form: PanelFormState) => PanelFormState) =>
+        updateWorkspaceRow(row.rowId, (currentValue) => ({
+          ...currentValue,
+          newPanelForm: updater(currentValue.newPanelForm),
+        }));
       return (
-        <CompactSelect
-          value={row.panelId}
-          onChange={(event) =>
-            updateWorkspaceRow(row.rowId, (currentValue) => ({
-              ...currentValue,
-              panelKey: event.target.value,
-              panelId: event.target.value,
-            }))}
-          disabled={!row.carId}
-        >
-          <option value="">Pilih Panel / Part</option>
-          {panelOptions.map((panel) => (
-            <option key={panel.value} value={panel.value}>
-              {panel.panelName}
-            </option>
-          ))}
-        </CompactSelect>
+        <div className="space-y-2">
+          {row.useNewPanel ? (
+            <div className="space-y-3 border border-border bg-background p-3">
+              <div className="grid grid-cols-2 gap-1 border border-border bg-card p-1">
+                {(["PANEL", "PART"] as const).map((nodeType) => (
+                  <button key={nodeType} type="button" onClick={() => updateNewPanelForm((form) => ({ ...form, nodeType, nodeTypeName: nodeType === "PART" ? "Part" : "Panel", parentId: nodeType === "PART" ? form.parentId : "", parentName: nodeType === "PART" ? form.parentName : "" }))} className={`h-8 font-mono text-[12px] uppercase tracking-[0.08em] ${row.newPanelForm.nodeType === nodeType ? "bg-primary/10 text-app-accent-ink" : "text-muted-foreground hover:text-foreground"}`}>
+                    {nodeType === "PART" ? "Part" : "Panel"}
+                  </button>
+                ))}
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div><FieldLabel required>Kategori</FieldLabel><SearchableField value={row.newPanelForm.category} options={categoryOptions} onChange={(category) => updateNewPanelForm((form) => ({ ...form, category, section: "", parentId: "", parentName: "" }))} placeholder="Pilih / ketik kategori" heightClassName="h-9" menuZClassName="z-[70]" /></div>
+                <div><FieldLabel required>Section</FieldLabel><SearchableField value={row.newPanelForm.section} options={sectionOptions} onChange={(section) => updateNewPanelForm((form) => ({ ...form, section, parentId: "", parentName: "" }))} placeholder="Pilih / ketik section" heightClassName="h-9" menuZClassName="z-[70]" /></div>
+                {row.newPanelForm.nodeType === "PART" ? <div><FieldLabel required>Panel Parent</FieldLabel><CompactSelect value={row.newPanelForm.parentId} onChange={(event) => updateNewPanelForm((form) => ({ ...form, parentId: event.target.value }))}><option value="">Pilih panel parent</option>{parentOptions.map((panel) => <option key={panel.value} value={panel.value}>{panel.label}</option>)}</CompactSelect></div> : null}
+                <div><FieldLabel required>Nama {row.newPanelForm.nodeType === "PART" ? "Part" : "Panel"}</FieldLabel><CompactInput value={row.newPanelForm.name} maxLength={100} onChange={(event) => updateNewPanelForm((form) => ({ ...form, name: event.target.value }))} /></div>
+                <div><FieldLabel>Qty</FieldLabel><CompactInput type="number" min="0.01" step="0.01" value={row.newPanelForm.qty} onChange={(event) => updateNewPanelForm((form) => ({ ...form, qty: event.target.value }))} /></div>
+                <div><FieldLabel>Lokasi</FieldLabel><CompactSelect value={row.newPanelForm.defaultLocationType} onChange={(event) => { const defaultLocationType = event.target.value as PanelFormState["defaultLocationType"]; updateNewPanelForm((form) => ({ ...form, defaultLocationType, defaultStockStatus: stockStatusForLocation(defaultLocationType) })); }}>{Object.entries(LOCATION_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</CompactSelect></div>
+                <div><FieldLabel>Posisi</FieldLabel><CompactSelect value={row.newPanelForm.defaultStockStatus} disabled={row.newPanelForm.defaultLocationType === "UNIT"} onChange={(event) => updateNewPanelForm((form) => ({ ...form, defaultStockStatus: event.target.value as PanelFormState["defaultStockStatus"] }))}>{Object.entries(STOCK_STATUS_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</CompactSelect></div>
+                <div><FieldLabel>Kondisi</FieldLabel><CompactSelect value={row.newPanelForm.defaultConditionType} onChange={(event) => updateNewPanelForm((form) => ({ ...form, defaultConditionType: event.target.value as PanelFormState["defaultConditionType"] }))}>{Object.entries(CONDITION_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</CompactSelect></div>
+              </div>
+            </div>
+          ) : (
+            <CompactSelect
+              value={row.panelId}
+              onChange={(event) =>
+                updateWorkspaceRow(row.rowId, (currentValue) => ({
+                  ...currentValue,
+                  panelKey: event.target.value,
+                  panelId: event.target.value,
+                }))}
+              disabled={!row.carId}
+            >
+              <option value="">Pilih Panel / Part</option>
+              {panelOptions.map((panel) => (
+                <option key={panel.value} value={panel.value}>
+                  {panel.panelName}
+                </option>
+              ))}
+            </CompactSelect>
+          )}
+          <label className="flex min-h-9 cursor-pointer items-center gap-2 border border-border bg-background px-3 text-[11px] text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={row.useNewPanel}
+              onChange={(event) => {
+                const checked = event.target.checked;
+                updateWorkspaceRow(row.rowId, (currentValue) => ({ ...currentValue, useNewPanel: checked, panelId: "", panelKey: "", newPanelForm: checked ? currentValue.newPanelForm : emptyUnitPanelForm() }));
+                if (checked && row.carId) void fetchUnitPanels("", row.carId).then((result) => setWorkspaceUnitPanels(result.payload?.data.tree ?? []));
+              }}
+              className="h-4 w-4 accent-primary"
+            />
+            Panel baru / belum ada
+          </label>
+        </div>
       );
     }
 
@@ -2193,19 +2340,11 @@ export function JobPlanShell({
                   </button>
                   <button
                     type="button"
-                    onClick={() => openCreateWorkspace(false)}
+                    onClick={openCreateWorkspace}
                     className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[10px] font-mono text-foreground/70 transition-colors hover:bg-white/[0.02] hover:text-foreground"
                   >
                     <Plus className="h-3.5 w-3.5 text-app-accent-ink" />
                     Job Tambahan
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => openCreateWorkspace(true)}
-                    className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[10px] font-mono text-foreground/70 transition-colors hover:bg-white/[0.02] hover:text-foreground"
-                  >
-                    <Plus className="h-3.5 w-3.5 text-app-accent-ink" />
-                    Tambah Job Non Teknis
                   </button>
                 </div>
               ) : null}
@@ -2404,27 +2543,29 @@ export function JobPlanShell({
 
       {workspaceOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="w-full max-w-5xl border border-white/10 bg-card">
-            <div className="flex items-start justify-between gap-3 border-b border-white/5 px-4 py-3">
+          <div className="max-h-[calc(100svh-2rem)] w-full max-w-5xl overflow-y-auto border border-border bg-card">
+            <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
               <div>
-                <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30">
-                  {isWorkspaceNonTechnical ? "Job Free Text / Non Teknis" : "Job Tambahan"}
+                <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                  {isWorkspaceNonTechnical ? "Job Non Teknis" : "Isi Job Plan"}
                 </p>
-                <h3 className="mt-0.5 text-[13px] font-mono text-foreground/80">
-                  {isWorkspaceNonTechnical ? "Job Non Teknis · Tanpa Countdown" : "Job Tambahan"}
+                <h3 className="mt-1 text-base font-semibold text-foreground">
+                  {isWorkspaceNonTechnical ? "Pekerjaan Non Teknis" : "Pekerjaan Tambahan"}
                 </h3>
               </div>
               <button
                 type="button"
                 onClick={closeCreateWorkspace}
-                className="border border-white/10 p-1.5 text-foreground/40 transition-colors hover:text-foreground"
+                className="grid h-11 w-11 place-items-center border border-border text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                aria-label="Tutup form pekerjaan tambahan"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
 
             <div className="space-y-4 px-4 py-4">
-              <div className="grid gap-3 md:grid-cols-3">
+              <p className="border-b border-border pb-2 font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">Target & Jadwal</p>
+              <div className="grid gap-3 md:grid-cols-4">
                 <div>
                   <FieldLabel required>Tanggal</FieldLabel>
                   <CompactInput
@@ -2442,7 +2583,7 @@ export function JobPlanShell({
                   />
                 </div>
                 <div>
-                  <FieldLabel>Perlu Rework?</FieldLabel>
+                  <FieldLabel>Pengulangan</FieldLabel>
                   <CompactSelect
                     value={workspaceForm.isRework ? "yes" : "no"}
                     onChange={(event) => setWorkspaceField("isRework", event.target.value === "yes")}
@@ -2451,9 +2592,17 @@ export function JobPlanShell({
                     <option value="yes">Ya</option>
                   </CompactSelect>
                 </div>
+                <div>
+                  <FieldLabel>Jenis Pekerjaan</FieldLabel>
+                  <label className="flex h-[38px] items-center gap-2 border border-border bg-background px-3 text-[12px] text-foreground">
+                    <input type="checkbox" checked={workspaceForm.isNonTechnicalJob} onChange={(event) => setWorkspaceField("isNonTechnicalJob", event.target.checked)} className="h-4 w-4 accent-primary" />
+                    Non Teknis
+                  </label>
+                </div>
               </div>
 
               <div className="grid gap-3 md:grid-cols-2">
+                <p className="border-b border-border pb-2 font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground md:col-span-2">Referensi Pekerjaan</p>
                 <div>
                   <FieldLabel required={!isWorkspaceNonTechnical}>
                     {isWorkspaceNonTechnical ? "Unit Scope" : "Unit"}
@@ -2462,7 +2611,7 @@ export function JobPlanShell({
                 </div>
                 <div>
                   <FieldLabel required={!isWorkspaceNonTechnical}>
-                    {isWorkspaceNonTechnical ? "Tanpa Countdown" : "Panel / Part"}
+                    {isWorkspaceNonTechnical ? "Tanpa Panel / Part" : "Panel / Part"}
                   </FieldLabel>
                   {renderPanelCell(workspaceForm.rows[0]!)}
                 </div>
@@ -2491,11 +2640,11 @@ export function JobPlanShell({
                   </CompactSelect>
                 </div>
                 <div>
-                  <FieldLabel required>Target Hours</FieldLabel>
+                  <FieldLabel required>{isWorkspaceNonTechnical ? "Jam Kerja" : "Target Awal"}</FieldLabel>
                   <CompactInput
                     type="text"
                     value={workspaceForm.rows[0]?.targetHours ?? ""}
-                    placeholder="HH:MM"
+                    placeholder="Contoh 08:00"
                     onChange={(event) =>
                       updateWorkspaceRow(workspaceForm.rows[0]!.rowId, (currentValue) => ({
                         ...currentValue,
@@ -2593,76 +2742,73 @@ export function JobPlanShell({
 
       {editorMode === "edit" && activePlan ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="w-full max-w-2xl border border-white/10 bg-card p-4">
-            <div className="flex items-start justify-between gap-3">
+          <div className="max-h-[calc(100svh-2rem)] w-full max-w-5xl overflow-y-auto border border-border bg-card">
+            <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
               <div>
-                <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30">
+                <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
                   {isDraftStatus(activePlan.status) ? "Edit Draft Job Plan" : "Detail Job Plan"}
                 </p>
-                <h3 className="mt-0.5 text-[13px] font-mono text-foreground/80">{activePlan.planId}</h3>
-                <p className="mt-1 text-[11px] text-foreground/40">{activePlan.unitName} · {activePlan.divisionName}</p>
+                <h3 className="mt-1 text-base font-semibold text-foreground">{activePlan.unitName}</h3>
+                <p className="mt-1 text-[11px] text-muted-foreground">{activePlan.planId} · {activePlan.divisionName}</p>
               </div>
-              <button type="button" onClick={closeEditor} className="border border-white/10 p-1.5 text-foreground/40 transition-colors hover:text-foreground">
+              <button type="button" onClick={closeEditor} className="grid h-11 w-11 place-items-center border border-border text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring" aria-label="Tutup form edit">
                 <X className="h-4 w-4" />
               </button>
             </div>
 
-            <div className="mt-4 grid gap-3 md:grid-cols-2">
-              <div>
-                <FieldLabel required>PIC</FieldLabel>
-                <CompactSelect value={editForm.assignedUserId} onChange={(event) => setEditForm((currentValue) => ({ ...currentValue, assignedUserId: event.target.value }))}>
-                  <option value="">Pilih PIC</option>
-                  {references.employees.map((employee) => <option key={employee.value} value={employee.value}>{employee.label}</option>)}
-                </CompactSelect>
-              </div>
-              <div>
-                <FieldLabel required>Tanggal</FieldLabel>
-                <CompactInput type="date" value={editForm.taskDate} onChange={(event) => setEditForm((currentValue) => ({ ...currentValue, taskDate: event.target.value }))} />
-              </div>
-              <div>
-                <FieldLabel required>Jam Kerja</FieldLabel>
-                <CompactInput type="number" min="0.5" step="0.5" value={editForm.targetHours} onChange={(event) => setEditForm((currentValue) => ({ ...currentValue, targetHours: event.target.value }))} />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <FieldLabel>Mulai</FieldLabel>
-                  <CompactInput type="time" value={editForm.startTime} onChange={(event) => setEditForm((currentValue) => ({ ...currentValue, startTime: event.target.value }))} />
+            <div className="grid gap-5 px-5 py-4 xl:grid-cols-[minmax(0,1.08fr)_minmax(0,0.92fr)] xl:gap-0">
+              <section className="space-y-3 xl:pr-6">
+                <p className="border-b border-border pb-2 font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">Referensi Pekerjaan</p>
+                {[
+                  ["Divisi", activePlan.divisionName ?? "-"],
+                  ["Unit", activePlan.unitName],
+                  ["Panel / Part", activePlan.panelName ?? "-"],
+                  ["Job Description", activePlan.masterJobName ?? activePlan.jobName ?? activePlan.panelName ?? "-"],
+                ].map(([label, value]) => (
+                  <div key={label} className="grid items-center gap-2 md:grid-cols-[120px_minmax(0,1fr)]">
+                    <FieldLabel>{label}</FieldLabel>
+                    <CompactInput value={value} disabled />
+                  </div>
+                ))}
+                <div className="grid items-center gap-2 md:grid-cols-[120px_minmax(0,1fr)]">
+                  <FieldLabel required>PIC</FieldLabel>
+                  <CompactSelect value={editForm.assignedUserId} onChange={(event) => setEditForm((currentValue) => ({ ...currentValue, assignedUserId: event.target.value }))}>
+                    <option value="">Pilih PIC</option>
+                    {references.employees.filter((employee) => !activePlan.divisionId || String(employee.divisionId ?? "") === String(activePlan.divisionId)).map((employee) => <option key={employee.value} value={employee.value}>{employee.label}</option>)}
+                  </CompactSelect>
                 </div>
-                <div>
-                  <FieldLabel>Selesai</FieldLabel>
-                  <CompactInput type="time" value={editForm.finishTime} onChange={(event) => setEditForm((currentValue) => ({ ...currentValue, finishTime: event.target.value }))} />
+                <div className="grid items-start gap-2 md:grid-cols-[120px_minmax(0,1fr)]">
+                  <FieldLabel required>Instruksi Kerja</FieldLabel>
+                  <CompactTextarea rows={4} value={editForm.jobDescription} placeholder="Masukkan instruksi kerja..." onChange={(event) => setEditForm((currentValue) => ({ ...currentValue, jobDescription: event.target.value }))} />
                 </div>
-              </div>
+              </section>
+
+              <section className="space-y-3 xl:border-l xl:border-border xl:pl-6">
+                <p className="border-b border-border pb-2 font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">Target &amp; Jadwal</p>
+                <div className="grid items-center gap-2 md:grid-cols-[120px_minmax(0,1fr)]"><FieldLabel required>Tanggal</FieldLabel><CompactInput type="date" value={editForm.taskDate} onChange={(event) => setEditForm((currentValue) => ({ ...currentValue, taskDate: event.target.value }))} /></div>
+                <div className="grid items-center gap-2 md:grid-cols-[120px_minmax(0,1fr)]"><FieldLabel required>Target Hari Ini</FieldLabel><CompactInput value={editForm.targetHours} placeholder="HH:MM" onChange={(event) => setEditForm((currentValue) => ({ ...currentValue, targetHours: event.target.value }))} /></div>
+                <div className="grid items-center gap-2 md:grid-cols-[120px_minmax(0,1fr)]"><FieldLabel>Jadwal Mulai</FieldLabel><CompactInput type="time" value={editForm.startTime} onChange={(event) => setEditForm((currentValue) => ({ ...currentValue, startTime: event.target.value }))} /></div>
+                <div className="grid items-center gap-2 md:grid-cols-[120px_minmax(0,1fr)]"><FieldLabel>Jadwal Selesai</FieldLabel><CompactInput type="time" value={editForm.finishTime} onChange={(event) => setEditForm((currentValue) => ({ ...currentValue, finishTime: event.target.value }))} /></div>
+                <div className="grid items-start gap-2 md:grid-cols-[120px_minmax(0,1fr)]"><FieldLabel>Catatan</FieldLabel><CompactTextarea rows={3} value={editForm.note} placeholder="Masukkan catatan..." onChange={(event) => setEditForm((currentValue) => ({ ...currentValue, note: event.target.value }))} /></div>
+                <div className="grid items-center gap-2 md:grid-cols-[120px_minmax(0,1fr)]">
+                  <FieldLabel>Prioritas</FieldLabel>
+                  <label className="flex h-10 items-center gap-2 border border-border bg-background px-3 text-[12px] text-foreground">
+                    <input type="checkbox" checked={editForm.isPriority} onChange={(event) => setEditForm((currentValue) => ({ ...currentValue, isPriority: event.target.checked }))} className="h-4 w-4 border-border bg-background accent-primary" />
+                    Job prioritas
+                  </label>
+                </div>
+              </section>
             </div>
 
-            <div className="mt-3">
-              <FieldLabel required>Instruksi</FieldLabel>
-              <CompactTextarea rows={3} value={editForm.jobDescription} onChange={(event) => setEditForm((currentValue) => ({ ...currentValue, jobDescription: event.target.value }))} />
-            </div>
-
-            <div className="mt-3 grid gap-3 md:grid-cols-[minmax(0,1fr)_140px]">
-              <div>
-                <FieldLabel>Keterangan</FieldLabel>
-                <CompactInput type="text" value={editForm.note} onChange={(event) => setEditForm((currentValue) => ({ ...currentValue, note: event.target.value }))} />
-              </div>
-              <div>
-                <FieldLabel>Prioritas</FieldLabel>
-                <label className="flex h-8 items-center gap-2 rounded-md border border-white/5 bg-card px-2.5 text-[12px] text-foreground">
-                  <input type="checkbox" checked={editForm.isPriority} onChange={(event) => setEditForm((currentValue) => ({ ...currentValue, isPriority: event.target.checked }))} className="h-3.5 w-3.5 rounded border-white/20 bg-white/5 accent-primary" />
-                  Tandai prioritas
-                </label>
-              </div>
-            </div>
-
-            <div className="mt-4 flex justify-between gap-2 border-t border-white/[0.05] pt-3">
+            <div className="flex flex-wrap justify-between gap-2 border-t border-border px-5 py-3">
               {isDraftStatus(activePlan.status) ? (
-                <ActionButton variant="danger" onClick={() => { void submitDelete(activePlan); }}>Hapus Draft</ActionButton>
+                <ActionButton variant="danger" onClick={() => { void submitDelete(activePlan); }}><Trash2 className="h-3.5 w-3.5" /> Hapus Draft</ActionButton>
               ) : <span />}
               <div className="flex gap-2">
                 <ActionButton onClick={closeEditor}>Batal</ActionButton>
                 <ActionButton variant="primary" disabled={isPending} onClick={() => { startTransition(() => { void submitUpdate(); }); }}>
-                  <Save className="h-3 w-3" />
-                  {isPending ? "Menyimpan..." : isDraftStatus(activePlan.status) ? "Simpan Draft" : "Simpan"}
+                  <Save className="h-3.5 w-3.5" />
+                  {isPending ? "Menyimpan..." : "Simpan Perubahan"}
                 </ActionButton>
               </div>
             </div>

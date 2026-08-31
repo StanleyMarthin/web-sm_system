@@ -9,6 +9,18 @@ const optionSchema = z.object({
   value: z.string(),
 });
 
+export const issueJobdescOptionSchema = z.object({
+  value: z.string(),
+  label: z.string(),
+  carId: z.string(),
+  divisionId: z.number().int().nullable(),
+  countdownId: z.string(),
+  panelValue: z.string(),
+  panelLabel: z.string(),
+  title: z.string(),
+  description: z.string(),
+});
+
 export const issueStatusSchema = z.enum([
   "OPEN",
   "ACKNOWLEDGED",
@@ -67,6 +79,7 @@ export const issueReferencesSchema = z.object({
   statuses: z.array(optionSchema),
   severities: z.array(optionSchema),
   employees: z.array(optionSchema),
+  jobdescs: z.array(issueJobdescOptionSchema),
 });
 
 export const issueQuerySchema = gridQueryStateSchema;

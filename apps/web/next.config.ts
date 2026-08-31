@@ -15,10 +15,11 @@ const securityHeaders = [
       "frame-ancestors 'none'",
       "object-src 'none'",
       `img-src 'self' data: blob: https://${r2ImageHost} http://127.0.0.1:3203 http://localhost:3203`,
+      `media-src 'self' blob: https://${r2ImageHost}`,
       "font-src 'self' data:",
       "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
       "style-src 'self' 'unsafe-inline'",
-      "connect-src 'self' http://127.0.0.1:3203 http://localhost:3203",
+      `connect-src 'self' https://${r2ImageHost} https://*.r2.cloudflarestorage.com http://127.0.0.1:3203 http://localhost:3203`,
     ].join("; "),
   },
   {

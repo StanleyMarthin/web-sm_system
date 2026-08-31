@@ -62,6 +62,7 @@ interface SmartDataGridProps {
   onRowClick?: (row: SmartDataGridRow) => void;
   getRowAriaLabel?: (row: SmartDataGridRow) => string;
   showControls?: boolean;
+  showHeader?: boolean;
 }
 
 const inputCls =
@@ -185,6 +186,7 @@ export function SmartDataGrid({
   onRowClick,
   getRowAriaLabel,
   showControls = true,
+  showHeader = true,
 }: SmartDataGridProps) {
   const gridState = useDataGridState(state);
   void sortOptions;
@@ -270,7 +272,7 @@ export function SmartDataGrid({
     <div className="rounded-[10px] border border-border bg-white shadow-sm dark:border-white/[0.08] dark:bg-card dark:shadow-none">
 
       {/* ── Grid header: title + view tabs ── */}
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2 dark:border-white/[0.05]">
+      {showHeader !== false ? <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2 dark:border-white/[0.05]">
         <div className="flex items-center gap-2">
           <Table2 className="h-4 w-4 shrink-0 text-app-accent-ink/70 dark:text-app-accent-ink/70" />
           <p className="text-[14px] font-semibold text-foreground dark:text-foreground">{title}</p>
@@ -321,7 +323,7 @@ export function SmartDataGrid({
             </Link>
           )}
         </div>
-      </div>
+      </div> : null}
 
       {/* ── Filter + search row ── */}
       {showControls ? (

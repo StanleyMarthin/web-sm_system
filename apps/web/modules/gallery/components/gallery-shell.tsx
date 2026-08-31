@@ -4,7 +4,7 @@ import type {
   GalleryQuery,
   GalleryRecord,
 } from "@smsystem/contracts/gallery";
-import { Camera, Filter, RefreshCcw } from "lucide-react";
+import { Camera } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 import { SmartDataGrid } from "@/shared/datagrid/smart-data-grid";
@@ -14,6 +14,7 @@ import type {
   SmartDataGridSortOption,
 } from "@/shared/datagrid/types";
 import { GalleryPhotoDrawer } from "@/modules/gallery/components/gallery-photo-drawer";
+import { CompactDateInput } from "@/shared/ui/compact";
 
 interface GalleryShellProps {
   rows: GalleryRecord[];
@@ -39,8 +40,7 @@ interface GalleryShellProps {
 const sortOptions: SmartDataGridSortOption[] = [
   { label: "Tanggal kerja", value: "workDate" },
   { label: "Unit", value: "unitName" },
-  { label: "Panel", value: "panelName" },
-  { label: "Part", value: "partName" },
+  { label: "Panel / Part", value: "panelName" },
   { label: "Pekerjaan", value: "jobName" },
   { label: "PIC", value: "employeeName" },
   { label: "Status", value: "actualStatus" },
@@ -67,6 +67,7 @@ export function GalleryShell({
     divisionName: row.divisionName,
     panelName: row.panelName,
     partName: row.partName,
+    panelPart: [row.panelName, row.partName].filter((value) => value && value !== "-").join(" / ") || "-",
     jobName: row.jobName,
     jobDescription: row.jobDescription,
     employeeName: row.employeeName,
@@ -89,13 +90,12 @@ export function GalleryShell({
         filterKey: "divisionId",
         filterOptions: references.divisions
       },
-      { 
-        key: "panelName", 
-        label: "Panel",
+      {
+        key: "panelPart",
+        label: "Panel / Part",
         filterKey: "panelId",
         filterOptions: references.panels 
       },
-      { key: "partName", label: "Part", filterKey: "part" },
       {
         key: "jobName",
         label: "Pekerjaan",
@@ -107,7 +107,7 @@ export function GalleryShell({
           </span>
         ),
       },
-      { key: "jobDescription", label: "Jobdesc" },
+      { key: "jobDescription", label: "Instruksi Kerja" },
       { key: "employeeName", label: "PIC" },
       { 
         key: "actualStatus", 
@@ -140,7 +140,7 @@ export function GalleryShell({
         rows={gridRows}
         meta={meta}
         state={state}
-        searchPlaceholder="Cari unit, panel, part, pekerjaan, jobdesc, atau PIC..."
+        searchPlaceholder="Cari unit, panel/part, pekerjaan, instruksi, atau PIC..."
         sortOptions={sortOptions}
         emptyMessage="Belum ada jobdesc yang cocok dengan filter gallery saat ini."
         onRowClick={(row: SmartDataGridRow) => setSelectedActualId(String(row.actualId))}
@@ -148,17 +148,11 @@ export function GalleryShell({
           `Buka foto pekerjaan ${String(row.jobName ?? "jobdesc")} untuk unit ${String(row.unitName ?? "-")}`
         }
         headerActions={
-          <div className="flex items-center gap-3">
-            <label className="flex items-center gap-2 rounded-lg border border-white/[0.08] bg-white/[0.03] px-2 py-1">
-              <span className="text-[10px] uppercase tracking-[0.16em] text-foreground/35">Tanggal</span>
-              <input
-                type="date"
-                defaultValue={state.date}
-                onChange={(e) => handleDateChange(e.target.value)}
-                className="bg-transparent text-[11px] text-foreground outline-none [color-scheme:dark]"
-              />
-            </label>
-          </div>
+          <CompactDateInput
+            value={state.date}
+            onChange={handleDateChange}
+            className="w-[180px]"
+          />
         }
       />
 

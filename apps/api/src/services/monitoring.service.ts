@@ -100,6 +100,7 @@ export interface MonitoringService {
     planId: string;
     actualId: string;
   }>;
+  submitActualToLedger(session: WebSession, actualId: string): Promise<{ ledgerId: string; alreadySubmitted: boolean }>;
 }
 
 const MONITORING_REFERENCE_CACHE_TTL_MS = 60_000;
@@ -295,6 +296,15 @@ export class DefaultMonitoringService implements MonitoringService {
       },
     }, "sm_tasks");
     return result;
+  }
+
+  async submitActualToLedger(session: WebSession, actualId: string) {
+    return this.repository.submitActualToLedger({
+      employeeId: session.user.employeeId,
+      scope: session.user.scope,
+      actorId: session.user.employeeId,
+      actorName: session.user.fullName,
+    }, actualId);
   }
 
   private async listByMode(

@@ -112,6 +112,7 @@ const jobPlanRecordBaseSchema = z.object({
   draftJobTypeId: z.string().trim().max(100).nullable().optional(),
   draftDeadlineDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u).nullable().optional(),
   draftIsRework: z.boolean().nullable().optional(),
+  draftIsNonTechnicalJob: z.boolean().nullable().optional(),
   availablePlanHours: z.number().nullable().optional(),
   remainingHours: z.number().nullable(),
   progressPercent: z.number().nullable(),
@@ -245,6 +246,7 @@ export const jobPlanWorkspaceDraftRowSchema = z.object({
   jobDescription: z.string().trim().min(1).max(500),
   note: z.string().trim().max(500).nullable().optional().default(null),
   isPriority: z.boolean().default(false),
+  isNonTechnicalJob: z.boolean().default(false),
 });
 
 export const createJobPlanWorkspaceRequestSchema = z.object({
@@ -294,6 +296,7 @@ export const jobPlanDraftRecordSchema = z.object({
   isPriority: z.boolean().default(false),
   deadlineDate: isoDateSchema.nullable().optional().default(null),
   isRework: z.boolean().default(false),
+  isNonTechnicalJob: z.boolean().default(false),
 });
 
 export const saveJobPlanDraftRequestSchema = z.object({

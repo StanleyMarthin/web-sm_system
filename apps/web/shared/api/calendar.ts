@@ -219,6 +219,40 @@ export async function upsertCalendarDayOverride(input: CalendarDayOverrideReques
   };
 }
 
+export async function syncNationalHolidays(year: string) {
+  let response: Response;
+  try {
+    response = await fetch(
+      `${getApiBaseUrl()}/api/calendar/holiday-sync?year=${encodeURIComponent(year)}`,
+      {
+        method: "POST",
+        credentials: "include",
+      },
+    );
+  } catch {
+    return {
+      success: false as const,
+      message: "Layanan sinkronisasi tidak dapat dihubungi. Coba lagi beberapa saat.",
+      errorCode: "HOLIDAY_SYNC_UNAVAILABLE",
+      data: {},
+    };
+  }
+
+  if (!response.ok) {
+    return {
+      ...(await parseFailure(response)),
+      success: false as const,
+    };
+  }
+
+  const payload = (await response.json()) as {
+    success: true;
+    message: string;
+    data: { year: string; synced: number };
+  };
+  return payload;
+}
+
 export async function simulateCapacity(input: {
   divisionId: number;
   date: string;

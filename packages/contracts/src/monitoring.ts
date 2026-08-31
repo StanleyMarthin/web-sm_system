@@ -89,6 +89,8 @@ const monitoringTaskRecordBaseSchema = z.object({
   actualBreakMinutes: z.number().nullable().catch(null),
   actualFinishTime: z.string().nullable().catch(null),
   actualDurationHours: z.number().nullable().catch(null),
+  actualId: z.string().nullable().catch(null),
+  submittedToLedger: z.boolean().default(false),
   planStartTime: z.string().nullable().optional(),
   planFinishTime: z.string().nullable().optional(),
   qcStatus: z.string().nullable().catch(null),
@@ -210,6 +212,12 @@ export const monitoringActualMutationEnvelopeSchema = z.object({
     planId: z.string(),
     actualId: z.string(),
   }),
+});
+
+export const monitoringLedgerMutationEnvelopeSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+  data: z.object({ ledgerId: z.string(), alreadySubmitted: z.boolean() }),
 });
 
 export const monitoringQuerySchema = gridQueryStateSchema.extend({

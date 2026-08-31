@@ -65,6 +65,8 @@ interface MonitoringTaskRow extends RowDataPacket {
   latestFinishTime: string | null;
   latestBreakDurationMinutes: number | null;
   actualDurationHours: number | null;
+  actualId: string | null;
+  submittedToLedger: number | boolean;
   qcStatus: MonitoringTaskRecord["qcStatus"];
   qcResult: string | null;
   qcNotes: string | null;
@@ -178,6 +180,7 @@ export interface MonitoringRepository {
     planId: string;
     actualId: string;
   }>;
+  submitActualToLedger(params: ScopeParams & { actorId: string; actorName: string }, actualId: string): Promise<{ ledgerId: string; alreadySubmitted: boolean }>;
 }
 
 function buildScopeWhereClause(
@@ -295,6 +298,8 @@ function buildMonitoringBaseSql(): string {
       DATE_FORMAT(actual.finishTime, '%Y-%m-%d %H:%i:%s') AS latestFinishTime,
       actual.breakDurationMinutes AS latestBreakDurationMinutes,
       actual.durationHours AS actualDurationHours,
+      actual.latestActualId AS actualId,
+      COALESCE(actual.submittedToLedger, 0) AS submittedToLedger,
       DATE_FORMAT(p.target_start_hours, '%H:%i') AS planStartTime,
       DATE_FORMAT(p.target_finish_hours, '%H:%i') AS planFinishTime,
       COALESCE(qc.resultStatus, cd.qc_last_status, 'BELUM_QC') AS qcStatus,
@@ -330,6 +335,7 @@ function buildMonitoringBaseSql(): string {
         a.break_duration_minutes AS breakDurationMinutes,
         a.duration_hours AS durationHours,
         a.daily_notes AS dailyNotes
+        ,a.submitted_to_ledger AS submittedToLedger
       FROM sm_jobdesc_actual a
       JOIN (
         SELECT
@@ -386,24 +392,48 @@ function buildModeClauses(
   };
 
   if (mode === "today") {
-    pushDateClause();
+    if (hasRange) {
+      clauses.push("DATE(actual.startTime) BETWEEN ? AND ?");
+      params.push(date, dateTo);
+    } else {
+      clauses.push("DATE(actual.startTime) = ?");
+      params.push(date);
+    }
     clauses.push("COALESCE(p.is_overtime, 0) = 0");
     return clauses;
   }
 
   if (mode === "all") {
-    pushDateClause();
+    if (hasRange) {
+      clauses.push("DATE(actual.startTime) BETWEEN ? AND ?");
+      params.push(date, dateTo);
+    } else {
+      clauses.push("DATE(actual.startTime) = ?");
+      params.push(date);
+    }
     return clauses;
   }
 
   if (mode === "overtime") {
-    pushDateClause();
+    if (hasRange) {
+      clauses.push("DATE(actual.startTime) BETWEEN ? AND ?");
+      params.push(date, dateTo);
+    } else {
+      clauses.push("DATE(actual.startTime) = ?");
+      params.push(date);
+    }
     clauses.push("COALESCE(p.is_overtime, 0) = 1");
     return clauses;
   }
 
   if (mode === "no-start") {
-    pushDateClause();
+    if (hasRange) {
+      clauses.push("p.task_date BETWEEN ? AND ?");
+      params.push(date, dateTo);
+    } else {
+      clauses.push("p.task_date < ?");
+      params.push(date);
+    }
     clauses.push("actual.latestActualId IS NULL");
     return clauses;
   }
@@ -541,6 +571,8 @@ function mapTaskRow(row: MonitoringTaskRow): MonitoringTaskRecord {
       row.actualDurationHours === null || row.actualDurationHours === undefined
         ? null
         : Number(row.actualDurationHours),
+    actualId: row.actualId,
+    submittedToLedger: Boolean(row.submittedToLedger),
     qcStatus: row.qcStatus,
     qcResult: row.qcResult,
     qcNotes: row.qcNotes,
@@ -728,6 +760,8 @@ function buildDivisionMonitoringWhere(
   if (scopeWhere) {
     whereClauses.push(scopeWhere);
   }
+  whereClauses.push("COALESCE(c.status, 'In_Progress') <> 'DONE'");
+  whereClauses.push("p.assigned_user_id IS NOT NULL");
 
   return whereClauses;
 }
@@ -880,6 +914,74 @@ export class MySqlMonitoringRepository implements MonitoringRepository {
     }
   }
 
+  async submitActualToLedger(
+    params: ScopeParams & { actorId: string; actorName: string }, actualId: string,
+  ): Promise<{ ledgerId: string; alreadySubmitted: boolean }> {
+    const connection = await this.poolFactory().getConnection();
+    try {
+      await connection.beginTransaction();
+      const scopeParams: unknown[] = [];
+      const scopeWhere = buildScopeWhereClause(
+        params.scope,
+        params.employeeId,
+        scopeParams,
+        {
+          carId: "COALESCE(cd.car_id, p.car_id)",
+          divisionId: "COALESCE(cd.division_id, p.division_id)",
+        },
+      );
+      const [rows] = await connection.query<Array<RowDataPacket & Record<string, unknown>>>(`
+        SELECT a.submitted_to_ledger submittedToLedger, p.id planId, p.core_id countdownId,
+          COALESCE(cd.car_id, p.car_id) carId,
+          COALESCE(cd.division_id, p.division_id) divisionId,
+          p.assigned_user_id employeeId,
+          COALESCE(e.full_name, p.assigned_user_id) employeeName,
+          DATE(COALESCE(a.start_time, p.task_date)) workDate, TIME(a.start_time) startTime,
+          TIME(a.finish_time) finishTime, COALESCE(a.break_duration_minutes, 0) / 60 breakHours,
+          COALESCE(a.billed_duration_hours, a.duration_hours, 0) durationHours,
+          IF(a.is_overtime = 1, COALESCE(a.billed_duration_hours, a.duration_hours, 0), 0) overtimeHours,
+          a.progres progressPercent, a.daily_notes progressNotes, a.status actualStatus
+        FROM sm_jobdesc_actual a JOIN sm_jobdesc_plan p ON p.id = a.plandaily_id
+        LEFT JOIN sm_jobdesc_countdown cd ON cd.id = p.core_id
+        LEFT JOIN sm_employee e ON e.employee_id = p.assigned_user_id
+        WHERE a.id = ?${scopeWhere ? ` AND ${scopeWhere}` : ""} FOR UPDATE`, [actualId, ...scopeParams]);
+      const row = rows[0];
+      if (!row) throw new Error("ACTUAL_NOT_FOUND");
+      const [existing] = await connection.query<Array<RowDataPacket & { id: string }>>("SELECT id FROM sm_work_ledger WHERE actual_id = ? LIMIT 1", [actualId]);
+      if (row.submittedToLedger || existing[0]) {
+        await connection.rollback();
+        return { ledgerId: existing[0]?.id ?? "", alreadySubmitted: true };
+      }
+      if (!row.finishTime || !["done", "pending"].includes(String(row.actualStatus))) throw new Error("ACTUAL_NOT_READY");
+      const ledgerId = randomUUID();
+      await connection.execute(`INSERT INTO sm_work_ledger (
+        id, actual_id, plan_id, countdown_id, car_id, division_id, employee_id, employee_name,
+        work_date, start_time, finish_time, break_hours, duration_hours, overtime_hours,
+        progress_percent, progress_notes, task_status, submitted_by, submitted_by_name
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+        ledgerId, actualId, row.planId, row.countdownId, row.carId, row.divisionId,
+        row.employeeId, row.employeeName, row.workDate, row.startTime, row.finishTime,
+        row.breakHours, row.durationHours, row.overtimeHours, row.progressPercent,
+        row.progressNotes, String(row.actualStatus) === "done" ? "DONE" : "ON_PROGRESS",
+        params.actorId, params.actorName,
+      ]);
+      await connection.execute(`INSERT INTO sm_work_ledger_photos (
+        id, ledger_id, photo_type, photo_url, caption, taken_by, taken_by_name, taken_at
+      ) SELECT UUID(), ?, tp.photo_type, tp.photo_url, tp.caption, tp.uploaded_by,
+        COALESCE(u.full_name, tp.uploaded_by), tp.uploaded_at
+        FROM sm_work_photos_temp tp LEFT JOIN sm_employee u ON u.employee_id = tp.uploaded_by
+        WHERE tp.actual_id = ?`, [ledgerId, actualId]);
+      await connection.execute("UPDATE sm_jobdesc_actual SET submitted_to_ledger = 1, submitted_at = NOW(), submitted_by = ? WHERE id = ?", [params.actorId, actualId]);
+      await connection.commit();
+      return { ledgerId, alreadySubmitted: false };
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
+
   async listTasks(params: MonitoringListParams): Promise<MonitoringListPayload> {
     const pool = this.poolFactory();
     const asOfDate = params.query.dateTo ?? params.query.date;
@@ -898,6 +1000,8 @@ export class MySqlMonitoringRepository implements MonitoringRepository {
       whereClauses.push(scopeWhere);
     }
 
+    whereClauses.push("COALESCE(c.status, 'In_Progress') <> 'DONE'");
+    whereClauses.push("p.assigned_user_id IS NOT NULL");
     whereClauses.push(...buildFilterClauses(params.query, baseParams));
     const whereSql =
       whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
@@ -928,6 +1032,8 @@ export class MySqlMonitoringRepository implements MonitoringRepository {
     if (countScopeWhere) {
       countWhereClauses.push(countScopeWhere);
     }
+    countWhereClauses.push("COALESCE(c.status, 'In_Progress') <> 'DONE'");
+    countWhereClauses.push("p.assigned_user_id IS NOT NULL");
     countWhereClauses.push(...buildFilterClauses(params.query, countParams));
 
     const [countRows] = (await pool.query(
@@ -944,6 +1050,7 @@ export class MySqlMonitoringRepository implements MonitoringRepository {
             a.plandaily_id,
             a.id AS latestActualId,
             CASE WHEN a.status = 'onprogress' AND a.finish_time IS NOT NULL THEN 'pending' ELSE a.status END AS actualStatus,
+            a.start_time AS startTime,
             a.finish_time AS finishTime
           FROM sm_jobdesc_actual a
           JOIN (
@@ -990,12 +1097,14 @@ export class MySqlMonitoringRepository implements MonitoringRepository {
     if (scopeWhere) {
       whereClauses.push(scopeWhere);
     }
+    whereClauses.push("COALESCE(c.status, 'In_Progress') <> 'DONE'");
+    whereClauses.push("p.assigned_user_id IS NOT NULL");
 
     const [rows] = (await pool.query(
       `
         SELECT
           SUM(CASE WHEN p.task_date <= ? AND actual.actualStatus = 'onprogress' THEN 1 ELSE 0 END) AS activeWork,
-          SUM(CASE WHEN p.task_date BETWEEN ? AND ? AND actual.latestActualId IS NULL AND COALESCE(p.is_overtime, 0) = 0 THEN 1 ELSE 0 END) AS noStart,
+          SUM(CASE WHEN p.task_date < ? AND actual.latestActualId IS NULL AND COALESCE(p.is_overtime, 0) = 0 THEN 1 ELSE 0 END) AS noStart,
           SUM(CASE WHEN p.task_date BETWEEN ? AND ? AND actual.actualStatus = 'onprogress' THEN 1 ELSE 0 END) AS noSubmit,
           SUM(
             CASE
@@ -1028,7 +1137,6 @@ export class MySqlMonitoringRepository implements MonitoringRepository {
         ${whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : ""}
       `,
       [
-        asOfDate,
         params.date,
         asOfDate,
         params.date,

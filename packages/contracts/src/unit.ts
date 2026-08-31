@@ -1,7 +1,7 @@
 import { gridMetaSchema, gridQueryStateSchema } from "@smsystem/contracts/grid";
 import { z } from "zod";
 
-export const unitRiskLevelSchema = z.enum(["GREEN", "YELLOW", "ORANGE", "RED", "UNKNOWN"]);
+export const unitRiskLevelSchema = z.enum(["GREEN", "YELLOW", "ORANGE", "RED", "UNKNOWN", "DELIVERED"]);
 export const unitMasterStatusSchema = z.enum(["In_Progress", "Done"]);
 
 const nullableTrimmedText = z

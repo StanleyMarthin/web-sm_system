@@ -65,6 +65,22 @@ import {
 } from "@/routes/units.routes";
 import { DefaultUnitsService, type UnitsService } from "@/services/units.service";
 import {
+  handleUnitCatalogItemRoute,
+  handleUnitCatalogItemsBulkRoute,
+  handleUnitCatalogMediaDeleteRoute,
+  handleUnitCatalogMediaRoute,
+  handleUnitCatalogPanelJobdescsRoute,
+  handleUnitCatalogPanelRoute,
+  handleUnitCatalogPromoteRoute,
+  handleUnitCatalogReferenceMediaRoute,
+  handleUnitCatalogReferenceRoute,
+  handleUnitCatalogRoute,
+  handleUnitCatalogSurveyConfirmRoute,
+  handleUnitCatalogSurveyRoute,
+  handleUnitCatalogUploadTicketRoute,
+} from "@/routes/unit-catalog.routes";
+import { UnitCatalogService } from "@/services/unit-catalog.service";
+import {
   handleCountdownCreateRoute,
   handleCountdownDeleteRoute,
   handleCountdownDetailRoute,
@@ -160,6 +176,7 @@ import {
   handleCalendarDayOverrideListRoute,
   handleCalendarDayOverrideUpsertRoute,
   handleDeliveryRiskRoute,
+  handleHolidaySyncRoute,
   handleCapacityPreviewRoute,
   handleUnitEtaRoute,
   handleWeeklyConfigListRoute,
@@ -234,6 +251,7 @@ import {
   handleMonitoringDivisionDetailRoute,
   handleMonitoringDivisionRoute,
   handleMonitoringActualCreateRoute,
+  handleMonitoringLedgerSubmitRoute,
   handleMonitoringEmployeeRoute,
   handleMonitoringUnitRoute,
   handleMonitoringNoStartRoute,
@@ -369,6 +387,7 @@ export interface AppDependencies extends HealthDependencies {
   usersService?: UsersService;
   rolesService?: RolesService;
   unitsService?: UnitsService;
+  unitCatalogService?: UnitCatalogService;
   countdownService?: CountdownService;
   jobPlanService?: JobPlanService;
   spkService?: SpkService;
@@ -426,6 +445,8 @@ export function createApiFetchHandler(dependencies: AppDependencies = {}) {
   const getUsersService = () => dependencies.usersService ?? new DefaultUsersService();
   const getRolesService = () => dependencies.rolesService ?? new DefaultRolesService();
   const getUnitsService = () => dependencies.unitsService ?? new DefaultUnitsService();
+  const getUnitCatalogService = () =>
+    dependencies.unitCatalogService ?? new UnitCatalogService();
   const getCountdownService = () =>
     dependencies.countdownService ?? new DefaultCountdownService();
   const getJobPlanService = () =>
@@ -513,6 +534,7 @@ export function createApiFetchHandler(dependencies: AppDependencies = {}) {
     { method: "GET", pattern: "/api/monitoring/unit", handler: (request) => handleMonitoringUnitRoute(request, getAuthService(), getMonitoringService()) },
     { method: "GET", pattern: "/api/monitoring/employee", handler: (request) => handleMonitoringEmployeeRoute(request, getAuthService(), getMonitoringService()) },
     { method: "POST", pattern: "/api/monitoring/actual", handler: (request) => handleMonitoringActualCreateRoute(request, getAuthService(), getMonitoringService()) },
+    { method: "POST", pattern: /^\/api\/monitoring\/actual\/([^/]+)\/ledger$/, handler: (request, match) => handleMonitoringLedgerSubmitRoute(request, match![1], getAuthService(), getMonitoringService()) },
     { method: "GET", pattern: /^\/api\/monitoring\/division\/\d+$/, handler: (request) => handleMonitoringDivisionDetailRoute(request, getAuthService(), getMonitoringService()) },
     { method: "GET", pattern: "/api/monitoring/overtime", handler: (request) => handleMonitoringOvertimeRoute(request, getAuthService(), getMonitoringService()) },
     { method: "GET", pattern: "/api/monitoring/no-start", handler: (request) => handleMonitoringNoStartRoute(request, getAuthService(), getMonitoringService()) },
@@ -528,6 +550,7 @@ export function createApiFetchHandler(dependencies: AppDependencies = {}) {
     { method: "GET", pattern: "/api/calendar/working-days", handler: (request) => handleWorkingDaysRoute(request, getAuthService(), getCalendarService()) },
     { method: "GET", pattern: "/api/calendar/day-overrides", handler: (request) => handleCalendarDayOverrideListRoute(request, getAuthService(), getCalendarService()) },
     { method: "POST", pattern: "/api/calendar/day-overrides", handler: (request) => handleCalendarDayOverrideUpsertRoute(request, getAuthService(), getCalendarService()) },
+    { method: "POST", pattern: "/api/calendar/holiday-sync", handler: (request) => handleHolidaySyncRoute(request, getAuthService(), getCalendarService()) },
     { method: "POST", pattern: "/api/calendar/simulate-capacity", handler: (request) => handleCapacityPreviewRoute(request, getAuthService(), getCalendarService()) },
     { method: "GET", pattern: "/api/planning/delivery-risk", handler: (request) => handleDeliveryRiskRoute(request, getAuthService(), getCalendarService()) },
     { method: "GET", pattern: "/api/planning/workspace", handler: (request) => handlePlanningWorkspaceSummaryRoute(request, getAuthService(), getPlanningWorkspaceService()) },
@@ -715,6 +738,21 @@ export function createApiFetchHandler(dependencies: AppDependencies = {}) {
     { method: "POST", pattern: "/api/countdown/import", handler: (request) => handleCountdownImportRoute(request, getAuthService(), getCountdownService()) },
     { method: "GET", pattern: /^\/api\/units\/([^/]+)\/workspace$/, handler: (request, match) => handleUnitWorkspaceRoute(request, match![1], getAuthService(), getUnitsService()) },
     { method: "GET", pattern: /^\/api\/units\/([^/]+)\/bom$/, handler: (request, match) => handleUnitBomRoute(request, match![1], getAuthService(), getUnitsService()) },
+    { method: "GET", pattern: /^\/api\/units\/([^/]+)\/catalog$/, handler: (request, match) => handleUnitCatalogRoute(request, match![1], getAuthService(), getUnitCatalogService()) },
+    { method: "POST", pattern: /^\/api\/units\/([^/]+)\/catalog$/, handler: (request, match) => handleUnitCatalogRoute(request, match![1], getAuthService(), getUnitCatalogService()) },
+    { method: "GET", pattern: /^\/api\/units\/([^/]+)\/catalog\/upload-ticket$/, handler: (request, match) => handleUnitCatalogUploadTicketRoute(request, match![1], getAuthService()) },
+    { method: "GET", pattern: /^\/api\/units\/([^/]+)\/catalog\/(\d+)$/, handler: (request, match) => handleUnitCatalogReferenceRoute(request, match![1], Number.parseInt(match![2], 10), getAuthService(), getUnitCatalogService()) },
+    { method: "PUT", pattern: /^\/api\/units\/([^/]+)\/catalog\/(\d+)\/items$/, handler: (request, match) => handleUnitCatalogItemsBulkRoute(request, match![1], Number.parseInt(match![2], 10), getAuthService(), getUnitCatalogService()) },
+    { method: "POST", pattern: /^\/api\/units\/([^/]+)\/catalog\/(\d+)\/media$/, handler: (request, match) => handleUnitCatalogReferenceMediaRoute(request, match![1], Number.parseInt(match![2], 10), getAuthService(), getUnitCatalogService()) },
+    { method: "GET", pattern: /^\/api\/units\/([^/]+)\/catalog\/items\/(\d+)$/, handler: (request, match) => handleUnitCatalogItemRoute(request, match![1], Number.parseInt(match![2], 10), getAuthService(), getUnitCatalogService()) },
+    { method: "PUT", pattern: /^\/api\/units\/([^/]+)\/catalog\/items\/(\d+)\/survey$/, handler: (request, match) => handleUnitCatalogSurveyRoute(request, match![1], Number.parseInt(match![2], 10), getAuthService(), getUnitCatalogService()) },
+    { method: "POST", pattern: /^\/api\/units\/([^/]+)\/catalog\/items\/(\d+)\/survey\/confirm$/, handler: (request, match) => handleUnitCatalogSurveyConfirmRoute(request, match![1], Number.parseInt(match![2], 10), getAuthService(), getUnitCatalogService()) },
+    { method: "POST", pattern: /^\/api\/units\/([^/]+)\/catalog\/items\/(\d+)\/media$/, handler: (request, match) => handleUnitCatalogMediaRoute(request, match![1], Number.parseInt(match![2], 10), getAuthService(), getUnitCatalogService()) },
+    { method: "DELETE", pattern: /^\/api\/units\/([^/]+)\/catalog\/items\/(\d+)\/media\/(\d+)$/, handler: (request, match) => handleUnitCatalogMediaDeleteRoute(request, match![1], Number.parseInt(match![2], 10), Number.parseInt(match![3], 10), getAuthService(), getUnitCatalogService()) },
+    { method: "POST", pattern: /^\/api\/units\/([^/]+)\/catalog\/items\/(\d+)\/promote$/, handler: (request, match) => handleUnitCatalogPromoteRoute(request, match![1], Number.parseInt(match![2], 10), getAuthService(), getUnitCatalogService()) },
+    { method: "GET", pattern: /^\/api\/units\/([^/]+)\/catalog\/master-panels\/(\d+)$/, handler: (request, match) => handleUnitCatalogPanelRoute(request, match![1], Number.parseInt(match![2], 10), getAuthService(), getUnitCatalogService()) },
+    { method: "GET", pattern: /^\/api\/units\/([^/]+)\/catalog\/master-panels\/(\d+)\/jobdescs$/, handler: (request, match) => handleUnitCatalogPanelJobdescsRoute(request, match![1], Number.parseInt(match![2], 10), getAuthService(), getUnitCatalogService()) },
+    { method: "POST", pattern: /^\/api\/units\/([^/]+)\/catalog\/master-panels\/(\d+)\/jobdescs$/, handler: (request, match) => handleUnitCatalogPanelJobdescsRoute(request, match![1], Number.parseInt(match![2], 10), getAuthService(), getUnitCatalogService()) },
     { method: "GET", pattern: "/api/units/master-panels/general", handler: (request) => handleUnitPanelGeneralRoute(request, getAuthService(), getUnitsService()) },
     { method: "GET", pattern: /^\/api\/units\/([^/]+)\/master-panels$/, handler: (request, match) => handleUnitPanelsRoute(request, match![1], getAuthService(), getUnitsService()) },
     { method: "POST", pattern: /^\/api\/units\/([^/]+)\/master-panels$/, handler: (request, match) => handleUnitPanelsRoute(request, match![1], getAuthService(), getUnitsService()) },

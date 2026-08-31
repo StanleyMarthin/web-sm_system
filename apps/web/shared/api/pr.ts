@@ -1,7 +1,7 @@
 import type {
   ApprovePrRequest,
   CancelPrRequest,
-  CreatePrRequest,
+  CreatePrInput,
   OrderPrRequest,
   ReceivePrRequest,
 } from "@smsystem/contracts/pr";
@@ -168,7 +168,7 @@ export async function fetchPrDetail(cookieHeader: string, prId: string) {
   }
 }
 
-export async function createPr(input: CreatePrRequest) {
+export async function createPr(input: CreatePrInput) {
   const response = await fetch(`${getApiBaseUrl()}/api/pr`, {
     method: "POST",
     credentials: "include",
@@ -192,7 +192,7 @@ export async function createPr(input: CreatePrRequest) {
   };
 }
 
-export async function updatePr(prId: string, input: CreatePrRequest) {
+export async function updatePr(prId: string, input: CreatePrInput) {
   const response = await fetch(`${getApiBaseUrl()}/api/pr/${prId}`, {
     method: "PUT",
     credentials: "include",

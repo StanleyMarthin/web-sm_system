@@ -12,6 +12,7 @@ export const reportTypeSchema = z.enum([
   "pr-aging",
   "material-cost",
   "cash-flow",
+  "ar-labour",
 ]);
 
 export const reportExportFormatSchema = z.enum(["csv", "xlsx"]);
@@ -94,6 +95,7 @@ export const reportGridEnvelopeSchema = z.object({
 });
 
 export const reportTypeOptions = [
+  { value: "ar-labour", label: "Rekapan" },
   { value: "delivery-accuracy", label: "Delivery Accuracy" },
   { value: "manhour", label: "Manhour" },
   { value: "division-kpi", label: "Division KPI" },
