@@ -483,7 +483,24 @@ export class UnitCatalogRepository {
       `,
       [panelId, unitId],
     );
-    return rows[0] ?? null;
+    const panel = rows[0] ?? null;
+    if (!panel) {
+      return null;
+    }
+
+    const [mediaRows] = await this.poolFactory(this.env).query<RowDataPacket[]>(
+      `
+        SELECT id, panel_id AS panelId, file_url AS fileUrl, media_type AS mediaType,
+               caption, source_catalog_media_id AS sourceCatalogMediaId,
+               source_catalog_reference_media_id AS sourceCatalogReferenceMediaId,
+               created_by AS createdBy, created_at AS createdAt
+        FROM master_panel_media
+        WHERE panel_id = ?
+        ORDER BY created_at, id
+      `,
+      [panelId],
+    );
+    return { ...panel, media: mediaRows };
   }
 
   async listPanelJobdescs(panelId: number) {

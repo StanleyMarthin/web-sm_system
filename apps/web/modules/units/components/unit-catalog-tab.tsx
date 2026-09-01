@@ -8,6 +8,7 @@ import {
   confirmUnitCatalogSurvey,
   createUnitCatalogPanelJobdescs,
   fetchUnitCatalog,
+  fetchUnitCatalogMasterPanel,
   fetchUnitCatalogReference,
   requestUnitCatalogUploadTicket,
   saveUnitCatalogSurvey,
@@ -33,6 +34,18 @@ type SurveyForm = {
   location: string;
   notes: string;
   photoFile: File | null;
+};
+
+type MasterPanelMedia = {
+  fileUrl?: unknown;
+  file_url?: unknown;
+  mediaType?: unknown;
+  media_type?: unknown;
+  caption?: unknown;
+};
+
+type MasterPanelDetail = Record<string, unknown> & {
+  media?: MasterPanelMedia[];
 };
 
 const defaultSurveyForm: SurveyForm = {
@@ -74,6 +87,23 @@ function unique(values: Array<string | null | undefined>) {
   return Array.from(new Set(values.filter((value): value is string => Boolean(value))));
 }
 
+function panelText(panel: MasterPanelDetail | null, key: string) {
+  const value = panel?.[key];
+  if (typeof value === "string" && value.trim()) return value;
+  if (typeof value === "number") return String(value);
+  return "-";
+}
+
+function panelMediaUrl(media: MasterPanelMedia) {
+  const value = media.fileUrl ?? media.file_url;
+  return typeof value === "string" ? value : null;
+}
+
+function panelMediaType(media: MasterPanelMedia) {
+  const value = media.mediaType ?? media.media_type;
+  return typeof value === "string" ? value.toUpperCase() : "";
+}
+
 export function UnitCatalogTab({ unitId, unitName }: UnitCatalogTabProps) {
   const [references, setReferences] = useState<CatalogReference[]>([]);
   const [reference, setReference] = useState<CatalogReference | null>(null);
@@ -82,6 +112,8 @@ export function UnitCatalogTab({ unitId, unitName }: UnitCatalogTabProps) {
   const [surveyOpen, setSurveyOpen] = useState(false);
   const [form, setForm] = useState<SurveyForm>(defaultSurveyForm);
   const [jobdescOpen, setJobdescOpen] = useState(false);
+  const [jobdescPanel, setJobdescPanel] = useState<MasterPanelDetail | null>(null);
+  const [jobdescPanelLoading, setJobdescPanelLoading] = useState(false);
   const [jobdesc, setJobdesc] = useState({
     divisionId: "",
     jobTypeId: "",
@@ -272,13 +304,32 @@ export function UnitCatalogTab({ unitId, unitName }: UnitCatalogTabProps) {
       return;
     }
     setJobdescOpen(false);
+    setJobdescPanel(null);
     setJobdesc({ divisionId: "", jobTypeId: "", description: "", targetHoursInitial: "" });
+  }
+
+  async function openJobdescModal() {
+    if (!selectedItem?.promotedPanelId) return;
+    setJobdescOpen(true);
+    setJobdescPanel(null);
+    setJobdescPanelLoading(true);
+    setError(null);
+    const result = await fetchUnitCatalogMasterPanel(unitId, selectedItem.promotedPanelId);
+    setJobdescPanelLoading(false);
+    if (!result.success) {
+      setError(result.message);
+      return;
+    }
+    setJobdescPanel(result.payload.data.panel as MasterPanelDetail);
   }
 
   const components = unique(references.map((row) => row.componentName));
   const panels = unique(references.map((row) => row.panelName));
   const confirmedMarker = selectedItem?.mappings.find((mapping) => mapping.catalogReferenceMediaId === selectedMedia?.id);
   const displayMarker = markerDraft ?? confirmedMarker ?? null;
+  const panelMedia = Array.isArray(jobdescPanel?.media) ? jobdescPanel.media : [];
+  const actualPanelMedia = panelMedia.filter((media) => panelMediaType(media) === "ACTUAL");
+  const referencePanelMedia = panelMedia.filter((media) => panelMediaType(media) === "REFERENCE");
 
   if (loading) return <div className="border border-border bg-card px-4 py-5 text-sm text-muted-foreground">Memuat catalog...</div>;
 
@@ -359,7 +410,7 @@ export function UnitCatalogTab({ unitId, unitName }: UnitCatalogTabProps) {
           {selectedItem?.surveyStatus === "CONFIRMED" ? (
             <div className="flex flex-wrap gap-2 border border-border bg-card p-3">
               <button type="button" className="border border-border px-3 py-2 text-sm" onClick={() => openSurvey(selectedItem, null)}>+ Tambah Foto Fisik</button>
-              <button type="button" className="border border-border px-3 py-2 text-sm" disabled={!selectedItem.promotedPanelId} onClick={() => setJobdescOpen(true)}>Buat Countdown</button>
+              <button type="button" className="border border-border px-3 py-2 text-sm" disabled={!selectedItem.promotedPanelId} onClick={() => { void openJobdescModal(); }}>Buat Countdown</button>
               <Link className="border border-border px-3 py-2 text-sm" href={`/wo?carId=${encodeURIComponent(unitId)}&panelId=${selectedItem.promotedPanelId ?? ""}`}>Buat WO</Link>
               <Link className="border border-border px-3 py-2 text-sm" href={`/requests/list?carId=${encodeURIComponent(unitId)}&panelId=${selectedItem.promotedPanelId ?? ""}`}>Ajukan PR</Link>
             </div>
@@ -417,11 +468,50 @@ export function UnitCatalogTab({ unitId, unitName }: UnitCatalogTabProps) {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Buat Countdown</p>
-                <h2 className="text-lg font-semibold">{selectedItem.partName ?? selectedItem.actualName ?? "Panel"}</h2>
+                <h2 className="text-lg font-semibold">{panelText(jobdescPanel, "name")}</h2>
               </div>
-              <button type="button" onClick={() => setJobdescOpen(false)} className="text-sm text-muted-foreground">Tutup</button>
+              <button type="button" onClick={() => { setJobdescOpen(false); setJobdescPanel(null); }} className="text-sm text-muted-foreground">Tutup</button>
             </div>
             <div className="mt-4 grid gap-3">
+              {jobdescPanelLoading ? (
+                <div className="border border-border bg-background px-3 py-2 text-sm text-muted-foreground">Memuat detail Master Panel...</div>
+              ) : (
+                <div className="grid gap-3 border border-border bg-background p-3 text-sm">
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <p><span className="text-muted-foreground">Component:</span> {panelText(jobdescPanel, "componentName")}</p>
+                    <p><span className="text-muted-foreground">Panel Name:</span> {panelText(jobdescPanel, "name")}</p>
+                    <p><span className="text-muted-foreground">Part Number:</span> {panelText(jobdescPanel, "partNumber")}</p>
+                    <p><span className="text-muted-foreground">Position Code:</span> {panelText(jobdescPanel, "positionCode")}</p>
+                    <p><span className="text-muted-foreground">Initial Condition:</span> {panelText(jobdescPanel, "initialCondition")}</p>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <p className="mb-2 text-xs uppercase tracking-[0.12em] text-muted-foreground">Foto Aktual</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        {actualPanelMedia.length ? actualPanelMedia.map((media, index) => {
+                          const url = panelMediaUrl(media);
+                          return url ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img key={`${url}-${index}`} src={url} alt={typeof media.caption === "string" ? media.caption : "Foto aktual"} className="h-24 w-full object-cover" />
+                          ) : null;
+                        }) : <p className="text-xs text-muted-foreground">Belum ada foto aktual.</p>}
+                      </div>
+                    </div>
+                    <div>
+                      <p className="mb-2 text-xs uppercase tracking-[0.12em] text-muted-foreground">Foto Catalog</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        {referencePanelMedia.length ? referencePanelMedia.map((media, index) => {
+                          const url = panelMediaUrl(media);
+                          return url ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img key={`${url}-${index}`} src={url} alt={typeof media.caption === "string" ? media.caption : "Foto catalog"} className="h-24 w-full object-cover" />
+                          ) : null;
+                        }) : <p className="text-xs text-muted-foreground">Belum ada foto catalog.</p>}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
               <input className="border border-border bg-background px-3 py-2 text-sm" placeholder="Division ID" value={jobdesc.divisionId} onChange={(event) => setJobdesc({ ...jobdesc, divisionId: event.target.value })} />
               <input className="border border-border bg-background px-3 py-2 text-sm" placeholder="Job Type ID" value={jobdesc.jobTypeId} onChange={(event) => setJobdesc({ ...jobdesc, jobTypeId: event.target.value })} />
               <textarea className="min-h-24 border border-border bg-background px-3 py-2 text-sm" placeholder="Deskripsi pekerjaan" value={jobdesc.description} onChange={(event) => setJobdesc({ ...jobdesc, description: event.target.value })} />

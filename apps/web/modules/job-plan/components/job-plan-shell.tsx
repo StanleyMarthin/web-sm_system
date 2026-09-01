@@ -63,16 +63,7 @@ import {
 import { useSweetAlert } from "@/shared/ui/sweet-alert";
 import { humanizeCodeLabel, fmtTime } from "@/shared/format/humanize";
 import { SearchableField } from "@/modules/units/components/shared/SearchableField";
-import {
-  buildPayload as buildUnitPanelPayload,
-  CONDITION_LABEL,
-  emptyForm as emptyUnitPanelForm,
-  LOCATION_LABEL,
-  type PanelFormState,
-  STOCK_STATUS_LABEL,
-  stockStatusForLocation,
-} from "@/modules/units/helpers/unit-panel-form";
-import { createUnitPanel, fetchUnitPanels } from "@/shared/api/units";
+import { fetchUnitPanels } from "@/shared/api/units";
 
 interface JobPlanShellProps {
   title: string;
@@ -151,8 +142,6 @@ interface WorkspaceRowState {
   carId: string;
   panelKey: string;
   panelId: string;
-  useNewPanel: boolean;
-  newPanelForm: PanelFormState;
   jobTypeId: string;
   assignedUserId: string;
   targetHours: string;
@@ -164,15 +153,9 @@ interface WorkspaceRowState {
 }
 
 export function resolveAdditionalPanelSelection(input: {
-  useNewPanel: boolean;
-  newPanelName: string;
   panelId: string;
   panelOptions: Array<{ value: string; panelName: string }>;
 }): Pick<JobPlanDraftRecord, "panelId" | "panelName"> {
-  if (input.useNewPanel) {
-    return { panelId: null, panelName: input.newPanelName.trim() || null };
-  }
-
   return {
     panelId: input.panelId ? Number(input.panelId) : null,
     panelName: input.panelOptions.find((panel) => panel.value === input.panelId)?.panelName ?? null,
@@ -240,8 +223,6 @@ function createEmptyWorkspaceRow(): WorkspaceRowState {
     carId: "",
     panelKey: "",
     panelId: "",
-    useNewPanel: false,
-    newPanelForm: emptyUnitPanelForm(),
     jobTypeId: "",
     assignedUserId: "",
     targetHours: "",
@@ -736,9 +717,7 @@ export function JobPlanShell({
     };
   }
 
-  function buildAdditionalDraftRecord(
-    createdPanel?: Pick<JobPlanDraftRecord, "panelId" | "panelName">,
-  ): JobPlanDraftRecord | null {
+  function buildAdditionalDraftRecord(): JobPlanDraftRecord | null {
     const row = workspaceForm.rows[0];
     if (!row) {
       return null;
@@ -752,9 +731,7 @@ export function JobPlanShell({
     const assignedUserName =
       references.employees.find((employee) => employee.value === row.assignedUserId)?.label ??
       row.assignedUserId;
-    const panel = createdPanel ?? resolveAdditionalPanelSelection({
-      useNewPanel: row.useNewPanel,
-      newPanelName: row.newPanelForm.name,
+    const panel = resolveAdditionalPanelSelection({
       panelId: row.panelId,
       panelOptions: getAdditionalPanelOptions(row),
     });
@@ -773,8 +750,8 @@ export function JobPlanShell({
       unitName,
       divisionId: workspaceForm.divisionId ? Number(workspaceForm.divisionId) : null,
       divisionName,
-      panelId: isWorkspaceNonTechnical ? null : panel.panelId,
-      panelName: isWorkspaceNonTechnical ? null : panel.panelName,
+      panelId: panel.panelId,
+      panelName: panel.panelName,
       jobTypeId: row.jobTypeId || null,
       jobName,
       assignedUserId: row.assignedUserId,
@@ -983,8 +960,6 @@ export function JobPlanShell({
       carId,
       panelKey: "",
       panelId: "",
-      useNewPanel: false,
-      newPanelForm: emptyUnitPanelForm(),
       jobTypeId: "",
     }));
   }
@@ -1437,14 +1412,13 @@ export function JobPlanShell({
           return;
         }
 
-        const rowIsNonTechnical = isWorkspaceNonTechnical;
-        if (row.source === "additional" && !rowIsNonTechnical && (!row.carId || (!row.panelId && (!row.newPanelForm.name.trim() || !row.newPanelForm.section.trim() || !row.newPanelForm.category.trim())) || !row.jobTypeId)) {
-          setError("Lengkapi unit, panel/part, kategori, section, dan jobdesc tambahan.");
+        if (row.source === "additional" && (!row.carId || !row.jobTypeId)) {
+          setError("Lengkapi unit dan jobdesc tambahan.");
           return;
         }
 
-        if (row.source === "additional" && rowIsNonTechnical && (!row.assignedUserId || !targetHours || !row.jobDescription.trim())) {
-          setError("Lengkapi PIC, jam kerja, dan deskripsi aktivitas non-teknis.");
+        if (row.source === "additional" && !row.panelId) {
+          setError("Master Panel wajib dipilih sebelum membuat Job Plan.");
           return;
         }
       }
@@ -1456,27 +1430,7 @@ export function JobPlanShell({
         return;
       }
 
-      let createdPanel: Pick<JobPlanDraftRecord, "panelId" | "panelName"> | undefined;
-      if (!isWorkspaceNonTechnical && firstRow.useNewPanel) {
-        if (firstRow.newPanelForm.nodeType === "PART" && !firstRow.newPanelForm.parentId) {
-          setError("Pilih panel parent untuk part.");
-          return;
-        }
-        const panelPayload = buildUnitPanelPayload(firstRow.newPanelForm, { includeParentId: true });
-        const panelResult = await createUnitPanel(firstRow.carId, {
-          ...panelPayload,
-          parentId: firstRow.newPanelForm.nodeType === "PART"
-            ? Number.parseInt(firstRow.newPanelForm.parentId, 10) || null
-            : null,
-        });
-        if (!panelResult.success) {
-          setError(panelResult.message);
-          return;
-        }
-        createdPanel = { panelId: panelResult.result.id, panelName: panelResult.result.name };
-      }
-
-      const draft = buildAdditionalDraftRecord(createdPanel);
+      const draft = buildAdditionalDraftRecord();
       if (!draft) {
         setError("Form tambahan belum lengkap.");
         return;
@@ -2036,7 +1990,7 @@ export function JobPlanShell({
   }
 
   function renderPanelCell(row: WorkspaceRowState) {
-    if (isWorkspaceNonTechnical) {
+    if (isWorkspaceNonTechnical && row.source !== "additional") {
       return (
         <div className="flex h-[38px] items-center rounded-md border border-white/5 bg-card px-3 text-[12px] text-foreground/35">
           Tanpa Panel / Part
@@ -2046,76 +2000,24 @@ export function JobPlanShell({
 
     if (row.source === "additional") {
       const panelOptions = getAdditionalPanelOptions(row);
-      const unitPanelRows = workspaceUnitPanels.flatMap((panel) => [panel, ...panel.children]);
-      const categoryOptions = Array.from(new Set(unitPanelRows.map((panel) => panel.category).filter(Boolean)))
-        .map((category) => ({ value: category! }));
-      const sectionOptions = Array.from(new Set(unitPanelRows
-        .filter((panel) => !row.newPanelForm.category || panel.category === row.newPanelForm.category)
-        .map((panel) => panel.section)))
-        .map((section) => ({ value: section }));
-      const parentOptions = workspaceUnitPanels
-        .filter((panel) => panel.nodeType === "PANEL" && (!row.newPanelForm.section || panel.section === row.newPanelForm.section))
-        .map((panel) => ({ value: String(panel.id), label: panel.name }));
-      const updateNewPanelForm = (updater: (form: PanelFormState) => PanelFormState) =>
-        updateWorkspaceRow(row.rowId, (currentValue) => ({
-          ...currentValue,
-          newPanelForm: updater(currentValue.newPanelForm),
-        }));
       return (
-        <div className="space-y-2">
-          {row.useNewPanel ? (
-            <div className="space-y-3 border border-border bg-background p-3">
-              <div className="grid grid-cols-2 gap-1 border border-border bg-card p-1">
-                {(["PANEL", "PART"] as const).map((nodeType) => (
-                  <button key={nodeType} type="button" onClick={() => updateNewPanelForm((form) => ({ ...form, nodeType, nodeTypeName: nodeType === "PART" ? "Part" : "Panel", parentId: nodeType === "PART" ? form.parentId : "", parentName: nodeType === "PART" ? form.parentName : "" }))} className={`h-8 font-mono text-[12px] uppercase tracking-[0.08em] ${row.newPanelForm.nodeType === nodeType ? "bg-primary/10 text-app-accent-ink" : "text-muted-foreground hover:text-foreground"}`}>
-                    {nodeType === "PART" ? "Part" : "Panel"}
-                  </button>
-                ))}
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div><FieldLabel required>Kategori</FieldLabel><SearchableField value={row.newPanelForm.category} options={categoryOptions} onChange={(category) => updateNewPanelForm((form) => ({ ...form, category, section: "", parentId: "", parentName: "" }))} placeholder="Pilih / ketik kategori" heightClassName="h-9" menuZClassName="z-[70]" /></div>
-                <div><FieldLabel required>Section</FieldLabel><SearchableField value={row.newPanelForm.section} options={sectionOptions} onChange={(section) => updateNewPanelForm((form) => ({ ...form, section, parentId: "", parentName: "" }))} placeholder="Pilih / ketik section" heightClassName="h-9" menuZClassName="z-[70]" /></div>
-                {row.newPanelForm.nodeType === "PART" ? <div><FieldLabel required>Panel Parent</FieldLabel><CompactSelect value={row.newPanelForm.parentId} onChange={(event) => updateNewPanelForm((form) => ({ ...form, parentId: event.target.value }))}><option value="">Pilih panel parent</option>{parentOptions.map((panel) => <option key={panel.value} value={panel.value}>{panel.label}</option>)}</CompactSelect></div> : null}
-                <div><FieldLabel required>Nama {row.newPanelForm.nodeType === "PART" ? "Part" : "Panel"}</FieldLabel><CompactInput value={row.newPanelForm.name} maxLength={100} onChange={(event) => updateNewPanelForm((form) => ({ ...form, name: event.target.value }))} /></div>
-                <div><FieldLabel>Qty</FieldLabel><CompactInput type="number" min="0.01" step="0.01" value={row.newPanelForm.qty} onChange={(event) => updateNewPanelForm((form) => ({ ...form, qty: event.target.value }))} /></div>
-                <div><FieldLabel>Lokasi</FieldLabel><CompactSelect value={row.newPanelForm.defaultLocationType} onChange={(event) => { const defaultLocationType = event.target.value as PanelFormState["defaultLocationType"]; updateNewPanelForm((form) => ({ ...form, defaultLocationType, defaultStockStatus: stockStatusForLocation(defaultLocationType) })); }}>{Object.entries(LOCATION_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</CompactSelect></div>
-                <div><FieldLabel>Posisi</FieldLabel><CompactSelect value={row.newPanelForm.defaultStockStatus} disabled={row.newPanelForm.defaultLocationType === "UNIT"} onChange={(event) => updateNewPanelForm((form) => ({ ...form, defaultStockStatus: event.target.value as PanelFormState["defaultStockStatus"] }))}>{Object.entries(STOCK_STATUS_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</CompactSelect></div>
-                <div><FieldLabel>Kondisi</FieldLabel><CompactSelect value={row.newPanelForm.defaultConditionType} onChange={(event) => updateNewPanelForm((form) => ({ ...form, defaultConditionType: event.target.value as PanelFormState["defaultConditionType"] }))}>{Object.entries(CONDITION_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</CompactSelect></div>
-              </div>
-            </div>
-          ) : (
-            <CompactSelect
-              value={row.panelId}
-              onChange={(event) =>
-                updateWorkspaceRow(row.rowId, (currentValue) => ({
-                  ...currentValue,
-                  panelKey: event.target.value,
-                  panelId: event.target.value,
-                }))}
-              disabled={!row.carId}
-            >
-              <option value="">Pilih Panel / Part</option>
-              {panelOptions.map((panel) => (
-                <option key={panel.value} value={panel.value}>
-                  {panel.panelName}
-                </option>
-              ))}
-            </CompactSelect>
-          )}
-          <label className="flex min-h-9 cursor-pointer items-center gap-2 border border-border bg-background px-3 text-[11px] text-muted-foreground">
-            <input
-              type="checkbox"
-              checked={row.useNewPanel}
-              onChange={(event) => {
-                const checked = event.target.checked;
-                updateWorkspaceRow(row.rowId, (currentValue) => ({ ...currentValue, useNewPanel: checked, panelId: "", panelKey: "", newPanelForm: checked ? currentValue.newPanelForm : emptyUnitPanelForm() }));
-                if (checked && row.carId) void fetchUnitPanels("", row.carId).then((result) => setWorkspaceUnitPanels(result.payload?.data.tree ?? []));
-              }}
-              className="h-4 w-4 accent-primary"
-            />
-            Panel baru / belum ada
-          </label>
-        </div>
+        <CompactSelect
+          value={row.panelId}
+          onChange={(event) =>
+            updateWorkspaceRow(row.rowId, (currentValue) => ({
+              ...currentValue,
+              panelKey: event.target.value,
+              panelId: event.target.value,
+            }))}
+          disabled={!row.carId}
+        >
+          <option value="">Pilih Master Panel</option>
+          {panelOptions.map((panel) => (
+            <option key={panel.value} value={panel.value}>
+              {panel.panelName}
+            </option>
+          ))}
+        </CompactSelect>
       );
     }
 

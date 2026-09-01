@@ -29,15 +29,13 @@ describe("buildJobPlanEditForm", () => {
 });
 
 describe("resolveAdditionalPanelSelection", () => {
-  test("uses a free-text panel when the panel is not in master data", () => {
+  test("requires an existing master panel id", () => {
     const panel = resolveAdditionalPanelSelection({
-      useNewPanel: true,
-      newPanelName: "Quarter panel custom",
       panelId: "",
       panelOptions: [],
     });
 
-    expect(panel).toEqual({ panelId: null, panelName: "Quarter panel custom" });
+    expect(panel).toEqual({ panelId: null, panelName: null });
   });
 });
 
