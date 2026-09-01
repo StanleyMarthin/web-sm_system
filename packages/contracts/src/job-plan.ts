@@ -212,6 +212,7 @@ const timeSchema = z
 const isoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/u);
 const durationHoursSchema = z.string().trim().regex(/^\d{1,3}:\d{2}$/u);
 const nullableTextSchema = z.string().trim().max(255).nullable().optional().default(null);
+const optionalNullableTextSchema = z.string().trim().max(255).nullable().optional();
 
 export const jobPlanDraftItemSchema = z.object({
   coreId: z.string().trim().min(1).max(64),
@@ -247,6 +248,8 @@ export const jobPlanWorkspaceDraftRowSchema = z.object({
   note: z.string().trim().max(500).nullable().optional().default(null),
   isPriority: z.boolean().default(false),
   isNonTechnicalJob: z.boolean().default(false),
+  picPlan: z.string().trim().max(50).nullable().optional(),
+  requiredGrade: optionalNullableTextSchema,
 });
 
 export const createJobPlanWorkspaceRequestSchema = z.object({
@@ -297,6 +300,8 @@ export const jobPlanDraftRecordSchema = z.object({
   deadlineDate: isoDateSchema.nullable().optional().default(null),
   isRework: z.boolean().default(false),
   isNonTechnicalJob: z.boolean().default(false),
+  picPlan: z.string().trim().max(50).nullable().optional(),
+  requiredGrade: optionalNullableTextSchema,
 });
 
 export const saveJobPlanDraftRequestSchema = z.object({
