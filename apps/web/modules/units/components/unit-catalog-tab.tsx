@@ -1,16 +1,22 @@
 "use client";
 
-import type { CatalogItem, CatalogReference } from "@smsystem/contracts/unit-catalog";
+import {
+  parseCatalogSpreadsheetText,
+  type CatalogItem,
+  type CatalogReference,
+} from "@smsystem/contracts/unit-catalog";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
   addUnitCatalogItemMedia,
   confirmUnitCatalogSurvey,
+  createUnitCatalogReference,
   createUnitCatalogPanelJobdescs,
   fetchUnitCatalog,
   fetchUnitCatalogMasterPanel,
   fetchUnitCatalogReference,
   requestUnitCatalogUploadTicket,
+  replaceUnitCatalogItems,
   saveUnitCatalogSurvey,
 } from "@/shared/api/unit-catalog";
 
@@ -48,6 +54,15 @@ type MasterPanelDetail = Record<string, unknown> & {
   media?: MasterPanelMedia[];
 };
 
+type CatalogImportForm = {
+  componentName: string;
+  panelName: string;
+  diagramImageUrl: string;
+  referenceUrl: string;
+  notes: string;
+  spreadsheetText: string;
+};
+
 const defaultSurveyForm: SurveyForm = {
   qtyOpname: "",
   actualName: "",
@@ -63,6 +78,15 @@ const statusLabels: Record<CatalogItem["surveyStatus"], string> = {
   NOT_STARTED: "Belum didata",
   DRAFT: "Draft",
   CONFIRMED: "Confirmed",
+};
+
+const defaultImportForm: CatalogImportForm = {
+  componentName: "",
+  panelName: "",
+  diagramImageUrl: "",
+  referenceUrl: "",
+  notes: "",
+  spreadsheetText: "",
 };
 
 function toNumberOrNull(value: string) {
@@ -104,6 +128,14 @@ function panelMediaType(media: MasterPanelMedia) {
   return typeof value === "string" ? value.toUpperCase() : "";
 }
 
+function countCatalogSpreadsheetRows(text: string) {
+  try {
+    return parseCatalogSpreadsheetText(text).length;
+  } catch {
+    return 0;
+  }
+}
+
 export function UnitCatalogTab({ unitId, unitName }: UnitCatalogTabProps) {
   const [references, setReferences] = useState<CatalogReference[]>([]);
   const [reference, setReference] = useState<CatalogReference | null>(null);
@@ -120,6 +152,8 @@ export function UnitCatalogTab({ unitId, unitName }: UnitCatalogTabProps) {
     description: "",
     targetHoursInitial: "",
   });
+  const [importForm, setImportForm] = useState<CatalogImportForm>(defaultImportForm);
+  const [importOpen, setImportOpen] = useState(false);
   const [filters, setFilters] = useState({ component: "", panel: "", search: "", status: "" });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -323,6 +357,51 @@ export function UnitCatalogTab({ unitId, unitName }: UnitCatalogTabProps) {
     setJobdescPanel(result.payload.data.panel as MasterPanelDetail);
   }
 
+  async function submitCatalogImport() {
+    let items: ReturnType<typeof parseCatalogSpreadsheetText>;
+    try {
+      items = parseCatalogSpreadsheetText(importForm.spreadsheetText);
+    } catch {
+      setError("Format spreadsheet catalog tidak valid.");
+      return;
+    }
+    if (!importForm.componentName.trim() || !importForm.panelName.trim() || items.length === 0) {
+      setError("Component, Panel, dan minimal satu row catalog wajib diisi.");
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    const referenceResult = await createUnitCatalogReference(unitId, {
+      componentName: importForm.componentName.trim(),
+      panelName: importForm.panelName.trim(),
+      diagramImageUrl: importForm.diagramImageUrl.trim() || null,
+      referenceUrl: importForm.referenceUrl.trim() || null,
+      notes: importForm.notes.trim() || null,
+    });
+    if (!referenceResult.success) {
+      setSaving(false);
+      setError(referenceResult.message);
+      return;
+    }
+
+    const referenceId = referenceResult.payload.data.reference.id;
+    const itemsResult = await replaceUnitCatalogItems(unitId, referenceId, { items });
+    setSaving(false);
+    if (!itemsResult.success) {
+      setError(itemsResult.message);
+      return;
+    }
+
+    setImportForm(defaultImportForm);
+    setImportOpen(false);
+    await loadReference(referenceId);
+    const listResult = await fetchUnitCatalog(unitId);
+    if (listResult.success) {
+      setReferences(listResult.payload.data.references);
+    }
+  }
+
   const components = unique(references.map((row) => row.componentName));
   const panels = unique(references.map((row) => row.panelName));
   const confirmedMarker = selectedItem?.mappings.find((mapping) => mapping.catalogReferenceMediaId === selectedMedia?.id);
@@ -352,6 +431,34 @@ export function UnitCatalogTab({ unitId, unitName }: UnitCatalogTabProps) {
           <option value="CONFIRMED">Confirmed</option>
         </select>
         <p className="text-sm text-muted-foreground">{unitName}</p>
+      </div>
+
+      <div className="border border-border bg-card p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-medium">Input Catalog</p>
+            <p className="text-xs text-muted-foreground">Paste dari Excel/Google Sheets. Catalog tetap staging, bukan data operasional.</p>
+          </div>
+          <button type="button" className="border border-border px-3 py-2 text-sm" onClick={() => setImportOpen((value) => !value)}>
+            {importOpen ? "Tutup" : "Input Catalog"}
+          </button>
+        </div>
+        {importOpen ? (
+          <div className="mt-4 grid gap-3">
+            <div className="grid gap-3 md:grid-cols-2">
+              <input className="border border-border bg-background px-3 py-2 text-sm" placeholder="Component" value={importForm.componentName} onChange={(event) => setImportForm({ ...importForm, componentName: event.target.value })} />
+              <input className="border border-border bg-background px-3 py-2 text-sm" placeholder="Panel" value={importForm.panelName} onChange={(event) => setImportForm({ ...importForm, panelName: event.target.value })} />
+              <input className="border border-border bg-background px-3 py-2 text-sm" placeholder="URL gambar catalog (opsional)" value={importForm.diagramImageUrl} onChange={(event) => setImportForm({ ...importForm, diagramImageUrl: event.target.value })} />
+              <input className="border border-border bg-background px-3 py-2 text-sm" placeholder="Reference URL (opsional)" value={importForm.referenceUrl} onChange={(event) => setImportForm({ ...importForm, referenceUrl: event.target.value })} />
+            </div>
+            <textarea className="min-h-20 border border-border bg-background px-3 py-2 text-sm" placeholder="Notes reference" value={importForm.notes} onChange={(event) => setImportForm({ ...importForm, notes: event.target.value })} />
+            <textarea className="min-h-40 font-mono text-xs border border-border bg-background px-3 py-2" placeholder={"CODE\tPARTS NUMBER\tNAME\tQTY NORMAL\tQTY OPNAME\tSTATUS\tKONDISI\tTINDAKAN\tLOKASI\tKETERANGAN"} value={importForm.spreadsheetText} onChange={(event) => setImportForm({ ...importForm, spreadsheetText: event.target.value })} />
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs text-muted-foreground">Row terbaca: {countCatalogSpreadsheetRows(importForm.spreadsheetText)}</p>
+              <button type="button" disabled={saving} onClick={submitCatalogImport} className="border border-primary bg-primary px-3 py-2 text-sm text-primary-foreground">Simpan Catalog</button>
+            </div>
+          </div>
+        ) : null}
       </div>
 
       {error ? <div className="border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</div> : null}

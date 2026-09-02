@@ -6,6 +6,13 @@ import { fetchCurrentUser } from "@/shared/auth/server";
 import { fetchUnitBom, fetchUnitDetail, fetchUnitPanels, fetchUnitWorkspace } from "@/shared/api/units";
 import { ModuleUnavailableState } from "@/shared/ui/module-unavailable-state";
 
+const unitCatalogPermissions = new Set<string>([
+  permissionCodes.unitCatalogView,
+  permissionCodes.unitCatalogSurvey,
+  permissionCodes.unitCatalogManage,
+  permissionCodes.unitCatalogCreateJobdesc,
+]);
+
 interface UnitDetailPageProps {
   params: Promise<{ unitId: string }>;
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
@@ -71,6 +78,9 @@ async function UnitDetailPageContent({ params, searchParams }: UnitDetailPagePro
         canManagePhotos={Boolean(user?.permissions.includes(permissionCodes.galleryPhotoManage))}
         canDownloadPhotos={Boolean(user?.permissions.includes(permissionCodes.galleryDownload))}
         canManagePanels={Boolean(user?.permissions.includes(permissionCodes.unitPanelManage))}
+        canUseCatalog={Boolean(
+          user?.permissions.some((permission) => unitCatalogPermissions.has(permission)),
+        )}
       />
     </div>
   );

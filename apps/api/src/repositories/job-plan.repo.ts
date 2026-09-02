@@ -106,6 +106,7 @@ interface CountdownReferenceRow extends RowDataPacket {
   value: string;
   label: string;
   carId: string;
+  panelId: number | null;
   divisionId: number | null;
   unitName: string;
   divisionName: string;
@@ -1491,6 +1492,7 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
               'j'
             ) AS label,
             jc.car_id AS carId,
+            jc.panel_id AS panelId,
             jc.division_id AS divisionId,
             COALESCE(c.unit_name, jc.car_id) AS unitName,
             COALESCE(d.name, '-') AS divisionName,
@@ -1541,6 +1543,7 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
           GROUP BY
             jc.id,
             jc.car_id,
+            jc.panel_id,
             jc.division_id,
             c.unit_name,
             mp.name,
@@ -1670,6 +1673,7 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
         label: row.label,
         carId: row.carId,
         divisionId: row.divisionId,
+        panelId: row.panelId ?? null,
         unitName: row.unitName,
         divisionName: row.divisionName,
         panelName: row.panelName,

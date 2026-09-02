@@ -89,14 +89,14 @@ describe("CountdownRepository revision decision", () => {
   });
 
   it("expands both unit budgets and applies an MO-approved revision atomically", async () => {
-    const statements: string[] = [];
+    const statements: Array<{ sql: string; params?: unknown[] }> = [];
     const connection = {
       beginTransaction: async () => undefined,
       commit: async () => undefined,
       rollback: async () => undefined,
       release: () => undefined,
       query: async (sql: string) => {
-        statements.push(sql);
+        statements.push({ sql });
         return [[{
           countdownId: "CD-1",
           carId: "UNIT-1",
@@ -105,10 +105,16 @@ describe("CountdownRepository revision decision", () => {
           extensionRequestStatus: "MO_REVIEW",
           timeExtensionHours: 1,
           targetHoursInitial: 8,
+          targetHoursRevised: 9,
+          targetHours: 9,
+          deadlineDate: "2026-08-18",
+          picPlan: "PIC-1",
+          requiredGrade: "SENIOR",
+          revisionReason: "ADDITIONAL_DAMAGE",
         }]];
       },
-      execute: async (sql: string) => {
-        statements.push(sql);
+      execute: async (sql: string, params?: unknown[]) => {
+        statements.push({ sql, params });
         return [{ affectedRows: sql.includes("UPDATE sm_unit_budgets") ? 1 : 0 }];
       },
     };
@@ -123,8 +129,72 @@ describe("CountdownRepository revision decision", () => {
     });
 
     expect(result.status).toBe("APPROVED");
-    expect(statements.some((sql) => sql.includes("pm_allocated_hours = pm_allocated_hours + ?"))).toBe(true);
+    expect(statements.some(({ sql }) => sql.includes("pm_allocated_hours = pm_allocated_hours + ?"))).toBe(true);
+    expect(statements.some(({ sql }) => sql.includes("extension_request_status = 'APPROVED'"))).toBe(true);
+    const auditInsert = statements.find(({ sql }) => sql.includes("INSERT INTO sm_jobdesc_countdown_revisions"));
+    expect(auditInsert?.sql).toContain("old_target_hours");
+    expect(auditInsert?.params).toEqual([
+      "CD-1", "EXTENSION", "ADDITIONAL_DAMAGE",
+      9, 11, 2,
+      "2026-08-18", "2026-08-20",
+      "PIC-1", "PIC-1",
+      "SENIOR", "SENIOR",
+      "MO_APPROVAL", "CD-1", "ADDITIONAL_DAMAGE", "MO-1",
+    ]);
+    expect(statements.some(({ sql }) => sql.includes("UPDATE sm_jobdesc_countdown_revisions"))).toBe(false);
+    expect(statements.some(({ sql }) => sql.includes("DELETE FROM sm_jobdesc_countdown_revisions"))).toBe(false);
+  });
+
+  it("rolls back the approved revision when audit insert fails", async () => {
+    let rollbackCalled = false;
+    let commitCalled = false;
+    const statements: string[] = [];
+    const connection = {
+      beginTransaction: async () => undefined,
+      commit: async () => { commitCalled = true; },
+      rollback: async () => { rollbackCalled = true; },
+      release: () => undefined,
+      query: async () => [[{
+        countdownId: "CD-1",
+        carId: "UNIT-1",
+        divisionId: 7,
+        status: "PROSES",
+        extensionRequestStatus: "MO_REVIEW",
+        timeExtensionHours: 0,
+        targetHoursInitial: 20,
+        targetHoursRevised: 20,
+        targetHours: 20,
+        deadlineDate: "2026-08-18",
+        revisionReason: "INPUT_ERROR",
+      }]],
+      execute: async (sql: string) => {
+        statements.push(sql);
+        if (sql.includes("INSERT INTO sm_jobdesc_countdown_revisions")) {
+          throw new Error("AUDIT_INSERT_FAILED");
+        }
+        return [{ affectedRows: sql.includes("UPDATE sm_unit_budgets") ? 1 : 0 }];
+      },
+    };
+    const repository = new CountdownRepository(() => ({ getConnection: async () => connection }) as never);
+
+    let message = "";
+    try {
+      await repository.decideCountdownRevision({
+        employeeId: "MO-1",
+        scope: { canViewAllUnits: true, canViewAssignedUnits: false, divisionIds: [], managedDivisionIds: [], unitIds: [] },
+        countdownId: "CD-1",
+        isMo: true,
+        input: { isApproved: true, approvedHours: -180, approvedDeadline: "2026-08-20" },
+      });
+    } catch (error) {
+      message = (error as Error).message;
+    }
+
+    expect(message).toBe("AUDIT_INSERT_FAILED");
+    expect(rollbackCalled).toBe(true);
+    expect(commitCalled).toBe(false);
     expect(statements.some((sql) => sql.includes("extension_request_status = 'APPROVED'"))).toBe(true);
+    expect(statements.some((sql) => sql.includes("INSERT INTO sm_jobdesc_countdown_revisions"))).toBe(true);
   });
 
   it("forwards a KP approval to MO_REVIEW when the revised total exceeds budget", async () => {

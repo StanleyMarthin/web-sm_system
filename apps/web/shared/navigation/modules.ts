@@ -274,10 +274,23 @@ function hasRequestAccess(permissions: readonly string[]) {
   );
 }
 
+function hasUnitCatalogAccess(permissions: readonly string[]) {
+  return [
+    permissionCodes.unitCatalogView,
+    permissionCodes.unitCatalogSurvey,
+    permissionCodes.unitCatalogManage,
+    permissionCodes.unitCatalogCreateJobdesc,
+  ].some((permission) => permissions.includes(permission));
+}
+
 function hasNodePermission(
   item: Pick<NavigationItem, "id" | "permission">,
   permissions: readonly string[],
 ) {
+  if (item.id === "units") {
+    return permissions.includes(permissionCodes.viewUnits) || hasUnitCatalogAccess(permissions);
+  }
+
   if (item.id === "requests" || item.id.startsWith("requests-")) {
     return hasRequestAccess(permissions);
   }
@@ -288,6 +301,10 @@ function hasNodePermission(
 
   if (item.id === "spf-clients") {
     return [permissionCodes.spfAdmin, permissionCodes.spfPublish].some((permission) => permissions.includes(permission));
+  }
+
+  if (item.id === "unit-catalog") {
+    return hasUnitCatalogAccess(permissions);
   }
 
   if (item.permission) {

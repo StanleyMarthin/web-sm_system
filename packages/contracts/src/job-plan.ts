@@ -44,6 +44,7 @@ export const jobPlanEmployeeOptionSchema = jobPlanReferenceOptionSchema.extend({
 export const jobPlanCountdownOptionSchema = jobPlanReferenceOptionSchema.extend({
   unitName: z.string(),
   carId: z.string(),
+  panelId: z.number().int().positive().nullable().optional(),
   divisionId: z.number().int().nullable(),
   divisionName: z.string(),
   panelName: z.string().nullable().optional(),

@@ -17,6 +17,10 @@ export const permissionCodes = {
   unitDetailView: "CAR_PROGRESS_DETAIL",
   viewCountdown: "VIEW_COUNTDOWN",
   viewCountdownDetail: "VIEW_COUNTDOWN_DETAIL",
+  unitCatalogView: "UNIT_CATALOG_VIEW",
+  unitCatalogSurvey: "UNIT_CATALOG_SURVEY",
+  unitCatalogManage: "UNIT_CATALOG_MANAGE",
+  unitCatalogCreateJobdesc: "UNIT_CATALOG_CREATE_JOBDESC",
   countdownSubmitApproval: "COUNTDOWN_SUBMIT_APPROVAL",
   countdownMarkQcReady: "COUNTDOWN_MARK_QC_READY",
   countdownRequestRevision: "COUNTDOWN_REQUEST_REVISION",
@@ -110,6 +114,22 @@ const permissionMetaCatalog: Record<string, PermissionMeta> = {
     audience: "SHARED",
   },
   [permissionCodes.viewCountdownDetail]: {
+    platforms: ["WEB", "MOBILE"],
+    audience: "SHARED",
+  },
+  [permissionCodes.unitCatalogView]: {
+    platforms: ["WEB", "MOBILE"],
+    audience: "SHARED",
+  },
+  [permissionCodes.unitCatalogSurvey]: {
+    platforms: ["WEB", "MOBILE"],
+    audience: "SHARED",
+  },
+  [permissionCodes.unitCatalogManage]: {
+    platforms: ["WEB"],
+    audience: "WEB",
+  },
+  [permissionCodes.unitCatalogCreateJobdesc]: {
     platforms: ["WEB", "MOBILE"],
     audience: "SHARED",
   },

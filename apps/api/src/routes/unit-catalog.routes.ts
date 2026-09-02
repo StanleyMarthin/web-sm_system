@@ -11,7 +11,7 @@ import { parseJsonBody } from "@/http/request";
 import { errorResponse, successResponse, withCors } from "@/http/response";
 import { getApiEnv } from "@/config/env";
 import { requireSession } from "@/middleware/auth.middleware";
-import { requirePermission } from "@/middleware/permission.middleware";
+import { requireAnyPermission } from "@/middleware/permission.middleware";
 import type { AuthService } from "@/services/auth/auth.service";
 import { S3GalleryUploadTicketProvider } from "@/services/storage/r2-upload.service";
 import { UnitCatalogService } from "@/services/unit-catalog.service";
@@ -23,15 +23,35 @@ import {
   storeUploadTicket,
 } from "@/security/upload-ticket";
 
-async function requireUnitCatalogSession(request: Request, authService: AuthService, manage = false) {
+const unitCatalogAdminPermissions = [
+  permissionCodes.unitCatalogManage,
+] as const;
+
+const unitCatalogSurveyPermissions = [
+  permissionCodes.unitCatalogSurvey,
+  permissionCodes.unitCatalogManage,
+] as const;
+
+const unitCatalogReadPermissions = [
+  permissionCodes.unitCatalogView,
+  ...unitCatalogSurveyPermissions,
+  permissionCodes.unitCatalogCreateJobdesc,
+] as const;
+
+const unitCatalogJobdescPermissions = [
+  permissionCodes.unitCatalogCreateJobdesc,
+  permissionCodes.unitCatalogManage,
+] as const;
+
+async function requireUnitCatalogSession(
+  request: Request,
+  authService: AuthService,
+  requiredPermissions: readonly string[] = unitCatalogReadPermissions,
+) {
   const sessionResult = await requireSession(request, authService);
   if ("response" in sessionResult) return sessionResult;
-  const base = requirePermission(request, sessionResult.session, permissionCodes.unitDetailView);
-  if ("response" in base) return base;
-  if (manage) {
-    const manageResult = requirePermission(request, sessionResult.session, permissionCodes.unitPanelManage);
-    if ("response" in manageResult) return manageResult;
-  }
+  const permissionResult = requireAnyPermission(request, sessionResult.session, requiredPermissions);
+  if ("response" in permissionResult) return permissionResult;
   return { session: sessionResult.session };
 }
 
@@ -47,7 +67,11 @@ function mapCatalogError(request: Request, error: unknown): Response {
 }
 
 export async function handleUnitCatalogRoute(request: Request, unitId: string, authService: AuthService, service: UnitCatalogService) {
-  const sessionResult = await requireUnitCatalogSession(request, authService, request.method !== "GET");
+  const sessionResult = await requireUnitCatalogSession(
+    request,
+    authService,
+    request.method === "GET" ? unitCatalogReadPermissions : unitCatalogAdminPermissions,
+  );
   if ("response" in sessionResult) return sessionResult.response;
   try {
     if (request.method === "POST") {
@@ -78,7 +102,7 @@ export async function handleUnitCatalogReferenceRoute(request: Request, unitId: 
 }
 
 export async function handleUnitCatalogItemsBulkRoute(request: Request, unitId: string, referenceId: number, authService: AuthService, service: UnitCatalogService) {
-  const sessionResult = await requireUnitCatalogSession(request, authService, true);
+  const sessionResult = await requireUnitCatalogSession(request, authService, unitCatalogAdminPermissions);
   if ("response" in sessionResult) return sessionResult.response;
   const body = await parseJsonBody(request, bulkCatalogItemsRequestSchema);
   if (!body.success) return withCors(request, body.response);
@@ -90,7 +114,7 @@ export async function handleUnitCatalogItemsBulkRoute(request: Request, unitId: 
 }
 
 export async function handleUnitCatalogReferenceMediaRoute(request: Request, unitId: string, referenceId: number, authService: AuthService, service: UnitCatalogService) {
-  const sessionResult = await requireUnitCatalogSession(request, authService, true);
+  const sessionResult = await requireUnitCatalogSession(request, authService, unitCatalogAdminPermissions);
   if ("response" in sessionResult) return sessionResult.response;
   const body = await parseJsonBody(request, catalogReferenceMediaRequestSchema);
   if (!body.success) return withCors(request, body.response);
@@ -104,7 +128,7 @@ export async function handleUnitCatalogReferenceMediaRoute(request: Request, uni
 }
 
 export async function handleUnitCatalogUploadTicketRoute(request: Request, unitId: string, authService: AuthService) {
-  const sessionResult = await requireUnitCatalogSession(request, authService, true);
+  const sessionResult = await requireUnitCatalogSession(request, authService, unitCatalogSurveyPermissions);
   if ("response" in sessionResult) return sessionResult.response;
   try {
     const url = new URL(request.url);
@@ -141,7 +165,7 @@ export async function handleUnitCatalogItemRoute(request: Request, unitId: strin
 }
 
 export async function handleUnitCatalogSurveyRoute(request: Request, unitId: string, itemId: number, authService: AuthService, service: UnitCatalogService) {
-  const sessionResult = await requireUnitCatalogSession(request, authService, true);
+  const sessionResult = await requireUnitCatalogSession(request, authService, unitCatalogSurveyPermissions);
   if ("response" in sessionResult) return sessionResult.response;
   const body = await parseJsonBody(request, updateCatalogSurveyRequestSchema);
   if (!body.success) return withCors(request, body.response);
@@ -155,7 +179,7 @@ export async function handleUnitCatalogSurveyRoute(request: Request, unitId: str
 }
 
 export async function handleUnitCatalogSurveyConfirmRoute(request: Request, unitId: string, itemId: number, authService: AuthService, service: UnitCatalogService) {
-  const sessionResult = await requireUnitCatalogSession(request, authService, true);
+  const sessionResult = await requireUnitCatalogSession(request, authService, unitCatalogSurveyPermissions);
   if ("response" in sessionResult) return sessionResult.response;
   const body = await parseJsonBody(request, updateCatalogSurveyRequestSchema);
   if (!body.success) return withCors(request, body.response);
@@ -169,7 +193,7 @@ export async function handleUnitCatalogSurveyConfirmRoute(request: Request, unit
 }
 
 export async function handleUnitCatalogMediaRoute(request: Request, unitId: string, itemId: number, authService: AuthService, service: UnitCatalogService) {
-  const sessionResult = await requireUnitCatalogSession(request, authService, true);
+  const sessionResult = await requireUnitCatalogSession(request, authService, unitCatalogSurveyPermissions);
   if ("response" in sessionResult) return sessionResult.response;
   const body = await parseJsonBody(request, catalogMediaRequestSchema);
   if (!body.success) return withCors(request, body.response);
@@ -183,7 +207,7 @@ export async function handleUnitCatalogMediaRoute(request: Request, unitId: stri
 }
 
 export async function handleUnitCatalogMediaDeleteRoute(request: Request, unitId: string, itemId: number, mediaId: number, authService: AuthService, service: UnitCatalogService) {
-  const sessionResult = await requireUnitCatalogSession(request, authService, true);
+  const sessionResult = await requireUnitCatalogSession(request, authService, unitCatalogSurveyPermissions);
   if ("response" in sessionResult) return sessionResult.response;
   try {
     return successResponse(request, "Foto pendataan berhasil dihapus.", await service.deleteMedia(sessionResult.session, unitId, itemId, mediaId));
@@ -193,7 +217,7 @@ export async function handleUnitCatalogMediaDeleteRoute(request: Request, unitId
 }
 
 export async function handleUnitCatalogPromoteRoute(request: Request, unitId: string, itemId: number, authService: AuthService, service: UnitCatalogService) {
-  const sessionResult = await requireUnitCatalogSession(request, authService, true);
+  const sessionResult = await requireUnitCatalogSession(request, authService, unitCatalogSurveyPermissions);
   if ("response" in sessionResult) return sessionResult.response;
   try {
     return successResponse(request, "Item berhasil diproses ke Master Panel.", await service.promoteItem(sessionResult.session, unitId, itemId));
@@ -215,7 +239,11 @@ export async function handleUnitCatalogPanelRoute(request: Request, unitId: stri
 }
 
 export async function handleUnitCatalogPanelJobdescsRoute(request: Request, unitId: string, panelId: number, authService: AuthService, service: UnitCatalogService) {
-  const sessionResult = await requireUnitCatalogSession(request, authService, request.method !== "GET");
+  const sessionResult = await requireUnitCatalogSession(
+    request,
+    authService,
+    request.method === "GET" ? unitCatalogReadPermissions : unitCatalogJobdescPermissions,
+  );
   if ("response" in sessionResult) return sessionResult.response;
   try {
     if (request.method === "POST") {

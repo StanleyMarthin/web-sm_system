@@ -6,6 +6,7 @@ import type {
   UpdateCatalogSurveyRequest,
   UpsertCatalogReferenceRequest,
 } from "@smsystem/contracts/unit-catalog";
+import { permissionCodes } from "@smsystem/permissions";
 import { UnitCatalogRepository } from "@/repositories/unit-catalog.repo";
 import { UnitsRepository } from "@/repositories/units.repo";
 import type { WebSession } from "@/services/auth/session.service";
@@ -17,9 +18,14 @@ export class UnitCatalogService {
   ) {}
 
   private async assertUnitAccess(session: WebSession, unitId: string) {
+    const canSurveyCatalog =
+      session.user.permissions.includes(permissionCodes.unitCatalogSurvey) ||
+      session.user.permissions.includes(permissionCodes.unitCatalogManage);
     const unit = await this.unitsRepository.findUnitSummary({
       employeeId: session.user.employeeId,
-      scope: session.user.scope,
+      scope: canSurveyCatalog
+        ? { ...session.user.scope, canViewAllUnits: true, canViewAssignedUnits: true }
+        : session.user.scope,
       unitId,
     });
     if (!unit) throw new Error("UNIT_NOT_FOUND");

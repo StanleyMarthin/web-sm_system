@@ -126,6 +126,13 @@ interface CountdownRevisionRowPacket extends RowDataPacket {
   extensionRequestStatus: string | null;
   timeExtensionHours: number;
   targetHoursInitial: number;
+  targetHours: number | null;
+  targetHoursRevised: number | null;
+  totalActualHours: number;
+  deadlineDate: string | null;
+  picPlan: string | null;
+  requiredGrade: string | null;
+  revisionReason: string | null;
 }
 
 interface ValidationPacket extends RowDataPacket {
@@ -705,6 +712,111 @@ interface NormalizedCountdownMutationInput {
 
 const ALLOWED_TASK_CATEGORIES = ["MAIN", "ADDITIONAL", "WO", "WOV"] as const;
 const ALLOWED_STATUSES = ["PLAN", "PROSES", "QC_READY", "DONE"] as const;
+const COUNTDOWN_CORRECTION_REASONS = new Set(["INPUT_ERROR", "WRONG_TARGET", "WRONG_PIC", "WRONG_DEADLINE", "SYSTEM_CORRECTION"]);
+const COUNTDOWN_ALLOWED_REVISION_REASONS = new Set([
+  "TARGET_NOT_ACHIEVED",
+  "ADDITIONAL_DAMAGE",
+  "SCOPE_CHANGE",
+  "TECHNICAL_CONSTRAINT",
+  "WAITING_SUPPORT",
+  "PIC_CHANGE",
+  "QC_REWORK",
+  "FINISHED_EARLY",
+  "SCOPE_REDUCED",
+  "WORK_SIMPLIFIED",
+  "INPUT_ERROR",
+  "WRONG_TARGET",
+  "WRONG_PIC",
+  "WRONG_DEADLINE",
+  "SYSTEM_CORRECTION",
+  "OTHER",
+]);
+
+function normalizeCountdownRevisionReason(reason: string | null | undefined): string {
+  const code = String(reason ?? "").trim().toUpperCase();
+  return COUNTDOWN_ALLOWED_REVISION_REASONS.has(code) ? code : "OTHER";
+}
+
+function classifyCountdownRevision(
+  oldTarget: number | null,
+  newTarget: number | null,
+  reasonCode: string,
+): "EXTENSION" | "REDUCTION" | "CORRECTION" {
+  if (COUNTDOWN_CORRECTION_REASONS.has(reasonCode)) return "CORRECTION";
+  if (oldTarget !== null && newTarget !== null) {
+    if (newTarget > oldTarget) return "EXTENSION";
+    if (newTarget < oldTarget) return "REDUCTION";
+  }
+  return "CORRECTION";
+}
+
+function currentCountdownTarget(row: {
+  targetHours?: number | null;
+  targetHoursRevised?: number | null;
+  targetHoursInitial?: number | null;
+  timeExtensionHours?: number | null;
+}): number | null {
+  const candidates = [
+    row.targetHours,
+    row.targetHoursRevised,
+    Number(row.targetHoursInitial ?? 0) + Number(row.timeExtensionHours ?? 0),
+    row.targetHoursInitial,
+  ];
+  const value = candidates.find((candidate) => candidate !== null && candidate !== undefined && Number.isFinite(Number(candidate)));
+  return value === undefined ? null : Number(value);
+}
+
+async function insertCountdownRevision(
+  connection: PoolConnection,
+  params: {
+    countdownId: string;
+    oldTargetHours: number | null;
+    newTargetHours: number | null;
+    oldDeadlineDate: string | null;
+    newDeadlineDate: string | null;
+    oldPicPlan: string | null;
+    newPicPlan: string | null;
+    oldRequiredGrade: string | null;
+    newRequiredGrade: string | null;
+    reasonCode: string;
+    reasonDetail: string | null;
+    referenceType: string | null;
+    referenceId: string | null;
+    changedBy: string;
+  },
+): Promise<void> {
+  const delta = params.oldTargetHours !== null && params.newTargetHours !== null
+    ? params.newTargetHours - params.oldTargetHours
+    : null;
+  await connection.execute(
+    `INSERT INTO sm_jobdesc_countdown_revisions (
+       countdown_id, revision_type, reason_code,
+       old_target_hours, new_target_hours, delta_hours,
+       old_deadline_date, new_deadline_date,
+       old_pic_plan, new_pic_plan,
+       old_required_grade, new_required_grade,
+       reference_type, reference_id, reason_detail, changed_by
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      params.countdownId,
+      classifyCountdownRevision(params.oldTargetHours, params.newTargetHours, params.reasonCode),
+      params.reasonCode,
+      params.oldTargetHours,
+      params.newTargetHours,
+      delta,
+      params.oldDeadlineDate,
+      params.newDeadlineDate,
+      params.oldPicPlan,
+      params.newPicPlan,
+      params.oldRequiredGrade,
+      params.newRequiredGrade,
+      params.referenceType,
+      params.referenceId,
+      params.reasonDetail,
+      params.changedBy,
+    ],
+  );
+}
 
 async function normalizeAndValidateCountdownMutation(
   connection: PoolConnection,
@@ -1150,12 +1262,28 @@ export class CountdownRepository {
           }
           await connection.execute(
             `UPDATE sm_jobdesc_countdown
-             SET extension_request_status = 'APPROVED', time_extension_hours = ?, target_hours_revised = ?,
+             SET extension_request_status = 'APPROVED', time_extension_hours = ?, target_hours_revised = ?, target_hours = ?,
                  remaining_hours = GREATEST(? - COALESCE(total_actual_hours, 0), 0), deadline_date = ?,
                  count_revisi = count_revisi + 1, user_update = ?, updated_at = NOW()
              WHERE id = ?`,
-            [extension, target, target, params.input.approvedDeadline, params.employeeId, params.countdownId],
+            [extension, target, target, target, params.input.approvedDeadline, params.employeeId, params.countdownId],
           );
+          await insertCountdownRevision(connection, {
+            countdownId: params.countdownId,
+            oldTargetHours: currentCountdownTarget(revision),
+            newTargetHours: target,
+            oldDeadlineDate: revision.deadlineDate,
+            newDeadlineDate: params.input.approvedDeadline,
+            oldPicPlan: revision.picPlan,
+            newPicPlan: revision.picPlan,
+            oldRequiredGrade: revision.requiredGrade,
+            newRequiredGrade: revision.requiredGrade,
+            reasonCode: normalizeCountdownRevisionReason(revision.revisionReason),
+            reasonDetail: revision.revisionReason,
+            referenceType: params.isMo ? "MO_APPROVAL" : "KP_APPROVAL",
+            referenceId: params.countdownId,
+            changedBy: params.employeeId,
+          });
         }
       } else {
         await connection.execute(
@@ -1181,7 +1309,14 @@ export class CountdownRepository {
       `SELECT id AS countdownId, car_id AS carId, division_id AS divisionId, status,
               extension_request_status AS extensionRequestStatus,
               COALESCE(time_extension_hours, 0) AS timeExtensionHours,
-              COALESCE(target_hours_initial, 0) AS targetHoursInitial
+              COALESCE(target_hours_initial, 0) AS targetHoursInitial,
+              target_hours AS targetHours,
+              target_hours_revised AS targetHoursRevised,
+              COALESCE(total_actual_hours, 0) AS totalActualHours,
+              DATE_FORMAT(deadline_date, '%Y-%m-%d') AS deadlineDate,
+              pic_plan AS picPlan,
+              required_grade AS requiredGrade,
+              revision_reason AS revisionReason
        FROM sm_jobdesc_countdown WHERE id = ? FOR UPDATE`,
       [params.countdownId],
     );
@@ -1362,6 +1497,7 @@ export class CountdownRepository {
             target_hours_initial,
             time_extension_hours,
             target_hours_revised,
+            target_hours,
             total_actual_hours,
             remaining_hours,
             actual_progress_percent,
@@ -1382,7 +1518,7 @@ export class CountdownRepository {
             temuan_awal,
             keterangan,
             last_qc_level
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 0, ?, NULL, ?, ?, ?, NULL, NULL, 0, ?, ?, NULL, 0, NULL, ?, ?, ?, NULL)
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 0, ?, NULL, ?, ?, ?, NULL, NULL, 0, ?, ?, NULL, 0, NULL, ?, ?, ?, NULL)
         `,
         [
           countdownId,
@@ -1396,6 +1532,7 @@ export class CountdownRepository {
           normalized.jobTypeId,
           normalized.targetHoursInitial,
           timeExtensionHours,
+          targetHoursRevised,
           targetHoursRevised,
           remainingHours,
           normalized.status,
@@ -1465,6 +1602,23 @@ export class CountdownRepository {
         throw new Error("SCOPE_FORBIDDEN");
       }
 
+      const [lockedRows] = await connection.query<Array<RowDataPacket & {
+        targetHours: number | null;
+        targetHoursRevised: number | null;
+        targetHoursInitial: number | null;
+        timeExtensionHours: number | null;
+        deadlineDate: string | null;
+        picPlan: string | null;
+        requiredGrade: string | null;
+      }>>(
+        `SELECT target_hours AS targetHours, target_hours_revised AS targetHoursRevised,
+                target_hours_initial AS targetHoursInitial, time_extension_hours AS timeExtensionHours,
+                DATE_FORMAT(deadline_date, '%Y-%m-%d') AS deadlineDate,
+                pic_plan AS picPlan, required_grade AS requiredGrade
+         FROM sm_jobdesc_countdown WHERE id = ? FOR UPDATE`,
+        [countdownId],
+      );
+
       const scopeParams: ScopeParams = params;
       const normalized = await normalizeAndValidateCountdownMutation(connection, scopeParams, input);
       const timeExtensionHours = Number(existing.timeExtensionHours ?? 0);
@@ -1490,6 +1644,7 @@ export class CountdownRepository {
             job_type_id = ?,
             target_hours_initial = ?,
             target_hours_revised = ?,
+            target_hours = ?,
             remaining_hours = ?,
             actual_progress_percent = ?,
             status = ?,
@@ -1513,6 +1668,7 @@ export class CountdownRepository {
           normalized.jobTypeId,
           normalized.targetHoursInitial,
           targetHoursRevised,
+          targetHoursRevised,
           remainingHours,
           actualProgressPercent,
           normalized.status,
@@ -1526,6 +1682,31 @@ export class CountdownRepository {
           countdownId,
         ],
       );
+
+      const locked = lockedRows[0];
+      if (locked) {
+        const oldTarget = currentCountdownTarget(locked);
+        const targetChanged = oldTarget !== targetHoursRevised;
+        const deadlineChanged = locked.deadlineDate !== normalized.deadlineDate;
+        if (targetChanged || deadlineChanged) {
+          await insertCountdownRevision(connection, {
+            countdownId,
+            oldTargetHours: oldTarget,
+            newTargetHours: targetHoursRevised,
+            oldDeadlineDate: locked.deadlineDate,
+            newDeadlineDate: normalized.deadlineDate,
+            oldPicPlan: locked.picPlan,
+            newPicPlan: locked.picPlan,
+            oldRequiredGrade: locked.requiredGrade,
+            newRequiredGrade: locked.requiredGrade,
+            reasonCode: "SYSTEM_CORRECTION",
+            reasonDetail: normalized.note,
+            referenceType: "COUNTDOWN_EDIT",
+            referenceId: countdownId,
+            changedBy: params.employeeId,
+          });
+        }
+      }
 
       await connection.commit();
       const updated = await this.findCountdownDetail({
@@ -1771,6 +1952,7 @@ export class CountdownRepository {
               target_hours_initial,
               time_extension_hours,
               target_hours_revised,
+              target_hours,
               total_actual_hours,
               remaining_hours,
               actual_progress_percent,
@@ -1791,7 +1973,7 @@ export class CountdownRepository {
               temuan_awal,
               keterangan,
               last_qc_level
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 0, ?, 0, 'PLAN', NULL, ?, ?, ?, NULL, NULL, 0, ?, ?, NULL, 0, NULL, ?, ?, ?, NULL)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 0, ?, 0, 'PLAN', NULL, ?, ?, ?, NULL, NULL, 0, ?, ?, NULL, 0, NULL, ?, ?, ?, NULL)
           `,
           [
             countdownId,
@@ -1804,6 +1986,7 @@ export class CountdownRepository {
             sectionName,
             jobTypeId,
             targetHoursInitial,
+            targetHoursRevised,
             targetHoursRevised,
             targetHoursRevised,
             now,

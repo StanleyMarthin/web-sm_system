@@ -322,8 +322,10 @@ export class UnitCatalogRepository {
     const connection = await this.poolFactory(this.env).getConnection();
     try {
       await connection.beginTransaction();
-      const item = await this.saveSurveyWithConnection(connection, unitId, itemId, actorId, input, "CONFIRMED");
+      await this.saveSurveyWithConnection(connection, unitId, itemId, actorId, input, "CONFIRMED");
       const promoted = await this.materializeItemWithConnection(connection, unitId, itemId, actorId);
+      const item = await this.getItem(unitId, itemId, connection);
+      if (!item) throw new Error("CATALOG_ITEM_NOT_FOUND");
       await connection.commit();
       return { item, panelId: promoted.panelId, alreadyPromoted: promoted.alreadyPromoted };
     } catch (error) {
@@ -422,22 +424,42 @@ export class UnitCatalogRepository {
         parentId = Number(parentResult.insertId);
       }
       const panelName = item.actualName || item.partName || item.positionCode || item.partNumber || item.panelName;
-      const [panelResult] = await connection.execute<ResultSetHeader>(
+      const [existingPanelRows] = await connection.query<RowDataPacket[]>(
         `
-          INSERT INTO master_panels (
-            car_id, component_name, section, name, category, parent_id, part_number, position_code,
-            sort_order, qty, qty_normal, initial_condition, notes, is_active, created_by, updated_by
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+          SELECT id FROM master_panels
+          WHERE car_id = ? AND parent_id = ?
+            AND COALESCE(component_name, section) = ?
+            AND name = ?
+            AND part_number <=> ?
+            AND position_code <=> ?
+          LIMIT 1
         `,
-        [
-          unitId, item.componentName, item.componentName, panelName, item.componentName, parentId,
-          item.partNumber, item.positionCode, item.sortOrder ?? 0, num(item.qtyNormal) ?? 1,
-          num(item.qtyNormal), item.conditionStatus, item.notes, actorId, actorId,
-        ],
+        [unitId, parentId, item.componentName, panelName, item.partNumber, item.positionCode],
       );
-      const panelId = Number(panelResult.insertId);
+      let panelId = Number(existingPanelRows[0]?.id ?? 0);
+      if (!panelId) {
+        const [panelResult] = await connection.execute<ResultSetHeader>(
+          `
+            INSERT INTO master_panels (
+              car_id, component_name, section, name, category, parent_id, part_number, position_code,
+              sort_order, qty, qty_normal, initial_condition, notes, is_active, created_by, updated_by
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+          `,
+          [
+            unitId, item.componentName, item.componentName, panelName, item.componentName, parentId,
+            item.partNumber, item.positionCode, item.sortOrder ?? 0, num(item.qtyNormal) ?? 1,
+            num(item.qtyNormal), item.conditionStatus, item.notes, actorId, actorId,
+          ],
+        );
+        panelId = Number(panelResult.insertId);
+      }
       const referenceMedia = await this.listReferenceMedia(item.catalogReferenceId, connection);
       for (const media of referenceMedia) {
+        const [existingMediaRows] = await connection.query<RowDataPacket[]>(
+          "SELECT id FROM master_panel_media WHERE panel_id = ? AND source_catalog_reference_media_id = ? LIMIT 1",
+          [panelId, media.id],
+        );
+        if (existingMediaRows[0]) continue;
         await connection.execute(
           `
             INSERT INTO master_panel_media (
@@ -448,16 +470,27 @@ export class UnitCatalogRepository {
         );
       }
       if (item.diagramImageUrl) {
+        const [existingDiagramRows] = await connection.query<RowDataPacket[]>(
+          "SELECT id FROM master_panel_media WHERE panel_id = ? AND media_type = 'REFERENCE' AND file_url = ? LIMIT 1",
+          [panelId, item.diagramImageUrl],
+        );
+        if (!existingDiagramRows[0]) {
         await connection.execute(
           "INSERT INTO master_panel_media (panel_id, file_url, media_type, caption, created_by) VALUES (?, ?, 'REFERENCE', ?, ?)",
           [panelId, item.diagramImageUrl, item.referenceUrl, actorId],
         );
+        }
       }
       const [mediaRows] = await connection.query<RowDataPacket[]>(
         "SELECT id, file_url AS fileUrl, caption FROM unit_catalog_item_media WHERE catalog_item_id = ?",
         [itemId],
       );
       for (const media of mediaRows) {
+        const [existingMediaRows] = await connection.query<RowDataPacket[]>(
+          "SELECT id FROM master_panel_media WHERE panel_id = ? AND source_catalog_media_id = ? LIMIT 1",
+          [panelId, media.id],
+        );
+        if (existingMediaRows[0]) continue;
         await connection.execute(
           `
             INSERT INTO master_panel_media (panel_id, file_url, media_type, caption, source_catalog_media_id, created_by)

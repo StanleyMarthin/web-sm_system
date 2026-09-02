@@ -5,7 +5,7 @@ import type { UnitBomWorkspace } from "@smsystem/contracts/unit-bom";
 import type { UnitPanelCollection } from "@smsystem/contracts/unit-panel";
 import { AlertTriangle, ArrowLeft, FileText, Wrench } from "lucide-react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { BomTrackerTab } from "@/modules/units/components/bom-tracker-tab";
 import { MasterPanelManager } from "@/modules/units/components/master-panel-manager";
 import { UnitCatalogTab } from "@/modules/units/components/unit-catalog-tab";
@@ -19,6 +19,7 @@ interface UnitWorkspaceShellProps {
   canManagePhotos: boolean;
   canDownloadPhotos: boolean;
   canManagePanels: boolean;
+  canUseCatalog: boolean;
 }
 
 function SummaryCard({
@@ -112,10 +113,11 @@ export function UnitWorkspaceShell({
   canManagePhotos,
   canDownloadPhotos,
   canManagePanels,
+  canUseCatalog,
 }: UnitWorkspaceShellProps) {
-  const router = useRouter();
   const searchParams = useSearchParams();
-  const activeTab = resolveTab(searchParams.get("tab"));
+  const requestedTab = resolveTab(searchParams.get("tab"));
+  const activeTab = requestedTab === "catalog" && !canUseCatalog ? "summary" : requestedTab;
   const countdownItems = workspace.countdownItems ?? [];
   const unitDetails = unit as UnitBoardRowExtended;
   const workspaceDetails = workspace as UnitWorkspaceExtended;
@@ -162,12 +164,6 @@ export function UnitWorkspaceShell({
     avgProgress: div.progressSum / Math.max(div.totalItems, 1),
   })).sort((a, b) => b.avgProgress - a.avgProgress);
 
-  function updateTab(nextTab: UnitWorkspaceTab) {
-    const params = new URLSearchParams(searchParams.toString());
-    params.set("tab", nextTab);
-    router.replace(`?${params.toString()}`, { scroll: false });
-  }
-
   return (
     <div className="space-y-6">
       <div className="border border-border bg-card px-4 py-3">
@@ -185,30 +181,6 @@ export function UnitWorkspaceShell({
             <ArrowLeft className="h-4 w-4" />
             Kembali ke Daftar Unit
           </Link>
-        </div>
-      </div>
-
-      <div className="border-b border-border">
-        <div className="flex flex-wrap items-center gap-2">
-          {([
-            { id: "summary", label: "Summary" },
-            { id: "catalog", label: "Catalog & Pendataan" },
-            { id: "parts-panels", label: "Parts & Panels" },
-            { id: "master-panel", label: "Master Panel" },
-          ] as const).map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => updateTab(tab.id)}
-              className={`px-4 py-2 text-[14px] font-mono uppercase tracking-[0.12em] transition-colors ${
-                activeTab === tab.id
-                  ? "border-b-2 border-primary text-app-accent-ink"
-                  : "border-b-2 border-transparent text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
         </div>
       </div>
 

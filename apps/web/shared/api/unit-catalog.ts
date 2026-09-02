@@ -2,13 +2,17 @@ import {
   catalogItemSchema,
   catalogMediaRequestSchema,
   catalogReferenceSchema,
+  bulkCatalogItemsRequestSchema,
   createPanelJobdescsRequestSchema,
   updateCatalogSurveyRequestSchema,
+  upsertCatalogReferenceRequestSchema,
+  type BulkCatalogItemsRequest,
   type CatalogItem,
   type CatalogMediaRequest,
   type CatalogReference,
   type CreatePanelJobdescsRequest,
   type UpdateCatalogSurveyRequest,
+  type UpsertCatalogReferenceRequest,
 } from "@smsystem/contracts/unit-catalog";
 import { z } from "zod";
 import { getApiBaseUrl } from "@/shared/api/config";
@@ -23,6 +27,12 @@ const referenceEnvelopeSchema = z.object({
   success: z.boolean(),
   message: z.string(),
   data: z.object({ reference: catalogReferenceSchema }),
+});
+
+const bulkItemsEnvelopeSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+  data: z.object({ itemCount: z.number().int().nonnegative() }),
 });
 
 const surveyConfirmEnvelopeSchema = z.object({
@@ -99,6 +109,31 @@ export async function fetchUnitCatalogReference(unitId: string, referenceId: num
   return requestJson(
     `/api/units/${encodeURIComponent(unitId)}/catalog/${referenceId}`,
     referenceEnvelopeSchema,
+  );
+}
+
+export async function createUnitCatalogReference(
+  unitId: string,
+  input: UpsertCatalogReferenceRequest,
+) {
+  const body = upsertCatalogReferenceRequestSchema.parse(input);
+  return requestJson(
+    `/api/units/${encodeURIComponent(unitId)}/catalog`,
+    referenceEnvelopeSchema,
+    { method: "POST", body: JSON.stringify(body) },
+  );
+}
+
+export async function replaceUnitCatalogItems(
+  unitId: string,
+  referenceId: number,
+  input: BulkCatalogItemsRequest,
+) {
+  const body = bulkCatalogItemsRequestSchema.parse(input);
+  return requestJson(
+    `/api/units/${encodeURIComponent(unitId)}/catalog/${referenceId}/items`,
+    bulkItemsEnvelopeSchema,
+    { method: "PUT", body: JSON.stringify(body) },
   );
 }
 

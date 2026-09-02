@@ -1039,11 +1039,14 @@ export function JobPlanShell({
       if (countdown.carId !== row.carId) {
         continue;
       }
-      const key = countdown.panelName ?? countdown.panelSectionName ?? "-";
+      if (!countdown.panelId) {
+        continue;
+      }
+      const key = String(countdown.panelId);
       if (!unique.has(key)) {
         unique.set(key, {
           value: key,
-          label: key,
+          label: countdown.panelName ?? countdown.panelSectionName ?? `Panel #${key}`,
         });
       }
     }
@@ -1052,7 +1055,7 @@ export function JobPlanShell({
 
   function getCountdownJobOptions(row: WorkspaceRowState) {
     return getCountdownRowsForDivision().filter((countdown) => {
-      const panelKey = countdown.panelName ?? countdown.panelSectionName ?? "-";
+      const panelKey = countdown.panelId ? String(countdown.panelId) : "";
       return countdown.carId === row.carId && panelKey === row.panelKey;
     });
   }
@@ -1173,6 +1176,10 @@ export function JobPlanShell({
       setError("Countdown ini belum memiliki divisi, jadi draft Job Plan belum bisa dibuat.");
       return;
     }
+    if (!selectedCountdown.panelId) {
+      setError("Master Panel wajib dipilih sebelum membuat Job Plan.");
+      return;
+    }
 
     const transferMode = mode === "overtime" ? "overtime" : "normal";
     const sourceHours =
@@ -1185,7 +1192,7 @@ export function JobPlanShell({
         ...createEmptyInlineCreateRow(state.dateStart, divisionId),
         carId: selectedCountdown.carId,
         unitQuery: selectedCountdown.unitName,
-        panelKey: selectedCountdown.panelName ?? selectedCountdown.panelSectionName ?? "-",
+        panelKey: String(selectedCountdown.panelId),
         panelQuery: selectedCountdown.panelName ?? selectedCountdown.panelSectionName ?? "-",
         referenceId: selectedCountdown.value,
         targetHours: formatDurationHHMM(targetHours),
@@ -1292,15 +1299,19 @@ export function JobPlanShell({
     const unique = new Map<string, { value: string; label: string }>();
     for (const countdown of getCountdownRowsByDivision(row.divisionId)) {
       if (countdown.carId !== row.carId) continue;
-      const panel = countdown.panelName ?? countdown.panelSectionName ?? "-";
-      unique.set(panel, { value: panel, label: panel });
+      if (!countdown.panelId) continue;
+      const panel = String(countdown.panelId);
+      unique.set(panel, {
+        value: panel,
+        label: countdown.panelName ?? countdown.panelSectionName ?? `Panel #${panel}`,
+      });
     }
     return Array.from(unique.values());
   }
 
   function getQuickCreateJobOptions(row: InlineCreateRowState) {
     return getCountdownRowsByDivision(row.divisionId).filter((countdown) => {
-      const panel = countdown.panelName ?? countdown.panelSectionName ?? "-";
+      const panel = countdown.panelId ? String(countdown.panelId) : "";
       return countdown.carId === row.carId && panel === row.panelKey;
     });
   }

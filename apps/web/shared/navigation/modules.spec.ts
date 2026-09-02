@@ -26,3 +26,13 @@ describe("SPF navigation permissions", () => {
     ).toEqual(["spf-periods", "spf-clients"]);
   });
 });
+
+describe("Unit catalog navigation permissions", () => {
+  it("shows Units when the user only has catalog access", () => {
+    expect(
+      buildNavigation([permissionCodes.unitCatalogView])
+        .find((item) => item.id === "units")
+        ?.label,
+    ).toBe("Units");
+  });
+});

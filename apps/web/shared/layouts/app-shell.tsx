@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import type { AuthUser } from "@smsystem/contracts/auth";
+import { permissionCodes } from "@smsystem/permissions";
 import {
   CarFront,
   Clock3,
@@ -96,6 +97,12 @@ function initialsFromName(fullName: string): string {
     .toUpperCase();
 }
 
+function unitDetailSegment(pathname: string): string | null {
+  if (!pathname.startsWith("/units/")) return null;
+  const segment = pathname.split("/")[2];
+  return segment || null;
+}
+
 export function AppShell({ user, navigation, children }: AppShellProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -115,11 +122,56 @@ export function AppShell({ user, navigation, children }: AppShellProps) {
   const isDark = mounted && theme === "dark";
 
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const currentUnitSegment = unitDetailSegment(pathname);
+  const canUseUnitCatalog =
+    user.roleName?.trim().toLowerCase() === "mis" ||
+    user.permissions.includes(permissionCodes.unitCatalogView);
+  const sidebarNavigation = useMemo(() => {
+    if (!currentUnitSegment) return navigation;
+
+    return navigation.map((item) => {
+      if (item.id !== "units") return item;
+
+      return {
+        ...item,
+        subItems: [
+          {
+            id: "unit-summary",
+            label: "Summary",
+            href: `/units/${currentUnitSegment}?tab=summary`,
+            permission: permissionCodes.viewUnits,
+          },
+          ...(canUseUnitCatalog
+            ? [
+                {
+                  id: "unit-catalog",
+                  label: "Catalog & Pendataan",
+                  href: `/units/${currentUnitSegment}?tab=catalog`,
+                  permission: permissionCodes.unitCatalogView,
+                },
+              ]
+            : []),
+          {
+            id: "unit-parts-panels",
+            label: "Parts & Panels",
+            href: `/units/${currentUnitSegment}?tab=parts-panels`,
+            permission: permissionCodes.viewUnits,
+          },
+          {
+            id: "unit-master-panel",
+            label: "Master Panel",
+            href: `/units/${currentUnitSegment}?tab=master-panel`,
+            permission: permissionCodes.viewUnits,
+          },
+        ],
+      };
+    });
+  }, [canUseUnitCatalog, currentUnitSegment, navigation]);
 
   const idlePrefetchRoutes = useMemo(() => {
     const seen = new Set<string>();
 
-    return collectNavigationHrefs(navigation)
+    return collectNavigationHrefs(sidebarNavigation)
       .filter((href) => {
         const target = new URL(href, "http://localhost");
         const normalizedHref = `${target.pathname}${target.search}`;
@@ -128,7 +180,7 @@ export function AppShell({ user, navigation, children }: AppShellProps) {
         return true;
       })
       .slice(0, MAX_IDLE_PREFETCH_ROUTES);
-  }, [navigation, pathname]);
+  }, [sidebarNavigation, pathname]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -148,6 +200,11 @@ export function AppShell({ user, navigation, children }: AppShellProps) {
     if (targetSection) {
       const currentSection = searchParams.get("section") ?? (pathname === "/warehouse" ? "overview" : null);
       return currentSection === targetSection;
+    }
+    const targetTab = target.searchParams.get("tab");
+    if (targetTab) {
+      const currentTab = searchParams.get("tab") ?? (pathname.startsWith("/units/") ? "summary" : null);
+      return currentTab === targetTab;
     }
     if ([...target.searchParams.keys()].length === 0) return true;
     for (const key of new Set(target.searchParams.keys())) {
@@ -173,7 +230,7 @@ export function AppShell({ user, navigation, children }: AppShellProps) {
       if (!alive) return;
       setExpandedGroups(prev => {
         const next = new Set(prev);
-        for (const item of navigation) {
+        for (const item of sidebarNavigation) {
           if (item.subItems?.length && isNodeActive(item)) {
             next.add(item.id);
           }
@@ -185,7 +242,7 @@ export function AppShell({ user, navigation, children }: AppShellProps) {
     return () => {
       alive = false;
     };
-  }, [isNodeActive, navigation]);
+  }, [isNodeActive, sidebarNavigation]);
 
   useEffect(() => {
     if (idlePrefetchRoutes.length === 0) return;
@@ -328,7 +385,7 @@ export function AppShell({ user, navigation, children }: AppShellProps) {
 
   let activeParentLabel = "";
   let activeChildLabel = "";
-  for (const item of navigation) {
+  for (const item of sidebarNavigation) {
     if (isNodeActive(item)) {
       activeParentLabel = item.label;
       if (item.subItems) {
@@ -370,10 +427,10 @@ export function AppShell({ user, navigation, children }: AppShellProps) {
         {/* Nav */}
         <nav className="flex-1 space-y-0.5 overflow-y-auto px-2 py-2">
           {/* Solo Items */}
-          {navigation.filter(item => !item.group).map(item => renderNavItem(item))}
+          {sidebarNavigation.filter(item => !item.group).map(item => renderNavItem(item))}
 
           {/* Grouped Items */}
-          {Array.from(new Set(navigation.map(i => i.group).filter(Boolean))).map(groupName => (
+          {Array.from(new Set(sidebarNavigation.map(i => i.group).filter(Boolean))).map(groupName => (
             <div key={groupName!} className="mt-4 first:mt-0">
               <div className="flex items-center gap-2 px-2 pt-3 pb-1.5">
                 <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-sidebar-foreground/75 dark:text-muted-foreground">
@@ -382,7 +439,7 @@ export function AppShell({ user, navigation, children }: AppShellProps) {
                 <div className="h-px flex-1 bg-sidebar-border dark:bg-border" />
               </div>
               <div className="space-y-0.5">
-                {navigation.filter(item => item.group === groupName).map(item => renderNavItem(item))}
+                {sidebarNavigation.filter(item => item.group === groupName).map(item => renderNavItem(item))}
               </div>
             </div>
           ))}
