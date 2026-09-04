@@ -12,10 +12,18 @@
     "@hookform/resolvers": "^5.4.0",
     "@opentelemetry/instrumentation": "^0.214.0",
     "@sentry/conventions": "^0.12.0",
+    "@sentry/feedback": "^10.59.0",
     "@sentry/nextjs": "^10.59.0",
+    "@sentry/replay": "^10.59.0",
+    "@sentry/replay-canvas": "^10.59.0",
+    "ag-grid-community": "^36.1.0",
+    "ag-grid-react": "^36.1.0",
     "next-themes": "^0.4.6",
     "react-hook-form": "^7.76.1",
     "stacktrace-parser": "^0.1.11",
     "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^28.0.1"
   }
 }

@@ -1905,7 +1905,8 @@ export function JobPlanShell({
           .find((employee) => employee.value === row.assignedUserId)
           ?.label.replace(`${row.assignedUserId} · `, "") ?? "-";
       const targetTotalHours = selectedCountdown?.targetTotalHours ?? null;
-      const remainingWorkHours = selectedCountdown?.remainingHours ?? null;
+      const remainingWorkHours =
+        selectedCountdown?.availablePlanHours ?? selectedCountdown?.remainingHours ?? null;
       const hasAllocationError =
         quickCreateStagedAllocationError?.referenceId === row.referenceId;
 
@@ -2145,6 +2146,8 @@ export function JobPlanShell({
     ? allSections.normal.meta
     : meta;
   const quickEntryCountdown = quickCreateEntry ? getQuickCreateSelectedCountdown(quickCreateEntry) : null;
+  const quickEntryAvailableHours =
+    quickEntryCountdown?.availablePlanHours ?? quickEntryCountdown?.remainingHours ?? null;
   const quickEntryUnits = quickCreateEntry ? getQuickCreateUnitOptions(quickCreateEntry) : [];
   const quickEntryEmployees = quickCreateEntry ? getInlineEmployees(quickCreateEntry) : [];
   const quickEntryPanels = quickCreateEntry ? getQuickCreatePanelOptions(quickCreateEntry) : [];
@@ -2412,7 +2415,7 @@ export function JobPlanShell({
                     <div className="grid items-center gap-2 md:grid-cols-[105px_minmax(0,1fr)]"><FieldLabel required>Tanggal</FieldLabel><CompactInput type="date" value={quickCreateEntry.taskDate} onChange={(event) => updateQuickCreateEntry((row) => ({ ...row, taskDate: event.target.value, finishTimeTouched: false }))} /></div>
                     <div className="grid items-center gap-2 md:grid-cols-[105px_minmax(0,1fr)]"><FieldLabel>Target Awal</FieldLabel><CompactInput value={quickEntryCountdown?.targetTotalHours == null ? "-" : formatDurationHHMM(quickEntryCountdown.targetTotalHours)} disabled /></div>
                     <div className="grid items-center gap-2 md:grid-cols-[105px_minmax(0,1fr)]"><FieldLabel required>Target Hari Ini</FieldLabel><CompactInput value={quickCreateEntry.targetHours} placeholder="HH:MM" aria-invalid={quickCreateAllocationError?.referenceId === quickCreateEntry.referenceId || undefined} onChange={(event) => updateQuickCreateEntry((row) => ({ ...row, targetHours: event.target.value, finishTimeTouched: false }))} /></div>
-                    <div className="grid items-center gap-2 md:grid-cols-[105px_minmax(0,1fr)]"><FieldLabel>Sisa Target</FieldLabel><CompactInput value={quickEntryCountdown?.remainingHours == null ? "-" : formatDurationHHMM(quickEntryCountdown.remainingHours)} disabled /></div>
+                    <div className="grid items-center gap-2 md:grid-cols-[105px_minmax(0,1fr)]"><FieldLabel>Sisa Target</FieldLabel><CompactInput value={quickEntryAvailableHours === null ? "-" : formatDurationHHMM(quickEntryAvailableHours)} disabled /></div>
                     <div className="grid items-center gap-2 md:grid-cols-[105px_minmax(0,1fr)]"><FieldLabel>Jadwal Mulai</FieldLabel><CompactInput type="time" value={quickCreateEntry.startTime} onChange={(event) => updateQuickCreateEntry((row) => ({ ...row, startTime: event.target.value, startTimeTouched: true, finishTimeTouched: false }))} /></div>
                     <div className="grid items-center gap-2 md:grid-cols-[105px_minmax(0,1fr)]"><FieldLabel>Jadwal Selesai</FieldLabel><CompactInput type="time" value={quickCreateEntry.finishTime} onChange={(event) => updateQuickCreateEntry((row) => ({ ...row, finishTime: event.target.value, finishTimeTouched: true }))} /></div>
                     <div className="grid items-start gap-2 md:grid-cols-[105px_minmax(0,1fr)]"><FieldLabel>Catatan</FieldLabel><CompactTextarea rows={2} value={quickCreateEntry.note} placeholder="Masukkan catatan..." onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); commitQuickCreateEntry(); } }} onChange={(event) => updateQuickCreateEntry((row) => ({ ...row, note: event.target.value }))} /></div>

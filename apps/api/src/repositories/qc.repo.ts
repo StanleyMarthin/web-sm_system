@@ -97,6 +97,12 @@ interface MutationResult {
   reworkPlanId: string | null;
 }
 
+interface ApproverRow {
+  advisorId: string | null;
+  kpId: string | null;
+  kdId: string | null;
+}
+
 export interface QcRepository {
   listQueue(params: QcListParams): Promise<QcListPayload>;
   listRework(params: QcListParams): Promise<QcListPayload>;
@@ -109,6 +115,7 @@ export interface QcRepository {
   }>;
   findByCoreId(params: ScopeParams & { coreId: string }): Promise<QcQueueRecord | null>;
   findAssignedEmployeeIds?(coreId: string): Promise<string[]>;
+  findUnitApprovers?(carId: string): Promise<ApproverRow | null>;
   passInspection(
     context: { actorId: string; qcLevel: string },
     input: { coreId: string; payload: QcPassRequest },
@@ -181,6 +188,12 @@ function toHours(value: string): number {
   const hours = Number.parseInt(hoursRaw ?? "0", 10);
   const minutes = Number.parseInt(minutesRaw ?? "0", 10);
   return hours + minutes / 60;
+}
+
+const TECHNICAL_COUNTDOWN_WHERE = "COALESCE(jt.is_teknis, 1) = 1";
+
+function isFinalQcLevel(qcLevel: string): boolean {
+  return qcLevel === "QC_ADVISOR";
 }
 
 function mapQcRow(row: QcRow): QcQueueRecord {
@@ -432,6 +445,29 @@ export class MySqlQcRepository implements QcRepository {
     return rows.map((row) => String(row.employeeId)).filter(Boolean);
   }
 
+  async findUnitApprovers(carId: string): Promise<ApproverRow | null> {
+    const [rows] = await this.poolFactory().query<RowDataPacket[]>(
+      `SELECT
+         advisor_id AS advisorId,
+         kp_id AS kpId,
+         kd_id AS kdId
+       FROM car_project_assignment
+       WHERE car_id = ?
+         AND ended_at IS NULL
+       LIMIT 1`,
+      [carId],
+    );
+
+    const row = rows[0];
+    return row
+      ? {
+          advisorId: row.advisorId ? String(row.advisorId) : null,
+          kpId: row.kpId ? String(row.kpId) : null,
+          kdId: row.kdId ? String(row.kdId) : null,
+        }
+      : null;
+  }
+
   async listQueue(params: QcListParams): Promise<QcListPayload> {
     return this.listByMode(params, {
       extraWhere: [
@@ -484,7 +520,9 @@ export class MySqlQcRepository implements QcRepository {
             d.name AS label
           FROM sm_jobdesc_countdown cd
           JOIN sm_divisi d ON d.id = cd.division_id
+          LEFT JOIN master_job_types jt ON jt.id = cd.job_type_id
           ${whereSql}
+          ${whereSql ? `AND ${TECHNICAL_COUNTDOWN_WHERE}` : `WHERE ${TECHNICAL_COUNTDOWN_WHERE}`}
           ORDER BY d.name
         `,
         scopeParams,
@@ -496,7 +534,9 @@ export class MySqlQcRepository implements QcRepository {
             c.unit_name AS label
           FROM sm_jobdesc_countdown cd
           JOIN cars c ON c.id = cd.car_id
+          LEFT JOIN master_job_types jt ON jt.id = cd.job_type_id
           ${whereSql}
+          ${whereSql ? `AND ${TECHNICAL_COUNTDOWN_WHERE}` : `WHERE ${TECHNICAL_COUNTDOWN_WHERE}`}
           ORDER BY c.unit_name
         `,
         scopeParams,
@@ -540,6 +580,7 @@ export class MySqlQcRepository implements QcRepository {
     if (scopeWhere) {
       clauses.push(scopeWhere);
     }
+    clauses.push(TECHNICAL_COUNTDOWN_WHERE);
 
     const [rows] = (await pool.query(
       `
@@ -566,6 +607,12 @@ export class MySqlQcRepository implements QcRepository {
       if (!current) {
         throw new Error("QC_NOT_FOUND");
       }
+      if (!current.isTechnicalJob) {
+        throw new Error("QC_NON_TECHNICAL_FORBIDDEN");
+      }
+
+      const nextStatus = isFinalQcLevel(context.qcLevel) ? "DONE" : "READY_QC";
+      const remainingHoursAfter = isFinalQcLevel(context.qcLevel) ? 0 : current.remainingHours;
 
       const qcId = randomUUID();
       await connection.execute(
@@ -582,13 +629,14 @@ export class MySqlQcRepository implements QcRepository {
             inspector_role,
             photo_before_url,
             evidence_photo_url
-          ) VALUES (?, ?, 'LOLOS', ?, ?, 0, ?, ?, ?, ?, ?)
+          ) VALUES (?, ?, 'LOLOS', ?, ?, ?, ?, ?, ?, ?, ?)
         `,
         [
           qcId,
           input.coreId,
           input.payload.notes ?? null,
           input.payload.inspectionDurationMinutes ?? null,
+          remainingHoursAfter,
           context.actorId,
           context.qcLevel,
           context.qcLevel.replace("QC_", ""),
@@ -600,15 +648,15 @@ export class MySqlQcRepository implements QcRepository {
       await connection.execute(
         `
           UPDATE sm_jobdesc_countdown
-          SET status = 'DONE',
+          SET status = ?,
               qc_last_status = 'LOLOS',
               latest_qc_id = ?,
               last_qc_level = ?,
-              remaining_hours = 0,
+              remaining_hours = ?,
               user_update = ?
           WHERE id = ?
         `,
-        [qcId, context.qcLevel, context.actorId, input.coreId],
+        [nextStatus, qcId, context.qcLevel, remainingHoursAfter, context.actorId, input.coreId],
       );
 
       await connection.commit();
@@ -764,6 +812,7 @@ export class MySqlQcRepository implements QcRepository {
     if (scopeWhere) {
       clauses.push(scopeWhere);
     }
+    clauses.push(TECHNICAL_COUNTDOWN_WHERE);
 
     const [checklistRows] = (await pool.query(
       `
@@ -782,6 +831,7 @@ export class MySqlQcRepository implements QcRepository {
           final.notes AS notes
         FROM sm_jobdesc_countdown cd
         JOIN cars c ON c.id = cd.car_id
+        LEFT JOIN master_job_types jt ON jt.id = cd.job_type_id
         ${buildOpenIssuesByCarJoinSql(issueStorageReady, "c.id")}
         LEFT JOIN sm_qc_final_approvals final ON final.car_id = c.id
         WHERE ${clauses.join(" AND ")}
@@ -934,6 +984,7 @@ export class MySqlQcRepository implements QcRepository {
     if (scopeWhere) {
       whereClauses.push(scopeWhere);
     }
+    whereClauses.push(TECHNICAL_COUNTDOWN_WHERE);
 
     whereClauses.push(...buildSearchClause(params.query, whereParams));
     whereClauses.push(...buildFilterClauses(params.query, whereParams));
@@ -984,7 +1035,11 @@ export class MySqlQcRepository implements QcRepository {
         divisionId: "cd.division_id",
       },
     );
-    const whereSql = scopeWhere ? `WHERE ${scopeWhere}` : "";
+    const whereClauses = [TECHNICAL_COUNTDOWN_WHERE];
+    if (scopeWhere) {
+      whereClauses.push(scopeWhere);
+    }
+    const whereSql = `WHERE ${whereClauses.join(" AND ")}`;
     const [rows] = (await pool.query(
       `
         SELECT
@@ -1012,6 +1067,7 @@ export class MySqlQcRepository implements QcRepository {
             END
           ) AS activeReworkCount
         FROM sm_jobdesc_countdown cd
+        LEFT JOIN master_job_types jt ON jt.id = cd.job_type_id
         LEFT JOIN sm_qc_inspections reject_qc ON reject_qc.id = cd.ref_rework_qc_id
         LEFT JOIN sm_jobdesc_plan rework_plan ON rework_plan.id = reject_qc.rework_plan_id
         ${whereSql}
@@ -1026,6 +1082,7 @@ export class MySqlQcRepository implements QcRepository {
           SELECT
             cd.car_id
           FROM sm_jobdesc_countdown cd
+          LEFT JOIN master_job_types jt ON jt.id = cd.job_type_id
           ${buildOpenIssuesByCarJoinSql(issueStorageReady)}
           ${whereSql}
           GROUP BY cd.car_id
@@ -1049,14 +1106,22 @@ export class MySqlQcRepository implements QcRepository {
   private async lockCountdown(
     connection: PoolConnection,
     coreId: string,
-  ): Promise<{ jobName: string | null; panelName: string | null; reworkPlanId: string | null } | null> {
+  ): Promise<{
+    jobName: string | null;
+    panelName: string | null;
+    reworkPlanId: string | null;
+    remainingHours: number;
+    isTechnicalJob: boolean;
+  } | null> {
     const [rows] = (await connection.query(
       `
         SELECT
           cd.id AS coreId,
           COALESCE(wo.job_detail, jt.job_name, cd.section_name, cd.task_category) AS jobName,
           COALESCE(cd.section_name, mp.name) AS panelName,
-          reject_qc.rework_plan_id AS reworkPlanId
+          reject_qc.rework_plan_id AS reworkPlanId,
+          COALESCE(cd.remaining_hours, 0) AS remainingHours,
+          COALESCE(jt.is_teknis, 1) AS isTechnicalJob
         FROM sm_jobdesc_countdown cd
         LEFT JOIN master_panels mp ON mp.id = cd.panel_id
         LEFT JOIN master_job_types jt ON jt.id = cd.job_type_id
@@ -1067,8 +1132,23 @@ export class MySqlQcRepository implements QcRepository {
         FOR UPDATE
       `,
       [coreId],
-    )) as [Array<RowDataPacket & { coreId: string; jobName: string | null; panelName: string | null; reworkPlanId: string | null }>, unknown];
+    )) as [Array<RowDataPacket & {
+      coreId: string;
+      jobName: string | null;
+      panelName: string | null;
+      reworkPlanId: string | null;
+      remainingHours: number | null;
+      isTechnicalJob: number | null;
+    }>, unknown];
 
-    return rows[0] ?? null;
+    return rows[0]
+      ? {
+          jobName: rows[0].jobName,
+          panelName: rows[0].panelName,
+          reworkPlanId: rows[0].reworkPlanId,
+          remainingHours: Number(rows[0].remainingHours ?? 0),
+          isTechnicalJob: Number(rows[0].isTechnicalJob ?? 1) === 1,
+        }
+      : null;
   }
 }

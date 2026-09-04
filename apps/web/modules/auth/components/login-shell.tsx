@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import type { FormEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, LogIn, Lock, User, Eye, EyeOff } from "lucide-react";
@@ -110,6 +111,11 @@ export function LoginShell() {
     void doLogin(data, false);
   }
 
+  function handleFormSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    void handleSubmit(submitLogin)(event);
+  }
+
   function submitForceLogin() {
     void doLogin(getValues(), true);
   }
@@ -149,7 +155,7 @@ export function LoginShell() {
 
         <form
           className="space-y-5"
-          onSubmit={handleSubmit(submitLogin)}
+          onSubmit={handleFormSubmit}
         >
           <div className="space-y-1.5">
             <label

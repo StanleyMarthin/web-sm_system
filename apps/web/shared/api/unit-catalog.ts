@@ -1,49 +1,47 @@
 import {
   catalogItemSchema,
+  catalogOverviewSchema,
+  catalogWorkspaceSchema,
+  catalogSearchItemSchema,
   catalogMediaRequestSchema,
-  catalogReferenceSchema,
-  bulkCatalogItemsRequestSchema,
+  catalogReferenceMediaRequestSchema,
   createPanelJobdescsRequestSchema,
+  saveCatalogWorkspaceRequestSchema,
   updateCatalogSurveyRequestSchema,
   upsertCatalogReferenceRequestSchema,
-  type BulkCatalogItemsRequest,
   type CatalogItem,
-  type CatalogMediaRequest,
-  type CatalogReference,
+  type CatalogOverview,
+  type CatalogWorkspace,
   type CreatePanelJobdescsRequest,
+  type SaveCatalogWorkspaceRequest,
   type UpdateCatalogSurveyRequest,
   type UpsertCatalogReferenceRequest,
 } from "@smsystem/contracts/unit-catalog";
 import { z } from "zod";
 import { getApiBaseUrl } from "@/shared/api/config";
 
-const listCatalogEnvelopeSchema = z.object({
+const overviewEnvelopeSchema = z.object({
   success: z.boolean(),
   message: z.string(),
-  data: z.object({ references: z.array(catalogReferenceSchema) }),
+  data: z.object({ overview: catalogOverviewSchema }),
 });
 
-const referenceEnvelopeSchema = z.object({
+const workspaceEnvelopeSchema = z.object({
   success: z.boolean(),
   message: z.string(),
-  data: z.object({ reference: catalogReferenceSchema }),
+  data: z.object({ workspace: catalogWorkspaceSchema }),
 });
 
-const bulkItemsEnvelopeSchema = z.object({
+const itemEnvelopeSchema = z.object({
   success: z.boolean(),
   message: z.string(),
-  data: z.object({ itemCount: z.number().int().nonnegative() }),
+  data: z.object({ item: catalogItemSchema }),
 });
 
-const surveyConfirmEnvelopeSchema = z.object({
+const searchEnvelopeSchema = z.object({
   success: z.boolean(),
   message: z.string(),
-  data: z.object({
-    result: z.object({
-      item: catalogItemSchema,
-      panel: z.record(z.string(), z.unknown()),
-    }),
-  }),
+  data: z.object({ items: z.array(catalogSearchItemSchema) }),
 });
 
 const mediaEnvelopeSchema = z.object({
@@ -99,75 +97,88 @@ async function requestJson<T>(path: string, schema: z.ZodType<T>, init?: Request
 }
 
 export async function fetchUnitCatalog(unitId: string) {
+  return requestJson(`/api/units/${encodeURIComponent(unitId)}/catalog`, overviewEnvelopeSchema);
+}
+
+export async function searchUnitCatalog(unitId: string, input: {
+  q: string;
+  componentId?: number | null;
+  panelId?: number | null;
+  limit?: number;
+  offset?: number;
+}) {
+  const params = new URLSearchParams({ q: input.q });
+  if (input.componentId) params.set("componentId", String(input.componentId));
+  if (input.panelId) params.set("panelId", String(input.panelId));
+  if (input.limit) params.set("limit", String(input.limit));
+  if (input.offset) params.set("offset", String(input.offset));
   return requestJson(
-    `/api/units/${encodeURIComponent(unitId)}/catalog`,
-    listCatalogEnvelopeSchema,
+    `/api/units/${encodeURIComponent(unitId)}/catalog/search?${params.toString()}`,
+    searchEnvelopeSchema,
+  );
+}
+
+export async function fetchUnitCatalogPanelWorkspace(unitId: string, panelId: number) {
+  return requestJson(
+    `/api/units/${encodeURIComponent(unitId)}/catalog/panels/${panelId}`,
+    workspaceEnvelopeSchema,
   );
 }
 
 export async function fetchUnitCatalogReference(unitId: string, referenceId: number) {
   return requestJson(
     `/api/units/${encodeURIComponent(unitId)}/catalog/${referenceId}`,
-    referenceEnvelopeSchema,
+    workspaceEnvelopeSchema,
   );
 }
 
-export async function createUnitCatalogReference(
-  unitId: string,
-  input: UpsertCatalogReferenceRequest,
-) {
+export async function createUnitCatalogReference(unitId: string, input: UpsertCatalogReferenceRequest) {
   const body = upsertCatalogReferenceRequestSchema.parse(input);
   return requestJson(
     `/api/units/${encodeURIComponent(unitId)}/catalog`,
-    referenceEnvelopeSchema,
+    workspaceEnvelopeSchema,
     { method: "POST", body: JSON.stringify(body) },
   );
 }
 
-export async function replaceUnitCatalogItems(
-  unitId: string,
-  referenceId: number,
-  input: BulkCatalogItemsRequest,
-) {
-  const body = bulkCatalogItemsRequestSchema.parse(input);
+export async function saveUnitCatalogPanelWorkspace(unitId: string, panelId: number, input: SaveCatalogWorkspaceRequest) {
+  const body = saveCatalogWorkspaceRequestSchema.parse(input);
   return requestJson(
-    `/api/units/${encodeURIComponent(unitId)}/catalog/${referenceId}/items`,
-    bulkItemsEnvelopeSchema,
+    `/api/units/${encodeURIComponent(unitId)}/catalog/panels/${panelId}/items/batch`,
+    workspaceEnvelopeSchema,
     { method: "PUT", body: JSON.stringify(body) },
   );
 }
 
-export async function saveUnitCatalogSurvey(
-  unitId: string,
-  itemId: number,
-  input: UpdateCatalogSurveyRequest,
-) {
+export async function saveUnitCatalogSurvey(unitId: string, itemId: number, input: UpdateCatalogSurveyRequest) {
   const body = updateCatalogSurveyRequestSchema.parse(input);
   return requestJson(
     `/api/units/${encodeURIComponent(unitId)}/catalog/items/${itemId}/survey`,
-    z.object({ success: z.boolean(), message: z.string(), data: z.object({ item: catalogItemSchema }) }),
+    itemEnvelopeSchema,
     { method: "PUT", body: JSON.stringify(body) },
   );
 }
 
-export async function confirmUnitCatalogSurvey(
-  unitId: string,
-  itemId: number,
-  input: UpdateCatalogSurveyRequest,
-) {
+export async function confirmUnitCatalogSurvey(unitId: string, itemId: number, input: UpdateCatalogSurveyRequest) {
   const body = updateCatalogSurveyRequestSchema.parse(input);
   return requestJson(
     `/api/units/${encodeURIComponent(unitId)}/catalog/items/${itemId}/survey/confirm`,
-    surveyConfirmEnvelopeSchema,
+    z.object({
+      success: z.boolean(),
+      message: z.string(),
+      data: z.object({
+        result: z.object({
+          item: catalogItemSchema,
+          panelId: z.number().int().positive(),
+          alreadyPromoted: z.boolean(),
+        }),
+      }),
+    }),
     { method: "POST", body: JSON.stringify(body) },
   );
 }
 
-export async function addUnitCatalogItemMedia(
-  unitId: string,
-  itemId: number,
-  input: CatalogMediaRequest,
-) {
+export async function addUnitCatalogItemMedia(unitId: string, itemId: number, input: { fileUrl: string; caption?: string | null }) {
   const body = catalogMediaRequestSchema.parse(input);
   return requestJson(
     `/api/units/${encodeURIComponent(unitId)}/catalog/items/${itemId}/media`,
@@ -176,12 +187,16 @@ export async function addUnitCatalogItemMedia(
   );
 }
 
-export async function requestUnitCatalogUploadTicket(input: {
-  unitId: string;
-  filename: string;
-  contentType: string;
-  size: number;
-}) {
+export async function addUnitCatalogReferenceMedia(unitId: string, referenceId: number, input: { fileUrl: string; caption?: string | null; sortOrder?: number }) {
+  const body = catalogReferenceMediaRequestSchema.parse(input);
+  return requestJson(
+    `/api/units/${encodeURIComponent(unitId)}/catalog/${referenceId}/media`,
+    mediaEnvelopeSchema,
+    { method: "POST", body: JSON.stringify(body) },
+  );
+}
+
+export async function requestUnitCatalogUploadTicket(input: { unitId: string; filename: string; contentType: string; size: number }) {
   const params = new URLSearchParams({
     filename: input.filename,
     contentType: input.contentType,
@@ -207,11 +222,7 @@ export async function fetchUnitCatalogMasterPanel(unitId: string, panelId: numbe
   );
 }
 
-export async function createUnitCatalogPanelJobdescs(
-  unitId: string,
-  panelId: number,
-  input: CreatePanelJobdescsRequest,
-) {
+export async function createUnitCatalogPanelJobdescs(unitId: string, panelId: number, input: CreatePanelJobdescsRequest) {
   const body = createPanelJobdescsRequestSchema.parse(input);
   return requestJson(
     `/api/units/${encodeURIComponent(unitId)}/catalog/master-panels/${panelId}/jobdescs`,
@@ -220,4 +231,4 @@ export async function createUnitCatalogPanelJobdescs(
   );
 }
 
-export type { CatalogItem, CatalogReference };
+export type { CatalogItem, CatalogOverview, CatalogWorkspace };

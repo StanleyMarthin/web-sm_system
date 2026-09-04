@@ -560,7 +560,8 @@ export function AppShell({ user, navigation, children }: AppShellProps) {
                       setLogoutError(null);
                       const didLogout = await logoutFromWeb();
                       if (didLogout) {
-                        window.location.href = "/login";
+                        router.replace("/login");
+                        router.refresh();
                         return;
                       }
 

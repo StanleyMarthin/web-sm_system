@@ -1,8 +1,8 @@
 import type {
-  BulkCatalogItemsRequest,
   CatalogMediaRequest,
   CatalogReferenceMediaRequest,
   CreatePanelJobdescsRequest,
+  SaveCatalogWorkspaceRequest,
   UpdateCatalogSurveyRequest,
   UpsertCatalogReferenceRequest,
 } from "@smsystem/contracts/unit-catalog";
@@ -31,9 +31,14 @@ export class UnitCatalogService {
     if (!unit) throw new Error("UNIT_NOT_FOUND");
   }
 
-  async listReferences(session: WebSession, unitId: string) {
+  async getOverview(session: WebSession, unitId: string) {
     await this.assertUnitAccess(session, unitId);
-    return this.repository.listReferences(unitId);
+    return this.repository.listOverview(unitId);
+  }
+
+  async searchCatalog(session: WebSession, unitId: string, query: string, filters?: { componentId?: number | null; panelId?: number | null; limit?: number; offset?: number }) {
+    await this.assertUnitAccess(session, unitId);
+    return this.repository.searchCatalog(unitId, query, filters);
   }
 
   async createReference(session: WebSession, unitId: string, input: UpsertCatalogReferenceRequest) {
@@ -46,11 +51,14 @@ export class UnitCatalogService {
     return this.repository.getReference(unitId, referenceId);
   }
 
-  async replaceItems(session: WebSession, unitId: string, referenceId: number, input: BulkCatalogItemsRequest) {
+  async getPanelWorkspace(session: WebSession, unitId: string, panelId: number) {
     await this.assertUnitAccess(session, unitId);
-    const reference = await this.repository.getReference(unitId, referenceId);
-    if (!reference) throw new Error("CATALOG_REFERENCE_NOT_FOUND");
-    return this.repository.replaceItems(referenceId, input);
+    return this.repository.getPanelWorkspace(unitId, panelId);
+  }
+
+  async savePanelWorkspace(session: WebSession, unitId: string, panelId: number, input: SaveCatalogWorkspaceRequest) {
+    await this.assertUnitAccess(session, unitId);
+    return this.repository.savePanelWorkspace(unitId, panelId, session.user.employeeId, input);
   }
 
   async addReferenceMedia(session: WebSession, unitId: string, referenceId: number, input: CatalogReferenceMediaRequest) {

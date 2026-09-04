@@ -577,7 +577,7 @@ export function QcShell({
                   />
                 </div>
 
-                {canSubmit && activeTab !== "rework" ? (
+                {(canSubmit || canValidate) && activeTab !== "rework" ? (
                   <div className="grid gap-4 xl:grid-cols-2">
                     <button
                       type="button"

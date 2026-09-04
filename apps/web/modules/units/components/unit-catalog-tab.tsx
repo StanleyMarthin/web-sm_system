@@ -1,633 +1,618 @@
+/*
+Tujuan: Workspace catalog unit berbasis AG Grid Community.
+Caller: unit workspace shell.
+Dependensi: API unit-catalog, helper spreadsheet, sweet alert.
+Main Functions: overview panel, pilih panel, edit batch item, upload media referensi, search.
+Side Effects: HTTP fetch/update catalog dan upload file reference.
+*/
+
 "use client";
 
-import {
-  parseCatalogSpreadsheetText,
-  type CatalogItem,
-  type CatalogReference,
-} from "@smsystem/contracts/unit-catalog";
-import Link from "next/link";
+import type { CatalogOverview, CatalogWorkspace } from "@smsystem/contracts/unit-catalog";
+import { AlertCircle, ArrowUpDown, ImagePlus, Pencil, Save, Search, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { UnitCatalogEditor } from "@/modules/units/components/unit-catalog-editor";
 import {
-  addUnitCatalogItemMedia,
-  confirmUnitCatalogSurvey,
-  createUnitCatalogReference,
-  createUnitCatalogPanelJobdescs,
+  appendEmptyCatalogDraftRow,
+  createCatalogWorkspaceDraft,
+  isCatalogDraftDirty,
+  serializeCatalogDraftRows,
+  workspaceDraftFromWorkspace,
+  type CatalogWorkspaceDraft,
+} from "@/modules/units/helpers/unit-catalog-sheet";
+import {
   fetchUnitCatalog,
-  fetchUnitCatalogMasterPanel,
-  fetchUnitCatalogReference,
+  fetchUnitCatalogPanelWorkspace,
   requestUnitCatalogUploadTicket,
-  replaceUnitCatalogItems,
-  saveUnitCatalogSurvey,
+  saveUnitCatalogPanelWorkspace,
+  searchUnitCatalog,
 } from "@/shared/api/unit-catalog";
+import { useSweetAlert } from "@/shared/ui/sweet-alert";
+import { ActionButton, CompactInput, PageHeader, SectionCard } from "@/shared/ui/compact";
 
 interface UnitCatalogTabProps {
   unitId: string;
   unitName: string;
 }
 
-type MarkerDraft = {
-  catalogReferenceMediaId: number;
-  xPercent: number;
-  yPercent: number;
-};
-
-type SurveyForm = {
-  qtyOpname: string;
-  actualName: string;
-  availabilityStatus: "UNKNOWN" | "AVAILABLE" | "NOT_AVAILABLE";
-  conditionStatus: "UNKNOWN" | "GOOD" | "RESTORE" | "NOT_USABLE";
-  actionType: "UNDECIDED" | "NO_ACTION" | "JOBDESC" | "JOBDESC_ORDER";
-  location: string;
-  notes: string;
-  photoFile: File | null;
-};
-
-type MasterPanelMedia = {
-  fileUrl?: unknown;
-  file_url?: unknown;
-  mediaType?: unknown;
-  media_type?: unknown;
-  caption?: unknown;
-};
-
-type MasterPanelDetail = Record<string, unknown> & {
-  media?: MasterPanelMedia[];
-};
-
-type CatalogImportForm = {
-  componentName: string;
-  panelName: string;
-  diagramImageUrl: string;
-  referenceUrl: string;
-  notes: string;
-  spreadsheetText: string;
-};
-
-const defaultSurveyForm: SurveyForm = {
-  qtyOpname: "",
-  actualName: "",
-  availabilityStatus: "UNKNOWN",
-  conditionStatus: "UNKNOWN",
-  actionType: "UNDECIDED",
-  location: "",
-  notes: "",
-  photoFile: null,
-};
-
-const statusLabels: Record<CatalogItem["surveyStatus"], string> = {
-  NOT_STARTED: "Belum didata",
-  DRAFT: "Draft",
-  CONFIRMED: "Confirmed",
-};
-
-const defaultImportForm: CatalogImportForm = {
-  componentName: "",
-  panelName: "",
-  diagramImageUrl: "",
-  referenceUrl: "",
-  notes: "",
-  spreadsheetText: "",
-};
-
-function toNumberOrNull(value: string) {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+function groupPanelsByComponent(overview: CatalogOverview | null) {
+  if (!overview) return [];
+  return overview.components.map((component) => ({
+    component,
+    panels: overview.panels.filter((panel) => panel.componentId === component.id),
+  }));
 }
 
-function initialForm(item: CatalogItem): SurveyForm {
-  return {
-    qtyOpname: item.qtyOpname == null ? "" : String(item.qtyOpname),
-    actualName: item.actualName ?? "",
-    availabilityStatus: item.availabilityStatus,
-    conditionStatus: item.conditionStatus,
-    actionType: item.actionType,
-    location: item.location ?? "",
-    notes: item.notes ?? "",
-    photoFile: null,
-  };
+function formatItemCount(value: number) {
+  return new Intl.NumberFormat("id-ID").format(value);
 }
 
-function unique(values: Array<string | null | undefined>) {
-  return Array.from(new Set(values.filter((value): value is string => Boolean(value))));
-}
-
-function panelText(panel: MasterPanelDetail | null, key: string) {
-  const value = panel?.[key];
-  if (typeof value === "string" && value.trim()) return value;
-  if (typeof value === "number") return String(value);
-  return "-";
-}
-
-function panelMediaUrl(media: MasterPanelMedia) {
-  const value = media.fileUrl ?? media.file_url;
-  return typeof value === "string" ? value : null;
-}
-
-function panelMediaType(media: MasterPanelMedia) {
-  const value = media.mediaType ?? media.media_type;
-  return typeof value === "string" ? value.toUpperCase() : "";
-}
-
-function countCatalogSpreadsheetRows(text: string) {
-  try {
-    return parseCatalogSpreadsheetText(text).length;
-  } catch {
-    return 0;
-  }
+function MediaThumb({
+  src,
+  alt,
+  active,
+  onClick,
+}: {
+  src: string;
+  alt: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`relative aspect-[4/3] overflow-hidden border ${active ? "border-primary" : "border-border"}`}
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={src} alt={alt} className="h-full w-full object-cover" />
+    </button>
+  );
 }
 
 export function UnitCatalogTab({ unitId, unitName }: UnitCatalogTabProps) {
-  const [references, setReferences] = useState<CatalogReference[]>([]);
-  const [reference, setReference] = useState<CatalogReference | null>(null);
-  const [selectedItem, setSelectedItem] = useState<CatalogItem | null>(null);
-  const [markerDraft, setMarkerDraft] = useState<MarkerDraft | null>(null);
-  const [surveyOpen, setSurveyOpen] = useState(false);
-  const [form, setForm] = useState<SurveyForm>(defaultSurveyForm);
-  const [jobdescOpen, setJobdescOpen] = useState(false);
-  const [jobdescPanel, setJobdescPanel] = useState<MasterPanelDetail | null>(null);
-  const [jobdescPanelLoading, setJobdescPanelLoading] = useState(false);
-  const [jobdesc, setJobdesc] = useState({
-    divisionId: "",
-    jobTypeId: "",
-    description: "",
-    targetHoursInitial: "",
-  });
-  const [importForm, setImportForm] = useState<CatalogImportForm>(defaultImportForm);
-  const [importOpen, setImportOpen] = useState(false);
-  const [filters, setFilters] = useState({ component: "", panel: "", search: "", status: "" });
+  const sweetAlert = useSweetAlert();
+  const [overview, setOverview] = useState<CatalogOverview | null>(null);
+  const [workspace, setWorkspace] = useState<CatalogWorkspace | null>(null);
+  const [baseline, setBaseline] = useState<CatalogWorkspaceDraft | null>(null);
+  const [draft, setDraft] = useState<CatalogWorkspaceDraft>(createCatalogWorkspaceDraft());
+  const [selectedPanelId, setSelectedPanelId] = useState<number | null>(null);
+  const [selectedRowIds, setSelectedRowIds] = useState<string[]>([]);
+  const [selectedMediaIndex, setSelectedMediaIndex] = useState(0);
+  const [componentFilter, setComponentFilter] = useState("");
+  const [panelSearch, setPanelSearch] = useState("");
+  const [gridSearch, setGridSearch] = useState("");
+  const [searchHits, setSearchHits] = useState<Array<{
+    itemId: number;
+    panelId: number;
+    panelName: string;
+    componentName: string;
+    code: string | null;
+    partNumber: string | null;
+    itemName: string | null;
+  }>>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingPanel, setLoadingPanel] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [editMode, setEditMode] = useState(false);
+  const [imageUrlInput, setImageUrlInput] = useState("");
+  const [deletedItemIds, setDeletedItemIds] = useState<number[]>([]);
+  const [deletedMediaIds, setDeletedMediaIds] = useState<number[]>([]);
+
+  const dirty = baseline ? isCatalogDraftDirty(baseline, draft) : false;
+  const groupedPanels = useMemo(() => groupPanelsByComponent(overview), [overview]);
+  const filteredGroups = useMemo(() => {
+    const keyword = panelSearch.trim().toLowerCase();
+    return groupedPanels
+      .filter((group) => !componentFilter || String(group.component.id) === componentFilter)
+      .map((group) => ({
+        ...group,
+        panels: group.panels.filter((panel) => !keyword || panel.panelName.toLowerCase().includes(keyword)),
+      }))
+      .filter((group) => group.panels.length > 0);
+  }, [componentFilter, groupedPanels, panelSearch]);
 
   useEffect(() => {
-    let active = true;
-    setLoading(true);
-    fetchUnitCatalog(unitId).then((result) => {
-      if (!active) return;
-      if (!result.success) {
-        setError(result.message);
-        setLoading(false);
-        return;
-      }
-      const rows = result.payload.data.references;
-      setReferences(rows);
-      setLoading(false);
-      const firstId = rows[0]?.id;
-      if (firstId) void loadReference(firstId);
-    });
-    return () => {
-      active = false;
-    };
+    void loadOverview();
   }, [unitId]);
 
-  async function loadReference(referenceId: number) {
-    setError(null);
-    const result = await fetchUnitCatalogReference(unitId, referenceId);
-    if (!result.success) {
-      setError(result.message);
+  useEffect(() => {
+    if (!panelSearch.trim() || selectedPanelId) {
+      setSearchHits([]);
       return;
     }
-    setReference(result.payload.data.reference);
-    setSelectedItem(null);
-    setMarkerDraft(null);
-  }
 
-  const media = reference?.media ?? [];
-  const selectedMedia = media[0] ?? null;
+    const timeout = window.setTimeout(async () => {
+      const result = await searchUnitCatalog(unitId, { q: panelSearch.trim(), limit: 20 });
+      if (!result.success) return;
+      setSearchHits(result.payload.data.items.map((item) => ({
+        itemId: item.itemId,
+        panelId: item.panelId,
+        panelName: item.panelName,
+        componentName: item.componentName,
+        code: item.code,
+        partNumber: item.partNumber,
+        itemName: item.itemName,
+      })));
+    }, 300);
 
-  const filteredItems = useMemo(() => {
-    const query = filters.search.trim().toLowerCase();
-    return (reference?.items ?? []).filter((item) => {
-      const text = [item.positionCode, item.partNumber, item.partName, item.actualName]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-      if (filters.status && item.surveyStatus !== filters.status) return false;
-      if (query && !text.includes(query)) return false;
-      return true;
-    });
-  }, [filters.search, filters.status, reference?.items]);
+    return () => window.clearTimeout(timeout);
+  }, [panelSearch, selectedPanelId, unitId]);
 
-  const visibleReferences = useMemo(() => {
-    return references.filter((row) => {
-      if (filters.component && row.componentName !== filters.component) return false;
-      if (filters.panel && row.panelName !== filters.panel) return false;
-      return true;
-    });
-  }, [filters.component, filters.panel, references]);
-
-  function openSurvey(item: CatalogItem, marker: MarkerDraft | null) {
-    setSelectedItem(item);
-    setMarkerDraft(marker);
-    setForm(initialForm(item));
-    setSurveyOpen(true);
-  }
-
-  function handleImageClick(event: React.MouseEvent<HTMLDivElement>) {
-    if (!selectedItem || selectedItem.surveyStatus === "CONFIRMED" || !selectedMedia) return;
-    const rect = event.currentTarget.getBoundingClientRect();
-    const marker = {
-      catalogReferenceMediaId: selectedMedia.id,
-      xPercent: ((event.clientX - rect.left) / rect.width) * 100,
-      yPercent: ((event.clientY - rect.top) / rect.height) * 100,
-    };
-    if (!window.confirm(`Tandai posisi ini untuk item ${selectedItem.partName ?? selectedItem.positionCode ?? selectedItem.id}?`)) return;
-    openSurvey(selectedItem, marker);
-  }
-
-  async function submitDraft() {
-    if (!selectedItem) return;
-    setSaving(true);
-    setError(null);
-    const result = await saveUnitCatalogSurvey(unitId, selectedItem.id, {
-      qtyOpname: toNumberOrNull(form.qtyOpname),
-      actualName: form.actualName || null,
-      availabilityStatus: form.availabilityStatus,
-      conditionStatus: form.conditionStatus,
-      actionType: form.actionType,
-      location: form.location || null,
-      notes: form.notes || null,
-      mapping: markerDraft,
-    });
-    setSaving(false);
+  async function loadOverview() {
+    setLoading(true);
+    const result = await fetchUnitCatalog(unitId);
     if (!result.success) {
-      setError(result.message);
+      sweetAlert.notifyError("Catalog belum dapat dimuat", result.message);
+      setLoading(false);
       return;
     }
-    await loadReference(selectedItem.catalogReferenceId);
-    setSurveyOpen(false);
+    setOverview(result.payload.data.overview);
+    setLoading(false);
   }
 
-  async function submitConfirm() {
-    if (!selectedItem) return;
-    setSaving(true);
-    setError(null);
-    if (form.photoFile) {
-      const ticketResult = await requestUnitCatalogUploadTicket({
-        unitId,
-        filename: form.photoFile.name,
-        contentType: form.photoFile.type || "image/jpeg",
-        size: form.photoFile.size,
+  async function openPanel(panelId: number) {
+    if (dirty) {
+      const confirmed = await sweetAlert.confirm({
+        title: "Perubahan belum disimpan",
+        description: "Perubahan di panel ini akan dibuang bila pindah sekarang.",
+        confirmLabel: "Pindah panel",
+        cancelLabel: "Tetap di sini",
       });
-      if (!ticketResult.success) {
-        setSaving(false);
-        setError(ticketResult.message);
-        return;
-      }
-      const uploadResponse = await fetch(ticketResult.result.uploadUrl, {
-        method: "PUT",
-        headers: { "Content-Type": form.photoFile.type || "image/jpeg" },
-        body: form.photoFile,
-      });
-      if (!uploadResponse.ok) {
-        setSaving(false);
-        setError("Upload foto aktual gagal.");
-        return;
-      }
-      const mediaResult = await addUnitCatalogItemMedia(unitId, selectedItem.id, {
-        fileUrl: ticketResult.result.publicUrl,
-        caption: "Foto aktual pendataan",
-      });
-      if (!mediaResult.success) {
-        setSaving(false);
-        setError(mediaResult.message);
-        return;
-      }
+      if (!confirmed) return;
     }
-    const result = await confirmUnitCatalogSurvey(unitId, selectedItem.id, {
-      qtyOpname: toNumberOrNull(form.qtyOpname),
-      actualName: form.actualName || null,
-      availabilityStatus: form.availabilityStatus,
-      conditionStatus: form.conditionStatus,
-      actionType: form.actionType,
-      location: form.location || null,
-      notes: form.notes || null,
-      mapping: markerDraft,
-    });
-    setSaving(false);
+
+    setLoadingPanel(true);
+    const result = await fetchUnitCatalogPanelWorkspace(unitId, panelId);
+    setLoadingPanel(false);
     if (!result.success) {
-      setError(result.message);
+      sweetAlert.notifyError("Panel belum dapat dibuka", result.message);
       return;
     }
-    await loadReference(selectedItem.catalogReferenceId);
-    setSurveyOpen(false);
+
+    const nextWorkspace = result.payload.data.workspace;
+    const nextDraft = workspaceDraftFromWorkspace(nextWorkspace);
+    setWorkspace(nextWorkspace);
+    setBaseline(nextDraft);
+    setDraft(nextDraft);
+    setSelectedPanelId(panelId);
+    setSelectedRowIds([]);
+    setSelectedMediaIndex(0);
+    setEditMode(false);
+    setGridSearch("");
+    setImageUrlInput("");
+    setDeletedItemIds([]);
+    setDeletedMediaIds([]);
   }
 
-  async function submitJobdesc() {
-    if (!selectedItem?.promotedPanelId) return;
-    setSaving(true);
-    setError(null);
-    const result = await createUnitCatalogPanelJobdescs(unitId, selectedItem.promotedPanelId, {
-      jobs: [{
-        divisionId: Number(jobdesc.divisionId),
-        jobTypeId: jobdesc.jobTypeId,
-        description: jobdesc.description,
-        targetHoursInitial: Number(jobdesc.targetHoursInitial),
-        picPlan: null,
-        requiredGrade: null,
-        standardHours: null,
-        startDate: null,
-        deadlineDate: null,
-        notes: null,
-        taskCategory: "MAIN",
-      }],
-    });
-    setSaving(false);
-    if (!result.success) {
-      setError(result.message);
-      return;
-    }
-    setJobdescOpen(false);
-    setJobdescPanel(null);
-    setJobdesc({ divisionId: "", jobTypeId: "", description: "", targetHoursInitial: "" });
+  function closePanel() {
+    setWorkspace(null);
+    setSelectedPanelId(null);
+    setBaseline(null);
+    setDraft(createCatalogWorkspaceDraft());
+    setSelectedRowIds([]);
+    setSelectedMediaIndex(0);
+    setEditMode(false);
+    setGridSearch("");
+    setImageUrlInput("");
+    setDeletedItemIds([]);
+    setDeletedMediaIds([]);
   }
 
-  async function openJobdescModal() {
-    if (!selectedItem?.promotedPanelId) return;
-    setJobdescOpen(true);
-    setJobdescPanel(null);
-    setJobdescPanelLoading(true);
-    setError(null);
-    const result = await fetchUnitCatalogMasterPanel(unitId, selectedItem.promotedPanelId);
-    setJobdescPanelLoading(false);
-    if (!result.success) {
-      setError(result.message);
-      return;
-    }
-    setJobdescPanel(result.payload.data.panel as MasterPanelDetail);
-  }
+  async function handleSave() {
+    if (!workspace || !selectedPanelId) return;
 
-  async function submitCatalogImport() {
-    let items: ReturnType<typeof parseCatalogSpreadsheetText>;
+    let items;
     try {
-      items = parseCatalogSpreadsheetText(importForm.spreadsheetText);
-    } catch {
-      setError("Format spreadsheet catalog tidak valid.");
-      return;
-    }
-    if (!importForm.componentName.trim() || !importForm.panelName.trim() || items.length === 0) {
-      setError("Component, Panel, dan minimal satu row catalog wajib diisi.");
+      items = serializeCatalogDraftRows(draft.rows);
+    } catch (error) {
+      sweetAlert.notifyError("Qty belum valid", error instanceof Error ? error.message.replace("QTY_INVALID:", "Isi qty tidak valid: ") : "Periksa kembali qty.");
       return;
     }
 
     setSaving(true);
-    setError(null);
-    const referenceResult = await createUnitCatalogReference(unitId, {
-      componentName: importForm.componentName.trim(),
-      panelName: importForm.panelName.trim(),
-      diagramImageUrl: importForm.diagramImageUrl.trim() || null,
-      referenceUrl: importForm.referenceUrl.trim() || null,
-      notes: importForm.notes.trim() || null,
+    const result = await saveUnitCatalogPanelWorkspace(unitId, selectedPanelId, {
+      referenceUrl: draft.referenceUrl.trim() || null,
+      notes: draft.notes.trim() || null,
+      items,
+      deletedItemIds,
+      media: draft.media
+        .filter((media) => media.fileUrl.trim())
+        .map((media, index) => ({
+          id: media.id,
+          fileUrl: media.fileUrl.trim(),
+          caption: media.caption.trim() || null,
+          sortOrder: index,
+        })),
+      deletedMediaIds,
     });
-    if (!referenceResult.success) {
-      setSaving(false);
-      setError(referenceResult.message);
-      return;
-    }
-
-    const referenceId = referenceResult.payload.data.reference.id;
-    const itemsResult = await replaceUnitCatalogItems(unitId, referenceId, { items });
     setSaving(false);
-    if (!itemsResult.success) {
-      setError(itemsResult.message);
+
+    if (!result.success) {
+      sweetAlert.notifyError("Catalog belum tersimpan", result.message);
       return;
     }
 
-    setImportForm(defaultImportForm);
-    setImportOpen(false);
-    await loadReference(referenceId);
-    const listResult = await fetchUnitCatalog(unitId);
-    if (listResult.success) {
-      setReferences(listResult.payload.data.references);
-    }
+    const nextWorkspace = result.payload.data.workspace;
+    const nextDraft = workspaceDraftFromWorkspace(nextWorkspace);
+    setWorkspace(nextWorkspace);
+    setBaseline(nextDraft);
+    setDraft(nextDraft);
+    setEditMode(false);
+    setSelectedRowIds([]);
+    setSelectedMediaIndex(0);
+    setDeletedItemIds([]);
+    setDeletedMediaIds([]);
+    sweetAlert.notifySuccess("Catalog tersimpan", "Perubahan panel ini sudah masuk ke database.");
+    void loadOverview();
   }
 
-  const components = unique(references.map((row) => row.componentName));
-  const panels = unique(references.map((row) => row.panelName));
-  const confirmedMarker = selectedItem?.mappings.find((mapping) => mapping.catalogReferenceMediaId === selectedMedia?.id);
-  const displayMarker = markerDraft ?? confirmedMarker ?? null;
-  const panelMedia = Array.isArray(jobdescPanel?.media) ? jobdescPanel.media : [];
-  const actualPanelMedia = panelMedia.filter((media) => panelMediaType(media) === "ACTUAL");
-  const referencePanelMedia = panelMedia.filter((media) => panelMediaType(media) === "REFERENCE");
+  function handleCancelEdit() {
+    if (!baseline) return;
+    setDraft(baseline);
+    setEditMode(false);
+    setSelectedRowIds([]);
+    setSelectedMediaIndex(0);
+    setDeletedItemIds([]);
+    setDeletedMediaIds([]);
+  }
 
-  if (loading) return <div className="border border-border bg-card px-4 py-5 text-sm text-muted-foreground">Memuat catalog...</div>;
+  async function addImageFromUpload(file: File) {
+    const ticket = await requestUnitCatalogUploadTicket({
+      unitId,
+      filename: file.name,
+      contentType: file.type || "image/jpeg",
+      size: file.size,
+    });
+    if (!ticket.success) {
+      sweetAlert.notifyError("Upload belum siap", ticket.message);
+      return;
+    }
+
+    const uploadResult = await fetch(ticket.result.uploadUrl, {
+      method: "PUT",
+      headers: { "Content-Type": file.type || "image/jpeg" },
+      body: file,
+    });
+    if (!uploadResult.ok) {
+      sweetAlert.notifyError("Upload gagal", "Gambar belum berhasil dikirim.");
+      return;
+    }
+
+    let nextIndex = 0;
+    setDraft((current) => {
+      nextIndex = current.media.length;
+      return {
+        ...current,
+        media: [
+          ...current.media,
+          {
+            id: null,
+            fileUrl: ticket.result.publicUrl,
+            caption: "",
+            sortOrder: current.media.length,
+          },
+        ],
+      };
+    });
+    setSelectedMediaIndex(nextIndex);
+    sweetAlert.notifySuccess("Gambar ditambahkan");
+  }
+
+  function addImageFromUrl() {
+    const value = imageUrlInput.trim();
+    if (!value) return;
+    let nextIndex = 0;
+    setDraft((current) => {
+      nextIndex = current.media.length;
+      return {
+        ...current,
+        media: [
+          ...current.media,
+          {
+            id: null,
+            fileUrl: value,
+            caption: "",
+            sortOrder: current.media.length,
+          },
+        ],
+      };
+    });
+    setSelectedMediaIndex(nextIndex);
+    setImageUrlInput("");
+    sweetAlert.notifySuccess("Link gambar dimasukkan");
+  }
+
+  async function removeCurrentImage() {
+    if (!currentMedia) return;
+    const confirmed = await sweetAlert.confirm({
+      title: "Hapus gambar referensi",
+      description: "Gambar ini akan dihapus saat catalog disimpan.",
+      confirmLabel: "Hapus",
+      cancelLabel: "Batal",
+    });
+    if (!confirmed) return;
+
+    setDraft((current) => {
+      const nextMedia = current.media
+        .filter((_, index) => index !== selectedMediaIndex)
+        .map((media, index) => ({ ...media, sortOrder: index }));
+      return { ...current, media: nextMedia };
+    });
+    if (currentMedia.id) {
+      setDeletedMediaIds((current) => (
+        current.includes(currentMedia.id as number) ? current : [...current, currentMedia.id as number]
+      ));
+    }
+    setSelectedMediaIndex((current) => Math.max(0, current - 1));
+  }
+
+  function handleDeleteSelectedRows() {
+    setDraft((current) => {
+      const deletedIds = current.rows
+        .filter((row) => selectedRowIds.includes(row.rowId) && row.persistedId != null)
+        .map((row) => row.persistedId as number);
+      if (deletedIds.length > 0) {
+        setDeletedItemIds((existing) => [...new Set([...existing, ...deletedIds])]);
+      }
+      return {
+        ...current,
+        rows: current.rows.filter((row) => !selectedRowIds.includes(row.rowId)).length > 0
+          ? current.rows.filter((row) => !selectedRowIds.includes(row.rowId))
+          : appendEmptyCatalogDraftRow([]),
+      };
+    });
+    setSelectedRowIds([]);
+  }
+
+  const currentMedia = draft.media[selectedMediaIndex] ?? null;
 
   return (
-    <section className="space-y-4">
-      <div className="grid gap-3 border border-border bg-card p-4 lg:grid-cols-5">
-        <select className="border border-border bg-background px-3 py-2 text-sm" value={filters.component} onChange={(event) => setFilters({ ...filters, component: event.target.value })}>
-          <option value="">Semua Component</option>
-          {components.map((value) => <option key={value} value={value}>{value}</option>)}
-        </select>
-        <select className="border border-border bg-background px-3 py-2 text-sm" value={filters.panel} onChange={(event) => setFilters({ ...filters, panel: event.target.value })}>
-          <option value="">Semua Panel</option>
-          {panels.map((value) => <option key={value} value={value}>{value}</option>)}
-        </select>
-        <input className="border border-border bg-background px-3 py-2 text-sm" placeholder="Part/Search" value={filters.search} onChange={(event) => setFilters({ ...filters, search: event.target.value })} />
-        <select className="border border-border bg-background px-3 py-2 text-sm" value={filters.status} onChange={(event) => setFilters({ ...filters, status: event.target.value })}>
-          <option value="">Semua Status Pendataan</option>
-          <option value="NOT_STARTED">Belum didata</option>
-          <option value="DRAFT">Draft</option>
-          <option value="CONFIRMED">Confirmed</option>
-        </select>
-        <p className="text-sm text-muted-foreground">{unitName}</p>
-      </div>
+    <div className="space-y-4">
+      {sweetAlert.alertElement}
 
-      <div className="border border-border bg-card p-4">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <p className="text-sm font-medium">Input Catalog</p>
-            <p className="text-xs text-muted-foreground">Paste dari Excel/Google Sheets. Catalog tetap staging, bukan data operasional.</p>
-          </div>
-          <button type="button" className="border border-border px-3 py-2 text-sm" onClick={() => setImportOpen((value) => !value)}>
-            {importOpen ? "Tutup" : "Input Catalog"}
-          </button>
-        </div>
-        {importOpen ? (
-          <div className="mt-4 grid gap-3">
+      <PageHeader
+        eyebrow={`Unit / Catalog · ${unitName}`}
+        title={selectedPanelId && workspace ? workspace.panel.panelName : "Catalog Unit"}
+        actions={selectedPanelId ? (
+          editMode ? (
+            <>
+              <ActionButton onClick={handleCancelEdit}>
+                <X className="h-3.5 w-3.5" />
+                Batal
+              </ActionButton>
+              <ActionButton variant="primary" onClick={() => { void handleSave(); }} disabled={saving}>
+                <Save className="h-3.5 w-3.5" />
+                {saving ? "Menyimpan" : "Simpan"}
+              </ActionButton>
+            </>
+          ) : (
+            <>
+              <ActionButton onClick={closePanel}>Kembali</ActionButton>
+              <ActionButton variant="primary" onClick={() => setEditMode(true)}>
+                <Pencil className="h-3.5 w-3.5" />
+                Edit Catalog
+              </ActionButton>
+            </>
+          )
+        ) : undefined}
+      />
+
+      {selectedPanelId && workspace ? (
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.75fr)_22rem]">
+          <SectionCard
+            label={`${workspace.panel.componentName} / ${workspace.panel.panelName}`}
+            count={draft.rows.length}
+            className="min-h-[42rem]"
+          >
             <div className="grid gap-3 md:grid-cols-2">
-              <input className="border border-border bg-background px-3 py-2 text-sm" placeholder="Component" value={importForm.componentName} onChange={(event) => setImportForm({ ...importForm, componentName: event.target.value })} />
-              <input className="border border-border bg-background px-3 py-2 text-sm" placeholder="Panel" value={importForm.panelName} onChange={(event) => setImportForm({ ...importForm, panelName: event.target.value })} />
-              <input className="border border-border bg-background px-3 py-2 text-sm" placeholder="URL gambar catalog (opsional)" value={importForm.diagramImageUrl} onChange={(event) => setImportForm({ ...importForm, diagramImageUrl: event.target.value })} />
-              <input className="border border-border bg-background px-3 py-2 text-sm" placeholder="Reference URL (opsional)" value={importForm.referenceUrl} onChange={(event) => setImportForm({ ...importForm, referenceUrl: event.target.value })} />
+              <CompactInput
+                value={draft.referenceUrl}
+                onChange={(event) => setDraft((current) => ({ ...current, referenceUrl: event.target.value }))}
+                disabled={!editMode}
+                placeholder="Link referensi panel"
+              />
+              <CompactInput
+                value={draft.notes}
+                onChange={(event) => setDraft((current) => ({ ...current, notes: event.target.value }))}
+                disabled={!editMode}
+                placeholder="Catatan panel"
+              />
             </div>
-            <textarea className="min-h-20 border border-border bg-background px-3 py-2 text-sm" placeholder="Notes reference" value={importForm.notes} onChange={(event) => setImportForm({ ...importForm, notes: event.target.value })} />
-            <textarea className="min-h-40 font-mono text-xs border border-border bg-background px-3 py-2" placeholder={"CODE\tPARTS NUMBER\tNAME\tQTY NORMAL\tQTY OPNAME\tSTATUS\tKONDISI\tTINDAKAN\tLOKASI\tKETERANGAN"} value={importForm.spreadsheetText} onChange={(event) => setImportForm({ ...importForm, spreadsheetText: event.target.value })} />
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-xs text-muted-foreground">Row terbaca: {countCatalogSpreadsheetRows(importForm.spreadsheetText)}</p>
-              <button type="button" disabled={saving} onClick={submitCatalogImport} className="border border-primary bg-primary px-3 py-2 text-sm text-primary-foreground">Simpan Catalog</button>
+
+            <div className="h-[34rem] border border-border">
+              <UnitCatalogEditor
+                rows={draft.rows}
+                editMode={editMode}
+                searchValue={gridSearch}
+                selectedRowIds={selectedRowIds}
+                onSearchChange={setGridSearch}
+                onRowsChange={(rows) => setDraft((current) => ({ ...current, rows }))}
+                onSelectedRowIdsChange={setSelectedRowIds}
+                onAddRow={() => setDraft((current) => ({ ...current, rows: appendEmptyCatalogDraftRow(current.rows) }))}
+                onDeleteSelected={handleDeleteSelectedRows}
+              />
             </div>
-          </div>
-        ) : null}
-      </div>
+          </SectionCard>
 
-      {error ? <div className="border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</div> : null}
-
-      <div className="grid gap-4 xl:grid-cols-[minmax(360px,0.95fr)_minmax(420px,1.05fr)]">
-        <div className="space-y-3">
-          <div className="flex flex-wrap gap-2">
-            {visibleReferences.map((row) => (
-              <button key={row.id} type="button" onClick={() => loadReference(row.id)} className={`border px-3 py-2 text-left text-xs ${reference?.id === row.id ? "border-primary text-app-accent-ink" : "border-border text-muted-foreground"}`}>
-                <span className="block font-mono uppercase">{row.componentName}</span>
-                <span>{row.panelName}</span>
-              </button>
-            ))}
-          </div>
-
-          <div className="overflow-hidden border border-border bg-card">
-            <div className="grid grid-cols-[72px_1fr_92px] border-b border-border px-3 py-2 text-xs uppercase tracking-[0.12em] text-muted-foreground">
-              <span>Code</span>
-              <span>Part</span>
-              <span>Status</span>
-            </div>
-            {filteredItems.map((item) => (
-              <button key={item.id} type="button" onClick={() => setSelectedItem(item)} className={`grid w-full grid-cols-[72px_1fr_92px] gap-2 border-b border-border px-3 py-2 text-left text-sm hover:bg-muted/40 ${selectedItem?.id === item.id ? "bg-muted/60" : ""}`}>
-                <span className="font-mono">{item.positionCode ?? "-"}</span>
-                <span>
-                  <span className="block text-foreground">{item.partName ?? item.actualName ?? "Part tanpa nama"}</span>
-                  <span className="text-xs text-muted-foreground">{item.partNumber ?? "PN kosong"} · Qty {item.qtyNormal ?? "-"}</span>
-                </span>
-                <span className="text-xs text-muted-foreground">{statusLabels[item.surveyStatus]}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="space-y-3">
-          <div className="border border-border bg-card p-3">
-            <div className="mb-2 flex items-center justify-between gap-3">
-              <p className="text-sm font-medium">{reference ? `${reference.componentName} · ${reference.panelName}` : "Gambar catalog"}</p>
-              {selectedItem && selectedItem.surveyStatus !== "CONFIRMED" ? (
-                <button type="button" className="border border-border px-3 py-1.5 text-xs" onClick={() => openSurvey(selectedItem, null)}>Data Item</button>
-              ) : null}
-            </div>
-            {selectedMedia ? (
-              <div className="relative cursor-crosshair overflow-hidden border border-border" onClick={handleImageClick}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={selectedMedia.fileUrl} alt={selectedMedia.caption ?? "Catalog"} className="h-auto w-full select-none" />
-                {displayMarker ? (
-                  <span className="absolute h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-primary shadow" style={{ left: `${displayMarker.xPercent}%`, top: `${displayMarker.yPercent}%` }} />
-                ) : null}
+          <SectionCard label="Gambar Referensi" count={draft.media.length} className="min-h-[42rem]">
+            {currentMedia ? (
+              <div className="space-y-3">
+                <div className="aspect-[4/3] overflow-hidden border border-border bg-muted">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={currentMedia.fileUrl} alt={workspace.panel.panelName} className="h-full w-full object-contain" />
+                </div>
+                <CompactInput
+                  value={currentMedia.caption}
+                  onChange={(event) => setDraft((current) => ({
+                    ...current,
+                    media: current.media.map((media, index) => (
+                      index === selectedMediaIndex ? { ...media, caption: event.target.value } : media
+                    )),
+                  }))}
+                  disabled={!editMode}
+                  placeholder="Keterangan gambar"
+                />
               </div>
             ) : (
-              <div className="border border-dashed border-border px-4 py-12 text-center text-sm text-muted-foreground">Reference belum punya gambar. Pilih item lalu klik Data Item.</div>
+              <div className="flex h-40 items-center justify-center border border-dashed border-border text-sm text-muted-foreground">
+                Belum ada gambar referensi.
+              </div>
             )}
+
+            {draft.media.length > 0 ? (
+              <div className="grid grid-cols-3 gap-2">
+                {draft.media.map((media, index) => (
+                  <MediaThumb
+                    key={`${media.id ?? "new"}-${index}`}
+                    src={media.fileUrl}
+                    alt={`${workspace.panel.panelName} ${index + 1}`}
+                    active={selectedMediaIndex === index}
+                    onClick={() => setSelectedMediaIndex(index)}
+                  />
+                ))}
+              </div>
+            ) : null}
+
+            {editMode ? (
+              <div className="space-y-2 border-t border-border pt-3">
+                <div className="flex gap-2">
+                  <CompactInput
+                    value={imageUrlInput}
+                    onChange={(event) => setImageUrlInput(event.target.value)}
+                    placeholder="Tempel URL gambar"
+                  />
+                  <ActionButton onClick={addImageFromUrl}>
+                    <ImagePlus className="h-3.5 w-3.5" />
+                    + URL
+                  </ActionButton>
+                  <ActionButton onClick={() => { void removeCurrentImage(); }} disabled={!currentMedia}>
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Hapus
+                  </ActionButton>
+                </div>
+                <label className="flex h-9 cursor-pointer items-center justify-center border border-border px-3 font-mono text-[12px] uppercase tracking-[0.08em] text-muted-foreground">
+                  Upload Gambar
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (file) void addImageFromUpload(file);
+                      event.currentTarget.value = "";
+                    }}
+                  />
+                </label>
+              </div>
+            ) : null}
+          </SectionCard>
+        </div>
+      ) : (
+        <SectionCard label="Panel Catalog" count={overview?.panels.length ?? 0}>
+          <div className="flex flex-wrap gap-2">
+            <select
+              value={componentFilter}
+              onChange={(event) => setComponentFilter(event.target.value)}
+              className="h-9 min-w-[14rem] border border-border bg-card px-3 text-sm"
+            >
+              <option value="">Semua komponen</option>
+              {overview?.components.map((component) => (
+                <option key={component.id} value={component.id}>
+                  {component.componentName}
+                </option>
+              ))}
+            </select>
+            <div className="min-w-[18rem] flex-1">
+              <CompactInput
+                value={panelSearch}
+                onChange={(event) => setPanelSearch(event.target.value)}
+                placeholder="Cari panel atau item"
+              />
+            </div>
           </div>
 
-          {selectedItem?.surveyStatus === "CONFIRMED" ? (
-            <div className="flex flex-wrap gap-2 border border-border bg-card p-3">
-              <button type="button" className="border border-border px-3 py-2 text-sm" onClick={() => openSurvey(selectedItem, null)}>+ Tambah Foto Fisik</button>
-              <button type="button" className="border border-border px-3 py-2 text-sm" disabled={!selectedItem.promotedPanelId} onClick={() => { void openJobdescModal(); }}>Buat Countdown</button>
-              <Link className="border border-border px-3 py-2 text-sm" href={`/wo?carId=${encodeURIComponent(unitId)}&panelId=${selectedItem.promotedPanelId ?? ""}`}>Buat WO</Link>
-              <Link className="border border-border px-3 py-2 text-sm" href={`/requests/list?carId=${encodeURIComponent(unitId)}&panelId=${selectedItem.promotedPanelId ?? ""}`}>Ajukan PR</Link>
-            </div>
-          ) : null}
-        </div>
-      </div>
-
-      {surveyOpen && selectedItem ? (
-        <div className="fixed inset-0 z-50 bg-background/80 p-4">
-          <div className="ml-auto h-full max-w-xl overflow-auto border border-border bg-card p-4 shadow-xl">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Pendataan</p>
-                <h2 className="text-lg font-semibold">{selectedItem.partName ?? selectedItem.positionCode ?? "Item"}</h2>
-              </div>
-              <button type="button" onClick={() => setSurveyOpen(false)} className="text-sm text-muted-foreground">Tutup</button>
-            </div>
-            <div className="mt-4 grid gap-3">
-              <input className="border border-border bg-background px-3 py-2 text-sm" placeholder="Qty Opname" value={form.qtyOpname} onChange={(event) => setForm({ ...form, qtyOpname: event.target.value })} />
-              <input className="border border-border bg-background px-3 py-2 text-sm" placeholder="Nama Aktual jika perlu" value={form.actualName} onChange={(event) => setForm({ ...form, actualName: event.target.value })} />
-              <select className="border border-border bg-background px-3 py-2 text-sm" value={form.availabilityStatus} onChange={(event) => setForm({ ...form, availabilityStatus: event.target.value as SurveyForm["availabilityStatus"] })}>
-                <option value="UNKNOWN">UNKNOWN</option>
-                <option value="AVAILABLE">AVAILABLE</option>
-                <option value="NOT_AVAILABLE">NOT_AVAILABLE</option>
-              </select>
-              <select className="border border-border bg-background px-3 py-2 text-sm" value={form.conditionStatus} onChange={(event) => setForm({ ...form, conditionStatus: event.target.value as SurveyForm["conditionStatus"] })}>
-                <option value="UNKNOWN">UNKNOWN</option>
-                <option value="GOOD">GOOD</option>
-                <option value="RESTORE">RESTORE</option>
-                <option value="NOT_USABLE">NOT_USABLE</option>
-              </select>
-              <select className="border border-border bg-background px-3 py-2 text-sm" value={form.actionType} onChange={(event) => setForm({ ...form, actionType: event.target.value as SurveyForm["actionType"] })}>
-                <option value="UNDECIDED">UNDECIDED</option>
-                <option value="NO_ACTION">NO_ACTION</option>
-                <option value="JOBDESC">JOBDESC</option>
-                <option value="JOBDESC_ORDER">JOBDESC_ORDER</option>
-              </select>
-              <input className="border border-border bg-background px-3 py-2 text-sm" placeholder="Lokasi" value={form.location} onChange={(event) => setForm({ ...form, location: event.target.value })} />
-              <textarea className="min-h-24 border border-border bg-background px-3 py-2 text-sm" placeholder="Keterangan" value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} />
-              <input className="border border-border bg-background px-3 py-2 text-sm" type="file" accept="image/*" capture="environment" onChange={(event) => setForm({ ...form, photoFile: event.target.files?.[0] ?? null })} />
-              {form.photoFile ? <p className="text-xs text-muted-foreground">Foto aktual: {form.photoFile.name}</p> : null}
-              {markerDraft ? <p className="text-xs text-muted-foreground">Marker: {markerDraft.xPercent.toFixed(2)}%, {markerDraft.yPercent.toFixed(2)}%</p> : null}
-              <div className="flex justify-end gap-2">
-                <button type="button" disabled={saving} onClick={submitDraft} className="border border-border px-3 py-2 text-sm">Simpan Draft</button>
-                <button type="button" disabled={saving} onClick={submitConfirm} className="border border-primary bg-primary px-3 py-2 text-sm text-primary-foreground">Simpan Pendataan</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {jobdescOpen && selectedItem?.promotedPanelId ? (
-        <div className="fixed inset-0 z-50 bg-background/80 p-4">
-          <div className="ml-auto h-full max-w-xl overflow-auto border border-border bg-card p-4 shadow-xl">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Buat Countdown</p>
-                <h2 className="text-lg font-semibold">{panelText(jobdescPanel, "name")}</h2>
-              </div>
-              <button type="button" onClick={() => { setJobdescOpen(false); setJobdescPanel(null); }} className="text-sm text-muted-foreground">Tutup</button>
-            </div>
-            <div className="mt-4 grid gap-3">
-              {jobdescPanelLoading ? (
-                <div className="border border-border bg-background px-3 py-2 text-sm text-muted-foreground">Memuat detail Master Panel...</div>
-              ) : (
-                <div className="grid gap-3 border border-border bg-background p-3 text-sm">
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    <p><span className="text-muted-foreground">Component:</span> {panelText(jobdescPanel, "componentName")}</p>
-                    <p><span className="text-muted-foreground">Panel Name:</span> {panelText(jobdescPanel, "name")}</p>
-                    <p><span className="text-muted-foreground">Part Number:</span> {panelText(jobdescPanel, "partNumber")}</p>
-                    <p><span className="text-muted-foreground">Position Code:</span> {panelText(jobdescPanel, "positionCode")}</p>
-                    <p><span className="text-muted-foreground">Initial Condition:</span> {panelText(jobdescPanel, "initialCondition")}</p>
+          {loading ? (
+            <p className="text-sm text-muted-foreground">Memuat daftar panel...</p>
+          ) : searchHits.length > 0 ? (
+            <div className="space-y-2">
+              {searchHits.map((item) => (
+                <button
+                  key={`${item.itemId}-${item.panelId}`}
+                  type="button"
+                  onClick={() => { void openPanel(item.panelId); }}
+                  className="flex w-full items-center justify-between border border-border px-3 py-2 text-left hover:border-primary/40 hover:bg-primary/5"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate font-medium text-foreground">{item.itemName ?? item.partNumber ?? item.code ?? item.panelName}</p>
+                    <p className="text-xs text-muted-foreground">{item.componentName} · {item.panelName}</p>
                   </div>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div>
-                      <p className="mb-2 text-xs uppercase tracking-[0.12em] text-muted-foreground">Foto Aktual</p>
-                      <div className="grid grid-cols-2 gap-2">
-                        {actualPanelMedia.length ? actualPanelMedia.map((media, index) => {
-                          const url = panelMediaUrl(media);
-                          return url ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img key={`${url}-${index}`} src={url} alt={typeof media.caption === "string" ? media.caption : "Foto aktual"} className="h-24 w-full object-cover" />
-                          ) : null;
-                        }) : <p className="text-xs text-muted-foreground">Belum ada foto aktual.</p>}
-                      </div>
-                    </div>
-                    <div>
-                      <p className="mb-2 text-xs uppercase tracking-[0.12em] text-muted-foreground">Foto Catalog</p>
-                      <div className="grid grid-cols-2 gap-2">
-                        {referencePanelMedia.length ? referencePanelMedia.map((media, index) => {
-                          const url = panelMediaUrl(media);
-                          return url ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img key={`${url}-${index}`} src={url} alt={typeof media.caption === "string" ? media.caption : "Foto catalog"} className="h-24 w-full object-cover" />
-                          ) : null;
-                        }) : <p className="text-xs text-muted-foreground">Belum ada foto catalog.</p>}
-                      </div>
-                    </div>
+                  <Search className="h-4 w-4 text-muted-foreground" />
+                </button>
+              ))}
+            </div>
+          ) : filteredGroups.length > 0 ? (
+            <div className="grid gap-4 xl:grid-cols-2">
+              {filteredGroups.map((group) => (
+                <div key={group.component.id} className="border border-border">
+                  <div className="border-b border-border bg-muted/40 px-3 py-2 font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground">
+                    {group.component.componentName}
+                  </div>
+                  <div className="divide-y divide-border">
+                    {group.panels.map((panel) => (
+                      <button
+                        key={panel.id}
+                        type="button"
+                        onClick={() => { void openPanel(panel.id); }}
+                        className="flex w-full items-center justify-between px-3 py-3 text-left hover:bg-primary/5"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate font-medium text-foreground">{panel.panelName}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {formatItemCount(panel.itemCount)} item · {formatItemCount(panel.surveyedCount)} sudah disurvey
+                          </p>
+                        </div>
+                        <div className="text-right text-xs text-muted-foreground">
+                          {panel.referenceId ? "Sudah ada" : "Belum diisi"}
+                        </div>
+                      </button>
+                    ))}
                   </div>
                 </div>
-              )}
-              <input className="border border-border bg-background px-3 py-2 text-sm" placeholder="Division ID" value={jobdesc.divisionId} onChange={(event) => setJobdesc({ ...jobdesc, divisionId: event.target.value })} />
-              <input className="border border-border bg-background px-3 py-2 text-sm" placeholder="Job Type ID" value={jobdesc.jobTypeId} onChange={(event) => setJobdesc({ ...jobdesc, jobTypeId: event.target.value })} />
-              <textarea className="min-h-24 border border-border bg-background px-3 py-2 text-sm" placeholder="Deskripsi pekerjaan" value={jobdesc.description} onChange={(event) => setJobdesc({ ...jobdesc, description: event.target.value })} />
-              <input className="border border-border bg-background px-3 py-2 text-sm" placeholder="Target Jam" value={jobdesc.targetHoursInitial} onChange={(event) => setJobdesc({ ...jobdesc, targetHoursInitial: event.target.value })} />
-              <button type="button" disabled={saving} onClick={submitJobdesc} className="border border-primary bg-primary px-3 py-2 text-sm text-primary-foreground">Simpan Countdown</button>
+              ))}
             </div>
+          ) : (
+            <div className="flex items-center gap-2 border border-dashed border-border px-3 py-6 text-sm text-muted-foreground">
+              <AlertCircle className="h-4 w-4" />
+              Tidak ada panel yang cocok dengan filter.
+            </div>
+          )}
+        </SectionCard>
+      )}
+
+      {selectedPanelId && loadingPanel ? (
+        <div className="border border-border px-3 py-4 text-sm text-muted-foreground">Memuat workspace panel...</div>
+      ) : null}
+
+      {selectedPanelId && workspace ? (
+        <div className="flex items-center justify-between border border-border bg-card px-4 py-3 text-sm">
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <ArrowUpDown className="h-4 w-4" />
+            {dirty ? "Ada perubahan yang belum disimpan." : "Data panel sudah sinkron dengan server."}
+          </div>
+          <div className="font-mono text-xs text-muted-foreground">
+            {formatItemCount(serializeSafeCount(draft.rows))} row aktif
           </div>
         </div>
       ) : null}
-    </section>
+    </div>
   );
+}
+
+function serializeSafeCount(rows: CatalogWorkspaceDraft["rows"]) {
+  try {
+    return serializeCatalogDraftRows(rows).length;
+  } catch {
+    return rows.length;
+  }
 }

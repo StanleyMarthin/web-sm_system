@@ -115,6 +115,10 @@ function deriveQcLevel(session: WebSession): "QC_KD" | "QC_ADVISOR" | "QC_KP" | 
     return "QC_MO";
   }
 
+  if (session.user.scope.canViewAssignedUnits && session.user.scope.managedDivisionIds.length > 0) {
+    return "QC_ADVISOR";
+  }
+
   if (
     session.user.scope.managedDivisionIds.length > 0 &&
     permissions.includes(permissionCodes.qcValidate)
@@ -122,15 +126,21 @@ function deriveQcLevel(session: WebSession): "QC_KD" | "QC_ADVISOR" | "QC_KP" | 
     return "QC_KP";
   }
 
-  if (session.user.scope.canViewAssignedUnits && session.user.scope.managedDivisionIds.length > 0) {
-    return "QC_ADVISOR";
-  }
-
   if (permissions.includes(permissionCodes.qcSubmit)) {
     return "QC_KD";
   }
 
   return "QC_MP";
+}
+
+function isFinalQcLevel(qcLevel: string): boolean {
+  return qcLevel === "QC_ADVISOR";
+}
+
+function buildQcPassBody(qcLevel: string, unitName: string, panelName: string): string {
+  return isFinalQcLevel(qcLevel)
+    ? `QC ${qcLevel.replace("QC_", "")} menyatakan ${unitName} - ${panelName} lolos. Pekerjaan selesai.`
+    : `QC ${qcLevel.replace("QC_", "")} menyatakan ${unitName} - ${panelName} lolos dan menunggu QC QA.`;
 }
 
 export class DefaultQcService implements QcService {
@@ -213,13 +223,19 @@ export class DefaultQcService implements QcService {
     });
 
     try {
-      const employeeIds = await (this.repository.findAssignedEmployeeIds?.(coreId) ?? Promise.resolve([]));
-      const recipients = [...employeeIds, detail.item.reworkAssignedUserId].filter(
-        (employeeId): employeeId is string => Boolean(employeeId),
-      );
+      const recipients = isFinalQcLevel(qcLevel)
+        ? [...new Set([
+            ...await (this.repository.findAssignedEmployeeIds?.(coreId) ?? Promise.resolve([])),
+            detail.item.reworkAssignedUserId,
+          ].filter((employeeId): employeeId is string => Boolean(employeeId)))]
+        : await this.resolvePendingQaRecipients(detail.item.carId, detail.item.divisionId);
       await notifyMobileEmployees(recipients, {
         title: "QC Lolos",
-        body: `QC ${qcLevel.replace("QC_", "")} menyatakan ${detail.item.unitName} - ${detail.item.panelName ?? detail.item.jobName} lolos. Pekerjaan selesai.`,
+        body: buildQcPassBody(
+          qcLevel,
+          detail.item.unitName,
+          detail.item.panelName ?? detail.item.jobName,
+        ),
         data: { coreId, qcId: result.qcId, resultStatus: "LOLOS", qcLevel, module: "qc" },
       }, "sm_job_qc");
     } catch (error) {
@@ -409,5 +425,20 @@ export class DefaultQcService implements QcService {
       references,
       summary: payload.summary,
     };
+  }
+
+  private async resolvePendingQaRecipients(
+    carId: string,
+    divisionId: number | null,
+  ): Promise<string[]> {
+    const approvers = await (this.repository.findUnitApprovers?.(carId) ?? Promise.resolve(null));
+    if (approvers?.advisorId) {
+      return [approvers.advisorId];
+    }
+
+    return resolveEmployeeIdsByPermission(
+      permissionCodes.qcValidate,
+      divisionId ?? undefined,
+    );
   }
 }

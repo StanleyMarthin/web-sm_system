@@ -21,6 +21,15 @@ interface RequestDetailDialogProps {
   vendorPayload?: any;
 }
 
+function DigitalSignature({ text = "" }: { text?: string }) {
+  return (
+    <div style={{ padding: "4px 0", textAlign: "center" }}>
+      <div style={{ fontSize: 9, fontWeight: 700, borderBottom: "1px solid var(--foreground)", display: "inline-block", paddingBottom: 2, marginBottom: 2, letterSpacing: 0.5 }}>DIGITALLY APPROVED</div>
+      <div style={{ fontSize: 8, fontFamily: "var(--font-jetbrains-mono)", color: "var(--muted-foreground)", textTransform: "uppercase" }}>{text}</div>
+    </div>
+  );
+}
+
 export function RequestDetailDialog({
   type,
   id,
@@ -240,13 +249,6 @@ export function RequestDetailDialog({
     fontSize: 10,
     verticalAlign: "top",
   };
-
-  const DigitalSignature = ({ text = "" }: { text?: string }) => (
-    <div style={{ padding: "4px 0", textAlign: "center" }}>
-      <div style={{ fontSize: 9, fontWeight: 700, borderBottom: "1px solid var(--foreground)", display: "inline-block", paddingBottom: 2, marginBottom: 2, letterSpacing: 0.5 }}>DIGITALLY APPROVED</div>
-      <div style={{ fontSize: 8, fontFamily: "var(--font-jetbrains-mono)", color: "var(--muted-foreground)", textTransform: "uppercase" }}>{text}</div>
-    </div>
-  );
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-[1px] print:static print:block print:bg-transparent print:p-0 print:backdrop-blur-none">

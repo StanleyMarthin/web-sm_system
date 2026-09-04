@@ -33,26 +33,6 @@ async function requireQcReadSession(request: Request, authService: AuthService) 
   };
 }
 
-async function requireQcSubmitSession(request: Request, authService: AuthService) {
-  const sessionResult = await requireQcReadSession(request, authService);
-  if ("response" in sessionResult) {
-    return sessionResult;
-  }
-
-  const permissionResult = requirePermission(
-    request,
-    sessionResult.session,
-    permissionCodes.qcSubmit,
-  );
-  if ("response" in permissionResult) {
-    return permissionResult;
-  }
-
-  return {
-    session: sessionResult.session,
-  };
-}
-
 async function requireQcValidateSession(request: Request, authService: AuthService) {
   const sessionResult = await requireQcReadSession(request, authService);
   if ("response" in sessionResult) {
@@ -73,6 +53,25 @@ async function requireQcValidateSession(request: Request, authService: AuthServi
   };
 }
 
+async function requireQcActionSession(request: Request, authService: AuthService) {
+  const sessionResult = await requireQcReadSession(request, authService);
+  if ("response" in sessionResult) {
+    return sessionResult;
+  }
+
+  const { session } = sessionResult;
+  const canSubmit = session.user.permissions.includes(permissionCodes.qcSubmit);
+  const canValidate = session.user.permissions.includes(permissionCodes.qcValidate);
+
+  if (!canSubmit && !canValidate) {
+    return {
+      response: errorResponse(request, "Akses ditolak.", 403, "FORBIDDEN"),
+    };
+  }
+
+  return { session };
+}
+
 function mapQcError(request: Request, error: unknown): Response {
   if (error instanceof ZodError) {
     return errorResponse(request, "Query QC tidak valid.", 400, "INVALID_QC_QUERY");
@@ -81,6 +80,15 @@ function mapQcError(request: Request, error: unknown): Response {
   if (error instanceof Error) {
     if (error.message === "QC_NOT_FOUND" || error.message === "FINAL_CHECKLIST_NOT_FOUND") {
       return errorResponse(request, "Data QC tidak ditemukan.", 404, error.message);
+    }
+
+    if (error.message === "QC_NON_TECHNICAL_FORBIDDEN") {
+      return errorResponse(
+        request,
+        "QC hanya berlaku untuk jobdesc teknis yang berasal dari countdown.",
+        409,
+        "QC_NON_TECHNICAL_FORBIDDEN",
+      );
     }
 
     if (error.message === "FINAL_CHECKLIST_NOT_READY") {
@@ -230,7 +238,7 @@ export async function handleQcPassRoute(
   authService: AuthService,
   qcService: QcService,
 ): Promise<Response> {
-  const sessionResult = await requireQcSubmitSession(request, authService);
+  const sessionResult = await requireQcActionSession(request, authService);
   if ("response" in sessionResult) {
     return sessionResult.response;
   }
@@ -261,7 +269,7 @@ export async function handleQcRejectRoute(
   authService: AuthService,
   qcService: QcService,
 ): Promise<Response> {
-  const sessionResult = await requireQcSubmitSession(request, authService);
+  const sessionResult = await requireQcActionSession(request, authService);
   if ("response" in sessionResult) {
     return sessionResult.response;
   }

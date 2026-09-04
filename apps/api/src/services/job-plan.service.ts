@@ -95,8 +95,23 @@ function expandPlanDraftForSchedule(plan: CreateJobPlanRequest) {
 
 const JOB_PLAN_DRAFT_TTL_SECONDS = 60 * 60 * 24 * 30;
 
-function buildJobPlanDraftKey(employeeId: string): string {
+type JobPlanReferences = Awaited<ReturnType<JobPlanRepository["listReferences"]>>;
+
+function buildLegacyWebDraftKey(employeeId: string): string {
   return `jobplan:web:draft:${employeeId}`;
+}
+
+function buildLegacyMobileDraftKey(employeeId: string): string {
+  return `jobplan:draft:${employeeId}`;
+}
+
+function buildDivisionDraftKey(divisionId: number): string {
+  return `jobplan:draft:division:${divisionId}`;
+}
+
+function toNullableInt(value: unknown): number | null {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
 function normalizeMobileDraftItem(item: unknown): JobPlanDraftRecord | null {
@@ -108,8 +123,19 @@ function normalizeMobileDraftItem(item: unknown): JobPlanDraftRecord | null {
       : Number.parseFloat(String(source.targetHours ?? source.target_hours ?? ""));
   try {
     return jobPlanDraftRecordSchema.parse({
-      coreId: String(source.coreId ?? source.draftItemId ?? source.core_id ?? ""),
+      draftItemId: String(source.draftItemId ?? source.draft_item_id ?? source.coreId ?? source.core_id ?? ""),
+      sourceType: String(source.sourceType ?? source.source_type ?? "COUNTDOWN").toUpperCase(),
+      coreId: source.coreId ?? source.core_id ?? null,
+      carId: source.carId ?? source.car_id ?? null,
+      unitName: source.unitName ?? source.unit_name ?? null,
+      divisionId: toNullableInt(source.divisionId ?? source.division_id),
+      divisionName: source.divisionName ?? source.division_name ?? null,
+      panelId: toNullableInt(source.panelId ?? source.panel_id),
+      panelName: source.panelName ?? source.panel_name ?? source.panelCustomNote ?? source.panel_custom_note ?? null,
+      jobTypeId: source.jobTypeId ?? source.job_type_id ?? null,
+      jobName: source.jobName ?? source.job_name ?? null,
       assignedUserId: String(source.assignedUserId ?? source.assigned_user_id ?? source.employeeId ?? ""),
+      assignedUserName: source.assignedUserName ?? source.assignedTo ?? source.assigned_user_name ?? null,
       taskDate: String(source.taskDate ?? source.task_date ?? ""),
       targetHours,
       startTime: source.startTime ?? source.start_time ?? null,
@@ -120,6 +146,11 @@ function normalizeMobileDraftItem(item: unknown): JobPlanDraftRecord | null {
       note: source.note ?? source.catatan ?? source.pok ?? null,
       isOvertime: Boolean(source.isOvertime ?? source.is_overtime),
       isPriority: Boolean(source.isPriority ?? source.is_priority),
+      deadlineDate: source.deadlineDate ?? source.deadline_date ?? null,
+      isRework: Boolean(source.isRework ?? source.is_rework),
+      isNonTechnicalJob: Boolean(source.isNonTechnicalJob ?? source.is_non_technical_job),
+      picPlan: source.picPlan ?? source.pic_plan ?? null,
+      requiredGrade: source.requiredGrade ?? source.required_grade ?? null,
     });
   } catch {
     return null;
@@ -245,6 +276,11 @@ function countDraftSummary(drafts: JobPlanDraftRecord[]) {
       overtimeCount: 0,
     },
   );
+}
+
+function pushPositiveInt(target: Set<number>, value: unknown) {
+  const parsed = toNullableInt(value);
+  if (parsed !== null) target.add(parsed);
 }
 
 function resolveApprovedStatus(currentStatus: JobPlanStatus): JobPlanStatus {
@@ -570,9 +606,71 @@ export class DefaultJobPlanService implements JobPlanService {
     private readonly redisFactory: () => Promise<RedisClientType> = getRedisClient,
   ) {}
 
-  private async readDrafts(employeeId: string): Promise<JobPlanDraftRecord[]> {
-    const redis = await this.redisFactory();
-    const raw = await redis.get(buildJobPlanDraftKey(employeeId)) ?? await redis.get(`jobplan:draft:${employeeId}`);
+  private getDraftDivisionIds(
+    session: WebSession,
+    options: {
+      query?: JobPlanGridQuery;
+      references?: JobPlanReferences;
+      drafts?: JobPlanDraftRecord[];
+    } = {},
+  ): number[] {
+    const divisionIds = new Set<number>();
+    const allowedDivisionIds = new Set([
+      ...session.user.scope.divisionIds,
+      ...session.user.scope.managedDivisionIds,
+      session.user.divisionId,
+    ].flatMap((divisionId) => {
+      const parsed = toNullableInt(divisionId);
+      return parsed === null ? [] : [parsed];
+    }));
+    const addScopedDivisionId = (value: unknown) => {
+      const parsed = toNullableInt(value);
+      if (parsed === null) return;
+      if (session.user.scope.canViewAllUnits || allowedDivisionIds.has(parsed)) {
+        divisionIds.add(parsed);
+      }
+    };
+
+    pushPositiveInt(divisionIds, session.user.divisionId);
+    session.user.scope.divisionIds.forEach((divisionId) => pushPositiveInt(divisionIds, divisionId));
+    session.user.scope.managedDivisionIds.forEach((divisionId) => pushPositiveInt(divisionIds, divisionId));
+    options.drafts?.forEach((draft) => addScopedDivisionId(this.resolveDraftDivisionId(session, draft)));
+    options.query?.filters.forEach((filter) => {
+      if (filter.field === "divisionId") addScopedDivisionId(filter.value);
+    });
+
+    if (session.user.scope.canViewAllUnits && options.references) {
+      options.references.divisions.forEach((division) => pushPositiveInt(divisionIds, division.value));
+    }
+
+    return [...divisionIds].sort((left, right) => left - right);
+  }
+
+  private resolveDraftDivisionId(session: WebSession, draft: JobPlanDraftRecord): number | null {
+    const draftDivisionId = toNullableInt(draft.divisionId);
+    if (draftDivisionId === null) {
+      return toNullableInt(session.user.divisionId);
+    }
+
+    if (session.user.scope.canViewAllUnits) {
+      return draftDivisionId;
+    }
+
+    const allowedDivisionIds = new Set([
+      ...session.user.scope.divisionIds,
+      ...session.user.scope.managedDivisionIds,
+      session.user.divisionId,
+    ].flatMap((divisionId) => {
+      const parsed = toNullableInt(divisionId);
+      return parsed === null ? [] : [parsed];
+    }));
+
+    return allowedDivisionIds.has(draftDivisionId)
+      ? draftDivisionId
+      : toNullableInt(session.user.divisionId);
+  }
+
+  private parseDrafts(raw: string | null): JobPlanDraftRecord[] {
     if (!raw) {
       return [];
     }
@@ -588,28 +686,83 @@ export class DefaultJobPlanService implements JobPlanService {
     }
   }
 
-  private async writeDrafts(employeeId: string, drafts: JobPlanDraftRecord[]) {
+  private async readDrafts(
+    employeeId: string,
+    divisionIds: number[],
+  ): Promise<JobPlanDraftRecord[]> {
     const redis = await this.redisFactory();
-    const webKey = buildJobPlanDraftKey(employeeId);
-    const mobileKey = `jobplan:draft:${employeeId}`;
+    const keys = [
+      ...divisionIds.map((divisionId) => buildDivisionDraftKey(divisionId)),
+      buildLegacyMobileDraftKey(employeeId),
+      buildLegacyWebDraftKey(employeeId),
+    ];
+    const rows = await Promise.all(keys.map(async (key) => this.parseDrafts(await redis.get(key))));
+    const draftsById = new Map<string, JobPlanDraftRecord>();
 
-    if (drafts.length === 0) {
-      await redis.del(webKey);
-      await redis.del(mobileKey);
-      return;
+    for (const drafts of rows) {
+      for (const draft of drafts) {
+        if (!draftsById.has(draft.draftItemId)) draftsById.set(draft.draftItemId, draft);
+      }
     }
 
-    await redis.set(webKey, JSON.stringify(drafts), {
-      EX: JOB_PLAN_DRAFT_TTL_SECONDS,
-    });
-    // Mirror ke key mobile (sm_job_plan) agar draft web muncul di aplikasi mobile.
-    await redis.set(mobileKey, JSON.stringify({ items: drafts }), {
-      EX: JOB_PLAN_DRAFT_TTL_SECONDS,
-    });
+    return [...draftsById.values()];
+  }
+
+  private async writeDrafts(
+    session: WebSession,
+    divisionIds: number[],
+    drafts: JobPlanDraftRecord[],
+  ) {
+    const redis = await this.redisFactory();
+    const legacyKeys = [
+      buildLegacyWebDraftKey(session.user.employeeId),
+      buildLegacyMobileDraftKey(session.user.employeeId),
+    ];
+    const groups = new Map<number, JobPlanDraftRecord[]>();
+    const unscopedDrafts: JobPlanDraftRecord[] = [];
+
+    for (const draft of drafts) {
+      const divisionId = this.resolveDraftDivisionId(session, draft);
+      if (divisionId === null) {
+        unscopedDrafts.push(draft);
+        continue;
+      }
+      groups.set(divisionId, [
+        ...(groups.get(divisionId) ?? []),
+        { ...draft, divisionId },
+      ]);
+    }
+
+    await Promise.all([
+      ...divisionIds.map((divisionId) => redis.del(buildDivisionDraftKey(divisionId))),
+      ...legacyKeys.map((key) => redis.del(key)),
+    ]);
+
+    await Promise.all([...groups].map(([divisionId, items]) =>
+      redis.set(buildDivisionDraftKey(divisionId), JSON.stringify({
+        action: "save_draft",
+        divisionId,
+        sourceType: new Set(items.map((draft) => draft.sourceType)).size === 1 ? items[0]!.sourceType : "MIXED",
+        items,
+      }), {
+        EX: JOB_PLAN_DRAFT_TTL_SECONDS,
+      }),
+    ));
+
+    if (unscopedDrafts.length > 0) {
+      await redis.set(buildLegacyMobileDraftKey(session.user.employeeId), JSON.stringify({
+        action: "save_draft",
+        userId: session.user.employeeId,
+        sourceType: new Set(unscopedDrafts.map((draft) => draft.sourceType)).size === 1 ? unscopedDrafts[0]!.sourceType : "MIXED",
+        items: unscopedDrafts,
+      }), {
+        EX: JOB_PLAN_DRAFT_TTL_SECONDS,
+      });
+    }
   }
 
   async list(session: WebSession, query: JobPlanGridQuery): Promise<JobPlanListResult> {
-    const [listResult, references, allDrafts] = await Promise.all([
+    const [listResult, references] = await Promise.all([
       this.repository.list({
         employeeId: session.user.employeeId,
         scope: session.user.scope,
@@ -620,8 +773,11 @@ export class DefaultJobPlanService implements JobPlanService {
         scope: session.user.scope,
         mode: query.mode,
       }),
-      this.readDrafts(session.user.employeeId),
     ]);
+    const allDrafts = await this.readDrafts(
+      session.user.employeeId,
+      this.getDraftDivisionIds(session, { query, references }),
+    );
 
     const visibleDrafts = allDrafts.filter((draft) => matchesDraftFilters(draft, query));
     const countdownMap = new Map(references.countdowns.map((countdown) => [countdown.value, countdown]));
@@ -710,7 +866,10 @@ export class DefaultJobPlanService implements JobPlanService {
     session: WebSession,
     input: SaveJobPlanDraftRequest,
   ): Promise<JobPlanMutationResult> {
-    const currentDrafts = input.replaceItems ? [] : await this.readDrafts(session.user.employeeId);
+    const draftDivisionIds = this.getDraftDivisionIds(session, { drafts: input.items });
+    const currentDrafts = input.replaceItems
+      ? []
+      : await this.readDrafts(session.user.employeeId, draftDivisionIds);
     const draftMap = new Map(currentDrafts.map((draft) => [draft.draftItemId, draft]));
 
     for (const draft of input.items) {
@@ -748,7 +907,7 @@ export class DefaultJobPlanService implements JobPlanService {
     if (exceededAllocation) {
       throw new Error("COUNTDOWN_CAPACITY_EXCEEDED");
     }
-    await this.writeDrafts(session.user.employeeId, nextDrafts);
+    await this.writeDrafts(session, draftDivisionIds, nextDrafts);
 
     await this.auditService.log({
       actorId: session.user.employeeId,
@@ -775,7 +934,15 @@ export class DefaultJobPlanService implements JobPlanService {
     session: WebSession,
     input: SubmitJobPlanDraftRequest,
   ): Promise<JobPlanMutationResult> {
-    const drafts = await this.readDrafts(session.user.employeeId);
+    const references = session.user.scope.canViewAllUnits
+      ? await this.repository.listReferences({
+          employeeId: session.user.employeeId,
+          scope: session.user.scope,
+          mode: "all",
+        })
+      : undefined;
+    const draftDivisionIds = this.getDraftDivisionIds(session, { references });
+    const drafts = await this.readDrafts(session.user.employeeId, draftDivisionIds);
     const selectedDrafts = input.draftItemIds.map((draftItemId) =>
       drafts.find((draft) => draft.draftItemId === draftItemId) ?? null,
     );
@@ -824,7 +991,8 @@ export class DefaultJobPlanService implements JobPlanService {
     );
 
     await this.writeDrafts(
-      session.user.employeeId,
+      session,
+      draftDivisionIds,
       drafts.filter((draft) => !input.draftItemIds.includes(draft.draftItemId)),
     );
 
@@ -859,21 +1027,59 @@ export class DefaultJobPlanService implements JobPlanService {
     carIds: string[],
     planIds: string[],
     actorName: string,
+    approverRows?: Array<{ carId: string; kpId: string | null; advisorId: string | null; kdId: string | null }>,
   ): Promise<void> {
     try {
-      const approvers = await this.repository.getApproversForCars([...new Set(carIds)]);
-      const recipients = approvers.flatMap(({ kpId, advisorId, kdId }) =>
-        [kpId, advisorId, kdId].filter((id): id is string => Boolean(id)),
-      );
-      await notifyMobileEmployees(recipients, {
-        title: "Job Plan Baru Menunggu Persetujuan",
-        body: `${actorName} mengajukan ${planIds.length} rencana kerja yang perlu disetujui.`,
-        data: {
-          planId: planIds[0] ?? "",
-          status: "PENDING",
-          module: "job_plan",
-        },
-      }, "sm_job_plan");
+      const approvers = approverRows ?? await this.repository.getApproversForCars([...new Set(carIds)]);
+      const approverByCarId = new Map(approvers.map((approver) => [approver.carId, approver]));
+      const pendingAdvRecipients = new Set<string>();
+      const pendingKpRecipients = new Set<string>();
+      let pendingAdvCount = 0;
+      let pendingKpCount = 0;
+      let pendingAdvPlanId = "";
+      let pendingKpPlanId = "";
+
+      carIds.forEach((carId, index) => {
+        const approver = approverByCarId.get(carId);
+        if (!approver) {
+          return;
+        }
+        if (approver.advisorId) {
+          pendingAdvRecipients.add(approver.advisorId);
+          pendingAdvCount += 1;
+          pendingAdvPlanId ||= planIds[index] ?? "";
+          return;
+        }
+        if (approver.kpId) {
+          pendingKpRecipients.add(approver.kpId);
+          pendingKpCount += 1;
+          pendingKpPlanId ||= planIds[index] ?? "";
+        }
+      });
+
+      if (pendingAdvRecipients.size > 0 && pendingAdvCount > 0) {
+        await notifyMobileEmployees([...pendingAdvRecipients], {
+          title: "Job Plan Menunggu Persetujuan QA",
+          body: `${actorName} mengajukan ${pendingAdvCount} rencana kerja yang perlu disetujui QA.`,
+          data: {
+            planId: pendingAdvPlanId,
+            status: "PENDING_ADV",
+            module: "job_plan",
+          },
+        }, "sm_job_plan");
+      }
+
+      if (pendingKpRecipients.size > 0 && pendingKpCount > 0) {
+        await notifyMobileEmployees([...pendingKpRecipients], {
+          title: "Job Plan Menunggu Persetujuan KP",
+          body: `${actorName} mengajukan ${pendingKpCount} rencana kerja yang perlu disetujui KP.`,
+          data: {
+            planId: pendingKpPlanId,
+            status: "PENDING_KP",
+            module: "job_plan",
+          },
+        }, "sm_job_plan");
+      }
     } catch (err) {
       console.error("[job-plan] notification error:", err);
     }
@@ -945,7 +1151,15 @@ export class DefaultJobPlanService implements JobPlanService {
     session: WebSession,
     input: DeleteJobPlanDraftRequest,
   ): Promise<JobPlanMutationResult> {
-    const drafts = await this.readDrafts(session.user.employeeId);
+    const references = session.user.scope.canViewAllUnits
+      ? await this.repository.listReferences({
+          employeeId: session.user.employeeId,
+          scope: session.user.scope,
+          mode: "all",
+        })
+      : undefined;
+    const draftDivisionIds = this.getDraftDivisionIds(session, { references });
+    const drafts = await this.readDrafts(session.user.employeeId, draftDivisionIds);
     const remainingDrafts = drafts.filter(
       (draft) => !input.draftItemIds.includes(draft.draftItemId),
     );
@@ -954,7 +1168,7 @@ export class DefaultJobPlanService implements JobPlanService {
       throw new Error("DRAFT_NOT_FOUND");
     }
 
-    await this.writeDrafts(session.user.employeeId, remainingDrafts);
+    await this.writeDrafts(session, draftDivisionIds, remainingDrafts);
 
     await this.auditService.log({
       actorId: session.user.employeeId,
