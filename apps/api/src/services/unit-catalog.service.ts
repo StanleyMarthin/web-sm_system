@@ -1,6 +1,7 @@
 import type {
   CatalogMediaRequest,
   CatalogPanelImageRequest,
+  CreateAdditionalCatalogItemRequest,
   CreatePanelJobdescsRequest,
   OpenCatalogPanelRequest,
   SaveCatalogWorkspaceRequest,
@@ -67,6 +68,16 @@ export class UnitCatalogService {
   async addPanelImage(session: WebSession, unitId: string, panelId: number, input: CatalogPanelImageRequest) {
     await this.assertUnitAccess(session, unitId);
     return this.repository.addPanelImage(unitId, panelId, session.user.employeeId, input);
+  }
+
+  async createAdditionalItem(session: WebSession, unitId: string, input: CreateAdditionalCatalogItemRequest) {
+    await this.assertUnitAccess(session, unitId);
+    return this.repository.createAdditionalItem(unitId, session.user.employeeId, input);
+  }
+
+  async promoteAdditionalItem(session: WebSession, unitId: string, itemId: number) {
+    await this.assertUnitAccess(session, unitId);
+    return this.repository.promoteAdditionalItem(unitId, itemId, session.user.employeeId);
   }
 
   async getItem(session: WebSession, unitId: string, itemId: number) {

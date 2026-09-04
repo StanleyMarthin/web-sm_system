@@ -95,3 +95,69 @@ describe("UnitCatalogRepository savePanelWorkspace", () => {
     );
   });
 });
+
+describe("UnitCatalogRepository promoteAdditionalItem", () => {
+  it("creates master panel with ADDITIONAL provenance", async () => {
+    const statements: Array<{ sql: string; params: unknown[] }> = [];
+    const connection = {
+      beginTransaction: async () => undefined,
+      commit: async () => undefined,
+      rollback: async () => undefined,
+      release: () => undefined,
+      query: async (sql: string, params: unknown[] = []) => {
+        statements.push({ sql, params });
+        if (sql.includes("SELECT id FROM master_panels")) return [[]];
+        if (sql.includes("FROM unit_additional_items")) {
+          return [[{
+            id: 77,
+            carId: "CAR-1",
+            componentName: "BODY",
+            panelName: "FRONT BUMPER",
+            itemName: "Bracket Bumper",
+            partNumber: "ADD-001",
+            deskription: "temuan tambahan",
+          }]];
+        }
+        if (sql.includes("FROM catalog_panels")) {
+          return [[{
+            componentId: 4,
+            panelId: 1,
+            componentName: "BODY",
+            panelName: "FRONT BUMPER",
+          }]];
+        }
+        if (sql.includes("FROM sm_car_panel_status")) return [[]];
+        return [[]];
+      },
+      execute: async (sql: string, params: unknown[] = []) => {
+        statements.push({ sql, params });
+        return [{ insertId: 901 }];
+      },
+    };
+
+    const repository: any = new UnitCatalogRepository(
+      () =>
+        ({
+          getConnection: async () => connection,
+        }) as never,
+      {} as never,
+    );
+
+    await repository.promoteAdditionalItem("CAR-1", 77, "EMP-1");
+
+    const masterInsert = statements.find(({ sql }) => sql.includes("INSERT INTO master_panels"));
+    expect(masterInsert?.params?.slice(0, 8)).toEqual([
+      "CAR-1",
+      77,
+      4,
+      1,
+      "BODY",
+      "FRONT BUMPER",
+      "Bracket Bumper",
+      "ADD-001",
+    ]);
+    expect(masterInsert?.sql.includes("'ADDITIONAL'")).toBe(true);
+    expect(statements.some(({ sql }) => sql.includes("sm_jobdesc_countdown"))).toBe(false);
+    expect(statements.some(({ sql }) => sql.includes("sm_jobdesc_wo"))).toBe(false);
+  });
+});

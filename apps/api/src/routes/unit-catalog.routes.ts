@@ -1,6 +1,7 @@
 import {
   catalogMediaRequestSchema,
   catalogPanelImageRequestSchema,
+  createAdditionalCatalogItemRequestSchema,
   createPanelJobdescsRequestSchema,
   openCatalogPanelRequestSchema,
   saveCatalogWorkspaceRequestSchema,
@@ -64,6 +65,7 @@ function mapCatalogError(request: Request, error: unknown): Response {
     if (error.message === "CATALOG_PANEL_NOT_FOUND") return errorResponse(request, "Panel catalog tidak ditemukan.", 404, "CATALOG_PANEL_NOT_FOUND");
     if (error.message === "CATALOG_COMPONENT_NOT_FOUND") return errorResponse(request, "Komponen catalog tidak ditemukan.", 404, "CATALOG_COMPONENT_NOT_FOUND");
     if (error.message === "CATALOG_ITEM_NOT_FOUND") return errorResponse(request, "Item catalog tidak ditemukan.", 404, "CATALOG_ITEM_NOT_FOUND");
+    if (error.message === "ADDITIONAL_ITEM_NOT_FOUND") return errorResponse(request, "Item tambahan tidak ditemukan.", 404, "ADDITIONAL_ITEM_NOT_FOUND");
     if (error.message === "CATALOG_REFERENCE_NOT_FOUND") return errorResponse(request, "Workspace catalog tidak ditemukan.", 404, "CATALOG_REFERENCE_NOT_FOUND");
     if (error.message === "UNIT_PANEL_NOT_FOUND") return errorResponse(request, "Master panel tidak ditemukan.", 404, "UNIT_PANEL_NOT_FOUND");
     if (error.message === "SURVEY_NOT_CONFIRMED") return errorResponse(request, "Pendataan harus CONFIRMED sebelum menjadi Master Panel.", 409, "SURVEY_NOT_CONFIRMED");
@@ -226,6 +228,34 @@ export async function handleUnitCatalogPanelMediaAliasRoute(request: Request, un
     return successResponse(request, "Gambar catalog berhasil disimpan.", {
       media: await service.addPanelImage(sessionResult.session, unitId, panelId, body.data),
     }, { status: 201 });
+  } catch (error) {
+    return mapCatalogError(request, error);
+  }
+}
+
+export async function handleUnitCatalogAdditionalRoute(request: Request, unitId: string, authService: AuthService, service: UnitCatalogService) {
+  const sessionResult = await requireUnitCatalogSession(request, authService, unitCatalogAdminPermissions);
+  if ("response" in sessionResult) return sessionResult.response;
+  const body = await parseJsonBody(request, createAdditionalCatalogItemRequestSchema);
+  if (!body.success) return withCors(request, body.response);
+
+  try {
+    return successResponse(request, "Item tambahan berhasil dibuat.", {
+      item: await service.createAdditionalItem(sessionResult.session, unitId, body.data),
+    }, { status: 201 });
+  } catch (error) {
+    return mapCatalogError(request, error);
+  }
+}
+
+export async function handleUnitCatalogAdditionalPromoteRoute(request: Request, unitId: string, itemId: number, authService: AuthService, service: UnitCatalogService) {
+  const sessionResult = await requireUnitCatalogSession(request, authService, unitCatalogSurveyPermissions);
+  if ("response" in sessionResult) return sessionResult.response;
+
+  try {
+    return successResponse(request, "Item tambahan berhasil diproses ke Master Panel.", {
+      result: await service.promoteAdditionalItem(sessionResult.session, unitId, itemId),
+    });
   } catch (error) {
     return mapCatalogError(request, error);
   }

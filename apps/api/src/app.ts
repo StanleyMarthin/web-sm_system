@@ -67,6 +67,8 @@ import { DefaultUnitsService, type UnitsService } from "@/services/units.service
 import {
   handleCatalogComponentPanelsRoute,
   handleCatalogComponentsRoute,
+  handleUnitCatalogAdditionalPromoteRoute,
+  handleUnitCatalogAdditionalRoute,
   handleUnitCatalogItemRoute,
   handleUnitCatalogMediaDeleteRoute,
   handleUnitCatalogMediaRoute,
@@ -749,6 +751,8 @@ export function createApiFetchHandler(dependencies: AppDependencies = {}) {
     { method: "POST", pattern: /^\/api\/units\/([^/]+)\/catalog$/, handler: (request, match) => handleUnitCatalogRoute(request, match![1], getAuthService(), getUnitCatalogService()) },
     { method: "GET", pattern: /^\/api\/units\/([^/]+)\/catalog\/search$/, handler: (request, match) => handleUnitCatalogSearchRoute(request, match![1], getAuthService(), getUnitCatalogService()) },
     { method: "GET", pattern: /^\/api\/units\/([^/]+)\/catalog\/upload-ticket$/, handler: (request, match) => handleUnitCatalogUploadTicketRoute(request, match![1], getAuthService()) },
+    { method: "POST", pattern: /^\/api\/units\/([^/]+)\/catalog\/additional$/, handler: (request, match) => handleUnitCatalogAdditionalRoute(request, match![1], getAuthService(), getUnitCatalogService()) },
+    { method: "POST", pattern: /^\/api\/units\/([^/]+)\/catalog\/additional\/(\d+)\/promote$/, handler: (request, match) => handleUnitCatalogAdditionalPromoteRoute(request, match![1], Number.parseInt(match![2], 10), getAuthService(), getUnitCatalogService()) },
     { method: "GET", pattern: /^\/api\/units\/([^/]+)\/catalog\/(\d+)$/, handler: (request, match) => handleUnitCatalogPanelAliasRoute(request, match![1], Number.parseInt(match![2], 10), getAuthService(), getUnitCatalogService()) },
     { method: "PUT", pattern: /^\/api\/units\/([^/]+)\/catalog\/(\d+)\/items$/, handler: (request, match) => handleUnitCatalogPanelItemsAliasRoute(request, match![1], Number.parseInt(match![2], 10), getAuthService(), getUnitCatalogService()) },
     { method: "POST", pattern: /^\/api\/units\/([^/]+)\/catalog\/(\d+)\/media$/, handler: (request, match) => handleUnitCatalogPanelMediaAliasRoute(request, match![1], Number.parseInt(match![2], 10), getAuthService(), getUnitCatalogService()) },

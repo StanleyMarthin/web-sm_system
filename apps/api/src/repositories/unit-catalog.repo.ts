@@ -10,6 +10,7 @@ import type {
   CatalogWorkspace,
   CatalogWorkspaceItem,
   CatalogWorkspaceItemInput,
+  CreateAdditionalCatalogItemRequest,
   CreatePanelJobdescsRequest,
   OpenCatalogPanelRequest,
   SaveCatalogWorkspaceRequest,
@@ -51,6 +52,16 @@ interface WorkspaceItemRow extends RowDataPacket {
   isRestoration: number | boolean | null;
   createdAt: string | null;
   updatedAt: string | null;
+}
+
+interface AdditionalItemRow extends RowDataPacket {
+  id: number;
+  carId: string;
+  componentName: string | null;
+  panelName: string | null;
+  itemName: string;
+  partNumber: string | null;
+  deskription: string | null;
 }
 
 function num(value: number | string | null | undefined): number | null {
@@ -441,6 +452,84 @@ export class UnitCatalogRepository {
     return { id: Number(result.insertId), fileUrl: input.fileUrl };
   }
 
+  async createAdditionalItem(unitId: string, actorId: string, input: CreateAdditionalCatalogItemRequest) {
+    const [result] = await this.poolFactory(this.env).execute<ResultSetHeader>(
+      `
+        INSERT INTO unit_additional_items (
+          car_id, component_name, panel_name, item_name, part_number, deskription, created_by
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      `,
+      [
+        unitId,
+        input.componentName ? normalizeSpaces(input.componentName) : null,
+        input.panelName ? normalizeSpaces(input.panelName) : null,
+        normalizeSpaces(input.itemName),
+        input.partNumber ? normalizeSpaces(input.partNumber) : null,
+        input.deskription ? input.deskription.trim() : null,
+        actorId,
+      ],
+    );
+    return this.getAdditionalItem(unitId, Number(result.insertId));
+  }
+
+  async promoteAdditionalItem(unitId: string, itemId: number, actorId: string) {
+    const connection = await this.poolFactory(this.env).getConnection();
+    try {
+      await connection.beginTransaction();
+      const [existingRows] = await connection.query<Array<RowDataPacket & { id: number }>>(
+        "SELECT id FROM master_panels WHERE car_id = ? AND source_part = 'ADDITIONAL' AND part_id = ? LIMIT 1 FOR UPDATE",
+        [unitId, itemId],
+      );
+      if (existingRows[0]?.id) {
+        await connection.commit();
+        return { panelId: Number(existingRows[0].id), alreadyPromoted: true };
+      }
+
+      const item = await this.getAdditionalItem(unitId, itemId, connection);
+      if (!item) throw new Error("ADDITIONAL_ITEM_NOT_FOUND");
+      const classification = await this.resolveAdditionalClassification(item, connection);
+      const componentName = classification?.componentName ?? item.componentName ?? null;
+      const panelName = classification?.panelName ?? item.panelName ?? null;
+
+      const [result] = await connection.execute<ResultSetHeader>(
+        `
+          INSERT INTO master_panels (
+            car_id, part_id, source_part, component_id, panel_id, component_name, panel_name,
+            name_part, alias_name, part_number, qty, initial_condition, current_status, location, notes,
+            section, name, category, is_active, parent_id, position_code, sort_order, qty_normal,
+            default_location_type, default_stock_status, default_condition_type, default_division_id,
+            created_at, created_by, updated_at, updated_by
+          ) VALUES (?, ?, 'ADDITIONAL', ?, ?, ?, ?, ?, NULL, ?, 1, 'UNKNOWN', 'UNKNOWN', 'UNIT', ?, ?, ?, ?, 1, NULL, NULL, 0, NULL, 'UNIT', 'INSTALLED', 'BEKAS', NULL, NOW(), ?, NOW(), ?)
+        `,
+        [
+          unitId,
+          itemId,
+          classification?.componentId ?? null,
+          classification?.panelId ?? null,
+          componentName,
+          panelName,
+          item.itemName,
+          item.partNumber,
+          item.deskription,
+          componentName,
+          item.itemName,
+          panelName,
+          actorId,
+          actorId,
+        ],
+      );
+      const panelId = Number(result.insertId);
+      await this.refreshPanelStatus(connection, unitId, panelId);
+      await connection.commit();
+      return { panelId, alreadyPromoted: false };
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
+
   async getItem(unitId: string, itemId: number, db: Queryable = this.poolFactory(this.env)): Promise<CatalogItem | null> {
     const [rows] = await db.query<Array<WorkspaceItemRow & RowDataPacket & { promotedPanelId: number | null }>>(
       `
@@ -794,6 +883,61 @@ export class UnitCatalogRepository {
       [panelId],
     );
     return rows[0] ? mapPanel(rows[0]) : null;
+  }
+
+  private async getAdditionalItem(unitId: string, itemId: number, db: Queryable = this.poolFactory(this.env)) {
+    const [rows] = await db.query<AdditionalItemRow[]>(
+      `
+        SELECT
+          id,
+          car_id AS carId,
+          component_name AS componentName,
+          panel_name AS panelName,
+          item_name AS itemName,
+          part_number AS partNumber,
+          deskription
+        FROM unit_additional_items
+        WHERE id = ? AND car_id = ?
+        LIMIT 1
+      `,
+      [itemId, unitId],
+    );
+    return rows[0] ?? null;
+  }
+
+  private async resolveAdditionalClassification(item: AdditionalItemRow, db: Queryable = this.poolFactory(this.env)) {
+    const componentName = item.componentName ? normalizePanelName(item.componentName) : null;
+    const panelName = item.panelName ? normalizePanelName(item.panelName) : null;
+    if (!componentName || !panelName) return null;
+
+    const [rows] = await db.query<Array<RowDataPacket & {
+      componentId: number;
+      panelId: number;
+      componentName: string;
+      panelName: string;
+    }>>(
+      `
+        SELECT
+          c.id AS componentId,
+          p.id AS panelId,
+          c.component_name AS componentName,
+          p.panel_name AS panelName
+        FROM catalog_panels p
+        JOIN catalog_components c ON c.id = p.component_id
+        WHERE (UPPER(TRIM(c.code)) = ? OR UPPER(TRIM(c.component_name)) = ?)
+          AND UPPER(TRIM(p.panel_name)) = ?
+        LIMIT 1
+      `,
+      [componentName, componentName, panelName],
+    );
+    return rows[0]
+      ? {
+          componentId: Number(rows[0].componentId),
+          panelId: Number(rows[0].panelId),
+          componentName: String(rows[0].componentName),
+          panelName: String(rows[0].panelName),
+        }
+      : null;
   }
 
   private async ensurePanelByName(connection: PoolConnection, componentCode: CatalogComponent["code"], panelName: string) {

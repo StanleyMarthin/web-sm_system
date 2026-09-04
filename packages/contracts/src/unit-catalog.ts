@@ -160,6 +160,14 @@ export const catalogPanelImageRequestSchema = catalogMediaRequestSchema.extend({
   sortOrder: z.number().int().min(0).max(9_999).optional().default(0),
 });
 
+export const createAdditionalCatalogItemRequestSchema = z.object({
+  componentName: nullableText(100),
+  panelName: nullableText(150),
+  itemName: z.string().trim().min(1).max(150),
+  partNumber: nullableText(100),
+  deskription: z.string().trim().max(2_000).nullable().optional().default(null),
+});
+
 export const panelJobdescInputSchema = z.object({
   divisionId: z.number().int().positive(),
   jobTypeId: z.string().trim().min(1).max(64),
@@ -283,4 +291,5 @@ export type SaveCatalogWorkspaceRequest = z.infer<typeof saveCatalogWorkspaceReq
 export type UpdateCatalogSurveyRequest = z.infer<typeof updateCatalogSurveyRequestSchema>;
 export type CatalogMediaRequest = z.infer<typeof catalogMediaRequestSchema>;
 export type CatalogPanelImageRequest = z.infer<typeof catalogPanelImageRequestSchema>;
+export type CreateAdditionalCatalogItemRequest = z.infer<typeof createAdditionalCatalogItemRequestSchema>;
 export type CreatePanelJobdescsRequest = z.infer<typeof createPanelJobdescsRequestSchema>;
