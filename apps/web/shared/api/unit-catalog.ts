@@ -4,18 +4,18 @@ import {
   catalogWorkspaceSchema,
   catalogSearchItemSchema,
   catalogMediaRequestSchema,
-  catalogReferenceMediaRequestSchema,
+  catalogPanelImageRequestSchema,
   createPanelJobdescsRequestSchema,
+  openCatalogPanelRequestSchema,
   saveCatalogWorkspaceRequestSchema,
   updateCatalogSurveyRequestSchema,
-  upsertCatalogReferenceRequestSchema,
   type CatalogItem,
   type CatalogOverview,
   type CatalogWorkspace,
   type CreatePanelJobdescsRequest,
+  type OpenCatalogPanelRequest,
   type SaveCatalogWorkspaceRequest,
   type UpdateCatalogSurveyRequest,
-  type UpsertCatalogReferenceRequest,
 } from "@smsystem/contracts/unit-catalog";
 import { z } from "zod";
 import { getApiBaseUrl } from "@/shared/api/config";
@@ -132,8 +132,8 @@ export async function fetchUnitCatalogReference(unitId: string, referenceId: num
   );
 }
 
-export async function createUnitCatalogReference(unitId: string, input: UpsertCatalogReferenceRequest) {
-  const body = upsertCatalogReferenceRequestSchema.parse(input);
+export async function openUnitCatalogPanel(unitId: string, input: OpenCatalogPanelRequest) {
+  const body = openCatalogPanelRequestSchema.parse(input);
   return requestJson(
     `/api/units/${encodeURIComponent(unitId)}/catalog`,
     workspaceEnvelopeSchema,
@@ -188,7 +188,7 @@ export async function addUnitCatalogItemMedia(unitId: string, itemId: number, in
 }
 
 export async function addUnitCatalogReferenceMedia(unitId: string, referenceId: number, input: { fileUrl: string; caption?: string | null; sortOrder?: number }) {
-  const body = catalogReferenceMediaRequestSchema.parse(input);
+  const body = catalogPanelImageRequestSchema.parse(input);
   return requestJson(
     `/api/units/${encodeURIComponent(unitId)}/catalog/${referenceId}/media`,
     mediaEnvelopeSchema,

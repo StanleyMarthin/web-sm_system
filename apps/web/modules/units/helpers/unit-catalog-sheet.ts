@@ -16,9 +16,9 @@ export const catalogGridFields = [
   "code",
   "partNumber",
   "itemName",
-  "positionCode",
+  "position",
   "qtyNormal",
-  "notes",
+  "isRestoration",
 ] as const;
 
 export type CatalogDraftField = typeof catalogGridFields[number];
@@ -29,17 +29,14 @@ export interface CatalogDraftRow {
   code: string;
   partNumber: string;
   itemName: string;
-  positionCode: string;
+  position: string;
   qtyNormal: string;
-  notes: string;
+  isRestoration: boolean;
 }
 
 export interface CatalogWorkspaceDraft {
-  referenceId: number | null;
   panelId: number;
-  referenceUrl: string;
-  notes: string;
-  media: Array<{
+  panelImages: Array<{
     id: number | null;
     fileUrl: string;
     caption: string;
@@ -58,6 +55,13 @@ function emptyString(value: string | null | undefined) {
 
 function normalizeCell(value: string) {
   return value.replace(/\r/gu, "");
+}
+
+function normalizeBoolean(value: string | boolean) {
+  if (typeof value === "boolean") return value;
+  const normalized = value.trim().toUpperCase();
+  if (!normalized) return false;
+  return ["1", "TRUE", "YA", "YES", "Y", "RESTORE", "RESTORATION"].includes(normalized);
 }
 
 function nullableText(value: string) {
@@ -82,9 +86,9 @@ function rowFromItem(item: Partial<CatalogWorkspace["items"][number]> & { id?: n
     code: emptyString(item.code),
     partNumber: emptyString(item.partNumber),
     itemName: emptyString(item.itemName),
-    positionCode: emptyString(item.positionCode),
+    position: emptyString(item.position),
     qtyNormal: item.qtyNormal == null ? "" : String(item.qtyNormal),
-    notes: emptyString(item.notes),
+    isRestoration: Boolean(item.isRestoration),
   };
 }
 
@@ -95,30 +99,24 @@ export function createCatalogDraftRow(partial: Partial<CatalogDraftRow> = {}): C
     code: partial.code ?? "",
     partNumber: partial.partNumber ?? "",
     itemName: partial.itemName ?? "",
-    positionCode: partial.positionCode ?? "",
+    position: partial.position ?? "",
     qtyNormal: partial.qtyNormal ?? "",
-    notes: partial.notes ?? "",
+    isRestoration: partial.isRestoration ?? false,
   };
 }
 
 export function createCatalogWorkspaceDraft(panelId = 0): CatalogWorkspaceDraft {
   return {
-    referenceId: null,
     panelId,
-    referenceUrl: "",
-    notes: "",
-    media: [],
+    panelImages: [],
     rows: [createCatalogDraftRow()],
   };
 }
 
 export function workspaceDraftFromWorkspace(workspace: CatalogWorkspace): CatalogWorkspaceDraft {
   return {
-    referenceId: workspace.referenceId,
     panelId: workspace.panel.id,
-    referenceUrl: emptyString(workspace.referenceUrl),
-    notes: emptyString(workspace.notes),
-    media: workspace.media.map((media) => ({
+    panelImages: workspace.panelImages.map((media) => ({
       id: media.id,
       fileUrl: media.fileUrl,
       caption: emptyString(media.caption),
@@ -130,9 +128,11 @@ export function workspaceDraftFromWorkspace(workspace: CatalogWorkspace): Catalo
   };
 }
 
-export function updateCatalogDraftCell(rows: CatalogDraftRow[], rowId: string, field: CatalogDraftField, value: string) {
+export function updateCatalogDraftCell(rows: CatalogDraftRow[], rowId: string, field: CatalogDraftField, value: string | boolean) {
   return rows.map((row) => (
-    row.rowId === rowId ? { ...row, [field]: normalizeCell(value) } : row
+    row.rowId === rowId
+      ? { ...row, [field]: field === "isRestoration" ? normalizeBoolean(value) : normalizeCell(String(value)) }
+      : row
   ));
 }
 
@@ -151,30 +151,29 @@ function draftRowHasValue(row: CatalogDraftRow) {
     row.code.trim() ||
     row.partNumber.trim() ||
     row.itemName.trim() ||
-    row.positionCode.trim() ||
+    row.position.trim() ||
     row.qtyNormal.trim() ||
-    row.notes.trim(),
+    row.isRestoration,
   );
 }
 
-function draftRowToInput(row: CatalogDraftRow, sortOrder: number): CatalogWorkspaceItemInput {
+function draftRowToInput(row: CatalogDraftRow): CatalogWorkspaceItemInput {
   return {
     id: row.persistedId,
     clientRowId: row.rowId,
     code: nullableText(row.code),
     partNumber: nullableText(row.partNumber),
     itemName: nullableText(row.itemName),
-    positionCode: nullableText(row.positionCode),
+    position: nullableText(row.position),
     qtyNormal: nullableNumber(row.qtyNormal),
-    notes: nullableText(row.notes),
-    sortOrder,
+    isRestoration: row.isRestoration,
   };
 }
 
 export function serializeCatalogDraftRows(rows: CatalogDraftRow[]) {
   return rows
     .filter(draftRowHasValue)
-    .map((row, index) => draftRowToInput(row, index));
+    .map((row) => draftRowToInput(row));
 }
 
 function parsedItemToDraftRow(item: CatalogWorkspaceItemInput): CatalogDraftRow {
@@ -182,9 +181,9 @@ function parsedItemToDraftRow(item: CatalogWorkspaceItemInput): CatalogDraftRow 
     code: emptyString(item.code),
     partNumber: emptyString(item.partNumber),
     itemName: emptyString(item.itemName),
-    positionCode: emptyString(item.positionCode),
+    position: emptyString(item.position),
     qtyNormal: item.qtyNormal == null ? "" : String(item.qtyNormal),
-    notes: emptyString(item.notes),
+    isRestoration: Boolean(item.isRestoration),
   });
 }
 
@@ -214,11 +213,15 @@ export function applyCatalogPaste(rows: CatalogDraftRow[], input: { rowIndex: nu
   return nextRows.map((row, rowIndex) => {
     const pastedRow = parsedRows[rowIndex - input.rowIndex];
     if (!pastedRow) return row;
-    const next = { ...row };
+    const next: CatalogDraftRow = { ...row };
     for (let columnOffset = 0; columnOffset < pastedRow.length; columnOffset += 1) {
       const field = catalogGridFields[startColumn + columnOffset];
       if (!field) break;
-      next[field] = normalizeCell(pastedRow[columnOffset] ?? "");
+      if (field === "isRestoration") {
+        next.isRestoration = normalizeBoolean(pastedRow[columnOffset] ?? "");
+      } else {
+        next[field] = normalizeCell(pastedRow[columnOffset] ?? "");
+      }
     }
     return next;
   });
@@ -226,18 +229,12 @@ export function applyCatalogPaste(rows: CatalogDraftRow[], input: { rowIndex: nu
 
 export function isCatalogDraftDirty(base: CatalogWorkspaceDraft, current: CatalogWorkspaceDraft) {
   return JSON.stringify({
-    referenceId: base.referenceId,
     panelId: base.panelId,
-    referenceUrl: base.referenceUrl,
-    notes: base.notes,
-    media: base.media,
+    panelImages: base.panelImages,
     rows: base.rows.map(({ rowId: _rowId, ...row }) => row),
   }) !== JSON.stringify({
-    referenceId: current.referenceId,
     panelId: current.panelId,
-    referenceUrl: current.referenceUrl,
-    notes: current.notes,
-    media: current.media,
+    panelImages: current.panelImages,
     rows: current.rows.map(({ rowId: _rowId, ...row }) => row),
   });
 }

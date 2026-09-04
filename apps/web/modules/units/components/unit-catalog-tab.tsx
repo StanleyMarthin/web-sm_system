@@ -97,7 +97,7 @@ export function UnitCatalogTab({ unitId, unitName }: UnitCatalogTabProps) {
   const [editMode, setEditMode] = useState(false);
   const [imageUrlInput, setImageUrlInput] = useState("");
   const [deletedItemIds, setDeletedItemIds] = useState<number[]>([]);
-  const [deletedMediaIds, setDeletedMediaIds] = useState<number[]>([]);
+  const [deletedPanelImageIds, setDeletedPanelImageIds] = useState<number[]>([]);
 
   const dirty = baseline ? isCatalogDraftDirty(baseline, draft) : false;
   const groupedPanels = useMemo(() => groupPanelsByComponent(overview), [overview]);
@@ -182,7 +182,7 @@ export function UnitCatalogTab({ unitId, unitName }: UnitCatalogTabProps) {
     setGridSearch("");
     setImageUrlInput("");
     setDeletedItemIds([]);
-    setDeletedMediaIds([]);
+    setDeletedPanelImageIds([]);
   }
 
   function closePanel() {
@@ -196,7 +196,7 @@ export function UnitCatalogTab({ unitId, unitName }: UnitCatalogTabProps) {
     setGridSearch("");
     setImageUrlInput("");
     setDeletedItemIds([]);
-    setDeletedMediaIds([]);
+    setDeletedPanelImageIds([]);
   }
 
   async function handleSave() {
@@ -212,11 +212,9 @@ export function UnitCatalogTab({ unitId, unitName }: UnitCatalogTabProps) {
 
     setSaving(true);
     const result = await saveUnitCatalogPanelWorkspace(unitId, selectedPanelId, {
-      referenceUrl: draft.referenceUrl.trim() || null,
-      notes: draft.notes.trim() || null,
       items,
       deletedItemIds,
-      media: draft.media
+      panelImages: draft.panelImages
         .filter((media) => media.fileUrl.trim())
         .map((media, index) => ({
           id: media.id,
@@ -224,7 +222,7 @@ export function UnitCatalogTab({ unitId, unitName }: UnitCatalogTabProps) {
           caption: media.caption.trim() || null,
           sortOrder: index,
         })),
-      deletedMediaIds,
+      deletedPanelImageIds,
     });
     setSaving(false);
 
@@ -242,7 +240,7 @@ export function UnitCatalogTab({ unitId, unitName }: UnitCatalogTabProps) {
     setSelectedRowIds([]);
     setSelectedMediaIndex(0);
     setDeletedItemIds([]);
-    setDeletedMediaIds([]);
+    setDeletedPanelImageIds([]);
     sweetAlert.notifySuccess("Catalog tersimpan", "Perubahan panel ini sudah masuk ke database.");
     void loadOverview();
   }
@@ -254,7 +252,7 @@ export function UnitCatalogTab({ unitId, unitName }: UnitCatalogTabProps) {
     setSelectedRowIds([]);
     setSelectedMediaIndex(0);
     setDeletedItemIds([]);
-    setDeletedMediaIds([]);
+    setDeletedPanelImageIds([]);
   }
 
   async function addImageFromUpload(file: File) {
@@ -281,16 +279,16 @@ export function UnitCatalogTab({ unitId, unitName }: UnitCatalogTabProps) {
 
     let nextIndex = 0;
     setDraft((current) => {
-      nextIndex = current.media.length;
+      nextIndex = current.panelImages.length;
       return {
         ...current,
-        media: [
-          ...current.media,
+        panelImages: [
+          ...current.panelImages,
           {
             id: null,
             fileUrl: ticket.result.publicUrl,
             caption: "",
-            sortOrder: current.media.length,
+            sortOrder: current.panelImages.length,
           },
         ],
       };
@@ -304,16 +302,16 @@ export function UnitCatalogTab({ unitId, unitName }: UnitCatalogTabProps) {
     if (!value) return;
     let nextIndex = 0;
     setDraft((current) => {
-      nextIndex = current.media.length;
+      nextIndex = current.panelImages.length;
       return {
         ...current,
-        media: [
-          ...current.media,
+        panelImages: [
+          ...current.panelImages,
           {
             id: null,
             fileUrl: value,
             caption: "",
-            sortOrder: current.media.length,
+            sortOrder: current.panelImages.length,
           },
         ],
       };
@@ -334,13 +332,13 @@ export function UnitCatalogTab({ unitId, unitName }: UnitCatalogTabProps) {
     if (!confirmed) return;
 
     setDraft((current) => {
-      const nextMedia = current.media
+      const nextMedia = current.panelImages
         .filter((_, index) => index !== selectedMediaIndex)
         .map((media, index) => ({ ...media, sortOrder: index }));
-      return { ...current, media: nextMedia };
+      return { ...current, panelImages: nextMedia };
     });
     if (currentMedia.id) {
-      setDeletedMediaIds((current) => (
+      setDeletedPanelImageIds((current) => (
         current.includes(currentMedia.id as number) ? current : [...current, currentMedia.id as number]
       ));
     }
@@ -365,7 +363,7 @@ export function UnitCatalogTab({ unitId, unitName }: UnitCatalogTabProps) {
     setSelectedRowIds([]);
   }
 
-  const currentMedia = draft.media[selectedMediaIndex] ?? null;
+  const currentMedia = draft.panelImages[selectedMediaIndex] ?? null;
 
   return (
     <div className="space-y-4">
@@ -405,21 +403,6 @@ export function UnitCatalogTab({ unitId, unitName }: UnitCatalogTabProps) {
             count={draft.rows.length}
             className="min-h-[42rem]"
           >
-            <div className="grid gap-3 md:grid-cols-2">
-              <CompactInput
-                value={draft.referenceUrl}
-                onChange={(event) => setDraft((current) => ({ ...current, referenceUrl: event.target.value }))}
-                disabled={!editMode}
-                placeholder="Link referensi panel"
-              />
-              <CompactInput
-                value={draft.notes}
-                onChange={(event) => setDraft((current) => ({ ...current, notes: event.target.value }))}
-                disabled={!editMode}
-                placeholder="Catatan panel"
-              />
-            </div>
-
             <div className="h-[34rem] border border-border">
               <UnitCatalogEditor
                 rows={draft.rows}
@@ -435,7 +418,7 @@ export function UnitCatalogTab({ unitId, unitName }: UnitCatalogTabProps) {
             </div>
           </SectionCard>
 
-          <SectionCard label="Gambar Referensi" count={draft.media.length} className="min-h-[42rem]">
+          <SectionCard label="Gambar Panel" count={draft.panelImages.length} className="min-h-[42rem]">
             {currentMedia ? (
               <div className="space-y-3">
                 <div className="aspect-[4/3] overflow-hidden border border-border bg-muted">
@@ -446,7 +429,7 @@ export function UnitCatalogTab({ unitId, unitName }: UnitCatalogTabProps) {
                   value={currentMedia.caption}
                   onChange={(event) => setDraft((current) => ({
                     ...current,
-                    media: current.media.map((media, index) => (
+                    panelImages: current.panelImages.map((media, index) => (
                       index === selectedMediaIndex ? { ...media, caption: event.target.value } : media
                     )),
                   }))}
@@ -460,9 +443,9 @@ export function UnitCatalogTab({ unitId, unitName }: UnitCatalogTabProps) {
               </div>
             )}
 
-            {draft.media.length > 0 ? (
+            {draft.panelImages.length > 0 ? (
               <div className="grid grid-cols-3 gap-2">
-                {draft.media.map((media, index) => (
+                {draft.panelImages.map((media, index) => (
                   <MediaThumb
                     key={`${media.id ?? "new"}-${index}`}
                     src={media.fileUrl}
@@ -569,11 +552,11 @@ export function UnitCatalogTab({ unitId, unitName }: UnitCatalogTabProps) {
                         <div className="min-w-0">
                           <p className="truncate font-medium text-foreground">{panel.panelName}</p>
                           <p className="text-xs text-muted-foreground">
-                            {formatItemCount(panel.itemCount)} item · {formatItemCount(panel.surveyedCount)} sudah disurvey
+                            {formatItemCount(panel.itemCount)} item · {formatItemCount(panel.restorationCount)} dipilih restorasi
                           </p>
                         </div>
                         <div className="text-right text-xs text-muted-foreground">
-                          {panel.referenceId ? "Sudah ada" : "Belum diisi"}
+                          {panel.itemCount > 0 ? "Sudah ada" : "Belum diisi"}
                         </div>
                       </button>
                     ))}

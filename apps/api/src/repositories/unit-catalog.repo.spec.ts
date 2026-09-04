@@ -33,12 +33,8 @@ describe("UnitCatalogRepository savePanelWorkspace", () => {
       componentCode: "BODY",
       componentName: "BODY",
       panelName: "FRONT FENDER LH",
-      description: null,
-      isActive: true,
     });
-    repository.ensureReference = async () => 17;
     repository.getPanelWorkspace = async () => ({
-      referenceId: 17,
       carId: "CAR-1",
       panel: {
         id: 11,
@@ -46,21 +42,15 @@ describe("UnitCatalogRepository savePanelWorkspace", () => {
         componentCode: "BODY",
         componentName: "BODY",
         panelName: "FRONT FENDER LH",
-        description: null,
-        isActive: true,
       },
-      referenceUrl: null,
-      notes: null,
-      media: [],
+      panelImages: [],
       items: [],
     });
 
     await repository.savePanelWorkspace("CAR-1", 11, "EMP-1", {
-      referenceUrl: null,
-      notes: null,
       deletedItemIds: [],
-      deletedMediaIds: [],
-      media: [],
+      deletedPanelImageIds: [],
+      panelImages: [],
       items: [
         {
           id: null,
@@ -68,10 +58,9 @@ describe("UnitCatalogRepository savePanelWorkspace", () => {
           code: "12",
           partNumber: null,
           itemName: "Rubber Seal",
-          positionCode: null,
+          position: null,
           qtyNormal: null,
-          notes: null,
-          sortOrder: 0,
+          isRestoration: true,
         },
         {
           id: null,
@@ -79,28 +68,27 @@ describe("UnitCatalogRepository savePanelWorkspace", () => {
           code: null,
           partNumber: null,
           itemName: null,
-          positionCode: null,
+          position: null,
           qtyNormal: null,
-          notes: null,
-          sortOrder: 1,
+          isRestoration: false,
         },
       ],
     });
 
     const itemInsertStatements = statements.filter(({ sql }) =>
-      sql.includes("INSERT INTO unit_catalog_items"),
+      sql.includes("INSERT INTO unit_catalog"),
     );
 
     expect(itemInsertStatements.length).toBe(1);
     expect(itemInsertStatements[0]?.params).toEqual([
-      17,
+      "CAR-1",
+      11,
       "12",
       null,
       "Rubber Seal",
       null,
       null,
-      null,
-      0,
+      1,
     ]);
     expect(statements.some(({ sql }) => sql.includes("master_panels"))).toBe(
       false,

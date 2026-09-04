@@ -16,7 +16,7 @@ describe("unit catalog sheet helper", () => {
   it("parses one spreadsheet row", () => {
     const rows = appendParsedCatalogRows(
       [createCatalogDraftRow()],
-      "1\tPN-1\tRubber Seal\t21\t1\tCek",
+      "1\tPN-1\tRubber Seal\t21\t1\tYA",
     );
 
     expect(rows.length).toBe(1);
@@ -24,16 +24,16 @@ describe("unit catalog sheet helper", () => {
       code: "1",
       partNumber: "PN-1",
       itemName: "Rubber Seal",
-      positionCode: "21",
+      position: "21",
       qtyNormal: "1",
-      notes: "Cek",
+      isRestoration: true,
     });
   });
 
   it("parses multi row tsv with CRLF", () => {
     const rows = appendParsedCatalogRows(
       [createCatalogDraftRow({ code: "seed" })],
-      "CODE\tPART NUMBER\tITEM NAME\tPOSITION\tQTY NORMAL\tNOTES\r\n1\tPN-1\tDoor Trim\t11\t1\tA\r\n2\t\tClip\t12\t\t\r\n",
+      "CODE\tPART NUMBER\tITEM NAME\tPOSITION\tQTY NORMAL\tRESTORATION\r\n1\tPN-1\tDoor Trim\t11\t1\tYA\r\n2\t\tClip\t12\t\t\r\n",
     );
 
     expect(rows.length).toBe(3);
@@ -41,17 +41,17 @@ describe("unit catalog sheet helper", () => {
       code: "1",
       partNumber: "PN-1",
       itemName: "Door Trim",
-      positionCode: "11",
+      position: "11",
       qtyNormal: "1",
-      notes: "A",
+      isRestoration: true,
     });
     expect(rows[2]).toMatchObject({
       code: "2",
       partNumber: "",
       itemName: "Clip",
-      positionCode: "12",
+      position: "12",
       qtyNormal: "",
-      notes: "",
+      isRestoration: false,
     });
   });
 
@@ -71,7 +71,6 @@ describe("unit catalog sheet helper", () => {
 
   it("hydrates draft from workspace", () => {
     const workspace: CatalogWorkspace = {
-      referenceId: 9,
       carId: "CAR-1",
       panel: {
         id: 7,
@@ -79,18 +78,13 @@ describe("unit catalog sheet helper", () => {
         componentCode: "BODY",
         componentName: "BODY",
         panelName: "FRONT FENDER LH",
-        description: null,
-        isActive: true,
       },
-      referenceUrl: "https://example.test/ref",
-      notes: "seed",
-      media: [{
+      panelImages: [{
         id: 3,
-        catalogReferenceId: 9,
+        panelId: 7,
         fileUrl: "https://img.test/1.jpg",
         caption: "main",
         sortOrder: 0,
-        createdBy: null,
         createdAt: null,
       }],
       items: [{
@@ -99,23 +93,24 @@ describe("unit catalog sheet helper", () => {
         code: "11",
         partNumber: null,
         itemName: "Rubber Seal",
-        positionCode: "21",
+        position: "21",
         qtyNormal: 1,
-        notes: null,
-        sortOrder: 0,
+        isRestoration: true,
+        createdAt: null,
+        updatedAt: null,
       }],
     };
 
     const draft = workspaceDraftFromWorkspace(workspace);
 
-    expect(draft.referenceId).toBe(9);
     expect(draft.panelId).toBe(7);
-    expect(draft.referenceUrl).toBe("https://example.test/ref");
+    expect(draft.panelImages).toHaveLength(1);
     expect(draft.rows[0]).toMatchObject({
       persistedId: 5,
       code: "11",
       itemName: "Rubber Seal",
       qtyNormal: "1",
+      isRestoration: true,
     });
   });
 
@@ -128,9 +123,9 @@ describe("unit catalog sheet helper", () => {
       code: "",
       partNumber: "",
       itemName: "",
-      positionCode: "",
+      position: "",
       qtyNormal: "",
-      notes: "",
+      isRestoration: false,
     });
   });
 
@@ -146,12 +141,12 @@ describe("unit catalog sheet helper", () => {
       code: "",
       partNumber: "PN-1",
       itemName: "Rubber Seal",
-      positionCode: "21",
+      position: "21",
     });
     expect(rows[1]).toMatchObject({
       partNumber: "PN-2",
       itemName: "",
-      positionCode: "22",
+      position: "22",
     });
   });
 
@@ -161,6 +156,7 @@ describe("unit catalog sheet helper", () => {
         code: "1",
         partNumber: "",
         itemName: "Rubber Seal",
+        isRestoration: true,
       }),
       createCatalogDraftRow(),
     ]);
@@ -170,9 +166,9 @@ describe("unit catalog sheet helper", () => {
       code: "1",
       partNumber: null,
       itemName: "Rubber Seal",
-      positionCode: null,
+      position: null,
       qtyNormal: null,
-      notes: null,
+      isRestoration: true,
     });
   });
 
@@ -192,7 +188,6 @@ describe("unit catalog sheet helper", () => {
     expect(isCatalogDraftDirty(baseline, baseline)).toBe(false);
 
     const restored = workspaceDraftFromWorkspace({
-      referenceId: baseline.referenceId,
       carId: "CAR-1",
       panel: {
         id: 7,
@@ -200,12 +195,8 @@ describe("unit catalog sheet helper", () => {
         componentCode: "BODY",
         componentName: "BODY",
         panelName: "FRONT FENDER LH",
-        description: null,
-        isActive: true,
       },
-      referenceUrl: null,
-      notes: null,
-      media: [],
+      panelImages: [],
       items: [],
     });
 

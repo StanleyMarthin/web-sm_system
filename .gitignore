@@ -103,6 +103,7 @@ nginx/
 # SQL dumps are local; application migrations are source code.
 *.sql
 !/apps/api/db/migrations/20260812_prevent_duplicate_work_ledger_actual.sql
+!/apps/api/db/migrations/20260904_catalog_final_erd_cutover.sql
 
 # Misc OS/editor files
 .DS_Store

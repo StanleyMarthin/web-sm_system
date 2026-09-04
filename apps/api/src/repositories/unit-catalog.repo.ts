@@ -5,14 +5,15 @@ import type {
   CatalogMediaRequest,
   CatalogOverview,
   CatalogPanel,
-  CatalogReferenceMediaRequest,
+  CatalogPanelImageRequest,
   CatalogSearchItem,
   CatalogWorkspace,
   CatalogWorkspaceItem,
+  CatalogWorkspaceItemInput,
   CreatePanelJobdescsRequest,
+  OpenCatalogPanelRequest,
   SaveCatalogWorkspaceRequest,
   UpdateCatalogSurveyRequest,
-  UpsertCatalogReferenceRequest,
 } from "@smsystem/contracts/unit-catalog";
 import type { Pool, PoolConnection, ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { getApiEnv, type ApiEnv } from "@/config/env";
@@ -24,8 +25,6 @@ interface ComponentRow extends RowDataPacket {
   id: number;
   code: CatalogComponent["code"];
   componentName: string;
-  description: string | null;
-  isActive: number | boolean;
 }
 
 interface PanelRow extends RowDataPacket {
@@ -34,48 +33,24 @@ interface PanelRow extends RowDataPacket {
   componentCode: CatalogComponent["code"];
   componentName: string;
   panelName: string;
-  description: string | null;
-  isActive: number | boolean;
 }
 
 interface PanelSummaryRow extends PanelRow {
-  componentMasterId: number;
-  referenceId: number | null;
   itemCount: number | string | null;
-  surveyedCount: number | string | null;
+  restorationCount: number | string | null;
   updatedAt: string | null;
-}
-
-interface WorkspaceReferenceRow extends PanelRow {
-  referenceId: number | null;
-  carId: string;
-  referenceUrl: string | null;
-  notes: string | null;
 }
 
 interface WorkspaceItemRow extends RowDataPacket {
   id: number;
-  catalogReferenceId: number;
   code: string | null;
   partNumber: string | null;
   itemName: string | null;
-  positionCode: string | null;
+  position: string | null;
   qtyNormal: number | string | null;
-  notes: string | null;
-  sortOrder: number;
-}
-
-interface SurveyItemRow extends WorkspaceItemRow {
-  qtyOpname: number | string | null;
-  actualName: string | null;
-  availabilityStatus: CatalogItem["availabilityStatus"];
-  conditionStatus: CatalogItem["conditionStatus"];
-  actionType: CatalogItem["actionType"];
-  surveyStatus: CatalogItem["surveyStatus"];
-  location: string | null;
-  promotedPanelId: number | null;
-  surveyedBy: string | null;
-  surveyedAt: string | null;
+  isRestoration: number | boolean | null;
+  createdAt: string | null;
+  updatedAt: string | null;
 }
 
 function num(value: number | string | null | undefined): number | null {
@@ -92,19 +67,15 @@ function normalizePanelName(value: string) {
   return normalizeSpaces(value).toUpperCase();
 }
 
-function isTruthy(value: number | boolean) {
-  return value === true || value === 1;
-}
-
 function isEmptyCatalogRow(row: {
   code: string | null;
   partNumber: string | null;
   itemName: string | null;
-  positionCode: string | null;
+  position: string | null;
   qtyNormal: number | null;
-  notes: string | null;
+  isRestoration: boolean;
 }) {
-  return !row.code && !row.partNumber && !row.itemName && !row.positionCode && row.qtyNormal == null && !row.notes;
+  return !row.code && !row.partNumber && !row.itemName && !row.position && row.qtyNormal == null && !row.isRestoration;
 }
 
 function mapComponent(row: ComponentRow): CatalogComponent {
@@ -112,8 +83,6 @@ function mapComponent(row: ComponentRow): CatalogComponent {
     id: Number(row.id),
     code: row.code,
     componentName: row.componentName,
-    description: row.description ?? null,
-    isActive: isTruthy(row.isActive),
   };
 }
 
@@ -124,8 +93,6 @@ function mapPanel(row: PanelRow): CatalogPanel {
     componentCode: row.componentCode,
     componentName: row.componentName,
     panelName: row.panelName,
-    description: row.description ?? null,
-    isActive: isTruthy(row.isActive),
   };
 }
 
@@ -136,30 +103,11 @@ function mapWorkspaceItem(row: WorkspaceItemRow): CatalogWorkspaceItem {
     code: row.code ?? null,
     partNumber: row.partNumber ?? null,
     itemName: row.itemName ?? null,
-    positionCode: row.positionCode ?? null,
+    position: row.position ?? null,
     qtyNormal: num(row.qtyNormal),
-    notes: row.notes ?? null,
-    sortOrder: Number(row.sortOrder ?? 0),
-  };
-}
-
-function mapSurveyItem(row: SurveyItemRow): CatalogItem {
-  return {
-    ...mapWorkspaceItem(row),
-    id: Number(row.id),
-    catalogReferenceId: Number(row.catalogReferenceId),
-    qtyOpname: num(row.qtyOpname),
-    actualName: row.actualName ?? null,
-    availabilityStatus: row.availabilityStatus,
-    conditionStatus: row.conditionStatus,
-    actionType: row.actionType,
-    surveyStatus: row.surveyStatus,
-    location: row.location ?? null,
-    promotedPanelId: row.promotedPanelId == null ? null : Number(row.promotedPanelId),
-    surveyedBy: row.surveyedBy ?? null,
-    surveyedAt: row.surveyedAt ?? null,
-    media: [],
-    mappings: [],
+    isRestoration: row.isRestoration === true || row.isRestoration === 1,
+    createdAt: row.createdAt ?? null,
+    updatedAt: row.updatedAt ?? null,
   };
 }
 
@@ -173,6 +121,11 @@ function buildBooleanSearch(query: string) {
     .join(" ");
 }
 
+function resolveRestorationSelection(input: UpdateCatalogSurveyRequest, fallback = false) {
+  if (typeof input.isRestoration === "boolean") return input.isRestoration;
+  return input.actionType === "JOBDESC" || input.actionType === "JOBDESC_ORDER" || fallback;
+}
+
 export class UnitCatalogRepository {
   constructor(
     private readonly poolFactory: (env?: ApiEnv) => Pool = getMySqlPool,
@@ -180,87 +133,56 @@ export class UnitCatalogRepository {
   ) {}
 
   async listOverview(unitId: string): Promise<CatalogOverview> {
-    const [rows] = await this.poolFactory(this.env).query<PanelSummaryRow[]>(
+    const [componentRows] = await this.poolFactory(this.env).query<ComponentRow[]>(
+      `
+        SELECT id, code, component_name AS componentName
+        FROM catalog_components
+        ORDER BY id ASC
+      `,
+    );
+    const [panelRows] = await this.poolFactory(this.env).query<PanelSummaryRow[]>(
       `
         SELECT
-          c.id AS componentMasterId,
-          c.code,
-          c.component_name AS componentName,
-          c.description,
-          c.is_active AS isActive,
           p.id,
           p.component_id AS componentId,
           c.code AS componentCode,
           c.component_name AS componentName,
           p.panel_name AS panelName,
-          p.description AS description,
-          p.is_active AS isActive,
-          r.id AS referenceId,
-          COUNT(i.id) AS itemCount,
-          SUM(CASE WHEN i.survey_status = 'CONFIRMED' THEN 1 ELSE 0 END) AS surveyedCount,
-          DATE_FORMAT(r.updated_at, '%Y-%m-%d %H:%i:%s') AS updatedAt
-        FROM catalog_components c
-        LEFT JOIN catalog_panels p ON p.component_id = c.id AND p.is_active = 1
-        LEFT JOIN unit_catalog_references r ON r.panel_id = p.id AND r.car_id = ?
-        LEFT JOIN unit_catalog_items i ON i.catalog_reference_id = r.id
-        WHERE c.is_active = 1
-        GROUP BY c.id, c.code, c.component_name, c.description, c.is_active,
-                 p.id, p.component_id, p.panel_name, p.description, p.is_active,
-                 r.id, r.updated_at
+          COUNT(uc.id) AS itemCount,
+          SUM(CASE WHEN COALESCE(uc.is_restoration, 0) = 1 THEN 1 ELSE 0 END) AS restorationCount,
+          DATE_FORMAT(MAX(uc.updated_at), '%Y-%m-%d %H:%i:%s') AS updatedAt
+        FROM catalog_panels p
+        JOIN catalog_components c ON c.id = p.component_id
+        LEFT JOIN unit_catalog uc ON uc.panel_id = p.id AND uc.car_id = ?
+        GROUP BY p.id, p.component_id, c.code, c.component_name, p.panel_name
         ORDER BY c.id ASC, p.panel_name ASC
       `,
       [unitId],
     );
 
-    const components = new Map<number, CatalogComponent>();
-    const panels: CatalogOverview["panels"] = [];
-
-    for (const row of rows) {
-      if (!components.has(Number(row.componentMasterId))) {
-        components.set(Number(row.componentMasterId), {
-          id: Number(row.componentMasterId),
-          code: row.code,
-          componentName: row.componentName,
-          description: row.description ?? null,
-          isActive: isTruthy(row.isActive),
-        });
-      }
-      if (row.panelName) {
-        panels.push({
-          id: Number(row.id),
-          componentId: Number(row.componentId),
-          componentCode: row.componentCode,
-          componentName: row.componentName,
-          panelName: row.panelName,
-          description: row.description ?? null,
-          isActive: isTruthy(row.isActive),
-          referenceId: row.referenceId == null ? null : Number(row.referenceId),
-          itemCount: Number(row.itemCount ?? 0),
-          surveyedCount: Number(row.surveyedCount ?? 0),
-          updatedAt: row.updatedAt ?? null,
-        });
-      }
-    }
-
     return {
-      components: Array.from(components.values()),
-      panels,
+      components: componentRows.map(mapComponent),
+      panels: panelRows.map((row) => ({
+        ...mapPanel(row),
+        itemCount: Number(row.itemCount ?? 0),
+        restorationCount: Number(row.restorationCount ?? 0),
+        updatedAt: row.updatedAt ?? null,
+      })),
     };
   }
 
   async listReferences(unitId: string) {
     const overview = await this.listOverview(unitId);
-    return overview.panels.filter((panel) => panel.referenceId !== null);
+    return overview.panels.filter((panel) => panel.itemCount > 0);
   }
 
-  async createReference(unitId: string, actorId: string, input: UpsertCatalogReferenceRequest) {
+  async openPanel(unitId: string, _actorId: string, input: OpenCatalogPanelRequest) {
     const connection = await this.poolFactory(this.env).getConnection();
     try {
       await connection.beginTransaction();
       const panel = await this.ensurePanelByName(connection, input.componentCode, input.panelName);
-      const referenceId = await this.ensureReference(connection, unitId, panel, actorId, input.referenceUrl, input.notes);
       await connection.commit();
-      return this.getPanelWorkspace(unitId, panel.id, referenceId);
+      return this.getPanelWorkspace(unitId, panel.id);
     } catch (error) {
       await connection.rollback();
       throw error;
@@ -269,94 +191,45 @@ export class UnitCatalogRepository {
     }
   }
 
-  async getReference(unitId: string, referenceId: number) {
-    const [rows] = await this.poolFactory(this.env).query<Array<RowDataPacket & { panelId: number }>>(
-      "SELECT panel_id AS panelId FROM unit_catalog_references WHERE id = ? AND car_id = ? LIMIT 1",
-      [referenceId, unitId],
-    );
-    const panelId = rows[0]?.panelId ? Number(rows[0].panelId) : null;
-    if (!panelId) return null;
-    return this.getPanelWorkspace(unitId, panelId, referenceId);
+  async getLegacyReference(unitId: string, referenceId: number) {
+    return this.getPanelWorkspace(unitId, referenceId);
   }
 
-  async getPanelWorkspace(unitId: string, panelId: number, forcedReferenceId?: number | null): Promise<CatalogWorkspace | null> {
-    const [rows] = await this.poolFactory(this.env).query<WorkspaceReferenceRow[]>(
-      `
-        SELECT
-          p.id,
-          p.component_id AS componentId,
-          c.code AS componentCode,
-          c.component_name AS componentName,
-          p.panel_name AS panelName,
-          p.description,
-          p.is_active AS isActive,
-          COALESCE(r.id, ?) AS referenceId,
-          ? AS carId,
-          r.reference_url AS referenceUrl,
-          r.notes
-        FROM catalog_panels p
-        JOIN catalog_components c ON c.id = p.component_id
-        LEFT JOIN unit_catalog_references r ON r.panel_id = p.id AND r.car_id = ?
-        WHERE p.id = ?
-        LIMIT 1
-      `,
-      [forcedReferenceId ?? null, unitId, unitId, panelId],
-    );
-
-    const row = rows[0];
-    if (!row) return null;
-
-    const referenceId = row.referenceId == null ? null : Number(row.referenceId);
-    const media = referenceId ? await this.listReferenceMedia(referenceId) : [];
-    const items = referenceId
-      ? await this.listWorkspaceItems(referenceId)
-      : [];
-
+  async getPanelWorkspace(unitId: string, panelId: number): Promise<CatalogWorkspace | null> {
+    const panel = await this.getCatalogPanel(panelId);
+    if (!panel) return null;
+    const [itemRows, panelImages] = await Promise.all([
+      this.listWorkspaceItems(unitId, panelId),
+      this.listPanelImages(panelId),
+    ]);
     return {
-      referenceId,
       carId: unitId,
-      panel: mapPanel(row),
-      referenceUrl: row.referenceUrl ?? null,
-      notes: row.notes ?? null,
-      media,
-      items,
+      panel,
+      panelImages,
+      items: itemRows,
     };
   }
 
-  async savePanelWorkspace(
-    unitId: string,
-    panelId: number,
-    actorId: string,
-    input: SaveCatalogWorkspaceRequest,
-  ): Promise<CatalogWorkspace> {
+  async savePanelWorkspace(unitId: string, panelId: number, _actorId: string, input: SaveCatalogWorkspaceRequest): Promise<CatalogWorkspace> {
     const connection = await this.poolFactory(this.env).getConnection();
     try {
       await connection.beginTransaction();
       const panel = await this.getCatalogPanel(panelId, connection);
       if (!panel) throw new Error("CATALOG_PANEL_NOT_FOUND");
 
-      const referenceId = await this.ensureReference(connection, unitId, panel, actorId, input.referenceUrl, input.notes);
       const normalizedItems = input.items
-        .map((item, index) => ({
-          id: item.id ?? null,
-          code: item.code ? normalizeSpaces(item.code) : null,
-          partNumber: item.partNumber ? normalizeSpaces(item.partNumber) : null,
-          itemName: item.itemName ? normalizeSpaces(item.itemName) : null,
-          positionCode: item.positionCode ? normalizeSpaces(item.positionCode) : null,
-          qtyNormal: item.qtyNormal ?? null,
-          notes: item.notes ? normalizeSpaces(item.notes) : null,
-          sortOrder: index,
-        }))
+        .map((item) => this.normalizeItemInput(item))
         .filter((item) => !isEmptyCatalogRow(item));
 
       if (input.deletedItemIds.length > 0) {
         await connection.execute(
           `
-            DELETE FROM unit_catalog_items
-            WHERE catalog_reference_id = ?
+            DELETE FROM unit_catalog
+            WHERE car_id = ?
+              AND panel_id = ?
               AND id IN (${input.deletedItemIds.map(() => "?").join(",")})
           `,
-          [referenceId, ...input.deletedItemIds],
+          [unitId, panelId, ...input.deletedItemIds],
         );
       }
 
@@ -364,80 +237,79 @@ export class UnitCatalogRepository {
         if (item.id) {
           await connection.execute(
             `
-              UPDATE unit_catalog_items
-              SET code = ?, part_number = ?, item_name = ?, position_code = ?,
-                  qty_normal = ?, notes = ?, sort_order = ?
-              WHERE id = ? AND catalog_reference_id = ?
+              UPDATE unit_catalog
+              SET code = ?, part_number = ?, item_name = ?, position = ?, qty_normal = ?, is_restoration = ?, updated_at = CURRENT_TIMESTAMP
+              WHERE id = ? AND car_id = ? AND panel_id = ?
             `,
             [
               item.code,
               item.partNumber,
               item.itemName,
-              item.positionCode,
+              item.position,
               item.qtyNormal,
-              item.notes,
-              item.sortOrder,
+              item.isRestoration ? 1 : 0,
               item.id,
-              referenceId,
+              unitId,
+              panelId,
             ],
           );
         } else {
           await connection.execute(
             `
-              INSERT INTO unit_catalog_items (
-                catalog_reference_id, code, part_number, item_name, position_code, qty_normal, notes, sort_order
+              INSERT INTO unit_catalog (
+                car_id, panel_id, code, part_number, item_name, position, qty_normal, is_restoration
               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             `,
             [
-              referenceId,
+              unitId,
+              panelId,
               item.code,
               item.partNumber,
               item.itemName,
-              item.positionCode,
+              item.position,
               item.qtyNormal,
-              item.notes,
-              item.sortOrder,
+              item.isRestoration ? 1 : 0,
             ],
           );
         }
       }
 
-      if (input.deletedMediaIds.length > 0) {
+      if (input.deletedPanelImageIds.length > 0) {
         await connection.execute(
           `
-            DELETE FROM unit_catalog_reference_media
-            WHERE catalog_reference_id = ?
-              AND id IN (${input.deletedMediaIds.map(() => "?").join(",")})
+            DELETE FROM catalog_panel_images
+            WHERE panel_id = ?
+              AND id IN (${input.deletedPanelImageIds.map(() => "?").join(",")})
           `,
-          [referenceId, ...input.deletedMediaIds],
+          [panelId, ...input.deletedPanelImageIds],
         );
       }
 
-      for (const media of input.media) {
-        if (media.id) {
+      for (const image of input.panelImages) {
+        if (image.id) {
           await connection.execute(
             `
-              UPDATE unit_catalog_reference_media
+              UPDATE catalog_panel_images
               SET url_image = ?, caption = ?, sort_order = ?
-              WHERE id = ? AND catalog_reference_id = ?
+              WHERE id = ? AND panel_id = ?
             `,
-            [media.fileUrl, media.caption, media.sortOrder, media.id, referenceId],
+            [image.fileUrl, image.caption, image.sortOrder, image.id, panelId],
           );
         } else {
           await connection.execute(
             `
-              INSERT INTO unit_catalog_reference_media (
-                catalog_reference_id, url_image, caption, sort_order, created_by
-              ) VALUES (?, ?, ?, ?, ?)
+              INSERT INTO catalog_panel_images (
+                panel_id, url_image, caption, sort_order
+              ) VALUES (?, ?, ?, ?)
             `,
-            [referenceId, media.fileUrl, media.caption, media.sortOrder, actorId],
+            [panelId, image.fileUrl, image.caption, image.sortOrder],
           );
         }
       }
 
       await connection.commit();
-      const workspace = await this.getPanelWorkspace(unitId, panelId, referenceId);
-      if (!workspace) throw new Error("CATALOG_REFERENCE_NOT_FOUND");
+      const workspace = await this.getPanelWorkspace(unitId, panelId);
+      if (!workspace) throw new Error("CATALOG_PANEL_NOT_FOUND");
       return workspace;
     } catch (error) {
       await connection.rollback();
@@ -451,11 +323,8 @@ export class UnitCatalogRepository {
     const trimmed = query.trim();
     if (!trimmed) return [] as CatalogSearchItem[];
 
-    const booleanQuery = buildBooleanSearch(trimmed);
-    const prefixQuery = `${trimmed.replace(/\s+/gu, "")}%`;
-    const clauses = ["r.car_id = ?"];
+    const clauses = ["uc.car_id = ?"];
     const params: unknown[] = [unitId];
-
     if (filters?.componentId) {
       clauses.push("c.id = ?");
       params.push(filters.componentId);
@@ -466,13 +335,15 @@ export class UnitCatalogRepository {
     }
 
     const searchClauses = [];
+    const booleanQuery = buildBooleanSearch(trimmed);
     if (booleanQuery) {
-      searchClauses.push("MATCH(i.item_name, i.part_number, i.code) AGAINST (? IN BOOLEAN MODE)");
+      searchClauses.push("MATCH(uc.item_name, uc.part_number, uc.code) AGAINST (? IN BOOLEAN MODE)");
       params.push(booleanQuery);
     }
-    searchClauses.push("i.part_number LIKE ?");
+    const prefixQuery = `${trimmed.replace(/\s+/gu, "")}%`;
+    searchClauses.push("uc.part_number LIKE ?");
     params.push(prefixQuery);
-    searchClauses.push("i.code LIKE ?");
+    searchClauses.push("uc.code LIKE ?");
     params.push(prefixQuery);
 
     const limit = Math.min(Math.max(filters?.limit ?? 25, 1), 100);
@@ -490,30 +361,31 @@ export class UnitCatalogRepository {
       code: string | null;
       partNumber: string | null;
       itemName: string | null;
-      positionCode: string | null;
+      position: string | null;
       qtyNormal: number | string | null;
+      isRestoration: number | boolean | null;
     }>>(
       `
         SELECT
-          i.id AS itemId,
-          r.car_id AS carId,
+          uc.id AS itemId,
+          uc.car_id AS carId,
           c.id AS componentId,
           c.code AS componentCode,
           c.component_name AS componentName,
           p.id AS panelId,
           p.panel_name AS panelName,
-          i.code,
-          i.part_number AS partNumber,
-          i.item_name AS itemName,
-          i.position_code AS positionCode,
-          i.qty_normal AS qtyNormal
-        FROM unit_catalog_items i
-        JOIN unit_catalog_references r ON r.id = i.catalog_reference_id
-        JOIN catalog_panels p ON p.id = r.panel_id
+          uc.code,
+          uc.part_number AS partNumber,
+          uc.item_name AS itemName,
+          uc.position AS position,
+          uc.qty_normal AS qtyNormal,
+          uc.is_restoration AS isRestoration
+        FROM unit_catalog uc
+        JOIN catalog_panels p ON p.id = uc.panel_id
         JOIN catalog_components c ON c.id = p.component_id
         WHERE ${clauses.join(" AND ")}
           AND (${searchClauses.join(" OR ")})
-        ORDER BY p.panel_name ASC, i.sort_order ASC, i.id ASC
+        ORDER BY p.panel_name ASC, uc.id ASC
         LIMIT ? OFFSET ?
       `,
       params,
@@ -530,154 +402,93 @@ export class UnitCatalogRepository {
       code: row.code ?? null,
       partNumber: row.partNumber ?? null,
       itemName: row.itemName ?? null,
-      positionCode: row.positionCode ?? null,
+      position: row.position ?? null,
       qtyNormal: num(row.qtyNormal),
+      isRestoration: row.isRestoration === true || row.isRestoration === 1,
     }));
   }
 
-  async addReferenceMedia(unitId: string, referenceId: number, actorId: string, input: CatalogReferenceMediaRequest) {
-    const workspace = await this.getReference(unitId, referenceId);
-    if (!workspace) throw new Error("CATALOG_REFERENCE_NOT_FOUND");
+  async addPanelImage(unitId: string, panelId: number, _actorId: string, input: CatalogPanelImageRequest) {
+    if (!(await this.getPanelWorkspace(unitId, panelId))) throw new Error("CATALOG_PANEL_NOT_FOUND");
     const [result] = await this.poolFactory(this.env).execute<ResultSetHeader>(
       `
-        INSERT INTO unit_catalog_reference_media (
-          catalog_reference_id, url_image, caption, sort_order, created_by
-        ) VALUES (?, ?, ?, ?, ?)
+        INSERT INTO catalog_panel_images (
+          panel_id, url_image, caption, sort_order
+        ) VALUES (?, ?, ?, ?)
       `,
-      [referenceId, input.fileUrl, input.caption, input.sortOrder, actorId],
+      [panelId, input.fileUrl, input.caption, input.sortOrder],
     );
     return { id: Number(result.insertId), fileUrl: input.fileUrl };
   }
 
   async getItem(unitId: string, itemId: number, db: Queryable = this.poolFactory(this.env)): Promise<CatalogItem | null> {
-    const [rows] = await db.query<SurveyItemRow[]>(
+    const [rows] = await db.query<Array<WorkspaceItemRow & RowDataPacket & { promotedPanelId: number | null }>>(
       `
         SELECT
-          i.id,
-          i.catalog_reference_id AS catalogReferenceId,
-          i.code,
-          i.part_number AS partNumber,
-          i.item_name AS itemName,
-          i.position_code AS positionCode,
-          i.qty_normal AS qtyNormal,
-          i.qty_opname AS qtyOpname,
-          i.actual_name AS actualName,
-          i.availability_status AS availabilityStatus,
-          i.condition_status AS conditionStatus,
-          i.action_type AS actionType,
-          i.survey_status AS surveyStatus,
-          i.location,
-          i.notes,
-          i.promoted_panel_id AS promotedPanelId,
-          i.sort_order AS sortOrder,
-          i.surveyed_by AS surveyedBy,
-          i.surveyed_at AS surveyedAt
-        FROM unit_catalog_items i
-        JOIN unit_catalog_references r ON r.id = i.catalog_reference_id
-        WHERE i.id = ? AND r.car_id = ?
+          uc.id,
+          uc.code,
+          uc.part_number AS partNumber,
+          uc.item_name AS itemName,
+          uc.position AS position,
+          uc.qty_normal AS qtyNormal,
+          uc.is_restoration AS isRestoration,
+          DATE_FORMAT(uc.created_at, '%Y-%m-%d %H:%i:%s') AS createdAt,
+          DATE_FORMAT(uc.updated_at, '%Y-%m-%d %H:%i:%s') AS updatedAt,
+          (
+            SELECT mp.id
+            FROM master_panels mp
+            WHERE mp.car_id = uc.car_id
+              AND mp.source_part = 'CATALOG'
+              AND mp.part_id = uc.id
+            ORDER BY mp.id DESC
+            LIMIT 1
+          ) AS promotedPanelId
+        FROM unit_catalog uc
+        WHERE uc.id = ? AND uc.car_id = ?
         LIMIT 1
       `,
       [itemId, unitId],
     );
-    const item = rows[0] ? mapSurveyItem(rows[0]) : null;
-    if (!item) return null;
+    const row = rows[0];
+    if (!row) return null;
 
-    const [mediaRows] = await db.query<Array<RowDataPacket & {
-      id: number;
-      fileUrl: string;
-      caption: string | null;
-      createdBy: string | null;
-      createdAt: string | null;
-    }>>(
-      `
-        SELECT id, file_url AS fileUrl, caption, created_by AS createdBy, created_at AS createdAt
-        FROM unit_catalog_item_media
-        WHERE catalog_item_id = ?
-        ORDER BY created_at ASC, id ASC
-      `,
-      [itemId],
-    );
-    item.media = mediaRows.map((row) => ({
+    const promotedPanelId = row.promotedPanelId == null ? null : Number(row.promotedPanelId);
+    const mediaRows = promotedPanelId ? await this.listMasterPanelImages(promotedPanelId, db) : [];
+    return {
+      ...mapWorkspaceItem(row),
       id: Number(row.id),
-      fileUrl: row.fileUrl,
-      caption: row.caption ?? null,
-      createdBy: row.createdBy ?? null,
-      createdAt: row.createdAt ?? null,
-    }));
-
-    const [mappingRows] = await db.query<Array<RowDataPacket & {
-      id: number;
-      catalogItemId: number;
-      catalogReferenceMediaId: number;
-      xPercent: number | string;
-      yPercent: number | string;
-      createdBy: string | null;
-      createdAt: string | null;
-      updatedAt: string | null;
-    }>>(
-      `
-        SELECT
-          id,
-          catalog_item_id AS catalogItemId,
-          catalog_reference_media_id AS catalogReferenceMediaId,
-          x_percent AS xPercent,
-          y_percent AS yPercent,
-          created_by AS createdBy,
-          created_at AS createdAt,
-          updated_at AS updatedAt
-        FROM unit_catalog_item_mappings
-        WHERE catalog_item_id = ?
-        ORDER BY id ASC
-      `,
-      [itemId],
-    );
-    item.mappings = mappingRows.map((row) => ({
-      id: Number(row.id),
-      catalogItemId: Number(row.catalogItemId),
-      catalogReferenceMediaId: Number(row.catalogReferenceMediaId),
-      xPercent: Number(row.xPercent),
-      yPercent: Number(row.yPercent),
-      createdBy: row.createdBy ?? null,
-      createdAt: row.createdAt ?? null,
-      updatedAt: row.updatedAt ?? null,
-    }));
-
-    return item;
+      promotedPanelId,
+      media: mediaRows.map((image) => ({
+        id: image.id,
+        panelId: promotedPanelId ?? 0,
+        fileUrl: image.fileUrl,
+        caption: image.caption,
+        sortOrder: image.sortOrder,
+        createdAt: image.createdAt,
+      })),
+      mappings: [],
+    };
   }
 
-  async updateSurvey(unitId: string, itemId: number, actorId: string, input: UpdateCatalogSurveyRequest) {
-    if (!(await this.getItem(unitId, itemId))) throw new Error("CATALOG_ITEM_NOT_FOUND");
-    await this.poolFactory(this.env).execute(
-      `
-        UPDATE unit_catalog_items
-        SET qty_opname = ?, actual_name = ?, availability_status = ?, condition_status = ?, action_type = ?,
-            survey_status = 'DRAFT', location = ?, notes = ?, surveyed_by = ?, surveyed_at = NOW()
-        WHERE id = ?
-      `,
-      [
-        input.qtyOpname,
-        input.actualName,
-        input.availabilityStatus,
-        input.conditionStatus,
-        input.actionType,
-        input.location,
-        input.notes,
-        actorId,
-        itemId,
-      ],
-    );
-    if (input.mapping) await this.addMapping(itemId, actorId, input.mapping);
+  async updateSurvey(unitId: string, itemId: number, _actorId: string, input: UpdateCatalogSurveyRequest) {
     const item = await this.getItem(unitId, itemId);
     if (!item) throw new Error("CATALOG_ITEM_NOT_FOUND");
-    return item;
+    await this.poolFactory(this.env).execute(
+      "UPDATE unit_catalog SET is_restoration = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND car_id = ?",
+      [resolveRestorationSelection(input, item.isRestoration) ? 1 : 0, itemId, unitId],
+    );
+    const refreshed = await this.getItem(unitId, itemId);
+    if (!refreshed) throw new Error("CATALOG_ITEM_NOT_FOUND");
+    return refreshed;
   }
 
   async confirmSurvey(unitId: string, itemId: number, actorId: string, input: UpdateCatalogSurveyRequest) {
     const connection = await this.poolFactory(this.env).getConnection();
     try {
       await connection.beginTransaction();
-      await this.saveSurveyWithConnection(connection, unitId, itemId, actorId, input, "CONFIRMED");
-      const promoted = await this.materializeItemWithConnection(connection, unitId, itemId, actorId);
+      const shouldRestore = await this.saveSurveyWithConnection(connection, unitId, itemId, input);
+      if (!shouldRestore) throw new Error("SURVEY_NOT_CONFIRMED");
+      const promoted = await this.materializeItemWithConnection(connection, unitId, itemId, actorId, input);
       const item = await this.getItem(unitId, itemId, connection);
       if (!item) throw new Error("CATALOG_ITEM_NOT_FOUND");
       await connection.commit();
@@ -690,23 +501,34 @@ export class UnitCatalogRepository {
     }
   }
 
-  async addMedia(unitId: string, itemId: number, actorId: string, input: CatalogMediaRequest) {
-    if (!(await this.getItem(unitId, itemId))) throw new Error("CATALOG_ITEM_NOT_FOUND");
+  async addMedia(unitId: string, itemId: number, _actorId: string, input: CatalogMediaRequest) {
+    const item = await this.getItem(unitId, itemId);
+    if (!item) throw new Error("CATALOG_ITEM_NOT_FOUND");
+    if (!item.promotedPanelId) throw new Error("CATALOG_ITEM_MEDIA_REQUIRES_MASTER_PANEL");
     const [result] = await this.poolFactory(this.env).execute<ResultSetHeader>(
       `
-        INSERT INTO unit_catalog_item_media (catalog_item_id, file_url, caption, created_by)
-        VALUES (?, ?, ?, ?)
+        INSERT INTO masterpanel_images (
+          part_id, url_image, caption, sort_order
+        ) VALUES (
+          ?, ?, ?, (
+            SELECT COALESCE(MAX(sort_order), -1) + 1
+            FROM masterpanel_images existing
+            WHERE existing.part_id = ?
+          )
+        )
       `,
-      [itemId, input.fileUrl, input.caption, actorId],
+      [item.promotedPanelId, input.fileUrl, input.caption, item.promotedPanelId],
     );
     return { id: Number(result.insertId), fileUrl: input.fileUrl };
   }
 
   async deleteMedia(unitId: string, itemId: number, mediaId: number) {
-    if (!(await this.getItem(unitId, itemId))) throw new Error("CATALOG_ITEM_NOT_FOUND");
+    const item = await this.getItem(unitId, itemId);
+    if (!item) throw new Error("CATALOG_ITEM_NOT_FOUND");
+    if (!item.promotedPanelId) throw new Error("CATALOG_ITEM_MEDIA_REQUIRES_MASTER_PANEL");
     await this.poolFactory(this.env).execute(
-      "DELETE FROM unit_catalog_item_media WHERE id = ? AND catalog_item_id = ?",
-      [mediaId, itemId],
+      "DELETE FROM masterpanel_images WHERE id = ? AND part_id = ?",
+      [mediaId, item.promotedPanelId],
     );
     return { deletedId: mediaId };
   }
@@ -715,7 +537,17 @@ export class UnitCatalogRepository {
     const connection = await this.poolFactory(this.env).getConnection();
     try {
       await connection.beginTransaction();
-      const promoted = await this.materializeItemWithConnection(connection, unitId, itemId, actorId);
+      const promoted = await this.materializeItemWithConnection(connection, unitId, itemId, actorId, {
+        isRestoration: true,
+        actualName: null,
+        availabilityStatus: "UNKNOWN",
+        conditionStatus: "UNKNOWN",
+        actionType: "JOBDESC",
+        location: null,
+        notes: null,
+        mapping: null,
+        qtyOpname: null,
+      });
       await connection.commit();
       return promoted;
     } catch (error) {
@@ -730,35 +562,39 @@ export class UnitCatalogRepository {
     const [rows] = await this.poolFactory(this.env).query<Array<RowDataPacket & {
       id: number;
       carId: string;
+      partId: number | null;
+      sourcePart: string | null;
+      componentId: number | null;
+      panelId: number | null;
       componentName: string | null;
-      name: string;
-      parentId: number | null;
-      partNumber: string | null;
-      positionCode: string | null;
-      qtyNormal: number | string | null;
-      initialCondition: string | null;
-      notes: string | null;
       panelName: string | null;
-      namePart: string | null;
-      location: string | null;
+      namePart: string;
+      aliasName: string | null;
+      partNumber: string | null;
+      qty: number | string | null;
+      initialCondition: string | null;
       currentStatus: string | null;
+      location: string | null;
+      notes: string | null;
     }>>(
       `
         SELECT
           id,
           car_id AS carId,
-          COALESCE(component_name, section) AS componentName,
-          name,
-          parent_id AS parentId,
-          part_number AS partNumber,
-          position_code AS positionCode,
-          COALESCE(qty_normal, qty) AS qtyNormal,
-          initial_condition AS initialCondition,
-          notes,
+          part_id AS partId,
+          source_part AS sourcePart,
+          component_id AS componentId,
+          panel_id AS panelId,
+          component_name AS componentName,
           panel_name AS panelName,
           name_part AS namePart,
+          alias_name AS aliasName,
+          part_number AS partNumber,
+          qty,
+          initial_condition AS initialCondition,
+          current_status AS currentStatus,
           location,
-          current_status AS currentStatus
+          notes
         FROM master_panels
         WHERE id = ? AND car_id = ?
         LIMIT 1
@@ -767,20 +603,8 @@ export class UnitCatalogRepository {
     );
     const panel = rows[0] ?? null;
     if (!panel) return null;
-
-    const [mediaRows] = await this.poolFactory(this.env).query<RowDataPacket[]>(
-      `
-        SELECT id, master_panel_id AS panelId, url_image AS fileUrl, image_type AS mediaType,
-               caption, source_catalog_media_id AS sourceCatalogMediaId,
-               source_catalog_reference_media_id AS sourceCatalogReferenceMediaId,
-               created_by AS createdBy, created_at AS createdAt
-        FROM master_panel_images
-        WHERE master_panel_id = ?
-        ORDER BY created_at ASC, id ASC
-      `,
-      [panelId],
-    );
-    return { ...panel, media: mediaRows };
+    const media = await this.listMasterPanelImages(panelId);
+    return { ...panel, media };
   }
 
   async listPanelJobdescs(panelId: number) {
@@ -847,46 +671,88 @@ export class UnitCatalogRepository {
     }
   }
 
-  private async listWorkspaceItems(referenceId: number, db: Queryable = this.poolFactory(this.env)) {
+  private normalizeItemInput(item: CatalogWorkspaceItemInput) {
+    return {
+      id: item.id ?? null,
+      code: item.code ? normalizeSpaces(item.code) : null,
+      partNumber: item.partNumber ? normalizeSpaces(item.partNumber) : null,
+      itemName: item.itemName ? normalizeSpaces(item.itemName) : null,
+      position: item.position ? normalizeSpaces(item.position) : null,
+      qtyNormal: item.qtyNormal ?? null,
+      isRestoration: Boolean(item.isRestoration),
+    };
+  }
+
+  private async listWorkspaceItems(unitId: string, panelId: number, db: Queryable = this.poolFactory(this.env)) {
     const [rows] = await db.query<WorkspaceItemRow[]>(
       `
         SELECT
           id,
-          catalog_reference_id AS catalogReferenceId,
           code,
           part_number AS partNumber,
           item_name AS itemName,
-          position_code AS positionCode,
+          position AS position,
           qty_normal AS qtyNormal,
-          notes,
-          sort_order AS sortOrder
-        FROM unit_catalog_items
-        WHERE catalog_reference_id = ?
-        ORDER BY sort_order ASC, id ASC
+          is_restoration AS isRestoration,
+          DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') AS createdAt,
+          DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s') AS updatedAt
+        FROM unit_catalog
+        WHERE car_id = ? AND panel_id = ?
+        ORDER BY id ASC
       `,
-      [referenceId],
+      [unitId, panelId],
     );
     return rows.map(mapWorkspaceItem);
   }
 
-  private async listReferenceMedia(referenceId: number, db: Queryable = this.poolFactory(this.env)) {
+  private async listPanelImages(panelId: number, db: Queryable = this.poolFactory(this.env)) {
     const [rows] = await db.query<RowDataPacket[]>(
       `
-        SELECT id, catalog_reference_id AS catalogReferenceId, url_image AS fileUrl, caption,
-               sort_order AS sortOrder, created_by AS createdBy, created_at AS createdAt
-        FROM unit_catalog_reference_media
-        WHERE catalog_reference_id = ?
+        SELECT
+          id,
+          panel_id AS panelId,
+          url_image AS fileUrl,
+          caption,
+          sort_order AS sortOrder,
+          DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') AS createdAt
+        FROM catalog_panel_images
+        WHERE panel_id = ?
         ORDER BY sort_order ASC, id ASC
       `,
-      [referenceId],
+      [panelId],
     );
     return rows.map((row) => ({
       id: Number(row.id),
-      catalogReferenceId: Number(row.catalogReferenceId),
+      panelId: Number(row.panelId),
       fileUrl: String(row.fileUrl),
       caption: row.caption ?? null,
       sortOrder: Number(row.sortOrder ?? 0),
-      createdBy: row.createdBy ?? null,
+      createdAt: row.createdAt ?? null,
+    }));
+  }
+
+  private async listMasterPanelImages(masterPanelId: number, db: Queryable = this.poolFactory(this.env)) {
+    const [rows] = await db.query<RowDataPacket[]>(
+      `
+        SELECT
+          id,
+          part_id AS partId,
+          url_image AS fileUrl,
+          caption,
+          sort_order AS sortOrder,
+          DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') AS createdAt
+        FROM masterpanel_images
+        WHERE part_id = ?
+        ORDER BY sort_order ASC, id ASC
+      `,
+      [masterPanelId],
+    );
+    return rows.map((row) => ({
+      id: Number(row.id),
+      partId: Number(row.partId),
+      fileUrl: String(row.fileUrl),
+      caption: row.caption ?? null,
+      sortOrder: Number(row.sortOrder ?? 0),
       createdAt: row.createdAt ?? null,
     }));
   }
@@ -899,9 +765,7 @@ export class UnitCatalogRepository {
           p.component_id AS componentId,
           c.code AS componentCode,
           c.component_name AS componentName,
-          p.panel_name AS panelName,
-          p.description,
-          p.is_active AS isActive
+          p.panel_name AS panelName
         FROM catalog_panels p
         JOIN catalog_components c ON c.id = p.component_id
         WHERE p.id = ?
@@ -913,14 +777,14 @@ export class UnitCatalogRepository {
   }
 
   private async ensurePanelByName(connection: PoolConnection, componentCode: CatalogComponent["code"], panelName: string) {
-    const normalized = normalizePanelName(panelName);
     const [componentRows] = await connection.query<ComponentRow[]>(
-      "SELECT id, code, component_name AS componentName, description, is_active AS isActive FROM catalog_components WHERE code = ? LIMIT 1",
+      "SELECT id, code, component_name AS componentName FROM catalog_components WHERE code = ? LIMIT 1",
       [componentCode],
     );
     const component = componentRows[0] ? mapComponent(componentRows[0]) : null;
     if (!component) throw new Error("CATALOG_COMPONENT_NOT_FOUND");
 
+    const normalized = normalizePanelName(panelName);
     const [panelRows] = await connection.query<PanelRow[]>(
       `
         SELECT
@@ -928,9 +792,7 @@ export class UnitCatalogRepository {
           p.component_id AS componentId,
           c.code AS componentCode,
           c.component_name AS componentName,
-          p.panel_name AS panelName,
-          p.description,
-          p.is_active AS isActive
+          p.panel_name AS panelName
         FROM catalog_panels p
         JOIN catalog_components c ON c.id = p.component_id
         WHERE p.component_id = ?
@@ -942,7 +804,7 @@ export class UnitCatalogRepository {
     if (panelRows[0]) return mapPanel(panelRows[0]);
 
     const [result] = await connection.execute<ResultSetHeader>(
-      "INSERT INTO catalog_panels (component_id, panel_name, is_active) VALUES (?, ?, 1)",
+      "INSERT INTO catalog_panels (component_id, panel_name) VALUES (?, ?)",
       [component.id, normalized],
     );
     return {
@@ -951,281 +813,110 @@ export class UnitCatalogRepository {
       componentCode: component.code,
       componentName: component.componentName,
       panelName: normalized,
-      description: null,
-      isActive: true,
     } satisfies CatalogPanel;
   }
 
-  private async ensureReference(
-    connection: PoolConnection,
-    unitId: string,
-    panel: CatalogPanel,
-    actorId: string,
-    referenceUrl: string | null,
-    notes: string | null,
-  ) {
-    const [rows] = await connection.query<Array<RowDataPacket & { id: number }>>(
-      "SELECT id FROM unit_catalog_references WHERE car_id = ? AND panel_id = ? LIMIT 1 FOR UPDATE",
-      [unitId, panel.id],
+  private async saveSurveyWithConnection(connection: PoolConnection, unitId: string, itemId: number, input: UpdateCatalogSurveyRequest) {
+    const [rows] = await connection.query<Array<RowDataPacket & { isRestoration: number | boolean | null }>>(
+      "SELECT id, is_restoration AS isRestoration FROM unit_catalog WHERE id = ? AND car_id = ? LIMIT 1 FOR UPDATE",
+      [itemId, unitId],
     );
-    if (rows[0]?.id) {
-      const referenceId = Number(rows[0].id);
-      await connection.execute(
-        `
-          UPDATE unit_catalog_references
-          SET reference_url = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
-          WHERE id = ?
-        `,
-        [referenceUrl, notes, referenceId],
-      );
-      return referenceId;
-    }
-
-    const [result] = await connection.execute<ResultSetHeader>(
-      `
-        INSERT INTO unit_catalog_references (
-          car_id, panel_id, reference_url, notes, created_by
-        ) VALUES (?, ?, ?, ?, ?)
-      `,
-      [unitId, panel.id, referenceUrl, notes, actorId],
+    const row = rows[0];
+    if (!row) throw new Error("CATALOG_ITEM_NOT_FOUND");
+    const shouldRestore = resolveRestorationSelection(input, row.isRestoration === true || row.isRestoration === 1);
+    await connection.execute(
+      "UPDATE unit_catalog SET is_restoration = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+      [shouldRestore ? 1 : 0, itemId],
     );
-    return Number(result.insertId);
+    return shouldRestore;
   }
 
-  private async materializeItemWithConnection(connection: PoolConnection, unitId: string, itemId: number, actorId: string) {
+  private async materializeItemWithConnection(connection: PoolConnection, unitId: string, itemId: number, actorId: string, input: UpdateCatalogSurveyRequest) {
+    const [existingRows] = await connection.query<Array<RowDataPacket & { id: number }>>(
+      "SELECT id FROM master_panels WHERE car_id = ? AND source_part = 'CATALOG' AND part_id = ? LIMIT 1 FOR UPDATE",
+      [unitId, itemId],
+    );
+    if (existingRows[0]?.id) {
+      return { panelId: Number(existingRows[0].id), alreadyPromoted: true };
+    }
+
     const [rows] = await connection.query<Array<RowDataPacket & {
       id: number;
-      catalogReferenceId: number;
-      promotedPanelId: number | null;
-      surveyStatus: string;
+      carId: string;
       componentId: number;
       componentCode: CatalogComponent["code"];
       componentName: string;
       panelId: number;
       panelName: string;
-      actualName: string | null;
       itemName: string | null;
       partNumber: string | null;
-      positionCode: string | null;
+      position: string | null;
       qtyNormal: number | string | null;
-      conditionStatus: string;
-      availabilityStatus: string;
-      location: string | null;
-      notes: string | null;
-      sortOrder: number | null;
+      isRestoration: number | boolean | null;
     }>>(
       `
         SELECT
-          i.id,
-          i.catalog_reference_id AS catalogReferenceId,
-          i.promoted_panel_id AS promotedPanelId,
-          i.survey_status AS surveyStatus,
+          uc.id,
+          uc.car_id AS carId,
           c.id AS componentId,
           c.code AS componentCode,
           c.component_name AS componentName,
           p.id AS panelId,
           p.panel_name AS panelName,
-          i.actual_name AS actualName,
-          i.item_name AS itemName,
-          i.part_number AS partNumber,
-          i.position_code AS positionCode,
-          i.qty_normal AS qtyNormal,
-          i.condition_status AS conditionStatus,
-          i.availability_status AS availabilityStatus,
-          i.location,
-          i.notes,
-          i.sort_order AS sortOrder
-        FROM unit_catalog_items i
-        JOIN unit_catalog_references r ON r.id = i.catalog_reference_id
-        JOIN catalog_panels p ON p.id = r.panel_id
+          uc.item_name AS itemName,
+          uc.part_number AS partNumber,
+          uc.position AS position,
+          uc.qty_normal AS qtyNormal,
+          uc.is_restoration AS isRestoration
+        FROM unit_catalog uc
+        JOIN catalog_panels p ON p.id = uc.panel_id
         JOIN catalog_components c ON c.id = p.component_id
-        WHERE i.id = ? AND r.car_id = ?
+        WHERE uc.id = ? AND uc.car_id = ?
         LIMIT 1 FOR UPDATE
       `,
       [itemId, unitId],
     );
     const item = rows[0];
     if (!item) throw new Error("CATALOG_ITEM_NOT_FOUND");
-    if (item.promotedPanelId) return { panelId: Number(item.promotedPanelId), alreadyPromoted: true };
-    if (item.surveyStatus !== "CONFIRMED") throw new Error("SURVEY_NOT_CONFIRMED");
+    if (!(item.isRestoration === true || item.isRestoration === 1)) throw new Error("SURVEY_NOT_CONFIRMED");
 
-    const [existingRows] = await connection.query<Array<RowDataPacket & { id: number }>>(
-      "SELECT id FROM master_panels WHERE car_id = ? AND source_type = 'CATALOG' AND source_id = ? LIMIT 1 FOR UPDATE",
-      [unitId, itemId],
-    );
-    if (existingRows[0]?.id) {
-      await connection.execute("UPDATE unit_catalog_items SET promoted_panel_id = ? WHERE id = ?", [existingRows[0].id, itemId]);
-      return { panelId: Number(existingRows[0].id), alreadyPromoted: true };
-    }
-
-    const [parentRows] = await connection.query<Array<RowDataPacket & { id: number }>>(
-      `
-        SELECT id
-        FROM master_panels
-        WHERE car_id = ? AND parent_id IS NULL
-          AND ((panel_id = ? AND panel_id IS NOT NULL) OR (COALESCE(component_name, section) = ? AND name = ?))
-        LIMIT 1
-      `,
-      [unitId, item.panelId, item.componentCode, item.panelName],
-    );
-    let parentId = parentRows[0]?.id ? Number(parentRows[0].id) : 0;
-    if (!parentId) {
-      const [parentResult] = await connection.execute<ResultSetHeader>(
-        `
-          INSERT INTO master_panels (
-            car_id, component_name, section, name, category, parent_id, sort_order,
-            qty, qty_normal, is_active, created_by, updated_by, component_id, panel_id,
-            panel_name, name_part, current_status, location
-          ) VALUES (?, ?, ?, ?, ?, NULL, 0, 1, 1, 1, ?, ?, ?, ?, ?, ?, NULL, 'UNIT')
-        `,
-        [
-          unitId,
-          item.componentCode,
-          item.componentCode,
-          item.panelName,
-          item.componentCode,
-          actorId,
-          actorId,
-          item.componentId,
-          item.panelId,
-          item.panelName,
-          item.panelName,
-        ],
-      );
-      parentId = Number(parentResult.insertId);
-    }
-
-    const resolvedName = item.actualName || item.itemName || item.positionCode || item.partNumber || item.panelName;
-    const [childResult] = await connection.execute<ResultSetHeader>(
+    const [result] = await connection.execute<ResultSetHeader>(
       `
         INSERT INTO master_panels (
-          car_id, component_name, section, name, category, parent_id, part_number, position_code,
-          sort_order, qty, qty_normal, initial_condition, notes, is_active, created_by, updated_by,
-          source_type, source_id, component_id, panel_id, panel_name, name_part, alias_name, current_status, location
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, 'CATALOG', ?, ?, ?, ?, ?, ?, ?, ?)
+          car_id, part_id, source_part, component_id, panel_id, component_name, panel_name,
+          name_part, alias_name, part_number, qty, initial_condition, current_status, location, notes,
+          section, name, category, is_active, parent_id, position_code, sort_order, qty_normal,
+          default_location_type, default_stock_status, default_condition_type, default_division_id,
+          created_at, created_by, updated_at, updated_by
+        ) VALUES (?, ?, 'CATALOG', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NULL, ?, 0, ?, 'UNIT', 'INSTALLED', 'BEKAS', NULL, NOW(), ?, NOW(), ?)
       `,
       [
         unitId,
-        item.componentCode,
-        item.componentCode,
-        resolvedName,
-        item.componentCode,
-        parentId,
-        item.partNumber,
-        item.positionCode,
-        item.sortOrder ?? 0,
-        num(item.qtyNormal) ?? 1,
-        num(item.qtyNormal),
-        item.conditionStatus,
-        item.notes,
-        actorId,
-        actorId,
         itemId,
         item.componentId,
         item.panelId,
+        item.componentName,
         item.panelName,
-        resolvedName,
-        item.actualName,
-        item.availabilityStatus,
-        item.location ?? "UNIT",
+        item.itemName ?? item.position ?? item.partNumber ?? item.panelName,
+        input.actualName ?? null,
+        item.partNumber,
+        num(item.qtyNormal) ?? 1,
+        input.conditionStatus,
+        input.availabilityStatus,
+        input.location ?? "UNIT",
+        input.notes,
+        item.componentName,
+        item.itemName ?? item.position ?? item.partNumber ?? item.panelName,
+        item.panelName,
+        item.position,
+        num(item.qtyNormal),
+        actorId,
+        actorId,
       ],
     );
-    const panelId = Number(childResult.insertId);
-
-    const referenceMedia = await this.listReferenceMedia(Number(item.catalogReferenceId), connection);
-    for (const media of referenceMedia) {
-      await connection.execute(
-        `
-          INSERT IGNORE INTO master_panel_images (
-            master_panel_id, url_image, image_type, caption, source_catalog_reference_media_id, created_by
-          ) VALUES (?, ?, 'REFERENCE', ?, ?, ?)
-        `,
-        [panelId, media.fileUrl, media.caption, media.id, actorId],
-      );
-    }
-
-    const [mediaRows] = await connection.query<Array<RowDataPacket & { id: number; fileUrl: string; caption: string | null }>>(
-      "SELECT id, file_url AS fileUrl, caption FROM unit_catalog_item_media WHERE catalog_item_id = ? ORDER BY created_at ASC, id ASC",
-      [itemId],
-    );
-    for (const media of mediaRows) {
-      await connection.execute(
-        `
-          INSERT IGNORE INTO master_panel_images (
-            master_panel_id, url_image, image_type, caption, source_catalog_media_id, created_by
-          ) VALUES (?, ?, 'ACTUAL', ?, ?, ?)
-        `,
-        [panelId, media.fileUrl, media.caption ?? null, media.id, actorId],
-      );
-    }
-
-    await connection.execute("UPDATE unit_catalog_items SET promoted_panel_id = ? WHERE id = ?", [panelId, itemId]);
+    const panelId = Number(result.insertId);
     await this.refreshPanelStatus(connection, unitId, panelId);
     return { panelId, alreadyPromoted: false };
-  }
-
-  private async addMapping(
-    connectionOrItemId: Queryable | number,
-    itemIdOrActorId: number | string,
-    actorOrMapping: string | NonNullable<UpdateCatalogSurveyRequest["mapping"]>,
-    maybeMapping?: NonNullable<UpdateCatalogSurveyRequest["mapping"]>,
-  ) {
-    const connection = typeof connectionOrItemId === "number" ? this.poolFactory(this.env) : connectionOrItemId;
-    const itemId = typeof connectionOrItemId === "number" ? connectionOrItemId : Number(itemIdOrActorId);
-    const actorId = typeof connectionOrItemId === "number" ? String(itemIdOrActorId) : String(actorOrMapping);
-    const mapping = (typeof connectionOrItemId === "number" ? actorOrMapping : maybeMapping) as NonNullable<UpdateCatalogSurveyRequest["mapping"]>;
-    await connection.execute(
-      `
-        INSERT INTO unit_catalog_item_mappings (
-          catalog_item_id, catalog_reference_media_id, x_percent, y_percent, created_by
-        ) VALUES (?, ?, ?, ?, ?)
-      `,
-      [itemId, mapping.catalogReferenceMediaId, mapping.xPercent, mapping.yPercent, actorId],
-    );
-  }
-
-  private async saveSurveyWithConnection(
-    connection: PoolConnection,
-    unitId: string,
-    itemId: number,
-    actorId: string,
-    input: UpdateCatalogSurveyRequest,
-    surveyStatus: "DRAFT" | "CONFIRMED",
-  ) {
-    const [rows] = await connection.query<RowDataPacket[]>(
-      `
-        SELECT i.id
-        FROM unit_catalog_items i
-        JOIN unit_catalog_references r ON r.id = i.catalog_reference_id
-        WHERE i.id = ? AND r.car_id = ?
-        LIMIT 1
-      `,
-      [itemId, unitId],
-    );
-    if (!rows[0]) throw new Error("CATALOG_ITEM_NOT_FOUND");
-
-    await connection.execute(
-      `
-        UPDATE unit_catalog_items
-        SET qty_opname = ?, actual_name = ?, availability_status = ?, condition_status = ?, action_type = ?,
-            survey_status = ?, location = ?, notes = ?, surveyed_by = ?, surveyed_at = NOW()
-        WHERE id = ?
-      `,
-      [
-        input.qtyOpname,
-        input.actualName,
-        input.availabilityStatus,
-        input.conditionStatus,
-        input.actionType,
-        surveyStatus,
-        input.location,
-        input.notes,
-        actorId,
-        itemId,
-      ],
-    );
-
-    if (input.mapping) await this.addMapping(connection, itemId, actorId, input.mapping);
   }
 
   private async refreshPanelStatus(connection: Queryable, unitId: string, panelId: number) {

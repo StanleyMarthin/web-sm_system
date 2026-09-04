@@ -64,7 +64,7 @@ export function UnitCatalogEditor({
     { field: "code", headerName: "Code", minWidth: 110, editable: editMode },
     { field: "partNumber", headerName: "Part Number", minWidth: 160, editable: editMode },
     { field: "itemName", headerName: "Item Name", minWidth: 220, editable: editMode, flex: 1 },
-    { field: "positionCode", headerName: "Position", minWidth: 120, editable: editMode },
+    { field: "position", headerName: "Position", minWidth: 120, editable: editMode },
     {
       field: "qtyNormal",
       headerName: "Qty Normal",
@@ -72,7 +72,15 @@ export function UnitCatalogEditor({
       editable: editMode,
       cellClass: (params) => qtyCellClass(params.value),
     },
-    { field: "notes", headerName: "Notes", minWidth: 220, editable: editMode, flex: 1.2 },
+    {
+      field: "isRestoration",
+      headerName: "Restorasi",
+      minWidth: 120,
+      editable: editMode,
+      cellEditor: "agCheckboxCellEditor",
+      cellRenderer: (params: { value: boolean }) => (params.value ? "Ya" : "-"),
+      valueFormatter: (params) => (params.value ? "Ya" : "-"),
+    },
   ]), [editMode]);
 
   function handlePaste(text: string) {
@@ -161,7 +169,7 @@ export function UnitCatalogEditor({
           onCellValueChanged={(event) => {
             const field = event.colDef.field as CatalogDraftField | undefined;
             if (!field) return;
-            onRowsChange(updateCatalogDraftCell(rows, event.data.rowId, field, String(event.newValue ?? "")));
+            onRowsChange(updateCatalogDraftCell(rows, event.data.rowId, field, event.newValue as string | boolean));
           }}
         />
       </div>

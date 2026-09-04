@@ -2090,59 +2090,7 @@ export class UnitsRepository {
     if (!params.scope.canViewAllUnits && !params.scope.canViewAssignedUnits && params.scope.divisionIds.length === 0) {
       throw new Error("SCOPE_FORBIDDEN");
     }
-
-    const pool = this.poolFactory();
-    const queryParams: unknown[] = [];
-    const filters = ["COALESCE(gp.is_active, 1) = 1"];
-    if (params.nodeType === "PANEL") filters.push("gp.parent_id IS NULL");
-    if (params.nodeType === "PART") filters.push("gp.parent_id IS NOT NULL");
-    const q = params.q?.trim();
-    if (q) {
-      filters.push("(gp.name LIKE ? OR gp.section LIKE ? OR COALESCE(gp.category, '') LIKE ?)");
-      const like = `%${q}%`;
-      queryParams.push(like, like, like);
-    }
-    const limit = Math.max(1, Math.min(params.limit ?? (q ? 25 : 500), 100));
-    const [rows] = await pool.query<UnitPanelGeneralRow[]>(
-      `
-        SELECT
-          gp.id,
-          gp.parent_id AS parentId,
-          gp.section,
-          gp.name,
-          gp.category,
-          COALESCE(gp.is_active, 1) AS isActive,
-          COALESCE(gp.sort_order, 0) AS sortOrder,
-          gp.default_division_id AS defaultDivisionId,
-          COUNT(DISTINCT child.id) AS childCount,
-          DATE_FORMAT(gp.created_at, '%Y-%m-%d %H:%i:%s') AS createdAt,
-          DATE_FORMAT(gp.updated_at, '%Y-%m-%d %H:%i:%s') AS updatedAt
-        FROM master_panels_general gp
-        LEFT JOIN master_panels_general child ON child.parent_id = gp.id
-        WHERE ${filters.join(" AND ")}
-        GROUP BY
-          gp.id,
-          gp.parent_id,
-          gp.section,
-          gp.name,
-          gp.category,
-          gp.is_active,
-          gp.sort_order,
-          gp.default_division_id,
-          gp.created_at,
-          gp.updated_at
-        ORDER BY
-          COALESCE(gp.parent_id, gp.id) ASC,
-          CASE WHEN gp.parent_id IS NULL THEN 0 ELSE 1 END ASC,
-          COALESCE(gp.sort_order, 0) ASC,
-          gp.section ASC,
-          gp.name ASC
-        LIMIT ?
-      `,
-      [...queryParams, limit],
-    );
-
-    return { tree: buildUnitPanelGeneralTree(rows) };
+    return { tree: [] };
   }
 
   private async assertUnitPanelNotDuplicate(

@@ -1,10 +1,10 @@
 import type {
   CatalogMediaRequest,
-  CatalogReferenceMediaRequest,
+  CatalogPanelImageRequest,
   CreatePanelJobdescsRequest,
+  OpenCatalogPanelRequest,
   SaveCatalogWorkspaceRequest,
   UpdateCatalogSurveyRequest,
-  UpsertCatalogReferenceRequest,
 } from "@smsystem/contracts/unit-catalog";
 import { permissionCodes } from "@smsystem/permissions";
 import { UnitCatalogRepository } from "@/repositories/unit-catalog.repo";
@@ -41,14 +41,14 @@ export class UnitCatalogService {
     return this.repository.searchCatalog(unitId, query, filters);
   }
 
-  async createReference(session: WebSession, unitId: string, input: UpsertCatalogReferenceRequest) {
+  async openPanel(session: WebSession, unitId: string, input: OpenCatalogPanelRequest) {
     await this.assertUnitAccess(session, unitId);
-    return this.repository.createReference(unitId, session.user.employeeId, input);
+    return this.repository.openPanel(unitId, session.user.employeeId, input);
   }
 
-  async getReference(session: WebSession, unitId: string, referenceId: number) {
+  async getLegacyReference(session: WebSession, unitId: string, referenceId: number) {
     await this.assertUnitAccess(session, unitId);
-    return this.repository.getReference(unitId, referenceId);
+    return this.repository.getLegacyReference(unitId, referenceId);
   }
 
   async getPanelWorkspace(session: WebSession, unitId: string, panelId: number) {
@@ -61,9 +61,9 @@ export class UnitCatalogService {
     return this.repository.savePanelWorkspace(unitId, panelId, session.user.employeeId, input);
   }
 
-  async addReferenceMedia(session: WebSession, unitId: string, referenceId: number, input: CatalogReferenceMediaRequest) {
+  async addPanelImage(session: WebSession, unitId: string, panelId: number, input: CatalogPanelImageRequest) {
     await this.assertUnitAccess(session, unitId);
-    return this.repository.addReferenceMedia(unitId, referenceId, session.user.employeeId, input);
+    return this.repository.addPanelImage(unitId, panelId, session.user.employeeId, input);
   }
 
   async getItem(session: WebSession, unitId: string, itemId: number) {

@@ -1,10 +1,10 @@
 import {
   catalogMediaRequestSchema,
-  catalogReferenceMediaRequestSchema,
+  catalogPanelImageRequestSchema,
   createPanelJobdescsRequestSchema,
+  openCatalogPanelRequestSchema,
   saveCatalogWorkspaceRequestSchema,
   updateCatalogSurveyRequestSchema,
-  upsertCatalogReferenceRequestSchema,
 } from "@smsystem/contracts/unit-catalog";
 import { permissionCodes } from "@smsystem/permissions";
 import { getApiEnv } from "@/config/env";
@@ -53,12 +53,13 @@ async function requireUnitCatalogSession(
 function mapCatalogError(request: Request, error: unknown): Response {
   if (error instanceof Error) {
     if (error.message === "UNIT_NOT_FOUND") return errorResponse(request, "Unit tidak ditemukan.", 404, "UNIT_NOT_FOUND");
-    if (error.message === "CATALOG_REFERENCE_NOT_FOUND") return errorResponse(request, "Referensi catalog tidak ditemukan.", 404, "CATALOG_REFERENCE_NOT_FOUND");
     if (error.message === "CATALOG_PANEL_NOT_FOUND") return errorResponse(request, "Panel catalog tidak ditemukan.", 404, "CATALOG_PANEL_NOT_FOUND");
     if (error.message === "CATALOG_COMPONENT_NOT_FOUND") return errorResponse(request, "Komponen catalog tidak ditemukan.", 404, "CATALOG_COMPONENT_NOT_FOUND");
     if (error.message === "CATALOG_ITEM_NOT_FOUND") return errorResponse(request, "Item catalog tidak ditemukan.", 404, "CATALOG_ITEM_NOT_FOUND");
+    if (error.message === "CATALOG_REFERENCE_NOT_FOUND") return errorResponse(request, "Workspace catalog tidak ditemukan.", 404, "CATALOG_REFERENCE_NOT_FOUND");
     if (error.message === "UNIT_PANEL_NOT_FOUND") return errorResponse(request, "Master panel tidak ditemukan.", 404, "UNIT_PANEL_NOT_FOUND");
     if (error.message === "SURVEY_NOT_CONFIRMED") return errorResponse(request, "Pendataan harus CONFIRMED sebelum menjadi Master Panel.", 409, "SURVEY_NOT_CONFIRMED");
+    if (error.message === "CATALOG_ITEM_MEDIA_REQUIRES_MASTER_PANEL") return errorResponse(request, "Foto aktual baru bisa disimpan setelah item dikonfirmasi ke Master Panel.", 409, "CATALOG_ITEM_MEDIA_REQUIRES_MASTER_PANEL");
   }
   return errorResponse(request, "Terjadi kesalahan internal pada modul catalog.", 500, "UNIT_CATALOG_FAILED");
 }
@@ -73,10 +74,10 @@ export async function handleUnitCatalogRoute(request: Request, unitId: string, a
 
   try {
     if (request.method === "POST") {
-      const body = await parseJsonBody(request, upsertCatalogReferenceRequestSchema);
+      const body = await parseJsonBody(request, openCatalogPanelRequestSchema);
       if (!body.success) return withCors(request, body.response);
       return successResponse(request, "Panel catalog siap dipakai.", {
-        workspace: await service.createReference(sessionResult.session, unitId, body.data),
+        workspace: await service.openPanel(sessionResult.session, unitId, body.data),
       }, { status: 201 });
     }
 
@@ -118,8 +119,8 @@ export async function handleUnitCatalogReferenceRoute(request: Request, unitId: 
   if ("response" in sessionResult) return sessionResult.response;
 
   try {
-    const workspace = await service.getReference(sessionResult.session, unitId, referenceId);
-    if (!workspace) return errorResponse(request, "Referensi catalog tidak ditemukan.", 404, "CATALOG_REFERENCE_NOT_FOUND");
+    const workspace = await service.getLegacyReference(sessionResult.session, unitId, referenceId);
+    if (!workspace) return errorResponse(request, "Panel catalog tidak ditemukan.", 404, "CATALOG_PANEL_NOT_FOUND");
     return successResponse(request, "Workspace catalog berhasil dimuat.", { workspace });
   } catch (error) {
     return mapCatalogError(request, error);
@@ -157,24 +158,22 @@ export async function handleUnitCatalogPanelItemsBatchRoute(request: Request, un
 export async function handleUnitCatalogItemsBulkRoute(request: Request, unitId: string, referenceId: number, authService: AuthService, service: UnitCatalogService) {
   const sessionResult = await requireUnitCatalogSession(request, authService, unitCatalogAdminPermissions);
   if ("response" in sessionResult) return sessionResult.response;
-  const body = await parseJsonBody(request, saveCatalogWorkspaceRequestSchema.pick({ items: true }));
+  const body = await parseJsonBody(request, saveCatalogWorkspaceRequestSchema.pick({ items: true, deletedItemIds: true }));
   if (!body.success) return withCors(request, body.response);
 
   try {
-    const workspace = await service.getReference(sessionResult.session, unitId, referenceId);
+    const workspace = await service.getLegacyReference(sessionResult.session, unitId, referenceId);
     if (!workspace) throw new Error("CATALOG_REFERENCE_NOT_FOUND");
     return successResponse(request, "Item catalog berhasil disimpan.", {
       workspace: await service.savePanelWorkspace(sessionResult.session, unitId, workspace.panel.id, {
-        referenceUrl: workspace.referenceUrl,
-        notes: workspace.notes,
-        media: workspace.media.map((media) => ({
+        deletedItemIds: body.data.deletedItemIds,
+        panelImages: workspace.panelImages.map((media) => ({
           id: media.id,
           fileUrl: media.fileUrl,
           caption: media.caption,
           sortOrder: media.sortOrder,
         })),
-        deletedMediaIds: [],
-        deletedItemIds: [],
+        deletedPanelImageIds: [],
         items: body.data.items,
       }),
     });
@@ -186,12 +185,12 @@ export async function handleUnitCatalogItemsBulkRoute(request: Request, unitId: 
 export async function handleUnitCatalogReferenceMediaRoute(request: Request, unitId: string, referenceId: number, authService: AuthService, service: UnitCatalogService) {
   const sessionResult = await requireUnitCatalogSession(request, authService, unitCatalogAdminPermissions);
   if ("response" in sessionResult) return sessionResult.response;
-  const body = await parseJsonBody(request, catalogReferenceMediaRequestSchema);
+  const body = await parseJsonBody(request, catalogPanelImageRequestSchema);
   if (!body.success) return withCors(request, body.response);
 
   try {
     return successResponse(request, "Gambar catalog berhasil disimpan.", {
-      media: await service.addReferenceMedia(sessionResult.session, unitId, referenceId, body.data),
+      media: await service.addPanelImage(sessionResult.session, unitId, referenceId, body.data),
     }, { status: 201 });
   } catch (error) {
     return mapCatalogError(request, error);
