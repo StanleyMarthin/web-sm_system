@@ -132,14 +132,38 @@ export class UnitCatalogRepository {
     private readonly env: ApiEnv = getApiEnv(),
   ) {}
 
-  async listOverview(unitId: string): Promise<CatalogOverview> {
-    const [componentRows] = await this.poolFactory(this.env).query<ComponentRow[]>(
+  async listComponents(): Promise<CatalogComponent[]> {
+    const [rows] = await this.poolFactory(this.env).query<ComponentRow[]>(
       `
         SELECT id, code, component_name AS componentName
         FROM catalog_components
         ORDER BY id ASC
       `,
     );
+    return rows.map(mapComponent);
+  }
+
+  async listPanelsByComponent(componentId: number): Promise<CatalogPanel[]> {
+    const [rows] = await this.poolFactory(this.env).query<PanelRow[]>(
+      `
+        SELECT
+          p.id,
+          p.component_id AS componentId,
+          c.code AS componentCode,
+          c.component_name AS componentName,
+          p.panel_name AS panelName
+        FROM catalog_panels p
+        JOIN catalog_components c ON c.id = p.component_id
+        WHERE p.component_id = ?
+        ORDER BY p.panel_name ASC
+      `,
+      [componentId],
+    );
+    return rows.map(mapPanel);
+  }
+
+  async listOverview(unitId: string): Promise<CatalogOverview> {
+    const componentRows = await this.listComponents();
     const [panelRows] = await this.poolFactory(this.env).query<PanelSummaryRow[]>(
       `
         SELECT
@@ -161,7 +185,7 @@ export class UnitCatalogRepository {
     );
 
     return {
-      components: componentRows.map(mapComponent),
+      components: componentRows,
       panels: panelRows.map((row) => ({
         ...mapPanel(row),
         itemCount: Number(row.itemCount ?? 0),
@@ -189,10 +213,6 @@ export class UnitCatalogRepository {
     } finally {
       connection.release();
     }
-  }
-
-  async getLegacyReference(unitId: string, referenceId: number) {
-    return this.getPanelWorkspace(unitId, referenceId);
   }
 
   async getPanelWorkspace(unitId: string, panelId: number): Promise<CatalogWorkspace | null> {

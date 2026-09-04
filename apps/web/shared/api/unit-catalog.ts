@@ -4,7 +4,6 @@ import {
   catalogWorkspaceSchema,
   catalogSearchItemSchema,
   catalogMediaRequestSchema,
-  catalogPanelImageRequestSchema,
   createPanelJobdescsRequestSchema,
   openCatalogPanelRequestSchema,
   saveCatalogWorkspaceRequestSchema,
@@ -42,6 +41,27 @@ const searchEnvelopeSchema = z.object({
   success: z.boolean(),
   message: z.string(),
   data: z.object({ items: z.array(catalogSearchItemSchema) }),
+});
+
+const catalogComponentSchema = catalogOverviewSchema.shape.components.element;
+const catalogPanelSchema = catalogOverviewSchema.shape.panels.element.pick({
+  id: true,
+  componentId: true,
+  componentCode: true,
+  componentName: true,
+  panelName: true,
+});
+
+const componentsEnvelopeSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+  data: z.object({ components: z.array(catalogComponentSchema) }),
+});
+
+const panelsEnvelopeSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+  data: z.object({ panels: z.array(catalogPanelSchema) }),
 });
 
 const mediaEnvelopeSchema = z.object({
@@ -100,6 +120,14 @@ export async function fetchUnitCatalog(unitId: string) {
   return requestJson(`/api/units/${encodeURIComponent(unitId)}/catalog`, overviewEnvelopeSchema);
 }
 
+export async function fetchCatalogComponents() {
+  return requestJson("/api/catalog/components", componentsEnvelopeSchema);
+}
+
+export async function fetchCatalogPanelsByComponent(componentId: number) {
+  return requestJson(`/api/catalog/components/${componentId}/panels`, panelsEnvelopeSchema);
+}
+
 export async function searchUnitCatalog(unitId: string, input: {
   q: string;
   componentId?: number | null;
@@ -121,13 +149,6 @@ export async function searchUnitCatalog(unitId: string, input: {
 export async function fetchUnitCatalogPanelWorkspace(unitId: string, panelId: number) {
   return requestJson(
     `/api/units/${encodeURIComponent(unitId)}/catalog/panels/${panelId}`,
-    workspaceEnvelopeSchema,
-  );
-}
-
-export async function fetchUnitCatalogReference(unitId: string, referenceId: number) {
-  return requestJson(
-    `/api/units/${encodeURIComponent(unitId)}/catalog/${referenceId}`,
     workspaceEnvelopeSchema,
   );
 }
@@ -182,15 +203,6 @@ export async function addUnitCatalogItemMedia(unitId: string, itemId: number, in
   const body = catalogMediaRequestSchema.parse(input);
   return requestJson(
     `/api/units/${encodeURIComponent(unitId)}/catalog/items/${itemId}/media`,
-    mediaEnvelopeSchema,
-    { method: "POST", body: JSON.stringify(body) },
-  );
-}
-
-export async function addUnitCatalogReferenceMedia(unitId: string, referenceId: number, input: { fileUrl: string; caption?: string | null; sortOrder?: number }) {
-  const body = catalogPanelImageRequestSchema.parse(input);
-  return requestJson(
-    `/api/units/${encodeURIComponent(unitId)}/catalog/${referenceId}/media`,
     mediaEnvelopeSchema,
     { method: "POST", body: JSON.stringify(body) },
   );

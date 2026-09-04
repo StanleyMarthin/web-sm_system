@@ -50,6 +50,14 @@ async function requireUnitCatalogSession(
   return { session: sessionResult.session };
 }
 
+async function requireCatalogMasterSession(
+  request: Request,
+  authService: AuthService,
+  requiredPermissions: readonly string[] = unitCatalogReadPermissions,
+) {
+  return requireUnitCatalogSession(request, authService, requiredPermissions);
+}
+
 function mapCatalogError(request: Request, error: unknown): Response {
   if (error instanceof Error) {
     if (error.message === "UNIT_NOT_FOUND") return errorResponse(request, "Unit tidak ditemukan.", 404, "UNIT_NOT_FOUND");
@@ -114,12 +122,38 @@ export async function handleUnitCatalogSearchRoute(request: Request, unitId: str
   }
 }
 
-export async function handleUnitCatalogReferenceRoute(request: Request, unitId: string, referenceId: number, authService: AuthService, service: UnitCatalogService) {
+export async function handleCatalogComponentsRoute(request: Request, authService: AuthService, service: UnitCatalogService) {
+  const sessionResult = await requireCatalogMasterSession(request, authService);
+  if ("response" in sessionResult) return sessionResult.response;
+
+  try {
+    return successResponse(request, "Daftar komponen catalog berhasil dimuat.", {
+      components: await service.listComponents(),
+    });
+  } catch (error) {
+    return mapCatalogError(request, error);
+  }
+}
+
+export async function handleCatalogComponentPanelsRoute(request: Request, componentId: number, authService: AuthService, service: UnitCatalogService) {
+  const sessionResult = await requireCatalogMasterSession(request, authService);
+  if ("response" in sessionResult) return sessionResult.response;
+
+  try {
+    return successResponse(request, "Daftar panel catalog berhasil dimuat.", {
+      panels: await service.listPanelsByComponent(componentId),
+    });
+  } catch (error) {
+    return mapCatalogError(request, error);
+  }
+}
+
+export async function handleUnitCatalogPanelAliasRoute(request: Request, unitId: string, panelId: number, authService: AuthService, service: UnitCatalogService) {
   const sessionResult = await requireUnitCatalogSession(request, authService);
   if ("response" in sessionResult) return sessionResult.response;
 
   try {
-    const workspace = await service.getLegacyReference(sessionResult.session, unitId, referenceId);
+    const workspace = await service.getPanelWorkspace(sessionResult.session, unitId, panelId);
     if (!workspace) return errorResponse(request, "Panel catalog tidak ditemukan.", 404, "CATALOG_PANEL_NOT_FOUND");
     return successResponse(request, "Workspace catalog berhasil dimuat.", { workspace });
   } catch (error) {
@@ -155,15 +189,15 @@ export async function handleUnitCatalogPanelItemsBatchRoute(request: Request, un
   }
 }
 
-export async function handleUnitCatalogItemsBulkRoute(request: Request, unitId: string, referenceId: number, authService: AuthService, service: UnitCatalogService) {
+export async function handleUnitCatalogPanelItemsAliasRoute(request: Request, unitId: string, panelId: number, authService: AuthService, service: UnitCatalogService) {
   const sessionResult = await requireUnitCatalogSession(request, authService, unitCatalogAdminPermissions);
   if ("response" in sessionResult) return sessionResult.response;
   const body = await parseJsonBody(request, saveCatalogWorkspaceRequestSchema.pick({ items: true, deletedItemIds: true }));
   if (!body.success) return withCors(request, body.response);
 
   try {
-    const workspace = await service.getLegacyReference(sessionResult.session, unitId, referenceId);
-    if (!workspace) throw new Error("CATALOG_REFERENCE_NOT_FOUND");
+    const workspace = await service.getPanelWorkspace(sessionResult.session, unitId, panelId);
+    if (!workspace) throw new Error("CATALOG_PANEL_NOT_FOUND");
     return successResponse(request, "Item catalog berhasil disimpan.", {
       workspace: await service.savePanelWorkspace(sessionResult.session, unitId, workspace.panel.id, {
         deletedItemIds: body.data.deletedItemIds,
@@ -182,7 +216,7 @@ export async function handleUnitCatalogItemsBulkRoute(request: Request, unitId: 
   }
 }
 
-export async function handleUnitCatalogReferenceMediaRoute(request: Request, unitId: string, referenceId: number, authService: AuthService, service: UnitCatalogService) {
+export async function handleUnitCatalogPanelMediaAliasRoute(request: Request, unitId: string, panelId: number, authService: AuthService, service: UnitCatalogService) {
   const sessionResult = await requireUnitCatalogSession(request, authService, unitCatalogAdminPermissions);
   if ("response" in sessionResult) return sessionResult.response;
   const body = await parseJsonBody(request, catalogPanelImageRequestSchema);
@@ -190,7 +224,7 @@ export async function handleUnitCatalogReferenceMediaRoute(request: Request, uni
 
   try {
     return successResponse(request, "Gambar catalog berhasil disimpan.", {
-      media: await service.addPanelImage(sessionResult.session, unitId, referenceId, body.data),
+      media: await service.addPanelImage(sessionResult.session, unitId, panelId, body.data),
     }, { status: 201 });
   } catch (error) {
     return mapCatalogError(request, error);

@@ -534,6 +534,11 @@ export function UnitCatalogTab({ unitId, unitName }: UnitCatalogTabProps) {
                 </button>
               ))}
             </div>
+          ) : (overview?.panels.length ?? 0) === 0 ? (
+            <div className="flex items-center gap-2 border border-dashed border-border px-3 py-6 text-sm text-muted-foreground">
+              <AlertCircle className="h-4 w-4" />
+              Belum ada panel catalog.
+            </div>
           ) : filteredGroups.length > 0 ? (
             <div className="grid gap-4 xl:grid-cols-2">
               {filteredGroups.map((group) => (

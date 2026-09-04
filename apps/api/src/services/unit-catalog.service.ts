@@ -31,6 +31,14 @@ export class UnitCatalogService {
     if (!unit) throw new Error("UNIT_NOT_FOUND");
   }
 
+  async listComponents() {
+    return this.repository.listComponents();
+  }
+
+  async listPanelsByComponent(componentId: number) {
+    return this.repository.listPanelsByComponent(componentId);
+  }
+
   async getOverview(session: WebSession, unitId: string) {
     await this.assertUnitAccess(session, unitId);
     return this.repository.listOverview(unitId);
@@ -44,11 +52,6 @@ export class UnitCatalogService {
   async openPanel(session: WebSession, unitId: string, input: OpenCatalogPanelRequest) {
     await this.assertUnitAccess(session, unitId);
     return this.repository.openPanel(unitId, session.user.employeeId, input);
-  }
-
-  async getLegacyReference(session: WebSession, unitId: string, referenceId: number) {
-    await this.assertUnitAccess(session, unitId);
-    return this.repository.getLegacyReference(unitId, referenceId);
   }
 
   async getPanelWorkspace(session: WebSession, unitId: string, panelId: number) {
