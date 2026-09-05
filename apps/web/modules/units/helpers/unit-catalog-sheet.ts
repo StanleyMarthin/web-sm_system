@@ -208,6 +208,19 @@ export function clampCatalogImageZoom(value: number) {
   return Math.min(Math.max(value, catalogImageZoomMin), catalogImageZoomMax);
 }
 
+export function getCatalogImageHoverPosition(
+  clientX: number,
+  clientY: number,
+  rect: Pick<DOMRect, "left" | "top" | "width" | "height">,
+) {
+  const x = rect.width > 0 ? ((clientX - rect.left) / rect.width) * 100 : 50;
+  const y = rect.height > 0 ? ((clientY - rect.top) / rect.height) * 100 : 50;
+  return {
+    x: Math.min(Math.max(x, 0), 100),
+    y: Math.min(Math.max(y, 0), 100),
+  };
+}
+
 export async function resolveCatalogPanelImagesForSave(
   images: CatalogDraftPanelImage[],
   uploadFile: (file: File) => Promise<string>,

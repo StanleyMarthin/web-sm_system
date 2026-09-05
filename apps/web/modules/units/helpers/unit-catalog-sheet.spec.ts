@@ -7,6 +7,7 @@ import {
   createCatalogDraftRow,
   createCatalogWorkspaceDraft,
   getCatalogImageFilesFromClipboardItems,
+  getCatalogImageHoverPosition,
   isCatalogDraftDirty,
   removeCatalogDraftImage,
   resolveCatalogPanelImagesForSave,
@@ -280,5 +281,20 @@ describe("unit catalog sheet helper", () => {
     expect(clampCatalogImageZoom(2.25)).toBe(2.25);
     expect(clampCatalogImageZoom(8)).toBe(4);
     expect(clampCatalogImageZoom(Number.NaN)).toBe(1);
+  });
+
+  it("maps hover position to image percentages", () => {
+    expect(getCatalogImageHoverPosition(150, 80, {
+      left: 100,
+      top: 40,
+      width: 200,
+      height: 80,
+    })).toEqual({ x: 25, y: 50 });
+    expect(getCatalogImageHoverPosition(20, 200, {
+      left: 100,
+      top: 40,
+      width: 200,
+      height: 80,
+    })).toEqual({ x: 0, y: 100 });
   });
 });

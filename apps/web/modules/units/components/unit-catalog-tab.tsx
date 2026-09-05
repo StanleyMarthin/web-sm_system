@@ -18,6 +18,7 @@ import {
   clampCatalogImageZoom,
   createCatalogWorkspaceDraft,
   getCatalogImageFilesFromClipboardItems,
+  getCatalogImageHoverPosition,
   isCatalogDraftDirty,
   isValidCatalogImageFile,
   removeCatalogDraftImage,
@@ -113,6 +114,7 @@ export function UnitCatalogTab({ unitId, unitName }: UnitCatalogTabProps) {
   const [isDraggingImage, setIsDraggingImage] = useState(false);
   const [imageZoomOpen, setImageZoomOpen] = useState(false);
   const [imageZoom, setImageZoom] = useState(1);
+  const [imageHoverPosition, setImageHoverPosition] = useState<{ x: number; y: number } | null>(null);
 
   const dirty = baseline ? isCatalogDraftDirty(baseline, draft) : false;
   const groupedPanels = useMemo(() => groupPanelsByComponent(overview), [overview]);
@@ -515,9 +517,30 @@ export function UnitCatalogTab({ unitId, unitName }: UnitCatalogTabProps) {
           <SectionCard label="Gambar Panel" count={draft.panelImages.length} className="min-h-[42rem]">
             {currentMedia ? (
               <div className="space-y-3">
-                <div className="relative aspect-[4/3] overflow-hidden border border-border bg-muted">
+                <div
+                  className="relative aspect-[4/3] overflow-hidden border border-border bg-muted"
+                  onMouseMove={(event) => {
+                    const position = getCatalogImageHoverPosition(
+                      event.clientX,
+                      event.clientY,
+                      event.currentTarget.getBoundingClientRect(),
+                    );
+                    setImageHoverPosition(position);
+                  }}
+                  onMouseLeave={() => setImageHoverPosition(null)}
+                >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={currentMediaSrc} alt={workspace.panel.panelName} className="h-full w-full object-contain" />
+                  <img
+                    src={currentMediaSrc}
+                    alt={workspace.panel.panelName}
+                    className="h-full w-full object-contain transition-transform duration-150"
+                    style={{
+                      transform: imageHoverPosition ? "scale(1.35)" : "scale(1)",
+                      transformOrigin: imageHoverPosition
+                        ? `${imageHoverPosition.x}% ${imageHoverPosition.y}%`
+                        : "50% 50%",
+                    }}
+                  />
                   <button
                     type="button"
                     onClick={() => {
