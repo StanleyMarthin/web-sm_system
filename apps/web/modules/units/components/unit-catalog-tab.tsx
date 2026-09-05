@@ -32,7 +32,7 @@ import {
   saveUnitCatalogPanelWorkspace,
   searchUnitCatalog,
 } from "@/shared/api/unit-catalog";
-import { getApiBaseUrl } from "@/shared/api/config";
+import { getApiBaseUrl, getProxiedImageUrl } from "@/shared/api/config";
 import { useSweetAlert } from "@/shared/ui/sweet-alert";
 import { ActionButton, CompactInput, PageHeader, SectionCard } from "@/shared/ui/compact";
 
@@ -75,7 +75,7 @@ function MediaThumb({
       className={`relative aspect-[4/3] overflow-hidden border ${active ? "border-primary" : "border-border"}`}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={src} alt={alt} className="h-full w-full object-cover" />
+      <img src={getProxiedImageUrl(src)} alt={alt} className="h-full w-full object-cover" />
     </button>
   );
 }
@@ -440,7 +440,7 @@ export function UnitCatalogTab({ unitId, unitName }: UnitCatalogTabProps) {
               <div className="space-y-3">
                 <div className="aspect-[4/3] overflow-hidden border border-border bg-muted">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={currentMedia.fileUrl} alt={workspace.panel.panelName} className="h-full w-full object-contain" />
+                  <img src={getProxiedImageUrl(currentMedia.fileUrl)} alt={workspace.panel.panelName} className="h-full w-full object-contain" />
                 </div>
                 <CompactInput
                   value={currentMedia.caption}

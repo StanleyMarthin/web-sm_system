@@ -88,6 +88,25 @@ export function getApiBaseUrl(): string {
 
 export function getProxiedImageUrl(url: string | null | undefined): string | undefined {
   if (!url) return undefined;
+  const trimmed = url.trim();
 
-  return url;
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(trimmed);
+  } catch {
+    return trimmed;
+  }
+
+  if (parsedUrl.protocol === "blob:" || parsedUrl.protocol === "data:") {
+    return trimmed;
+  }
+
+  const host = parsedUrl.hostname.toLowerCase();
+  if (parsedUrl.protocol !== "https:" || !host.endsWith(".r2.dev")) {
+    return trimmed;
+  }
+
+  const proxyUrl = new URL(`${getApiBaseUrl()}/api/proxy/image`);
+  proxyUrl.searchParams.set("url", trimmed);
+  return proxyUrl.toString();
 }
