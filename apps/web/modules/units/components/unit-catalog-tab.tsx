@@ -10,13 +10,19 @@ Side Effects: HTTP fetch/update catalog dan upload file reference.
 
 import type { CatalogOverview, CatalogWorkspace } from "@smsystem/contracts/unit-catalog";
 import { AlertCircle, ArrowUpDown, ImagePlus, Pencil, Save, Search, Trash2, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { UnitCatalogEditor } from "@/modules/units/components/unit-catalog-editor";
 import {
   appendEmptyCatalogDraftRow,
+  catalogImageMaxBytes,
   createCatalogWorkspaceDraft,
+  getCatalogImageFilesFromClipboardItems,
   isCatalogDraftDirty,
+  isValidCatalogImageFile,
+  removeCatalogDraftImage,
+  resolveCatalogPanelImagesForSave,
   serializeCatalogDraftRows,
+  stageCatalogImageFiles,
   workspaceDraftFromWorkspace,
   type CatalogWorkspaceDraft,
 } from "@/modules/units/helpers/unit-catalog-sheet";
@@ -47,6 +53,10 @@ function formatItemCount(value: number) {
   return new Intl.NumberFormat("id-ID").format(value);
 }
 
+function formatBytes(value: number) {
+  return `${Math.round(value / 1024 / 1024)} MB`;
+}
+
 function MediaThumb({
   src,
   alt,
@@ -72,6 +82,7 @@ function MediaThumb({
 
 export function UnitCatalogTab({ unitId, unitName }: UnitCatalogTabProps) {
   const sweetAlert = useSweetAlert();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [overview, setOverview] = useState<CatalogOverview | null>(null);
   const [workspace, setWorkspace] = useState<CatalogWorkspace | null>(null);
   const [baseline, setBaseline] = useState<CatalogWorkspaceDraft | null>(null);
@@ -98,6 +109,7 @@ export function UnitCatalogTab({ unitId, unitName }: UnitCatalogTabProps) {
   const [imageUrlInput, setImageUrlInput] = useState("");
   const [deletedItemIds, setDeletedItemIds] = useState<number[]>([]);
   const [deletedPanelImageIds, setDeletedPanelImageIds] = useState<number[]>([]);
+  const [isDraggingImage, setIsDraggingImage] = useState(false);
 
   const dirty = baseline ? isCatalogDraftDirty(baseline, draft) : false;
   const groupedPanels = useMemo(() => groupPanelsByComponent(overview), [overview]);
@@ -115,6 +127,18 @@ export function UnitCatalogTab({ unitId, unitName }: UnitCatalogTabProps) {
   useEffect(() => {
     void loadOverview();
   }, [unitId]);
+
+  useEffect(() => {
+    if (!editMode || !workspace) return;
+    const handlePaste = (event: ClipboardEvent) => {
+      const files = getCatalogImageFilesFromClipboardItems(Array.from(event.clipboardData?.items ?? []));
+      if (files.length === 0) return;
+      event.preventDefault();
+      stageImages(files);
+    };
+    window.addEventListener("paste", handlePaste);
+    return () => window.removeEventListener("paste", handlePaste);
+  }, [editMode, workspace]);
 
   useEffect(() => {
     if (!panelSearch.trim() || selectedPanelId) {
@@ -203,10 +227,15 @@ export function UnitCatalogTab({ unitId, unitName }: UnitCatalogTabProps) {
     if (!workspace || !selectedPanelId) return;
 
     let items;
+    let panelImages;
     try {
       items = serializeCatalogDraftRows(draft.rows);
+      panelImages = await resolveCatalogPanelImagesForSave(draft.panelImages, uploadImageFile);
     } catch (error) {
-      sweetAlert.notifyError("Qty belum valid", error instanceof Error ? error.message.replace("QTY_INVALID:", "Isi qty tidak valid: ") : "Periksa kembali qty.");
+      sweetAlert.notifyError(
+        error instanceof Error && error.message.startsWith("QTY_INVALID:") ? "Qty belum valid" : "Gambar belum tersimpan",
+        error instanceof Error ? error.message.replace("QTY_INVALID:", "Isi qty tidak valid: ") : "Periksa kembali data.",
+      );
       return;
     }
 
@@ -214,14 +243,7 @@ export function UnitCatalogTab({ unitId, unitName }: UnitCatalogTabProps) {
     const result = await saveUnitCatalogPanelWorkspace(unitId, selectedPanelId, {
       items,
       deletedItemIds,
-      panelImages: draft.panelImages
-        .filter((media) => media.fileUrl.trim())
-        .map((media, index) => ({
-          id: media.id,
-          fileUrl: media.fileUrl.trim(),
-          caption: media.caption.trim() || null,
-          sortOrder: index,
-        })),
+      panelImages,
       deletedPanelImageIds,
     });
     setSaving(false);
@@ -255,7 +277,7 @@ export function UnitCatalogTab({ unitId, unitName }: UnitCatalogTabProps) {
     setDeletedPanelImageIds([]);
   }
 
-  async function addImageFromUpload(file: File) {
+  async function uploadImageFile(file: File) {
     const ticket = await requestUnitCatalogUploadTicket({
       unitId,
       filename: file.name,
@@ -263,8 +285,7 @@ export function UnitCatalogTab({ unitId, unitName }: UnitCatalogTabProps) {
       size: file.size,
     });
     if (!ticket.success) {
-      sweetAlert.notifyError("Upload belum siap", ticket.message);
-      return;
+      throw new Error(ticket.message);
     }
 
     const uploadResult = await fetch(ticket.result.uploadUrl, {
@@ -273,28 +294,27 @@ export function UnitCatalogTab({ unitId, unitName }: UnitCatalogTabProps) {
       body: file,
     });
     if (!uploadResult.ok) {
-      sweetAlert.notifyError("Upload gagal", "Gambar belum berhasil dikirim.");
-      return;
+      throw new Error("Gambar belum berhasil dikirim.");
     }
+    return ticket.result.publicUrl;
+  }
 
+  function stageImages(files: File[]) {
+    const validFiles = files.filter((file) => isValidCatalogImageFile(file));
+    if (validFiles.length !== files.length) {
+      sweetAlert.notifyError("Gambar tidak valid", `Gunakan jpg, jpeg, png, atau webp maksimal ${formatBytes(catalogImageMaxBytes)}.`);
+    }
+    if (validFiles.length === 0) return;
     let nextIndex = 0;
     setDraft((current) => {
       nextIndex = current.panelImages.length;
       return {
         ...current,
-        panelImages: [
-          ...current.panelImages,
-          {
-            id: null,
-            fileUrl: ticket.result.publicUrl,
-            caption: "",
-            sortOrder: current.panelImages.length,
-          },
-        ],
+        panelImages: stageCatalogImageFiles(current.panelImages, validFiles, (file) => URL.createObjectURL(file)),
       };
     });
     setSelectedMediaIndex(nextIndex);
-    sweetAlert.notifySuccess("Gambar ditambahkan");
+    sweetAlert.notifySuccess("Gambar siap disimpan", `${validFiles.length} gambar masuk draft.`);
   }
 
   function addImageFromUrl() {
@@ -332,15 +352,16 @@ export function UnitCatalogTab({ unitId, unitName }: UnitCatalogTabProps) {
     if (!confirmed) return;
 
     setDraft((current) => {
-      const nextMedia = current.panelImages
-        .filter((_, index) => index !== selectedMediaIndex)
-        .map((media, index) => ({ ...media, sortOrder: index }));
-      return { ...current, panelImages: nextMedia };
+      const result = removeCatalogDraftImage(current.panelImages, selectedMediaIndex);
+      if (result.deletedId) {
+        setDeletedPanelImageIds((existing) => (
+          existing.includes(result.deletedId as number) ? existing : [...existing, result.deletedId as number]
+        ));
+      }
+      return { ...current, panelImages: result.images };
     });
-    if (currentMedia.id) {
-      setDeletedPanelImageIds((current) => (
-        current.includes(currentMedia.id as number) ? current : [...current, currentMedia.id as number]
-      ));
+    if (currentMedia.file && currentMedia.fileUrl.startsWith("blob:")) {
+      URL.revokeObjectURL(currentMedia.fileUrl);
     }
     setSelectedMediaIndex((current) => Math.max(0, current - 1));
   }
@@ -459,6 +480,43 @@ export function UnitCatalogTab({ unitId, unitName }: UnitCatalogTabProps) {
 
             {editMode ? (
               <div className="space-y-2 border-t border-border pt-3">
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => fileInputRef.current?.click()}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") fileInputRef.current?.click();
+                  }}
+                  onDragOver={(event) => {
+                    event.preventDefault();
+                    setIsDraggingImage(true);
+                  }}
+                  onDragLeave={() => setIsDraggingImage(false)}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    setIsDraggingImage(false);
+                    stageImages(Array.from(event.dataTransfer.files));
+                  }}
+                  className={`flex min-h-32 cursor-pointer flex-col items-center justify-center gap-1 border border-dashed px-4 py-5 text-center transition ${
+                    isDraggingImage ? "border-primary bg-primary/5" : "border-border bg-muted/20"
+                  }`}
+                >
+                  <ImagePlus className="h-5 w-5 text-muted-foreground" />
+                  <p className="text-sm font-medium text-foreground">Drop gambar disini</p>
+                  <p className="text-xs text-muted-foreground">atau paste Ctrl+V</p>
+                  <p className="text-xs text-muted-foreground">atau pilih file</p>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+                    multiple
+                    className="hidden"
+                    onChange={(event) => {
+                      stageImages(Array.from(event.target.files ?? []));
+                      event.currentTarget.value = "";
+                    }}
+                  />
+                </div>
                 <div className="flex gap-2">
                   <CompactInput
                     value={imageUrlInput}
@@ -474,19 +532,6 @@ export function UnitCatalogTab({ unitId, unitName }: UnitCatalogTabProps) {
                     Hapus
                   </ActionButton>
                 </div>
-                <label className="flex h-9 cursor-pointer items-center justify-center border border-border px-3 font-mono text-[12px] uppercase tracking-[0.08em] text-muted-foreground">
-                  Upload Gambar
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={(event) => {
-                      const file = event.target.files?.[0];
-                      if (file) void addImageFromUpload(file);
-                      event.currentTarget.value = "";
-                    }}
-                  />
-                </label>
               </div>
             ) : null}
           </SectionCard>

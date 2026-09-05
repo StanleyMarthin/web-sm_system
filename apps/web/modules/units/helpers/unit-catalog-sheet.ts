@@ -34,16 +34,23 @@ export interface CatalogDraftRow {
   isRestoration: boolean;
 }
 
+export interface CatalogDraftPanelImage {
+  id: number | null;
+  fileUrl: string;
+  caption: string;
+  sortOrder: number;
+  file?: File | null;
+}
+
 export interface CatalogWorkspaceDraft {
   panelId: number;
-  panelImages: Array<{
-    id: number | null;
-    fileUrl: string;
-    caption: string;
-    sortOrder: number;
-  }>;
+  panelImages: CatalogDraftPanelImage[];
   rows: CatalogDraftRow[];
 }
+
+const allowedCatalogImageTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
+const allowedCatalogImageExtensions = new Set(["jpg", "jpeg", "png", "webp"]);
+export const catalogImageMaxBytes = Number(process.env.NEXT_PUBLIC_CATALOG_IMAGE_MAX_BYTES ?? 10 * 1024 * 1024);
 
 function createRowId() {
   return `tmp-${Math.random().toString(36).slice(2, 10)}`;
@@ -144,6 +151,72 @@ export function removeCatalogDraftRows(rows: CatalogDraftRow[], rowIds: string[]
   const set = new Set(rowIds);
   const next = rows.filter((row) => !set.has(row.rowId));
   return next.length > 0 ? next : [createCatalogDraftRow()];
+}
+
+function getFileExtension(fileName: string) {
+  return fileName.split(".").pop()?.toLowerCase() ?? "";
+}
+
+export function isValidCatalogImageFile(file: File, maxBytes = catalogImageMaxBytes) {
+  const type = file.type.split(";")[0]?.trim().toLowerCase() ?? "";
+  const extension = getFileExtension(file.name);
+  return (allowedCatalogImageTypes.has(type) || (!type && allowedCatalogImageExtensions.has(extension))) &&
+    file.size > 0 &&
+    file.size <= maxBytes;
+}
+
+export function stageCatalogImageFiles(
+  images: CatalogDraftPanelImage[],
+  files: File[],
+  createObjectUrl: (file: File) => string,
+  maxBytes = catalogImageMaxBytes,
+) {
+  const staged = files
+    .filter((file) => isValidCatalogImageFile(file, maxBytes))
+    .map((file, index) => ({
+      id: null,
+      fileUrl: createObjectUrl(file),
+      caption: "",
+      sortOrder: images.length + index,
+      file,
+    }));
+
+  return [...images, ...staged];
+}
+
+export function getCatalogImageFilesFromClipboardItems(items: Array<Pick<DataTransferItem, "kind" | "type" | "getAsFile">>) {
+  return items
+    .filter((item) => item.kind === "file" && item.type.toLowerCase().startsWith("image/"))
+    .map((item) => item.getAsFile())
+    .filter((file): file is File => file !== null);
+}
+
+export function removeCatalogDraftImage(images: CatalogDraftPanelImage[], index: number) {
+  const removed = images[index] ?? null;
+  return {
+    images: images
+      .filter((_, imageIndex) => imageIndex !== index)
+      .map((image, imageIndex) => ({ ...image, sortOrder: imageIndex })),
+    deletedId: removed?.id ?? null,
+  };
+}
+
+export async function resolveCatalogPanelImagesForSave(
+  images: CatalogDraftPanelImage[],
+  uploadFile: (file: File) => Promise<string>,
+) {
+  const resolved = [];
+  for (const [index, image] of images.entries()) {
+    const fileUrl = image.file ? await uploadFile(image.file) : image.fileUrl.trim();
+    if (!fileUrl) continue;
+    resolved.push({
+      id: image.id,
+      fileUrl,
+      caption: image.caption.trim() || null,
+      sortOrder: index,
+    });
+  }
+  return resolved;
 }
 
 function draftRowHasValue(row: CatalogDraftRow) {

@@ -5,9 +5,13 @@ import {
   appendParsedCatalogRows,
   createCatalogDraftRow,
   createCatalogWorkspaceDraft,
+  getCatalogImageFilesFromClipboardItems,
   isCatalogDraftDirty,
+  removeCatalogDraftImage,
+  resolveCatalogPanelImagesForSave,
   removeCatalogDraftRows,
   serializeCatalogDraftRows,
+  stageCatalogImageFiles,
   updateCatalogDraftCell,
   workspaceDraftFromWorkspace,
 } from "./unit-catalog-sheet";
@@ -201,5 +205,72 @@ describe("unit catalog sheet helper", () => {
     });
 
     expect(isCatalogDraftDirty(restored, restored)).toBe(false);
+  });
+
+  it("stages one uploaded image with local preview before save", () => {
+    const file = new File(["image"], "front.jpg", { type: "image/jpeg" });
+    const images = stageCatalogImageFiles([], [file], () => "blob:front");
+
+    expect(images).toHaveLength(1);
+    expect(images[0]).toMatchObject({
+      id: null,
+      fileUrl: "blob:front",
+      caption: "",
+      sortOrder: 0,
+    });
+    expect(images[0]?.file).toBe(file);
+  });
+
+  it("stages multiple image files and rejects non-image files", () => {
+    const first = new File(["image"], "front.png", { type: "image/png" });
+    const second = new File(["image"], "rear.webp", { type: "image/webp" });
+
+    const images = stageCatalogImageFiles([], [
+      first,
+      new File(["text"], "notes.txt", { type: "text/plain" }),
+      second,
+    ], (file) => `blob:${file.name}`);
+
+    expect(images.map((image) => image.fileUrl)).toEqual(["blob:front.png", "blob:rear.webp"]);
+    expect(images.map((image) => image.sortOrder)).toEqual([0, 1]);
+  });
+
+  it("extracts pasted clipboard image files", () => {
+    const file = new File(["image"], "paste.png", { type: "image/png" });
+    const files = getCatalogImageFilesFromClipboardItems([
+      { kind: "string", type: "text/plain", getAsFile: () => null },
+      { kind: "file", type: "image/png", getAsFile: () => file },
+    ]);
+
+    expect(files).toEqual([file]);
+  });
+
+  it("removes staged image before save without marking persisted delete", () => {
+    const file = new File(["image"], "front.jpg", { type: "image/jpeg" });
+    const images = stageCatalogImageFiles([
+      { id: 9, fileUrl: "https://img.test/old.jpg", caption: "", sortOrder: 0 },
+    ], [file], () => "blob:front");
+
+    const result = removeCatalogDraftImage(images, 1);
+
+    expect(result.images).toHaveLength(1);
+    expect(result.deletedId).toBeNull();
+    expect(result.images[0]?.id).toBe(9);
+  });
+
+  it("uploads staged images only when catalog panel is saved", async () => {
+    const file = new File(["image"], "front.jpg", { type: "image/jpeg" });
+    const images = stageCatalogImageFiles([
+      { id: 9, fileUrl: "https://img.test/old.jpg", caption: "old", sortOrder: 0 },
+    ], [file], () => "blob:front");
+
+    const saved = await resolveCatalogPanelImagesForSave(images, async (stagedFile) => (
+      `https://img.test/uploaded/${stagedFile.name}`
+    ));
+
+    expect(saved).toEqual([
+      { id: 9, fileUrl: "https://img.test/old.jpg", caption: "old", sortOrder: 0 },
+      { id: null, fileUrl: "https://img.test/uploaded/front.jpg", caption: null, sortOrder: 1 },
+    ]);
   });
 });
