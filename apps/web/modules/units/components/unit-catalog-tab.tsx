@@ -29,7 +29,6 @@ import {
 import {
   fetchUnitCatalog,
   fetchUnitCatalogPanelWorkspace,
-  requestUnitCatalogUploadTicket,
   saveUnitCatalogPanelWorkspace,
   searchUnitCatalog,
 } from "@/shared/api/unit-catalog";
@@ -278,25 +277,20 @@ export function UnitCatalogTab({ unitId, unitName }: UnitCatalogTabProps) {
   }
 
   async function uploadImageFile(file: File) {
-    const ticket = await requestUnitCatalogUploadTicket({
-      unitId,
-      filename: file.name,
-      contentType: file.type || "image/jpeg",
-      size: file.size,
+    const form = new FormData();
+    form.set("unitId", unitId);
+    form.set("file", file);
+    const response = await fetch("/api/unit-catalog/upload-panel-image", {
+      method: "POST",
+      body: form,
+      credentials: "include",
+      cache: "no-store",
     });
-    if (!ticket.success) {
-      throw new Error(ticket.message);
+    const payload = await response.json().catch(() => null);
+    if (!response.ok || !payload?.success || !payload?.data?.publicUrl) {
+      throw new Error(typeof payload?.message === "string" ? payload.message : "Gambar belum berhasil diupload.");
     }
-
-    const uploadResult = await fetch(ticket.result.uploadUrl, {
-      method: "PUT",
-      headers: { "Content-Type": file.type || "image/jpeg" },
-      body: file,
-    });
-    if (!uploadResult.ok) {
-      throw new Error("Gambar belum berhasil dikirim.");
-    }
-    return ticket.result.publicUrl;
+    return String(payload.data.publicUrl);
   }
 
   function stageImages(files: File[]) {
