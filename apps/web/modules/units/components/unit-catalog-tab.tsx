@@ -280,7 +280,7 @@ export function UnitCatalogTab({ unitId, unitName }: UnitCatalogTabProps) {
     const form = new FormData();
     form.set("unitId", unitId);
     form.set("file", file);
-    const response = await fetch("/api/unit-catalog/upload-panel-image", {
+    const response = await fetch("/catalog-upload/panel-image", {
       method: "POST",
       body: form,
       credentials: "include",
