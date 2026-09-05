@@ -76,4 +76,37 @@ export class S3GalleryUploadTicketProvider implements GalleryUploadTicketProvide
       objectKey: input.objectKey,
     };
   }
+
+  async uploadObject(input: {
+    objectKey: string;
+    contentType: string;
+    contentLength: number;
+    body: Uint8Array;
+  }): Promise<{
+    publicUrl: string;
+    objectKey: string;
+  }> {
+    if (!this.client || !this.env.R2_BUCKET_NAME || !this.env.R2_PUBLIC_URL) {
+      throw new Error("GALLERY_UPLOAD_NOT_CONFIGURED");
+    }
+    if (!Number.isSafeInteger(input.contentLength) || input.contentLength <= 0) {
+      throw new Error("INVALID_UPLOAD_SIZE");
+    }
+    if (input.contentLength > MAX_IMAGE_UPLOAD_BYTES) {
+      throw new Error("UPLOAD_TOO_LARGE");
+    }
+
+    await this.client.send(new PutObjectCommand({
+      Bucket: this.env.R2_BUCKET_NAME,
+      Key: input.objectKey,
+      ContentType: input.contentType,
+      ContentLength: input.contentLength,
+      Body: input.body,
+    }));
+
+    return {
+      publicUrl: `${stripTrailingSlash(this.env.R2_PUBLIC_URL)}/${input.objectKey}`,
+      objectKey: input.objectKey,
+    };
+  }
 }

@@ -17,6 +17,7 @@ import { S3GalleryUploadTicketProvider } from "@/services/storage/r2-upload.serv
 import type { AuthService } from "@/services/auth/auth.service";
 import { UnitCatalogService } from "@/services/unit-catalog.service";
 import {
+  assertImageMagicBytes,
   createUploadNonce,
   extensionForImageContentType,
   normalizeAllowedImageContentType,
@@ -70,6 +71,11 @@ function mapCatalogError(request: Request, error: unknown): Response {
     if (error.message === "UNIT_PANEL_NOT_FOUND") return errorResponse(request, "Master panel tidak ditemukan.", 404, "UNIT_PANEL_NOT_FOUND");
     if (error.message === "SURVEY_NOT_CONFIRMED") return errorResponse(request, "Pendataan harus CONFIRMED sebelum menjadi Master Panel.", 409, "SURVEY_NOT_CONFIRMED");
     if (error.message === "CATALOG_ITEM_MEDIA_REQUIRES_MASTER_PANEL") return errorResponse(request, "Foto aktual baru bisa disimpan setelah item dikonfirmasi ke Master Panel.", 409, "CATALOG_ITEM_MEDIA_REQUIRES_MASTER_PANEL");
+    if (error.message === "GALLERY_UPLOAD_NOT_CONFIGURED") return errorResponse(request, "Upload gambar belum siap di server saat ini.", 503, "GALLERY_UPLOAD_NOT_CONFIGURED");
+    if (error.message === "INVALID_UPLOAD_CONTENT_TYPE") return errorResponse(request, "Tipe file upload tidak diizinkan.", 400, "INVALID_UPLOAD_CONTENT_TYPE");
+    if (error.message === "UPLOAD_SIZE_REQUIRED" || error.message === "INVALID_UPLOAD_SIZE") return errorResponse(request, "Ukuran file upload tidak valid.", 400, error.message);
+    if (error.message === "UPLOAD_TOO_LARGE") return errorResponse(request, "Ukuran gambar maksimal 10MB.", 413, "UPLOAD_TOO_LARGE");
+    if (error.message === "INVALID_IMAGE_BYTES") return errorResponse(request, "Isi file tidak sesuai dengan tipe gambar.", 400, "INVALID_IMAGE_BYTES");
   }
   return errorResponse(request, "Terjadi kesalahan internal pada modul catalog.", 500, "UNIT_CATALOG_FAILED");
 }
@@ -282,6 +288,38 @@ export async function handleUnitCatalogUploadTicketRoute(request: Request, unitI
     });
     await storeUploadTicket({ nonce, employeeId: sessionResult.session.employeeId, objectKey });
     return successResponse(request, "Unit Preparation upload ticket ready", ticket as unknown as Record<string, unknown>);
+  } catch (error) {
+    return mapCatalogError(request, error);
+  }
+}
+
+export async function handleUnitCatalogPanelImageUploadRoute(request: Request, unitId: string, authService: AuthService) {
+  const sessionResult = await requireUnitCatalogSession(request, authService, unitCatalogAdminPermissions);
+  if ("response" in sessionResult) return sessionResult.response;
+
+  try {
+    const form = await request.formData();
+    const file = form.get("file");
+    if (!file || typeof file === "string") {
+      return errorResponse(request, "File gambar wajib diisi.", 400, "MISSING_FILE");
+    }
+
+    const contentType = normalizeAllowedImageContentType(file.type || "image/jpeg");
+    const extension = extensionForImageContentType(contentType);
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    if (bytes.byteLength <= 0) throw new Error("INVALID_UPLOAD_SIZE");
+    if (bytes.byteLength > 10 * 1024 * 1024) throw new Error("UPLOAD_TOO_LARGE");
+    assertImageMagicBytes(contentType, bytes);
+
+    const objectKey = `catalog-panels/${encodeURIComponent(unitId)}/${sessionResult.session.employeeId}/${createUploadNonce()}.${extension}`;
+    const upload = await new S3GalleryUploadTicketProvider(getApiEnv()).uploadObject({
+      objectKey,
+      contentType,
+      contentLength: bytes.byteLength,
+      body: bytes,
+    });
+
+    return successResponse(request, "Gambar siap disimpan.", { publicUrl: upload.publicUrl });
   } catch (error) {
     return mapCatalogError(request, error);
   }

@@ -32,6 +32,7 @@ import {
   saveUnitCatalogPanelWorkspace,
   searchUnitCatalog,
 } from "@/shared/api/unit-catalog";
+import { getApiBaseUrl } from "@/shared/api/config";
 import { useSweetAlert } from "@/shared/ui/sweet-alert";
 import { ActionButton, CompactInput, PageHeader, SectionCard } from "@/shared/ui/compact";
 
@@ -280,7 +281,7 @@ export function UnitCatalogTab({ unitId, unitName }: UnitCatalogTabProps) {
     const form = new FormData();
     form.set("unitId", unitId);
     form.set("file", file);
-    const response = await fetch("/catalog-upload/panel-image", {
+    const response = await fetch(`${getApiBaseUrl()}/api/units/${encodeURIComponent(unitId)}/catalog/panel-images/upload`, {
       method: "POST",
       body: form,
       credentials: "include",
