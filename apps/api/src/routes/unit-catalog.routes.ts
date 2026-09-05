@@ -73,12 +73,13 @@ function resolveTasksBaseUrl(): string {
   }
 }
 
-async function requestTaskUploadTicket(objectKey: string): Promise<{
+async function requestTaskUploadTicket(objectKey: string, contentType: string): Promise<{
   uploadUrl: string;
   publicUrl: string;
 }> {
   const ticketUrl = new URL(`${resolveTasksBaseUrl()}/sm/tasks/upload-ticket`);
   ticketUrl.searchParams.set("filename", objectKey);
+  ticketUrl.searchParams.set("contentType", contentType);
 
   const response = await fetch(ticketUrl);
   const payload = (await response.json().catch(() => null)) as UploadTicketEnvelope | null;
@@ -368,7 +369,7 @@ export async function handleUnitCatalogPanelImageUploadRoute(request: Request, u
     assertImageMagicBytes(contentType, bytes);
 
     const objectKey = `catalog-panels/${unitId}/${sessionResult.session.employeeId}/${createUploadNonce()}.${extension}`;
-    const ticket = await requestTaskUploadTicket(objectKey);
+    const ticket = await requestTaskUploadTicket(objectKey, contentType);
     const uploadResponse = await fetch(ticket.uploadUrl, {
       method: "PUT",
       headers: { "Content-Type": contentType },
