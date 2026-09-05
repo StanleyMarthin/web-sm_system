@@ -3,6 +3,7 @@ import type { CatalogWorkspace } from "@smsystem/contracts/unit-catalog";
 import {
   applyCatalogPaste,
   appendParsedCatalogRows,
+  clampCatalogImageZoom,
   createCatalogDraftRow,
   createCatalogWorkspaceDraft,
   getCatalogImageFilesFromClipboardItems,
@@ -272,5 +273,12 @@ describe("unit catalog sheet helper", () => {
       { id: 9, fileUrl: "https://img.test/old.jpg", caption: "old", sortOrder: 0 },
       { id: null, fileUrl: "https://img.test/uploaded/front.jpg", caption: null, sortOrder: 1 },
     ]);
+  });
+
+  it("clamps image zoom", () => {
+    expect(clampCatalogImageZoom(0.5)).toBe(1);
+    expect(clampCatalogImageZoom(2.25)).toBe(2.25);
+    expect(clampCatalogImageZoom(8)).toBe(4);
+    expect(clampCatalogImageZoom(Number.NaN)).toBe(1);
   });
 });

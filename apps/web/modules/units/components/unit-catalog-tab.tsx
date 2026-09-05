@@ -9,12 +9,13 @@ Side Effects: HTTP fetch/update catalog dan upload file reference.
 "use client";
 
 import type { CatalogOverview, CatalogWorkspace } from "@smsystem/contracts/unit-catalog";
-import { AlertCircle, ArrowUpDown, ImagePlus, Pencil, Save, Search, Trash2, X } from "lucide-react";
+import { AlertCircle, ArrowUpDown, ImagePlus, Maximize2, Pencil, RotateCcw, Save, Search, Trash2, X, ZoomIn, ZoomOut } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { UnitCatalogEditor } from "@/modules/units/components/unit-catalog-editor";
 import {
   appendEmptyCatalogDraftRow,
   catalogImageMaxBytes,
+  clampCatalogImageZoom,
   createCatalogWorkspaceDraft,
   getCatalogImageFilesFromClipboardItems,
   isCatalogDraftDirty,
@@ -110,6 +111,8 @@ export function UnitCatalogTab({ unitId, unitName }: UnitCatalogTabProps) {
   const [deletedItemIds, setDeletedItemIds] = useState<number[]>([]);
   const [deletedPanelImageIds, setDeletedPanelImageIds] = useState<number[]>([]);
   const [isDraggingImage, setIsDraggingImage] = useState(false);
+  const [imageZoomOpen, setImageZoomOpen] = useState(false);
+  const [imageZoom, setImageZoom] = useState(1);
 
   const dirty = baseline ? isCatalogDraftDirty(baseline, draft) : false;
   const groupedPanels = useMemo(() => groupPanelsByComponent(overview), [overview]);
@@ -381,10 +384,84 @@ export function UnitCatalogTab({ unitId, unitName }: UnitCatalogTabProps) {
   }
 
   const currentMedia = draft.panelImages[selectedMediaIndex] ?? null;
+  const currentMediaFileUrl = currentMedia?.fileUrl;
+  const currentMediaSrc = currentMediaFileUrl ? getProxiedImageUrl(currentMediaFileUrl) : undefined;
+
+  useEffect(() => {
+    setImageZoom(1);
+    if (!currentMediaFileUrl) setImageZoomOpen(false);
+  }, [currentMediaFileUrl]);
+
+  useEffect(() => {
+    if (!imageZoomOpen) return;
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setImageZoomOpen(false);
+      if (event.key === "+" || event.key === "=") setImageZoom((value) => clampCatalogImageZoom(value + 0.25));
+      if (event.key === "-") setImageZoom((value) => clampCatalogImageZoom(value - 0.25));
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [imageZoomOpen]);
 
   return (
     <div className="space-y-4">
       {sweetAlert.alertElement}
+
+      {imageZoomOpen && currentMediaSrc ? (
+        <div className="fixed inset-0 z-50 bg-black/90 p-4 text-white" role="dialog" aria-modal="true">
+          <div className="flex h-full flex-col gap-3">
+            <div className="flex items-center justify-between gap-3">
+              <p className="truncate text-sm font-medium">{workspace?.panel.panelName ?? "Gambar Panel"}</p>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setImageZoom((value) => clampCatalogImageZoom(value - 0.25))}
+                  className="border border-white/30 px-3 py-2 text-xs hover:bg-white/10"
+                  aria-label="Perkecil gambar"
+                >
+                  <ZoomOut className="h-4 w-4" />
+                </button>
+                <span className="w-14 text-center text-xs">{Math.round(imageZoom * 100)}%</span>
+                <button
+                  type="button"
+                  onClick={() => setImageZoom((value) => clampCatalogImageZoom(value + 0.25))}
+                  className="border border-white/30 px-3 py-2 text-xs hover:bg-white/10"
+                  aria-label="Perbesar gambar"
+                >
+                  <ZoomIn className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setImageZoom(1)}
+                  className="border border-white/30 px-3 py-2 text-xs hover:bg-white/10"
+                  aria-label="Reset zoom"
+                >
+                  <RotateCcw className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setImageZoomOpen(false)}
+                  className="border border-white/30 px-3 py-2 text-xs hover:bg-white/10"
+                  aria-label="Tutup zoom"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+            <div className="min-h-0 flex-1 overflow-auto border border-white/20 bg-black">
+              <div className="flex min-h-full min-w-full items-start justify-center p-4">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={currentMediaSrc}
+                  alt={workspace?.panel.panelName ?? "Gambar Panel"}
+                  className="h-auto max-w-none"
+                  style={{ width: `${imageZoom * 100}%` }}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <PageHeader
         eyebrow={`Unit / Catalog · ${unitName}`}
@@ -438,9 +515,20 @@ export function UnitCatalogTab({ unitId, unitName }: UnitCatalogTabProps) {
           <SectionCard label="Gambar Panel" count={draft.panelImages.length} className="min-h-[42rem]">
             {currentMedia ? (
               <div className="space-y-3">
-                <div className="aspect-[4/3] overflow-hidden border border-border bg-muted">
+                <div className="relative aspect-[4/3] overflow-hidden border border-border bg-muted">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={getProxiedImageUrl(currentMedia.fileUrl)} alt={workspace.panel.panelName} className="h-full w-full object-contain" />
+                  <img src={currentMediaSrc} alt={workspace.panel.panelName} className="h-full w-full object-contain" />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setImageZoom(1);
+                      setImageZoomOpen(true);
+                    }}
+                    className="absolute right-2 top-2 flex items-center gap-1 border border-border bg-background/90 px-2 py-1 text-xs font-medium text-foreground shadow-sm hover:border-primary"
+                  >
+                    <Maximize2 className="h-3.5 w-3.5" />
+                    Zoom
+                  </button>
                 </div>
                 <CompactInput
                   value={currentMedia.caption}

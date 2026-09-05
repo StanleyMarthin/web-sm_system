@@ -51,6 +51,8 @@ export interface CatalogWorkspaceDraft {
 const allowedCatalogImageTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
 const allowedCatalogImageExtensions = new Set(["jpg", "jpeg", "png", "webp"]);
 export const catalogImageMaxBytes = Number(process.env.NEXT_PUBLIC_CATALOG_IMAGE_MAX_BYTES ?? 10 * 1024 * 1024);
+export const catalogImageZoomMin = 1;
+export const catalogImageZoomMax = 4;
 
 function createRowId() {
   return `tmp-${Math.random().toString(36).slice(2, 10)}`;
@@ -199,6 +201,11 @@ export function removeCatalogDraftImage(images: CatalogDraftPanelImage[], index:
       .map((image, imageIndex) => ({ ...image, sortOrder: imageIndex })),
     deletedId: removed?.id ?? null,
   };
+}
+
+export function clampCatalogImageZoom(value: number) {
+  if (!Number.isFinite(value)) return catalogImageZoomMin;
+  return Math.min(Math.max(value, catalogImageZoomMin), catalogImageZoomMax);
 }
 
 export async function resolveCatalogPanelImagesForSave(
