@@ -77,7 +77,7 @@ OR EXISTS (
 
 DROP TABLE IF EXISTS catalog_panel_images_cutover;
 CREATE TABLE catalog_panel_images_cutover (
-  id bigint unsigned NOT NULL,
+  id bigint unsigned NOT NULL AUTO_INCREMENT,
   panel_id int unsigned NOT NULL,
   url_image text NOT NULL,
   caption varchar(255) DEFAULT NULL,
@@ -110,7 +110,7 @@ JOIN catalog_panels_cutover cp ON cp.id = cpi.panel_id;
 
 DROP TABLE IF EXISTS unit_catalog_cutover;
 CREATE TABLE unit_catalog_cutover (
-  id bigint unsigned NOT NULL,
+  id bigint unsigned NOT NULL AUTO_INCREMENT,
   car_id varchar(36) NOT NULL,
   panel_id int unsigned NOT NULL,
   item_name varchar(150) DEFAULT NULL,
