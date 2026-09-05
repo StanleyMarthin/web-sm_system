@@ -4,6 +4,7 @@ import {
   catalogWorkspaceSchema,
   catalogSearchItemSchema,
   catalogMediaRequestSchema,
+  masterPanelSchema,
   createPanelJobdescsRequestSchema,
   openCatalogPanelRequestSchema,
   saveCatalogWorkspaceRequestSchema,
@@ -73,7 +74,7 @@ const mediaEnvelopeSchema = z.object({
 const panelEnvelopeSchema = z.object({
   success: z.boolean(),
   message: z.string(),
-  data: z.object({ panel: z.record(z.string(), z.unknown()) }),
+  data: z.object({ panel: masterPanelSchema }),
 });
 
 const jobdescsEnvelopeSchema = z.object({

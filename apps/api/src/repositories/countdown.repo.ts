@@ -287,8 +287,9 @@ function buildFilterClauses(query: CountdownGridQuery, params: unknown[]): strin
         c.unit_name LIKE ?
         OR COALESCE(c.customer_name, '') LIKE ?
         OR COALESCE(cd.section_name, '') LIKE ?
-        OR COALESCE(mp.section, '') LIKE ?
-        OR COALESCE(mp.name, '') LIKE ?
+        OR COALESCE(mp.component_name, '') LIKE ?
+        OR COALESCE(mp.panel_name, '') LIKE ?
+        OR COALESCE(mp.name_part, '') LIKE ?
         OR COALESCE(mjt.job_name, '') LIKE ?
         OR COALESCE(cd.temuan_awal, '') LIKE ?
         OR COALESCE(cd.keterangan, '') LIKE ?
@@ -296,7 +297,7 @@ function buildFilterClauses(query: CountdownGridQuery, params: unknown[]): strin
         OR COALESCE(cd.status, '') LIKE ?
       )`,
     );
-    params.push(value, value, value, value, value, value, value, value, value, value);
+    params.push(value, value, value, value, value, value, value, value, value, value, value);
   }
 
   for (const filter of query.filters) {
@@ -475,7 +476,7 @@ function countdownSelectSql(): string {
       cd.division_id AS divisionId,
       sd.name AS divisionName,
       cd.panel_id AS panelId,
-      mp.name AS panelName,
+      COALESCE(mp.panel_name, mp.name_part) AS panelName,
       cd.section_name AS sectionName,
       cd.task_category AS taskCategory,
       cd.prerequisite_core_id AS prerequisiteCoreId,
@@ -1416,23 +1417,21 @@ export class CountdownRepository {
         `
           SELECT
             id AS value,
-            name AS label,
+            COALESCE(NULLIF(TRIM(panel_name), ''), NULLIF(TRIM(name_part), ''), CONCAT('MP-', id)) AS label,
             car_id AS carId,
-            section,
-            category
+            panel_name AS section,
+            component_name AS category
           FROM master_panels
-          WHERE is_active = 1
-          ORDER BY section ASC, name ASC
+          ORDER BY component_name ASC, panel_name ASC, name_part ASC
         `,
       ),
       pool.query<ReferenceOptionRow[]>(
         `
-          SELECT DISTINCT section AS value, section AS label
+          SELECT DISTINCT panel_name AS value, panel_name AS label
           FROM master_panels
-          WHERE is_active = 1
-            AND section IS NOT NULL
-            AND TRIM(section) <> ''
-          ORDER BY section ASC
+          WHERE panel_name IS NOT NULL
+            AND TRIM(panel_name) <> ''
+          ORDER BY panel_name ASC
         `,
       ),
       pool.query<ReferenceOptionRow[]>(

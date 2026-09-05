@@ -455,7 +455,7 @@ async function assertPanelHasCountdown(
   coreDb: string,
   carId: string,
   panelId: number,
-): Promise<void> {
+): Promise<number> {
   const [panelRows] = await connection.query<RowDataPacket[]>(
     `
       SELECT id
@@ -481,6 +481,8 @@ async function assertPanelHasCountdown(
   if (countdownRows.length === 0) {
     throw new Error("PR_REQUIRES_COUNTDOWN");
   }
+
+  return Number(panelRows[0]?.id);
 }
 
 export interface PrRepository {
@@ -701,8 +703,9 @@ export class MySqlPrRepository implements PrRepository {
 
     try {
       await connection.beginTransaction();
+      let masterPanelId: number | null = null;
       if (input.panelId) {
-        await assertPanelHasCountdown(
+        masterPanelId = await assertPanelHasCountdown(
           connection,
           this.env.DB_NAME,
           input.carId,
@@ -719,7 +722,7 @@ export class MySqlPrRepository implements PrRepository {
             id,
             pr_number,
             car_id,
-            panel_id,
+            master_panel_id,
             requested_by,
             requested_by_name,
             division_name,
@@ -734,7 +737,7 @@ export class MySqlPrRepository implements PrRepository {
           prId,
           prNumber,
           input.carId,
-          input.panelId ?? null,
+          masterPanelId,
           context.actorId,
           context.actorName,
           input.divisionName ?? context.divisionName,

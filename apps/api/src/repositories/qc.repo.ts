@@ -236,7 +236,7 @@ function buildOrderBy(sortBy: string, direction: "asc" | "desc"): string {
     waitingHours: "waitingHours",
     unitName: "c.unit_name",
     divisionName: "d.name",
-    panelName: "COALESCE(cd.section_name, mp.name)",
+    panelName: "COALESCE(cd.section_name, mp.panel_name, mp.name_part)",
     countdownStatus: "cd.status",
     qcLevel: "cd.last_qc_level",
     deadlineDate: "cd.deadline_date",
@@ -258,7 +258,7 @@ function buildSearchClause(query: QcGridQuery, params: unknown[]): string[] {
       c.unit_name LIKE ?
       OR COALESCE(c.customer_name, '') LIKE ?
       OR COALESCE(d.name, '') LIKE ?
-      OR COALESCE(cd.section_name, mp.name, '') LIKE ?
+      OR COALESCE(cd.section_name, mp.panel_name, mp.name_part, '') LIKE ?
       OR COALESCE(wo.job_detail, jt.job_name, cd.section_name, cd.task_category) LIKE ?
     )`,
   );
@@ -388,7 +388,7 @@ function baseQcSelectSql(issueStorageReady: boolean): string {
       cd.division_id AS divisionId,
       d.name AS divisionName,
       cd.panel_id AS panelId,
-      COALESCE(cd.section_name, mp.name) AS panelName,
+      COALESCE(cd.section_name, mp.panel_name, mp.name_part) AS panelName,
       cd.task_category AS taskCategory,
       COALESCE(wo.job_detail, jt.job_name, cd.section_name, cd.task_category) AS jobName,
       COALESCE(cd.status, 'PLAN') AS countdownStatus,
@@ -858,7 +858,7 @@ export class MySqlQcRepository implements QcRepository {
       `
         SELECT
           cd.id AS coreId,
-          COALESCE(cd.section_name, mp.name) AS panelName,
+          COALESCE(cd.section_name, mp.panel_name, mp.name_part) AS panelName,
           d.name AS divisionName,
           COALESCE(wo.job_detail, jt.job_name, cd.section_name, cd.task_category) AS jobName,
           COALESCE(cd.status, 'PLAN') AS countdownStatus,
@@ -1118,7 +1118,7 @@ export class MySqlQcRepository implements QcRepository {
         SELECT
           cd.id AS coreId,
           COALESCE(wo.job_detail, jt.job_name, cd.section_name, cd.task_category) AS jobName,
-          COALESCE(cd.section_name, mp.name) AS panelName,
+          COALESCE(cd.section_name, mp.panel_name, mp.name_part) AS panelName,
           reject_qc.rework_plan_id AS reworkPlanId,
           COALESCE(cd.remaining_hours, 0) AS remainingHours,
           COALESCE(jt.is_teknis, 1) AS isTechnicalJob

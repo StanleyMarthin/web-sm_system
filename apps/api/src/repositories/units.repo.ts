@@ -204,6 +204,8 @@ interface BomPhotoSlotRow extends RowDataPacket {
 interface UnitPanelRow extends RowDataPacket {
   id: number;
   carId: string;
+  componentId: number | null;
+  catalogPanelId: number | null;
   parentId: number | null;
   sourceGeneralId: number | null;
   section: string;
@@ -242,10 +244,6 @@ interface MasterPanelInventorySchemaRow extends RowDataPacket {
 
 interface MasterPanelInventorySchema {
   hasQty: boolean;
-  hasDefaultLocationType: boolean;
-  hasDefaultStockStatus: boolean;
-  hasDefaultConditionType: boolean;
-  hasSourceGeneralId: boolean;
 }
 
 function mapTinyIntBoolean(value: unknown): boolean {
@@ -448,13 +446,27 @@ function normalizeUnitPanelInventoryInput<T extends CreateUnitPanelRequest | Upd
   return { ...input, defaultStockStatus: nextStatus };
 }
 
+function masterPanelLocationSql(alias = "mp"): string {
+  return `CASE WHEN UPPER(COALESCE(${alias}.location, 'UNIT')) IN ('GUDANG', 'WORKSHOP', 'UNIT') THEN UPPER(COALESCE(${alias}.location, 'UNIT')) ELSE 'UNIT' END`;
+}
+
+function masterPanelStockStatusSql(alias = "mp"): string {
+  return `CASE UPPER(COALESCE(${alias}.current_status, 'INSTALLED')) WHEN 'AVAILABLE' THEN 'IN_STORAGE' WHEN 'NOT_AVAILABLE' THEN 'LOST' WHEN 'IN_STORAGE' THEN 'IN_STORAGE' WHEN 'RETRIEVED' THEN 'RETRIEVED' WHEN 'LOST' THEN 'LOST' ELSE 'INSTALLED' END`;
+}
+
+function masterPanelConditionSql(alias = "mp"): string {
+  return `CASE UPPER(COALESCE(${alias}.initial_condition, 'BEKAS')) WHEN 'BARU' THEN 'BARU' WHEN 'RESTORE' THEN 'RESTORE' ELSE 'BEKAS' END`;
+}
+
 function mapUnitPanelRecord(row: UnitPanelRow): UnitPanelRecord {
   return {
     id: Number(row.id),
     carId: row.carId,
-    sourceGeneralId: row.sourceGeneralId === null ? null : Number(row.sourceGeneralId),
-    parentId: row.parentId === null ? null : Number(row.parentId),
-    nodeType: row.parentId === null ? "PANEL" : "PART",
+    componentId: row.componentId == null ? null : Number(row.componentId),
+    catalogPanelId: row.catalogPanelId == null ? null : Number(row.catalogPanelId),
+    sourceGeneralId: null,
+    parentId: null,
+    nodeType: "PART",
     section: row.section,
     name: row.name,
     category: toNullableText(row.category),
@@ -987,11 +999,7 @@ export class UnitsRepository {
             WHERE table_schema = DATABASE()
               AND table_name = 'master_panels'
               AND column_name IN (
-                'qty',
-                'default_location_type',
-                'default_stock_status',
-                'default_condition_type',
-                'source_general_id'
+                'qty'
               )
           `,
         )
@@ -999,10 +1007,6 @@ export class UnitsRepository {
           const columns = new Set(rows.map((row) => row.columnName));
           return {
             hasQty: columns.has("qty"),
-            hasDefaultLocationType: columns.has("default_location_type"),
-            hasDefaultStockStatus: columns.has("default_stock_status"),
-            hasDefaultConditionType: columns.has("default_condition_type"),
-            hasSourceGeneralId: columns.has("source_general_id"),
           };
         });
     }
@@ -1359,7 +1363,7 @@ export class UnitsRepository {
             cd.division_id AS divisionId,
             COALESCE(d.name, 'Tanpa Divisi') AS divisionName,
             cd.panel_id AS panelId,
-            mp.name AS panelName,
+            COALESCE(mp.panel_name, mp.name_part) AS panelName,
             cd.section_name AS sectionName,
             cd.task_category AS taskCategory,
             cd.job_type_id AS jobTypeId,
@@ -1380,7 +1384,7 @@ export class UnitsRepository {
           LEFT JOIN master_panels mp ON mp.id = cd.panel_id
           LEFT JOIN master_job_types jt ON jt.id = cd.job_type_id
           WHERE cd.car_id = ?
-          ORDER BY d.name ASC, COALESCE(mp.section, cd.section_name, mp.name, '') ASC, cd.deadline_date ASC, cd.updated_at DESC
+          ORDER BY d.name ASC, COALESCE(mp.panel_name, cd.section_name, mp.name_part, '') ASC, cd.deadline_date ASC, cd.updated_at DESC
         `,
         [params.unitId],
       ),
@@ -1474,11 +1478,9 @@ export class UnitsRepository {
     const warehouseStockCard = qualifyTable(this.warehouseDb, "wh_stock_card");
     const warehouseTransactions = qualifyTable(this.warehouseDb, "wh_transactions");
     const warehouseLocations = qualifyTable(this.warehouseDb, "wh_storage_locations");
-    const schema = await this.getMasterPanelInventorySchema(pool);
-
-    const statusSelect = schema.hasDefaultStockStatus ? "COALESCE(stock_latest.status, mp.default_stock_status)" : "stock_latest.status";
-    const conditionSelect = schema.hasDefaultConditionType ? "COALESCE(stock_latest.conditionType, mp.default_condition_type)" : "stock_latest.conditionType";
-    const locationSelect = schema.hasDefaultLocationType ? "COALESCE(stock_latest.locationName, stock_latest.locationDetail, mp.default_location_type)" : "COALESCE(stock_latest.locationName, stock_latest.locationDetail)";
+    const statusSelect = `COALESCE(stock_latest.status, ${masterPanelStockStatusSql("mp")})`;
+    const conditionSelect = `COALESCE(stock_latest.conditionType, ${masterPanelConditionSql("mp")})`;
+    const locationSelect = "COALESCE(stock_latest.locationName, stock_latest.locationDetail, mp.location)";
 
     const [
       panelRowsResult,
@@ -1495,9 +1497,9 @@ export class UnitsRepository {
           `
             SELECT
               mp.id AS panelId,
-              mp.category AS category,
-              mp.section AS section,
-              mp.name AS partName,
+              COALESCE(NULLIF(TRIM(mp.component_name), ''), 'Lainnya') AS category,
+              COALESCE(NULLIF(TRIM(mp.panel_name), ''), NULLIF(TRIM(mp.component_name), ''), 'Tanpa Panel') AS section,
+              COALESCE(NULLIF(TRIM(mp.name_part), ''), NULLIF(TRIM(mp.panel_name), ''), '-') AS partName,
               panel_lock.currentDivisionId AS divisionId,
               d.name AS divisionName,
               panel_lock.isLocked AS isLocked,
@@ -1527,7 +1529,7 @@ export class UnitsRepository {
                 1
               ) AS activeCountdownId,
               SUBSTRING_INDEX(
-                GROUP_CONCAT(COALESCE(panel_jt.job_name, cd.section_name, mp.name) ORDER BY cd.updated_at DESC SEPARATOR ','),
+                GROUP_CONCAT(COALESCE(panel_jt.job_name, cd.section_name, mp.name_part) ORDER BY cd.updated_at DESC SEPARATOR ','),
                 ',',
                 1
               ) AS activeJobName,
@@ -1595,19 +1597,21 @@ export class UnitsRepository {
               ON stock_latest.partCode = CONCAT('MP-', mp.id)
               OR (
                 stock_latest.partCode IS NULL
-                AND stock_latest.partName = mp.name
+                AND stock_latest.partName = mp.name_part
               )
             LEFT JOIN sm_jobdesc_countdown cd
               ON cd.car_id = mp.car_id
              AND cd.panel_id = mp.id
             LEFT JOIN master_job_types panel_jt ON panel_jt.id = cd.job_type_id
             WHERE mp.car_id = ?
-              AND COALESCE(mp.is_active, 1) = 1
             GROUP BY
               mp.id,
-              mp.category,
-              mp.section,
-              mp.name,
+              mp.component_name,
+              mp.panel_name,
+              mp.name_part,
+              mp.current_status,
+              mp.initial_condition,
+              mp.location,
               panel_lock.currentDivisionId,
               d.name,
               panel_lock.isLocked,
@@ -1618,7 +1622,7 @@ export class UnitsRepository {
               stock_latest.takenByName,
               stock_latest.dateOut,
               panel_lock.lockUpdatedAt
-            ORDER BY mp.category ASC, mp.section ASC, mp.name ASC
+            ORDER BY mp.component_name ASC, mp.panel_name ASC, mp.name_part ASC
           `,
           [params.unitId, params.unitId, params.unitId],
         ),
@@ -1948,37 +1952,28 @@ export class UnitsRepository {
   private async findUnitPanelRow(pool: Pick<Pool, "query">, unitId: string, panelId: number) {
     const schema = await this.getMasterPanelInventorySchema(pool);
     const qtySelect = schema.hasQty ? "COALESCE(mp.qty, 1)" : "1";
-    const locationSelect = schema.hasDefaultLocationType ? "COALESCE(mp.default_location_type, 'UNIT')" : "'UNIT'";
-    const stockStatusSelect = schema.hasDefaultStockStatus ? "COALESCE(mp.default_stock_status, 'INSTALLED')" : "'INSTALLED'";
-    const conditionSelect = schema.hasDefaultConditionType ? "COALESCE(mp.default_condition_type, 'BEKAS')" : "'BEKAS'";
-    const sourceGeneralSelect = schema.hasSourceGeneralId ? "mp.source_general_id" : "NULL";
-    const inventoryGroupBy = [
-      schema.hasQty ? "mp.qty" : null,
-      schema.hasDefaultLocationType ? "mp.default_location_type" : null,
-      schema.hasDefaultStockStatus ? "mp.default_stock_status" : null,
-      schema.hasDefaultConditionType ? "mp.default_condition_type" : null,
-      schema.hasSourceGeneralId ? "mp.source_general_id" : null,
-    ].filter(Boolean);
 
     const [rows] = await pool.query<UnitPanelRow[]>(
       `
         SELECT
           mp.id,
           mp.car_id AS carId,
-          mp.parent_id AS parentId,
-          ${sourceGeneralSelect} AS sourceGeneralId,
-          mp.section,
-          mp.name,
-          mp.category,
-          COALESCE(mp.is_active, 1) AS isActive,
-          COALESCE(mp.sort_order, 0) AS sortOrder,
+          mp.component_id AS componentId,
+          mp.panel_id AS catalogPanelId,
+          NULL AS parentId,
+          NULL AS sourceGeneralId,
+          COALESCE(NULLIF(TRIM(mp.panel_name), ''), NULLIF(TRIM(mp.component_name), ''), 'Tanpa Panel') AS section,
+          COALESCE(NULLIF(TRIM(mp.name_part), ''), NULLIF(TRIM(mp.panel_name), ''), '-') AS name,
+          NULLIF(TRIM(mp.component_name), '') AS category,
+          1 AS isActive,
+          0 AS sortOrder,
           ${qtySelect} AS qty,
-          ${locationSelect} AS defaultLocationType,
-          ${stockStatusSelect} AS defaultStockStatus,
-          ${conditionSelect} AS defaultConditionType,
+          ${masterPanelLocationSql("mp")} AS defaultLocationType,
+          ${masterPanelStockStatusSql("mp")} AS defaultStockStatus,
+          ${masterPanelConditionSql("mp")} AS defaultConditionType,
           COUNT(DISTINCT cd.id) AS countdownUsageCount,
           COUNT(DISTINCT cps.id) AS statusUsageCount,
-          COUNT(DISTINCT child.id) AS childCount,
+          0 AS childCount,
           DATE_FORMAT(mp.created_at, '%Y-%m-%d %H:%i:%s') AS createdAt,
           DATE_FORMAT(mp.updated_at, '%Y-%m-%d %H:%i:%s') AS updatedAt
         FROM master_panels mp
@@ -1986,19 +1981,20 @@ export class UnitsRepository {
         LEFT JOIN sm_car_panel_status cps
           ON cps.panel_id = mp.id
          AND cps.car_id = mp.car_id
-        LEFT JOIN master_panels child ON child.parent_id = mp.id
         WHERE mp.car_id = ?
           AND mp.id = ?
         GROUP BY
           mp.id,
           mp.car_id,
-          mp.parent_id,
-          mp.section,
-          mp.name,
-          mp.category,
-          mp.is_active,
-          mp.sort_order,
-          ${inventoryGroupBy.length ? `${inventoryGroupBy.join(",\n          ")},` : ""}
+          mp.component_id,
+          mp.panel_id,
+          mp.panel_name,
+          mp.component_name,
+          mp.name_part,
+          ${schema.hasQty ? "mp.qty," : ""}
+          mp.location,
+          mp.current_status,
+          mp.initial_condition,
           mp.created_at,
           mp.updated_at
         LIMIT 1
@@ -2018,37 +2014,28 @@ export class UnitsRepository {
     const pool = this.poolFactory();
     const schema = await this.getMasterPanelInventorySchema(pool);
     const qtySelect = schema.hasQty ? "COALESCE(mp.qty, 1)" : "1";
-    const locationSelect = schema.hasDefaultLocationType ? "COALESCE(mp.default_location_type, 'UNIT')" : "'UNIT'";
-    const stockStatusSelect = schema.hasDefaultStockStatus ? "COALESCE(mp.default_stock_status, 'INSTALLED')" : "'INSTALLED'";
-    const conditionSelect = schema.hasDefaultConditionType ? "COALESCE(mp.default_condition_type, 'BEKAS')" : "'BEKAS'";
-    const sourceGeneralSelect = schema.hasSourceGeneralId ? "mp.source_general_id" : "NULL";
-    const inventoryGroupBy = [
-      schema.hasQty ? "mp.qty" : null,
-      schema.hasDefaultLocationType ? "mp.default_location_type" : null,
-      schema.hasDefaultStockStatus ? "mp.default_stock_status" : null,
-      schema.hasDefaultConditionType ? "mp.default_condition_type" : null,
-      schema.hasSourceGeneralId ? "mp.source_general_id" : null,
-    ].filter(Boolean);
 
     const [rows] = await pool.query<UnitPanelRow[]>(
       `
         SELECT
           mp.id,
           mp.car_id AS carId,
-          mp.parent_id AS parentId,
-          ${sourceGeneralSelect} AS sourceGeneralId,
-          mp.section,
-          mp.name,
-          mp.category,
-          COALESCE(mp.is_active, 1) AS isActive,
-          COALESCE(mp.sort_order, 0) AS sortOrder,
+          mp.component_id AS componentId,
+          mp.panel_id AS catalogPanelId,
+          NULL AS parentId,
+          NULL AS sourceGeneralId,
+          COALESCE(NULLIF(TRIM(mp.panel_name), ''), NULLIF(TRIM(mp.component_name), ''), 'Tanpa Panel') AS section,
+          COALESCE(NULLIF(TRIM(mp.name_part), ''), NULLIF(TRIM(mp.panel_name), ''), '-') AS name,
+          NULLIF(TRIM(mp.component_name), '') AS category,
+          1 AS isActive,
+          0 AS sortOrder,
           ${qtySelect} AS qty,
-          ${locationSelect} AS defaultLocationType,
-          ${stockStatusSelect} AS defaultStockStatus,
-          ${conditionSelect} AS defaultConditionType,
+          ${masterPanelLocationSql("mp")} AS defaultLocationType,
+          ${masterPanelStockStatusSql("mp")} AS defaultStockStatus,
+          ${masterPanelConditionSql("mp")} AS defaultConditionType,
           COUNT(DISTINCT cd.id) AS countdownUsageCount,
           COUNT(DISTINCT cps.id) AS statusUsageCount,
-          COUNT(DISTINCT child.id) AS childCount,
+          0 AS childCount,
           DATE_FORMAT(mp.created_at, '%Y-%m-%d %H:%i:%s') AS createdAt,
           DATE_FORMAT(mp.updated_at, '%Y-%m-%d %H:%i:%s') AS updatedAt
         FROM master_panels mp
@@ -2056,26 +2043,26 @@ export class UnitsRepository {
         LEFT JOIN sm_car_panel_status cps
           ON cps.panel_id = mp.id
          AND cps.car_id = mp.car_id
-        LEFT JOIN master_panels child ON child.parent_id = mp.id
         WHERE mp.car_id = ?
         GROUP BY
           mp.id,
           mp.car_id,
-          mp.parent_id,
-          mp.section,
-          mp.name,
-          mp.category,
-          mp.is_active,
-          mp.sort_order,
-          ${inventoryGroupBy.length ? `${inventoryGroupBy.join(",\n          ")},` : ""}
+          mp.component_id,
+          mp.panel_id,
+          mp.panel_name,
+          mp.component_name,
+          mp.name_part,
+          ${schema.hasQty ? "mp.qty," : ""}
+          mp.location,
+          mp.current_status,
+          mp.initial_condition,
           mp.created_at,
           mp.updated_at
         ORDER BY
-          COALESCE(mp.parent_id, mp.id) ASC,
-          CASE WHEN mp.parent_id IS NULL THEN 0 ELSE 1 END ASC,
-          COALESCE(mp.sort_order, 0) ASC,
-          mp.section ASC,
-          mp.name ASC
+          mp.component_name ASC,
+          mp.panel_name ASC,
+          mp.name_part ASC,
+          mp.id ASC
       `,
       [params.unitId],
     );
@@ -2106,8 +2093,6 @@ export class UnitsRepository {
   ) {
     const params: unknown[] = [
       input.unitId,
-      input.parentId,
-      input.parentId,
       input.section.trim(),
       input.name.trim(),
       toNullableText(input.category) ?? "Lainnya",
@@ -2122,14 +2107,9 @@ export class UnitsRepository {
         SELECT COUNT(*) AS total
         FROM master_panels
         WHERE car_id = ?
-          AND (
-            (? IS NULL AND parent_id IS NULL)
-            OR parent_id = ?
-          )
-          AND TRIM(section) = ?
-          AND TRIM(name) = ?
-          AND COALESCE(NULLIF(TRIM(category), ''), 'Lainnya') = ?
-          AND COALESCE(is_active, 1) = 1
+          AND TRIM(COALESCE(panel_name, '')) = ?
+          AND TRIM(COALESCE(name_part, '')) = ?
+          AND COALESCE(NULLIF(TRIM(component_name), ''), 'Lainnya') = ?
           ${excludeClause}
       `,
       params,
@@ -2156,19 +2136,9 @@ export class UnitsRepository {
     const schema = await this.getMasterPanelInventorySchema(pool);
     const input = normalizeUnitPanelInventoryInput(params.input);
 
-    if (input.parentId !== null) {
-      const parentRow = await this.findUnitPanelRow(pool, params.unitId, input.parentId);
-      if (!parentRow) {
-        throw new Error("UNIT_PANEL_PARENT_NOT_FOUND");
-      }
-      if (parentRow.parentId !== null) {
-        throw new Error("UNIT_PANEL_PARENT_INVALID");
-      }
-    }
-
     await this.assertUnitPanelNotDuplicate(pool, {
       unitId: params.unitId,
-      parentId: input.parentId ?? null,
+      parentId: null,
       section: input.section,
       name: input.name,
       category: input.category,
@@ -2176,43 +2146,34 @@ export class UnitsRepository {
 
     const inventoryColumns = [
       schema.hasQty ? "qty" : null,
-      schema.hasDefaultLocationType ? "default_location_type" : null,
-      schema.hasDefaultStockStatus ? "default_stock_status" : null,
-      schema.hasDefaultConditionType ? "default_condition_type" : null,
-      schema.hasSourceGeneralId ? "source_general_id" : null,
     ].filter(Boolean);
     const inventoryValues = [
       schema.hasQty ? input.qty : undefined,
-      schema.hasDefaultLocationType ? input.defaultLocationType : undefined,
-      schema.hasDefaultStockStatus ? input.defaultStockStatus : undefined,
-      schema.hasDefaultConditionType ? input.defaultConditionType : undefined,
-      schema.hasSourceGeneralId ? input.sourceGeneralId ?? null : undefined,
     ].filter((value) => value !== undefined);
 
     const [result] = await pool.execute<ResultSetHeader>(
       `
         INSERT INTO master_panels (
           car_id,
-          section,
-          name,
-          category,
-          is_active,
-          parent_id,
-          sort_order,
+          component_name,
+          panel_name,
+          name_part,
+          location,
+          initial_condition,
+          current_status,
           ${inventoryColumns.length ? `${inventoryColumns.join(",\n          ")},` : ""}
-          default_division_id,
           created_by,
           updated_by
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ${inventoryColumns.map(() => "?").join(", ")}${inventoryColumns.length ? ", " : ""}NULL, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ${inventoryColumns.map(() => "?").join(", ")}${inventoryColumns.length ? ", " : ""}?, ?)
       `,
       [
         params.unitId,
+        toNullableText(input.category),
         input.section.trim(),
         input.name.trim(),
-        toNullableText(input.category),
-        input.isActive ? 1 : 0,
-        input.parentId,
-        input.sortOrder,
+        input.defaultLocationType,
+        input.defaultConditionType,
+        input.defaultStockStatus,
         ...inventoryValues,
         params.actorId,
         params.actorId,
@@ -2250,38 +2211,9 @@ export class UnitsRepository {
 
     const before = mapUnitPanelRecord(currentRow);
 
-    let parentIdAssignment = "";
-    const parentIdValues: (number | null)[] = [];
-
-    if (input.parentId !== undefined) {
-      if (input.parentId !== null) {
-        const parentRow = await this.findUnitPanelRow(pool, params.unitId, input.parentId);
-        if (!parentRow) {
-          throw new Error("UNIT_PANEL_NOT_FOUND");
-        }
-        if (parentRow.parentId !== null) {
-          throw new Error("UNIT_PANEL_PARENT_INVALID");
-        }
-      }
-      
-      // If we are making it a panel, make sure it has no children
-      if (input.parentId === null && currentRow.parentId !== null) {
-        const [children] = await pool.query<UnitPanelRow[]>(
-          "SELECT id FROM master_panels WHERE parent_id = ? AND car_id = ? LIMIT 1",
-          [params.panelId, params.unitId]
-        );
-        if (children.length > 0) {
-          throw new Error("UNIT_PANEL_HAS_CHILDREN");
-        }
-      }
-
-      parentIdAssignment = "parent_id = ?,";
-      parentIdValues.push(input.parentId);
-    }
-
     await this.assertUnitPanelNotDuplicate(pool, {
       unitId: params.unitId,
-      parentId: input.parentId === undefined ? currentRow.parentId : input.parentId,
+      parentId: null,
       section: input.section,
       name: input.name,
       category: input.category,
@@ -2289,27 +2221,21 @@ export class UnitsRepository {
     });
     const inventoryAssignments = [
       schema.hasQty ? "qty = ?" : null,
-      schema.hasDefaultLocationType ? "default_location_type = ?" : null,
-      schema.hasDefaultStockStatus ? "default_stock_status = ?" : null,
-      schema.hasDefaultConditionType ? "default_condition_type = ?" : null,
     ].filter(Boolean);
     const inventoryValues = [
       schema.hasQty ? input.qty : undefined,
-      schema.hasDefaultLocationType ? input.defaultLocationType : undefined,
-      schema.hasDefaultStockStatus ? input.defaultStockStatus : undefined,
-      schema.hasDefaultConditionType ? input.defaultConditionType : undefined,
     ].filter((value) => value !== undefined);
 
     await pool.execute(
       `
         UPDATE master_panels
         SET
-          ${parentIdAssignment}
-          section = ?,
-          name = ?,
-          category = ?,
-          is_active = ?,
-          sort_order = ?,
+          component_name = ?,
+          panel_name = ?,
+          name_part = ?,
+          location = ?,
+          initial_condition = ?,
+          current_status = ?,
           ${inventoryAssignments.length ? `${inventoryAssignments.join(",\n          ")},` : ""}
           updated_by = ?
         WHERE id = ?
@@ -2317,12 +2243,12 @@ export class UnitsRepository {
         LIMIT 1
       `,
       [
-        ...parentIdValues,
+        toNullableText(input.category),
         input.section.trim(),
         input.name.trim(),
-        toNullableText(input.category),
-        input.isActive ? 1 : 0,
-        input.sortOrder,
+        input.defaultLocationType,
+        input.defaultConditionType,
+        input.defaultStockStatus,
         ...inventoryValues,
         params.actorId,
         params.panelId,
@@ -2359,10 +2285,10 @@ export class UnitsRepository {
       `
         UPDATE master_panels
         SET
-          category = ?,
+          component_name = ?,
           updated_by = ?
         WHERE car_id = ?
-          AND COALESCE(NULLIF(TRIM(category), ''), 'Lainnya') = ?
+          AND COALESCE(NULLIF(TRIM(component_name), ''), 'Lainnya') = ?
       `,
       [
         toNullableText(params.toCategory),
@@ -2442,6 +2368,7 @@ export class UnitsRepository {
           UPDATE ${stockCardTable}
           SET
             car_name = ?,
+            master_panel_id = ?,
             panel_section = ?,
             part_name = ?,
             condition_type = ?,
@@ -2454,6 +2381,7 @@ export class UnitsRepository {
         `,
         [
           unitSummary.unitName,
+          params.record.id,
           params.record.section,
           params.record.name,
           params.record.defaultConditionType,
@@ -2473,6 +2401,7 @@ export class UnitsRepository {
           id,
           car_id,
           car_name,
+          master_panel_id,
           part_code,
           panel_section,
           part_name,
@@ -2486,12 +2415,13 @@ export class UnitsRepository {
           is_labeled,
           created_at,
           updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, CURRENT_DATE, ?, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, CURRENT_DATE, ?, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       `,
       [
         randomUUID(),
         params.unitId,
         unitSummary.unitName,
+        params.record.id,
         partCode,
         params.record.section,
         params.record.name,

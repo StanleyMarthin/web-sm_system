@@ -551,7 +551,7 @@ export class MySqlIssuesRepository implements IssuesRepository {
             cd.division_id AS divisionId,
             cd.id AS countdownId,
             COALESCE(CAST(cd.panel_id AS CHAR), CONCAT('part:', COALESCE(cd.section_name, '-'))) AS panelValue,
-            CONCAT(COALESCE(mp.name, 'Tanpa Panel'), CASE WHEN NULLIF(cd.section_name, '') IS NULL THEN '' ELSE CONCAT(' · ', cd.section_name) END) AS panelLabel,
+            CONCAT(COALESCE(mp.panel_name, mp.name_part, 'Tanpa Panel'), CASE WHEN NULLIF(cd.section_name, '') IS NULL THEN '' ELSE CONCAT(' · ', cd.section_name) END) AS panelLabel,
             COALESCE(NULLIF(cd.section_name, ''), NULLIF(p.jobdescription, ''), 'Pembahasan Jobdesc') AS title,
             COALESCE(NULLIF(p.jobdescription, ''), NULLIF(cd.section_name, ''), 'Tidak ada instruksi kerja.') AS description
           FROM sm_jobdesc_plan p

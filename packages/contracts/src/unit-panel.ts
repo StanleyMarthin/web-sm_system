@@ -17,6 +17,8 @@ export const unitPanelConditionTypeSchema = z.enum(["BARU", "RESTORE", "BEKAS"])
 export interface UnitPanelRecordShape {
   id: number;
   carId: string;
+  componentId: number | null;
+  catalogPanelId: number | null;
   sourceGeneralId: number | null;
   parentId: number | null;
   nodeType: "PANEL" | "PART";
@@ -41,6 +43,8 @@ export const unitPanelRecordSchema: z.ZodType<UnitPanelRecordShape> = z.lazy(() 
   z.object({
     id: z.number().int().positive(),
     carId: z.string(),
+    componentId: z.number().int().positive().nullable(),
+    catalogPanelId: z.number().int().positive().nullable(),
     sourceGeneralId: z.number().int().positive().nullable(),
     parentId: z.number().int().positive().nullable(),
     nodeType: unitPanelNodeTypeSchema,

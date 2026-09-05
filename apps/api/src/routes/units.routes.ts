@@ -166,7 +166,7 @@ function mapUnitsError(request: Request, error: unknown): Response {
     if (error.message === "UNIT_PANEL_DUPLICATE") {
       return errorResponse(
         request,
-        "Master panel dengan parent, section, kategori, dan nama yang sama sudah ada.",
+        "Master panel dengan komponen, panel, dan nama part yang sama sudah ada.",
         409,
         "UNIT_PANEL_DUPLICATE",
       );

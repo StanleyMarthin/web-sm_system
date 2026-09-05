@@ -496,10 +496,8 @@ export class UnitCatalogRepository {
           INSERT INTO master_panels (
             car_id, part_id, source_part, component_id, panel_id, component_name, panel_name,
             name_part, alias_name, part_number, qty, initial_condition, current_status, location, notes,
-            section, name, category, is_active, parent_id, position_code, sort_order, qty_normal,
-            default_location_type, default_stock_status, default_condition_type, default_division_id,
             created_at, created_by, updated_at, updated_by
-          ) VALUES (?, ?, 'ADDITIONAL', ?, ?, ?, ?, ?, NULL, ?, 1, 'UNKNOWN', 'UNKNOWN', 'UNIT', ?, ?, ?, ?, 1, NULL, NULL, 0, NULL, 'UNIT', 'INSTALLED', 'BEKAS', NULL, NOW(), ?, NOW(), ?)
+          ) VALUES (?, ?, 'ADDITIONAL', ?, ?, ?, ?, ?, NULL, ?, 1, 'UNKNOWN', 'UNKNOWN', 'UNIT', ?, NOW(), ?, NOW(), ?)
         `,
         [
           unitId,
@@ -511,9 +509,6 @@ export class UnitCatalogRepository {
           item.itemName,
           item.partNumber,
           item.deskription,
-          componentName,
-          item.itemName,
-          panelName,
           actorId,
           actorId,
         ],
@@ -685,6 +680,10 @@ export class UnitCatalogRepository {
       currentStatus: string | null;
       location: string | null;
       notes: string | null;
+      createdAt: string | null;
+      createdBy: string | null;
+      updatedAt: string | null;
+      updatedBy: string | null;
     }>>(
       `
         SELECT
@@ -703,7 +702,11 @@ export class UnitCatalogRepository {
           initial_condition AS initialCondition,
           current_status AS currentStatus,
           location,
-          notes
+          notes,
+          DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') AS createdAt,
+          created_by AS createdBy,
+          DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s') AS updatedAt,
+          updated_by AS updatedBy
         FROM master_panels
         WHERE id = ? AND car_id = ?
         LIMIT 1
@@ -1045,14 +1048,12 @@ export class UnitCatalogRepository {
     if (!(item.isRestoration === true || item.isRestoration === 1)) throw new Error("SURVEY_NOT_CONFIRMED");
 
     const [result] = await connection.execute<ResultSetHeader>(
-      `
-        INSERT INTO master_panels (
-          car_id, part_id, source_part, component_id, panel_id, component_name, panel_name,
-          name_part, alias_name, part_number, qty, initial_condition, current_status, location, notes,
-          section, name, category, is_active, parent_id, position_code, sort_order, qty_normal,
-          default_location_type, default_stock_status, default_condition_type, default_division_id,
-          created_at, created_by, updated_at, updated_by
-        ) VALUES (?, ?, 'CATALOG', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NULL, ?, 0, ?, 'UNIT', 'INSTALLED', 'BEKAS', NULL, NOW(), ?, NOW(), ?)
+        `
+          INSERT INTO master_panels (
+            car_id, part_id, source_part, component_id, panel_id, component_name, panel_name,
+            name_part, alias_name, part_number, qty, initial_condition, current_status, location, notes,
+            created_at, created_by, updated_at, updated_by
+        ) VALUES (?, ?, 'CATALOG', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, NOW(), ?)
       `,
       [
         unitId,
@@ -1069,11 +1070,6 @@ export class UnitCatalogRepository {
         input.availabilityStatus,
         input.location ?? "UNIT",
         input.notes,
-        item.componentName,
-        item.itemName ?? item.position ?? item.partNumber ?? item.panelName,
-        item.panelName,
-        item.position,
-        num(item.qtyNormal),
         actorId,
         actorId,
       ],

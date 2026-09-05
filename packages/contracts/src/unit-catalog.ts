@@ -44,6 +44,30 @@ export const catalogPanelImageSchema = z.object({
   createdAt: z.string().nullable(),
 });
 
+export const masterPanelSchema = z.object({
+  id: z.number().int().positive(),
+  carId: z.string(),
+  partId: z.number().int().positive().nullable(),
+  sourcePart: z.enum(["CATALOG", "ADDITIONAL"]).nullable(),
+  componentId: z.number().int().positive().nullable(),
+  panelId: z.number().int().positive().nullable(),
+  componentName: z.string().nullable(),
+  panelName: z.string().nullable(),
+  namePart: z.string(),
+  aliasName: z.string().nullable(),
+  partNumber: z.string().nullable(),
+  qty: z.number().nullable(),
+  initialCondition: z.string().nullable(),
+  currentStatus: z.string().nullable(),
+  location: z.string().nullable(),
+  notes: z.string().nullable(),
+  createdAt: z.string().nullable(),
+  createdBy: z.string().nullable(),
+  updatedAt: z.string().nullable(),
+  updatedBy: z.string().nullable(),
+  media: z.array(catalogPanelImageSchema).default([]),
+});
+
 export const catalogItemMappingSchema = z.object({
   id: z.number().int().positive(),
   catalogReferenceMediaId: z.number().int().positive(),
@@ -279,6 +303,7 @@ export function parseCatalogSpreadsheetText(text: string): CatalogWorkspaceItemI
 export type CatalogComponent = z.infer<typeof catalogComponentSchema>;
 export type CatalogPanel = z.infer<typeof catalogPanelSchema>;
 export type CatalogPanelImage = z.infer<typeof catalogPanelImageSchema>;
+export type MasterPanel = z.infer<typeof masterPanelSchema>;
 export type CatalogPanelSummary = z.infer<typeof catalogPanelSummarySchema>;
 export type CatalogOverview = z.infer<typeof catalogOverviewSchema>;
 export type CatalogWorkspace = z.infer<typeof catalogWorkspaceSchema>;

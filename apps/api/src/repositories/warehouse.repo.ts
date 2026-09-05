@@ -1485,7 +1485,6 @@ export class MySqlWarehouseRepository implements WarehouseRepository {
     const panelParams: unknown[] = [];
     const panelConditions = [
       "mp.car_id = ?",
-      "COALESCE(mp.is_active, 1) = 1",
     ];
     if (selectedUnitId) {
       panelParams.push(selectedUnitId);
@@ -1494,7 +1493,7 @@ export class MySqlWarehouseRepository implements WarehouseRepository {
     if (params.search) {
       const value = `%${params.search}%`;
       panelConditions.push(
-        "(CAST(mp.id AS CHAR) LIKE ? OR COALESCE(mp.section, '') LIKE ? OR COALESCE(mp.name, '') LIKE ? OR COALESCE(mp.category, '') LIKE ?)",
+        "(CAST(mp.id AS CHAR) LIKE ? OR COALESCE(mp.component_name, '') LIKE ? OR COALESCE(mp.panel_name, '') LIKE ? OR COALESCE(mp.name_part, '') LIKE ?)",
       );
       panelParams.push(value, value, value, value);
     }
@@ -1504,14 +1503,14 @@ export class MySqlWarehouseRepository implements WarehouseRepository {
           `
             SELECT
               mp.id AS panelId,
-              mp.parent_id AS parentPanelId,
+              NULL AS parentPanelId,
               CONCAT('MP-', mp.id) AS partCode,
-              mp.section AS section,
-              mp.name AS name,
-              mp.category AS category
+              COALESCE(mp.panel_name, mp.component_name, 'Tanpa Panel') AS section,
+              COALESCE(mp.name_part, mp.panel_name, CONCAT('MP-', mp.id)) AS name,
+              mp.component_name AS category
             FROM ${this.tables.masterPanels} mp
             WHERE ${panelConditions.join(" AND ")}
-            ORDER BY COALESCE(mp.sort_order, 0) ASC, mp.section ASC, mp.name ASC
+            ORDER BY mp.component_name ASC, mp.panel_name ASC, mp.name_part ASC
             LIMIT 200
           `,
           panelParams,
@@ -1601,7 +1600,7 @@ export class MySqlWarehouseRepository implements WarehouseRepository {
           COALESCE(c.unit_name, jc.car_id) AS unitName,
           jc.division_id AS divisionId,
           d.name AS divisionName,
-          COALESCE(mp.name, jc.section_name) AS panelName,
+          COALESCE(mp.panel_name, mp.name_part, jc.section_name) AS panelName,
           COALESCE(mjt.job_name, p.jobdescription, jc.section_name) AS jobName,
           DATE_FORMAT(p.task_date, '%Y-%m-%d') AS taskDate,
           p.is_overtime AS isOvertime
@@ -1612,7 +1611,7 @@ export class MySqlWarehouseRepository implements WarehouseRepository {
         LEFT JOIN master_panels mp ON mp.id = jc.panel_id
         LEFT JOIN master_job_types mjt ON mjt.id = jc.job_type_id
         WHERE ${conditions.join(" AND ")}
-        ORDER BY COALESCE(c.unit_name, jc.car_id) ASC, COALESCE(mp.name, jc.section_name) ASC, COALESCE(mjt.job_name, p.jobdescription, jc.section_name) ASC
+        ORDER BY COALESCE(c.unit_name, jc.car_id) ASC, COALESCE(mp.panel_name, mp.name_part, jc.section_name) ASC, COALESCE(mjt.job_name, p.jobdescription, jc.section_name) ASC
         LIMIT 200
       `,
       queryParams,
@@ -1688,7 +1687,7 @@ export class MySqlWarehouseRepository implements WarehouseRepository {
           COALESCE(c.unit_name, jc.car_id) AS unitName,
           jc.division_id AS divisionId,
           d.name AS divisionName,
-          COALESCE(mp.name, jc.section_name) AS panelName,
+          COALESCE(mp.panel_name, mp.name_part, jc.section_name) AS panelName,
           COALESCE(mjt.job_name, p.jobdescription, jc.section_name) AS jobName,
           DATE_FORMAT(p.task_date, '%Y-%m-%d') AS taskDate,
           p.is_overtime AS isOvertime
@@ -1827,12 +1826,12 @@ export class MySqlWarehouseRepository implements WarehouseRepository {
           sc.entry_no AS entryNo,
           sc.car_id AS carId,
           COALESCE(c.unit_name, sc.car_name, sc.car_id) AS unitName,
-          mp.id AS masterPanelId,
-          mp.parent_id AS parentPanelId,
-          COALESCE(parent_mp.name, CASE WHEN mp.parent_id IS NULL THEN mp.name ELSE NULL END) AS panelName,
+          COALESCE(sc.master_panel_id, mp.id) AS masterPanelId,
+          NULL AS parentPanelId,
+          COALESCE(mp.panel_name, mp.name_part) AS panelName,
           sc.part_code AS partCode,
           sc.panel_section AS panelSection,
-          mp.category AS panelCategory,
+          mp.component_name AS panelCategory,
           sc.part_name AS partName,
           sc.condition_type AS conditionType,
           sc.qty AS qty,
@@ -1865,8 +1864,9 @@ export class MySqlWarehouseRepository implements WarehouseRepository {
         FROM ${this.tables.stockCard} sc
         LEFT JOIN ${this.tables.storageLocations} sl ON sl.id = sc.storage_location_id
         LEFT JOIN ${this.tables.cars} c ON c.id = sc.car_id
-        LEFT JOIN ${this.tables.masterPanels} mp ON mp.car_id = sc.car_id AND sc.part_code = CONCAT('MP-', mp.id)
-        LEFT JOIN ${this.tables.masterPanels} parent_mp ON parent_mp.id = mp.parent_id
+        LEFT JOIN ${this.tables.masterPanels} mp
+          ON mp.car_id = sc.car_id
+         AND (mp.id = sc.master_panel_id OR (sc.master_panel_id IS NULL AND sc.part_code = CONCAT('MP-', mp.id)))
         LEFT JOIN ${this.tables.cars} c_scope ON c_scope.id = sc.car_id
         WHERE ${conditions.join(" AND ")}
         ORDER BY COALESCE(c.unit_name, sc.car_name, sc.car_id) ASC, sc.part_name ASC, sc.created_at DESC
@@ -1912,9 +1912,12 @@ export class MySqlWarehouseRepository implements WarehouseRepository {
           sc.entry_no AS entryNo,
           sc.car_id AS carId,
           COALESCE(c.unit_name, sc.car_name, sc.car_id) AS unitName,
+          COALESCE(sc.master_panel_id, mp.id) AS masterPanelId,
+          NULL AS parentPanelId,
+          COALESCE(mp.panel_name, mp.name_part) AS panelName,
           sc.part_code AS partCode,
           sc.panel_section AS panelSection,
-          mp.category AS panelCategory,
+          mp.component_name AS panelCategory,
           sc.part_name AS partName,
           sc.condition_type AS conditionType,
           sc.qty AS qty,
@@ -1939,7 +1942,9 @@ export class MySqlWarehouseRepository implements WarehouseRepository {
         JOIN ${this.tables.countdown} jc ON jc.car_id = sc.car_id
         LEFT JOIN ${this.tables.storageLocations} sl ON sl.id = sc.storage_location_id
         LEFT JOIN ${this.tables.cars} c ON c.id = sc.car_id
-        LEFT JOIN ${this.tables.masterPanels} mp ON mp.car_id = sc.car_id AND sc.part_code = CONCAT('MP-', mp.id)
+        LEFT JOIN ${this.tables.masterPanels} mp
+          ON mp.car_id = sc.car_id
+         AND (mp.id = sc.master_panel_id OR (sc.master_panel_id IS NULL AND sc.part_code = CONCAT('MP-', mp.id)))
         LEFT JOIN ${this.tables.cars} c_scope ON c_scope.id = jc.car_id
         WHERE ${conditions.join(" AND ")}
         ORDER BY sc.part_name ASC, sc.created_at DESC
@@ -2027,12 +2032,12 @@ export class MySqlWarehouseRepository implements WarehouseRepository {
         sc.entry_no AS entryNo,
         sc.car_id AS carId,
         COALESCE(c.unit_name, sc.car_name, sc.car_id) AS unitName,
-        mp.id AS masterPanelId,
-        mp.parent_id AS parentPanelId,
-        COALESCE(parent_mp.name, CASE WHEN mp.parent_id IS NULL THEN mp.name ELSE NULL END) AS panelName,
+        COALESCE(sc.master_panel_id, mp.id) AS masterPanelId,
+        NULL AS parentPanelId,
+        COALESCE(mp.panel_name, mp.name_part) AS panelName,
         sc.part_code AS partCode,
         sc.panel_section AS panelSection,
-        mp.category AS panelCategory,
+        mp.component_name AS panelCategory,
         sc.part_name AS partName,
         sc.condition_type AS conditionType,
         sc.qty AS qty,
@@ -2057,8 +2062,9 @@ export class MySqlWarehouseRepository implements WarehouseRepository {
       FROM ${this.tables.stockCard} sc
       LEFT JOIN ${this.tables.storageLocations} sl ON sl.id = sc.storage_location_id
       LEFT JOIN ${this.tables.cars} c ON c.id = sc.car_id
-      LEFT JOIN ${this.tables.masterPanels} mp ON mp.car_id = sc.car_id AND sc.part_code = CONCAT('MP-', mp.id)
-      LEFT JOIN ${this.tables.masterPanels} parent_mp ON parent_mp.id = mp.parent_id
+      LEFT JOIN ${this.tables.masterPanels} mp
+        ON mp.car_id = sc.car_id
+       AND (mp.id = sc.master_panel_id OR (sc.master_panel_id IS NULL AND sc.part_code = CONCAT('MP-', mp.id)))
       ${whereClause}
       ORDER BY ${sortColumn} ${direction}, sc.created_at DESC
       LIMIT ? OFFSET ?
@@ -2106,9 +2112,12 @@ export class MySqlWarehouseRepository implements WarehouseRepository {
           sc.entry_no AS entryNo,
           sc.car_id AS carId,
           COALESCE(c.unit_name, sc.car_name, sc.car_id) AS unitName,
+          COALESCE(sc.master_panel_id, mp.id) AS masterPanelId,
+          NULL AS parentPanelId,
+          COALESCE(mp.panel_name, mp.name_part) AS panelName,
           sc.part_code AS partCode,
           sc.panel_section AS panelSection,
-          mp.category AS panelCategory,
+          mp.component_name AS panelCategory,
           sc.part_name AS partName,
           sc.condition_type AS conditionType,
           sc.qty AS qty,
@@ -2133,7 +2142,9 @@ export class MySqlWarehouseRepository implements WarehouseRepository {
         FROM ${this.tables.stockCard} sc
         LEFT JOIN ${this.tables.storageLocations} sl ON sl.id = sc.storage_location_id
         LEFT JOIN ${this.tables.cars} c ON c.id = sc.car_id
-        LEFT JOIN ${this.tables.masterPanels} mp ON mp.car_id = sc.car_id AND sc.part_code = CONCAT('MP-', mp.id)
+        LEFT JOIN ${this.tables.masterPanels} mp
+          ON mp.car_id = sc.car_id
+         AND (mp.id = sc.master_panel_id OR (sc.master_panel_id IS NULL AND sc.part_code = CONCAT('MP-', mp.id)))
         WHERE ${conditions.join(" AND ")}
         LIMIT 1
       `,
@@ -2166,6 +2177,7 @@ export class MySqlWarehouseRepository implements WarehouseRepository {
           entry_no,
           car_id,
           car_name,
+          master_panel_id,
           part_code,
           panel_section,
           part_name,
@@ -2182,13 +2194,14 @@ export class MySqlWarehouseRepository implements WarehouseRepository {
           photo_urls,
           created_at,
           updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_DATE), ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_DATE), ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       `,
       [
         stockCardId,
         Number(entryRows[0]?.nextEntryNo ?? 1),
         input.carId,
         unit.label,
+        panel.panelId,
         panel.partCode,
         panel.section,
         panel.name,
@@ -2221,6 +2234,7 @@ export class MySqlWarehouseRepository implements WarehouseRepository {
         SET
           car_id = ?,
           car_name = ?,
+          master_panel_id = ?,
           part_code = ?,
           panel_section = ?,
           part_name = ?,
@@ -2241,6 +2255,7 @@ export class MySqlWarehouseRepository implements WarehouseRepository {
       [
         input.carId,
         unit.label,
+        panel.panelId,
         panel.partCode,
         panel.section,
         panel.name,
@@ -3481,13 +3496,12 @@ export class MySqlWarehouseRepository implements WarehouseRepository {
           SELECT
             mp.id AS panelId,
             CONCAT('MP-', mp.id) AS partCode,
-            mp.section AS section,
-            mp.name AS name,
-            mp.category AS category
+            COALESCE(mp.panel_name, mp.component_name, 'Tanpa Panel') AS section,
+            COALESCE(mp.name_part, mp.panel_name, CONCAT('MP-', mp.id)) AS name,
+            mp.component_name AS category
           FROM ${this.tables.masterPanels} mp
           WHERE mp.id = ?
             AND mp.car_id = ?
-            AND COALESCE(mp.is_active, 1) = 1
           LIMIT 1
         `,
         [requestedPanelId, input.carId],
@@ -3507,33 +3521,29 @@ export class MySqlWarehouseRepository implements WarehouseRepository {
 
     const section = input.panelSection.trim();
     const name = input.partName.trim();
-    const parentPanel = await this.resolveStockCardParentPanel(input, section, name);
-    const parentPanelId = parentPanel ? Number(parentPanel.panelId) : null;
     const [existingRows] = await this.pool.query<StockCardPanelReferenceRow[]>(
       `
         SELECT
           mp.id AS panelId,
-          mp.parent_id AS parentPanelId,
+          NULL AS parentPanelId,
           CONCAT('MP-', mp.id) AS partCode,
-          mp.section AS section,
-          mp.name AS name,
-          mp.category AS category
+          COALESCE(mp.panel_name, mp.component_name, 'Tanpa Panel') AS section,
+          COALESCE(mp.name_part, mp.panel_name, CONCAT('MP-', mp.id)) AS name,
+          mp.component_name AS category
         FROM ${this.tables.masterPanels} mp
         WHERE mp.car_id = ?
-          AND TRIM(mp.section) = ?
-          AND TRIM(mp.name) = ?
-          AND ((? IS NULL AND mp.parent_id IS NULL) OR mp.parent_id = ?)
-          AND COALESCE(mp.is_active, 1) = 1
+          AND TRIM(COALESCE(mp.panel_name, '')) = ?
+          AND TRIM(COALESCE(mp.name_part, '')) = ?
         ORDER BY mp.id ASC
         LIMIT 1
       `,
-      [input.carId, section, name, parentPanelId, parentPanelId],
+      [input.carId, section, name],
     );
     const existing = existingRows[0];
     if (existing) {
-      return {
-        panelId: Number(existing.panelId),
-        partCode: existing.partCode,
+        return {
+          panelId: Number(existing.panelId),
+          partCode: existing.partCode,
         section: existing.section,
         name: existing.name,
       };
@@ -3543,18 +3553,18 @@ export class MySqlWarehouseRepository implements WarehouseRepository {
       `
         INSERT INTO ${this.tables.masterPanels} (
           car_id,
-          section,
-          name,
-          category,
-          is_active,
-          parent_id,
-          sort_order,
-          default_division_id,
+          component_name,
+          panel_name,
+          name_part,
+          qty,
+          initial_condition,
+          current_status,
+          location,
           created_by,
           updated_by
-        ) VALUES (?, ?, ?, ?, 1, ?, 0, NULL, NULL, NULL)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)
       `,
-      [input.carId, section, name, parentPanel?.category ?? input.panelCategory ?? null, parentPanelId],
+      [input.carId, input.panelCategory ?? null, section, name, input.qty, input.conditionType, input.status, "UNIT"],
     );
     const panelId = Number(result.insertId);
 
@@ -3566,96 +3576,6 @@ export class MySqlWarehouseRepository implements WarehouseRepository {
     };
   }
 
-  private async resolveStockCardParentPanel(
-    input: CreateWarehouseStockCard | UpdateWarehouseStockCard,
-    section: string,
-    partName: string,
-  ): Promise<StockCardPanelReferenceRow | null> {
-    if (input.parentPanelId) {
-      const [rows] = await this.pool.query<StockCardPanelReferenceRow[]>(
-        `
-          SELECT
-            mp.id AS panelId,
-            mp.parent_id AS parentPanelId,
-            CONCAT('MP-', mp.id) AS partCode,
-            mp.section AS section,
-            mp.name AS name,
-            mp.category AS category
-          FROM ${this.tables.masterPanels} mp
-          WHERE mp.id = ?
-            AND mp.car_id = ?
-            AND mp.parent_id IS NULL
-            AND COALESCE(mp.is_active, 1) = 1
-          LIMIT 1
-        `,
-        [input.parentPanelId, input.carId],
-      );
-      const row = rows[0];
-      if (!row) {
-        throw new Error("WAREHOUSE_MASTER_PANEL_NOT_FOUND");
-      }
-      return row;
-    }
-
-    const panelName = input.panelName?.trim() ?? "";
-    if (!panelName || panelName === partName) {
-      return null;
-    }
-
-    const [existingRows] = await this.pool.query<StockCardPanelReferenceRow[]>(
-      `
-        SELECT
-          mp.id AS panelId,
-          mp.parent_id AS parentPanelId,
-          CONCAT('MP-', mp.id) AS partCode,
-          mp.section AS section,
-          mp.name AS name,
-          mp.category AS category
-        FROM ${this.tables.masterPanels} mp
-        WHERE mp.car_id = ?
-          AND TRIM(mp.section) = ?
-          AND TRIM(mp.name) = ?
-          AND mp.parent_id IS NULL
-          AND COALESCE(mp.is_active, 1) = 1
-        ORDER BY mp.id ASC
-        LIMIT 1
-      `,
-      [input.carId, section, panelName],
-    );
-    const existing = existingRows[0];
-    if (existing) {
-      return existing;
-    }
-
-    const [result] = await this.pool.execute<ResultSetHeader>(
-      `
-        INSERT INTO ${this.tables.masterPanels} (
-          car_id,
-          section,
-          name,
-          category,
-          is_active,
-          parent_id,
-          sort_order,
-          default_division_id,
-          created_by,
-          updated_by
-        ) VALUES (?, ?, ?, ?, 1, NULL, 0, NULL, NULL, NULL)
-      `,
-      [input.carId, section, panelName, input.panelCategory ?? null],
-    );
-    const panelId = Number(result.insertId);
-
-    return {
-      panelId,
-      parentPanelId: null,
-      partCode: `MP-${panelId}`,
-      section,
-      name: panelName,
-      category: input.panelCategory ?? null,
-    } as StockCardPanelReferenceRow;
-  }
-
   private async readStockCard(stockCardId: string) {
     const [rows] = await this.pool.query<StockCardRow[]>(
       `
@@ -3664,9 +3584,12 @@ export class MySqlWarehouseRepository implements WarehouseRepository {
           sc.entry_no AS entryNo,
           sc.car_id AS carId,
           COALESCE(c.unit_name, sc.car_name, sc.car_id) AS unitName,
+          COALESCE(sc.master_panel_id, mp.id) AS masterPanelId,
+          NULL AS parentPanelId,
+          COALESCE(mp.panel_name, mp.name_part) AS panelName,
           sc.part_code AS partCode,
           sc.panel_section AS panelSection,
-          mp.category AS panelCategory,
+          mp.component_name AS panelCategory,
           sc.part_name AS partName,
           sc.condition_type AS conditionType,
           sc.qty AS qty,
@@ -3691,8 +3614,9 @@ export class MySqlWarehouseRepository implements WarehouseRepository {
         FROM ${this.tables.stockCard} sc
         LEFT JOIN ${this.tables.storageLocations} sl ON sl.id = sc.storage_location_id
         LEFT JOIN ${this.tables.cars} c ON c.id = sc.car_id
-        LEFT JOIN ${this.tables.masterPanels} mp ON mp.car_id = sc.car_id AND sc.part_code = CONCAT('MP-', mp.id)
-        LEFT JOIN ${this.tables.masterPanels} parent_mp ON parent_mp.id = mp.parent_id
+        LEFT JOIN ${this.tables.masterPanels} mp
+          ON mp.car_id = sc.car_id
+         AND (mp.id = sc.master_panel_id OR (sc.master_panel_id IS NULL AND sc.part_code = CONCAT('MP-', mp.id)))
         WHERE sc.id = ?
         LIMIT 1
       `,

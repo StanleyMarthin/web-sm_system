@@ -552,7 +552,7 @@ function buildListSelectSql(): string {
       COALESCE(c.unit_name, jc.car_id, NULLIF(jc.section_name, ''), p.jobdescription, '-') AS unitName,
       COALESCE(jc.division_id, NULL) AS divisionId,
       d.name AS divisionName,
-      COALESCE(mp.name, jc.section_name) AS panelName,
+      COALESCE(mp.panel_name, mp.name_part, jc.section_name) AS panelName,
       jc.section_name AS panelSectionName,
       COALESCE(mjt.job_name, wo.job_detail, jc.section_name, jc.task_category) AS jobName,
       COALESCE(mjt.job_name, wo.job_detail, jc.section_name, p.jobdescription, jc.task_category) AS masterJobName,
@@ -867,7 +867,7 @@ async function getAdditionalContext(
         c.id AS carId,
         COALESCE(c.unit_name, c.id) AS unitName,
         mp.id AS panelId,
-        mp.name AS panelName,
+        COALESCE(mp.panel_name, mp.name_part) AS panelName,
         COALESCE(parent_division.id, selected_division.id) AS divisionId,
         COALESCE(parent_division.name, selected_division.name) AS divisionName,
         mjt.id AS jobTypeId,
@@ -1486,7 +1486,7 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
             CONCAT(
               COALESCE(c.unit_name, jc.car_id),
               ' · ',
-              COALESCE(mjt.job_name, mp.name, jc.section_name),
+              COALESCE(mjt.job_name, mp.name_part, mp.panel_name, jc.section_name),
               ' · ',
               ROUND(GREATEST(COALESCE(jc.remaining_hours, 0) - COALESCE(planCapacity.reservedPlanHours, 0), 0), 2),
               'j'
@@ -1496,7 +1496,7 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
             jc.division_id AS divisionId,
             COALESCE(c.unit_name, jc.car_id) AS unitName,
             COALESCE(d.name, '-') AS divisionName,
-            COALESCE(mp.name, jc.section_name) AS panelName,
+            COALESCE(mp.panel_name, mp.name_part, jc.section_name) AS panelName,
             mjt.job_name AS jobName,
             ROUND(COALESCE(jc.target_hours_revised, jc.target_hours_initial, 0), 2) AS targetTotalHours,
             ROUND(COALESCE(jc.remaining_hours, 0), 2) AS remainingHours,
@@ -1546,7 +1546,8 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
             jc.panel_id,
             jc.division_id,
             c.unit_name,
-            mp.name,
+            mp.panel_name,
+            mp.name_part,
             jc.section_name,
             d.name,
             mjt.job_name,
@@ -1590,11 +1591,11 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
           SELECT
             CAST(mp.id AS CHAR) AS value,
             CASE
-              WHEN mp.car_id IS NULL THEN mp.name
-              ELSE CONCAT(COALESCE(c.unit_name, mp.car_id), ' · ', mp.name)
+              WHEN mp.car_id IS NULL THEN COALESCE(mp.panel_name, mp.name_part)
+              ELSE CONCAT(COALESCE(c.unit_name, mp.car_id), ' · ', COALESCE(mp.panel_name, mp.name_part))
             END AS label,
             mp.car_id AS carId,
-            mp.name AS panelName
+            COALESCE(mp.panel_name, mp.name_part) AS panelName
           FROM master_panels mp
           LEFT JOIN cars c ON c.id = mp.car_id
           WHERE ${
@@ -1604,7 +1605,7 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
                 ? `(${panelScopeClauses.join(" OR ")})`
                 : "1 = 0"
           }
-          ORDER BY mp.name ASC
+          ORDER BY mp.panel_name ASC, mp.name_part ASC
           LIMIT 300
         `,
         panelParams,

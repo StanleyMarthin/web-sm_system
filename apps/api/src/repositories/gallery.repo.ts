@@ -208,14 +208,15 @@ function buildGalleryFilterClauses(query: GalleryQuery, params: unknown[]): stri
       `(
         c.id LIKE ?
         OR c.unit_name LIKE ?
-        OR COALESCE(mp.name, '') LIKE ?
+        OR COALESCE(mp.panel_name, '') LIKE ?
+        OR COALESCE(mp.name_part, '') LIKE ?
         OR COALESCE(cd.section_name, '') LIKE ?
         OR COALESCE(mjt.job_name, '') LIKE ?
         OR COALESCE(p.jobdescription, '') LIKE ?
         OR COALESCE(e.full_name, '') LIKE ?
       )`,
     );
-    params.push(value, value, value, value, value, value, value);
+    params.push(value, value, value, value, value, value, value, value);
   }
 
   if (query.unitId) {
@@ -259,7 +260,7 @@ function buildOrderBy(sortBy: GalleryQuery["sortBy"], direction: GalleryQuery["s
     latestPhotoAt: "COALESCE(photo_agg.latestPhotoAt, a.start_time, a.created_at)",
     workDate: "COALESCE(DATE(a.start_time), p.task_date, DATE(a.created_at))",
     unitName: "c.unit_name",
-    panelName: "COALESCE(mp.name, '-')",
+    panelName: "COALESCE(mp.panel_name, mp.name_part, '-')",
     partName: "COALESCE(cd.section_name, '-')",
     jobName: "COALESCE(mjt.job_name, '-')",
     jobDescription: "COALESCE(p.jobdescription, '-')",
@@ -390,7 +391,7 @@ export class MySqlGalleryRepository implements GalleryRepository {
           cd.division_id AS divisionId,
           d.name AS divisionName,
           cd.panel_id AS panelId,
-          COALESCE(mp.name, '-') AS panelName,
+          COALESCE(mp.panel_name, mp.name_part, '-') AS panelName,
           COALESCE(cd.section_name, '-') AS partName,
           cd.job_type_id AS jobTypeId,
           COALESCE(mjt.job_name, '-') AS jobName,
@@ -486,7 +487,7 @@ export class MySqlGalleryRepository implements GalleryRepository {
 
     const [panelRows] = (await pool.query(
       `
-        SELECT DISTINCT cd.panel_id AS value, mp.name AS label
+        SELECT DISTINCT cd.panel_id AS value, COALESCE(mp.panel_name, mp.name_part) AS label
         FROM ${this.tables.actual} a
         JOIN ${this.tables.plan} p ON p.id = a.plandaily_id
         JOIN ${this.tables.countdown} cd ON cd.id = p.core_id
@@ -494,7 +495,7 @@ export class MySqlGalleryRepository implements GalleryRepository {
         JOIN ${this.tables.cars} c ON c.id = cd.car_id
         ${whereSql}
           AND cd.panel_id IS NOT NULL
-        ORDER BY mp.name ASC
+        ORDER BY COALESCE(mp.panel_name, mp.name_part) ASC
       `,
       baseParams,
     )) as [OptionRow[], unknown];
@@ -547,7 +548,7 @@ export class MySqlGalleryRepository implements GalleryRepository {
           c.unit_name AS unitName,
           cd.division_id AS divisionId,
           COALESCE(d.name, '-') AS divisionName,
-          COALESCE(mp.name, '-') AS panelName,
+          COALESCE(mp.panel_name, mp.name_part, '-') AS panelName,
           COALESCE(cd.section_name, '-') AS partName,
           COALESCE(mjt.job_name, '-') AS jobName,
           COALESCE(p.jobdescription, '-') AS jobDescription,

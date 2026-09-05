@@ -259,7 +259,7 @@ function buildMonitoringBaseSql(): string {
       p.assigned_user_id AS employeeId,
       e.full_name AS employeeName,
       DATE_FORMAT(p.task_date, '%Y-%m-%d') AS taskDate,
-      COALESCE(mp.name, cd.section_name, p.jobdescription) AS panelName,
+      COALESCE(mp.panel_name, mp.name_part, cd.section_name, p.jobdescription) AS panelName,
       COALESCE(mjt.job_name, wo.job_detail, cd.section_name, p.jobdescription, cd.task_category) AS masterJobName,
       COALESCE(
         NULLIF(TRIM(p.jobdescription), ''),

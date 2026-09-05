@@ -239,7 +239,7 @@ function buildSearchClause(query: QaGridQuery, params: unknown[]): string[] {
     `(
       c.unit_name LIKE ?
       OR COALESCE(d.name, '') LIKE ?
-      OR COALESCE(cd.section_name, mp.name, '') LIKE ?
+      OR COALESCE(cd.section_name, mp.panel_name, mp.name_part, '') LIKE ?
       OR COALESCE(wo.job_detail, jt.job_name, cd.section_name, cd.task_category) LIKE ?
       OR COALESCE(emp.full_name, '') LIKE ?
     )`,
@@ -320,7 +320,7 @@ function baseSelectSql(columns: Set<string>) {
       c.unit_name AS unitName,
       cd.division_id AS divisionId,
       d.name AS divisionName,
-      COALESCE(cd.section_name, mp.name) AS panelName,
+      COALESCE(cd.section_name, mp.panel_name, mp.name_part) AS panelName,
       COALESCE(wo.job_detail, jt.job_name, cd.section_name, cd.task_category) AS jobName,
       ${qcColumn(columns, "inspector_id")} AS inspectorId,
       emp.full_name AS inspectorName,
