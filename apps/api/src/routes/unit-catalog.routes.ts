@@ -19,7 +19,9 @@ import { UnitCatalogService } from "@/services/unit-catalog.service";
 import {
   assertImageMagicBytes,
   createUploadNonce,
+  detectAllowedImageContentType,
   extensionForImageContentType,
+  MAX_IMAGE_UPLOAD_BYTES,
   normalizeAllowedImageContentType,
   parseUploadContentLength,
   storeUploadTicket,
@@ -39,6 +41,57 @@ const unitCatalogJobdescPermissions = [
   permissionCodes.unitCatalogCreateJobdesc,
   permissionCodes.unitCatalogManage,
 ] as const;
+
+interface UploadTicketEnvelope {
+  success?: boolean;
+  data?: {
+    upload_url?: string;
+    public_url?: string;
+    uploadUrl?: string;
+    publicUrl?: string;
+  };
+  message?: string;
+}
+
+function stripTrailingSlash(value: string): string {
+  return value.replace(/\/$/u, "");
+}
+
+function resolveTasksBaseUrl(): string {
+  const env = getApiEnv();
+  if (env.SM_TASKS_BASE_URL) return stripTrailingSlash(env.SM_TASKS_BASE_URL);
+
+  try {
+    const loginUrl = new URL(env.SM_LOGIN_BASE_URL);
+    loginUrl.port = "8086";
+    loginUrl.pathname = "";
+    loginUrl.search = "";
+    loginUrl.hash = "";
+    return stripTrailingSlash(loginUrl.toString());
+  } catch {
+    return "http://172.31.11.74:8086";
+  }
+}
+
+async function requestTaskUploadTicket(objectKey: string): Promise<{
+  uploadUrl: string;
+  publicUrl: string;
+}> {
+  const ticketUrl = new URL(`${resolveTasksBaseUrl()}/sm/tasks/upload-ticket`);
+  ticketUrl.searchParams.set("filename", objectKey);
+
+  const response = await fetch(ticketUrl);
+  const payload = (await response.json().catch(() => null)) as UploadTicketEnvelope | null;
+  const data = payload?.data ?? {};
+  const uploadUrl = data.upload_url ?? data.uploadUrl;
+  const publicUrl = data.public_url ?? data.publicUrl;
+
+  if (!response.ok || payload?.success === false || !uploadUrl || !publicUrl) {
+    throw new Error(payload?.message || "UPLOAD_TICKET_FAILED");
+  }
+
+  return { uploadUrl, publicUrl };
+}
 
 async function requireUnitCatalogSession(
   request: Request,
@@ -76,6 +129,8 @@ function mapCatalogError(request: Request, error: unknown): Response {
     if (error.message === "UPLOAD_SIZE_REQUIRED" || error.message === "INVALID_UPLOAD_SIZE") return errorResponse(request, "Ukuran file upload tidak valid.", 400, error.message);
     if (error.message === "UPLOAD_TOO_LARGE") return errorResponse(request, "Ukuran gambar maksimal 10MB.", 413, "UPLOAD_TOO_LARGE");
     if (error.message === "INVALID_IMAGE_BYTES") return errorResponse(request, "Isi file tidak sesuai dengan tipe gambar.", 400, "INVALID_IMAGE_BYTES");
+    if (error.message === "UPLOAD_TICKET_FAILED") return errorResponse(request, "Upload ticket object storage gagal dibuat.", 502, "UPLOAD_TICKET_FAILED");
+    if (error.message === "R2_UPLOAD_FAILED") return errorResponse(request, "Gagal mengupload gambar ke object storage.", 502, "R2_UPLOAD_FAILED");
   }
   return errorResponse(request, "Terjadi kesalahan internal pada modul catalog.", 500, "UNIT_CATALOG_FAILED");
 }
@@ -304,22 +359,31 @@ export async function handleUnitCatalogPanelImageUploadRoute(request: Request, u
       return errorResponse(request, "File gambar wajib diisi.", 400, "MISSING_FILE");
     }
 
-    const contentType = normalizeAllowedImageContentType(file.type || "image/jpeg");
-    const extension = extensionForImageContentType(contentType);
     const bytes = new Uint8Array(await file.arrayBuffer());
     if (bytes.byteLength <= 0) throw new Error("INVALID_UPLOAD_SIZE");
-    if (bytes.byteLength > 10 * 1024 * 1024) throw new Error("UPLOAD_TOO_LARGE");
+    if (bytes.byteLength > MAX_IMAGE_UPLOAD_BYTES) throw new Error("UPLOAD_TOO_LARGE");
+    const contentType = detectAllowedImageContentType(bytes);
+    if (!contentType) throw new Error("INVALID_IMAGE_BYTES");
+    const extension = extensionForImageContentType(contentType);
     assertImageMagicBytes(contentType, bytes);
 
-    const objectKey = `catalog-panels/${encodeURIComponent(unitId)}/${sessionResult.session.employeeId}/${createUploadNonce()}.${extension}`;
-    const upload = await new S3GalleryUploadTicketProvider(getApiEnv()).uploadObject({
-      objectKey,
-      contentType,
-      contentLength: bytes.byteLength,
+    const objectKey = `catalog-panels/${unitId}/${sessionResult.session.employeeId}/${createUploadNonce()}.${extension}`;
+    const ticket = await requestTaskUploadTicket(objectKey);
+    const uploadResponse = await fetch(ticket.uploadUrl, {
+      method: "PUT",
+      headers: { "Content-Type": contentType },
       body: bytes,
     });
+    if (!uploadResponse.ok) {
+      const body = await uploadResponse.text().catch(() => "");
+      console.error("[unit-catalog] panel image upload failed", {
+        status: uploadResponse.status,
+        body: body.slice(0, 500),
+      });
+      throw new Error("R2_UPLOAD_FAILED");
+    }
 
-    return successResponse(request, "Gambar siap disimpan.", { publicUrl: upload.publicUrl });
+    return successResponse(request, "Gambar siap disimpan.", { publicUrl: ticket.publicUrl });
   } catch (error) {
     return mapCatalogError(request, error);
   }

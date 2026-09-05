@@ -226,6 +226,7 @@ export function UnitCatalogTab({ unitId, unitName }: UnitCatalogTabProps) {
   async function handleSave() {
     if (!workspace || !selectedPanelId) return;
 
+    setSaving(true);
     let items;
     let panelImages;
     try {
@@ -236,10 +237,10 @@ export function UnitCatalogTab({ unitId, unitName }: UnitCatalogTabProps) {
         error instanceof Error && error.message.startsWith("QTY_INVALID:") ? "Qty belum valid" : "Gambar belum tersimpan",
         error instanceof Error ? error.message.replace("QTY_INVALID:", "Isi qty tidak valid: ") : "Periksa kembali data.",
       );
+      setSaving(false);
       return;
     }
 
-    setSaving(true);
     const result = await saveUnitCatalogPanelWorkspace(unitId, selectedPanelId, {
       items,
       deletedItemIds,
