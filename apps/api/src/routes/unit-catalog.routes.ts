@@ -4,6 +4,7 @@ import {
   createAdditionalCatalogItemRequestSchema,
   createPanelJobdescsRequestSchema,
   openCatalogPanelRequestSchema,
+  saveCatalogPanelsRequestSchema,
   saveCatalogWorkspaceRequestSchema,
   updateCatalogSurveyRequestSchema,
 } from "@smsystem/contracts/unit-catalog";
@@ -13,6 +14,7 @@ import { parseJsonBody } from "@/http/request";
 import { errorResponse, successResponse, withCors } from "@/http/response";
 import { requireSession } from "@/middleware/auth.middleware";
 import { requireAnyPermission } from "@/middleware/permission.middleware";
+import { CatalogPanelDeleteConflictError } from "@/repositories/unit-catalog.repo";
 import { S3GalleryUploadTicketProvider } from "@/services/storage/r2-upload.service";
 import type { AuthService } from "@/services/auth/auth.service";
 import { UnitCatalogService } from "@/services/unit-catalog.service";
@@ -115,9 +117,19 @@ async function requireCatalogMasterSession(
 }
 
 function mapCatalogError(request: Request, error: unknown): Response {
+  if (error instanceof CatalogPanelDeleteConflictError) {
+    return errorResponse(
+      request,
+      "Panel tidak dapat dihapus karena sudah digunakan.",
+      409,
+      "CATALOG_PANEL_DELETE_CONFLICT",
+      error.conflict,
+    );
+  }
   if (error instanceof Error) {
     if (error.message === "UNIT_NOT_FOUND") return errorResponse(request, "Unit tidak ditemukan.", 404, "UNIT_NOT_FOUND");
     if (error.message === "CATALOG_PANEL_NOT_FOUND") return errorResponse(request, "Panel catalog tidak ditemukan.", 404, "CATALOG_PANEL_NOT_FOUND");
+    if (error.message === "CATALOG_PANEL_DUPLICATE") return errorResponse(request, "Nama panel sudah ada pada komponen ini.", 409, "CATALOG_PANEL_DUPLICATE");
     if (error.message === "CATALOG_COMPONENT_NOT_FOUND") return errorResponse(request, "Komponen catalog tidak ditemukan.", 404, "CATALOG_COMPONENT_NOT_FOUND");
     if (error.message === "CATALOG_ITEM_NOT_FOUND") return errorResponse(request, "Item catalog tidak ditemukan.", 404, "CATALOG_ITEM_NOT_FOUND");
     if (error.message === "ADDITIONAL_ITEM_NOT_FOUND") return errorResponse(request, "Item tambahan tidak ditemukan.", 404, "ADDITIONAL_ITEM_NOT_FOUND");
@@ -206,6 +218,21 @@ export async function handleCatalogComponentPanelsRoute(request: Request, compon
   try {
     return successResponse(request, "Daftar panel catalog berhasil dimuat.", {
       panels: await service.listPanelsByComponent(componentId),
+    });
+  } catch (error) {
+    return mapCatalogError(request, error);
+  }
+}
+
+export async function handleCatalogComponentPanelsBatchRoute(request: Request, componentId: number, authService: AuthService, service: UnitCatalogService) {
+  const sessionResult = await requireCatalogMasterSession(request, authService, unitCatalogAdminPermissions);
+  if ("response" in sessionResult) return sessionResult.response;
+  const body = await parseJsonBody(request, saveCatalogPanelsRequestSchema);
+  if (!body.success) return withCors(request, body.response);
+
+  try {
+    return successResponse(request, "Panel catalog berhasil disimpan.", {
+      panels: await service.saveCatalogPanels(sessionResult.session, componentId, body.data),
     });
   } catch (error) {
     return mapCatalogError(request, error);

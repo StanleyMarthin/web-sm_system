@@ -4,6 +4,7 @@ import type {
   CreateAdditionalCatalogItemRequest,
   CreatePanelJobdescsRequest,
   OpenCatalogPanelRequest,
+  SaveCatalogPanelsRequest,
   SaveCatalogWorkspaceRequest,
   UpdateCatalogSurveyRequest,
 } from "@smsystem/contracts/unit-catalog";
@@ -38,6 +39,10 @@ export class UnitCatalogService {
 
   async listPanelsByComponent(componentId: number) {
     return this.repository.listPanelsByComponent(componentId);
+  }
+
+  async saveCatalogPanels(_session: WebSession, componentId: number, input: SaveCatalogPanelsRequest) {
+    return this.repository.saveCatalogPanels(componentId, input);
   }
 
   async getOverview(session: WebSession, unitId: string) {

@@ -66,6 +66,7 @@ import {
 import { DefaultUnitsService, type UnitsService } from "@/services/units.service";
 import {
   handleCatalogComponentPanelsRoute,
+  handleCatalogComponentPanelsBatchRoute,
   handleCatalogComponentsRoute,
   handleUnitCatalogAdditionalPromoteRoute,
   handleUnitCatalogAdditionalRoute,
@@ -748,6 +749,7 @@ export function createApiFetchHandler(dependencies: AppDependencies = {}) {
     { method: "GET", pattern: /^\/api\/units\/([^/]+)\/bom$/, handler: (request, match) => handleUnitBomRoute(request, match![1], getAuthService(), getUnitsService()) },
     { method: "GET", pattern: "/api/catalog/components", handler: (request) => handleCatalogComponentsRoute(request, getAuthService(), getUnitCatalogService()) },
     { method: "GET", pattern: /^\/api\/catalog\/components\/(\d+)\/panels$/, handler: (request, match) => handleCatalogComponentPanelsRoute(request, Number.parseInt(match![1], 10), getAuthService(), getUnitCatalogService()) },
+    { method: "PUT", pattern: /^\/api\/catalog\/components\/(\d+)\/panels\/batch$/, handler: (request, match) => handleCatalogComponentPanelsBatchRoute(request, Number.parseInt(match![1], 10), getAuthService(), getUnitCatalogService()) },
     { method: "GET", pattern: /^\/api\/units\/([^/]+)\/catalog$/, handler: (request, match) => handleUnitCatalogRoute(request, match![1], getAuthService(), getUnitCatalogService()) },
     { method: "POST", pattern: /^\/api\/units\/([^/]+)\/catalog$/, handler: (request, match) => handleUnitCatalogRoute(request, match![1], getAuthService(), getUnitCatalogService()) },
     { method: "GET", pattern: /^\/api\/units\/([^/]+)\/catalog\/search$/, handler: (request, match) => handleUnitCatalogSearchRoute(request, match![1], getAuthService(), getUnitCatalogService()) },

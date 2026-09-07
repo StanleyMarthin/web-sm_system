@@ -35,6 +35,16 @@ export const catalogPanelSchema = z.object({
   panelName: z.string(),
 });
 
+export const catalogPanelBatchItemSchema = z.object({
+  id: z.number().int().positive().nullable().optional().default(null),
+  panelName: z.string().trim().max(150),
+});
+
+export const saveCatalogPanelsRequestSchema = z.object({
+  items: z.array(catalogPanelBatchItemSchema).max(5_000),
+  deletedIds: z.array(z.number().int().positive()).optional().default([]),
+});
+
 export const catalogPanelImageSchema = z.object({
   id: z.number().int().positive(),
   panelId: z.number().int().positive(),
@@ -302,6 +312,7 @@ export function parseCatalogSpreadsheetText(text: string): CatalogWorkspaceItemI
 
 export type CatalogComponent = z.infer<typeof catalogComponentSchema>;
 export type CatalogPanel = z.infer<typeof catalogPanelSchema>;
+export type CatalogPanelBatchItem = z.infer<typeof catalogPanelBatchItemSchema>;
 export type CatalogPanelImage = z.infer<typeof catalogPanelImageSchema>;
 export type MasterPanel = z.infer<typeof masterPanelSchema>;
 export type CatalogPanelSummary = z.infer<typeof catalogPanelSummarySchema>;
@@ -312,6 +323,7 @@ export type CatalogWorkspaceItem = z.infer<typeof catalogWorkspaceItemSchema>;
 export type CatalogWorkspaceItemInput = z.infer<typeof catalogWorkspaceItemInputSchema>;
 export type CatalogSearchItem = z.infer<typeof catalogSearchItemSchema>;
 export type OpenCatalogPanelRequest = z.infer<typeof openCatalogPanelRequestSchema>;
+export type SaveCatalogPanelsRequest = z.infer<typeof saveCatalogPanelsRequestSchema>;
 export type SaveCatalogWorkspaceRequest = z.infer<typeof saveCatalogWorkspaceRequestSchema>;
 export type UpdateCatalogSurveyRequest = z.infer<typeof updateCatalogSurveyRequestSchema>;
 export type CatalogMediaRequest = z.infer<typeof catalogMediaRequestSchema>;

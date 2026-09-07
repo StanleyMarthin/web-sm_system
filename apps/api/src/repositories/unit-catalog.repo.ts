@@ -13,6 +13,7 @@ import type {
   CreateAdditionalCatalogItemRequest,
   CreatePanelJobdescsRequest,
   OpenCatalogPanelRequest,
+  SaveCatalogPanelsRequest,
   SaveCatalogWorkspaceRequest,
   UpdateCatalogSurveyRequest,
 } from "@smsystem/contracts/unit-catalog";
@@ -62,6 +63,17 @@ interface AdditionalItemRow extends RowDataPacket {
   itemName: string;
   partNumber: string | null;
   deskription: string | null;
+}
+
+export class CatalogPanelDeleteConflictError extends Error {
+  constructor(readonly conflict: {
+    panelId: number;
+    unitCatalogCount: number;
+    imageCount: number;
+    masterPanelCount: number;
+  }) {
+    super("CATALOG_PANEL_DELETE_CONFLICT");
+  }
 }
 
 function num(value: number | string | null | undefined): number | null {
@@ -171,6 +183,117 @@ export class UnitCatalogRepository {
       [componentId],
     );
     return rows.map(mapPanel);
+  }
+
+  async saveCatalogPanels(componentId: number, input: SaveCatalogPanelsRequest): Promise<CatalogPanel[]> {
+    const connection = await this.poolFactory(this.env).getConnection();
+    try {
+      await connection.beginTransaction();
+      const [componentRows] = await connection.query<ComponentRow[]>(
+        "SELECT id, code, component_name AS componentName FROM catalog_components WHERE id = ? LIMIT 1 FOR UPDATE",
+        [componentId],
+      );
+      if (!componentRows[0]) throw new Error("CATALOG_COMPONENT_NOT_FOUND");
+
+      const [existingRows] = await connection.query<PanelRow[]>(
+        `
+          SELECT
+            p.id,
+            p.component_id AS componentId,
+            c.code AS componentCode,
+            c.component_name AS componentName,
+            p.panel_name AS panelName
+          FROM catalog_panels p
+          JOIN catalog_components c ON c.id = p.component_id
+          WHERE p.component_id = ?
+          FOR UPDATE
+        `,
+        [componentId],
+      );
+      const existingById = new Map(existingRows.map((panel) => [Number(panel.id), mapPanel(panel)]));
+      const deletedIdSet = new Set(input.deletedIds);
+      const normalizedItems = input.items
+        .map((item) => ({
+          id: item.id ?? null,
+          panelName: normalizeSpaces(item.panelName),
+        }))
+        .filter((item) => item.panelName && !deletedIdSet.has(item.id ?? 0));
+
+      const names = new Map<string, number | null>();
+      for (const item of normalizedItems) {
+        if (item.id && !existingById.has(item.id)) throw new Error("CATALOG_PANEL_NOT_FOUND");
+        const key = normalizePanelName(item.panelName);
+        if (names.has(key)) throw new Error("CATALOG_PANEL_DUPLICATE");
+        names.set(key, item.id);
+      }
+
+      for (const panel of existingById.values()) {
+        const key = normalizePanelName(panel.panelName);
+        const incomingId = names.get(key);
+        if (incomingId !== undefined && incomingId !== panel.id && !deletedIdSet.has(panel.id)) {
+          throw new Error("CATALOG_PANEL_DUPLICATE");
+        }
+      }
+
+      for (const panelId of deletedIdSet) {
+        if (!existingById.has(panelId)) continue;
+        const [rows] = await connection.query<Array<RowDataPacket & {
+          unitCatalogCount: number | string;
+          imageCount: number | string;
+          masterPanelCount: number | string;
+        }>>(
+          `
+            SELECT
+              (SELECT COUNT(*) FROM unit_catalog WHERE panel_id = ?) AS unitCatalogCount,
+              (SELECT COUNT(*) FROM catalog_panel_images WHERE panel_id = ?) AS imageCount,
+              (SELECT COUNT(*) FROM master_panels WHERE panel_id = ?) AS masterPanelCount
+          `,
+          [panelId, panelId, panelId],
+        );
+        const counts = rows[0] ?? { unitCatalogCount: 0, imageCount: 0, masterPanelCount: 0 };
+        const conflict = {
+          panelId,
+          unitCatalogCount: Number(counts.unitCatalogCount ?? 0),
+          imageCount: Number(counts.imageCount ?? 0),
+          masterPanelCount: Number(counts.masterPanelCount ?? 0),
+        };
+        if (conflict.unitCatalogCount > 0 || conflict.imageCount > 0 || conflict.masterPanelCount > 0) {
+          throw new CatalogPanelDeleteConflictError(conflict);
+        }
+      }
+
+      if (deletedIdSet.size > 0) {
+        const deletedIds = [...deletedIdSet].filter((panelId) => existingById.has(panelId));
+        if (deletedIds.length > 0) {
+          await connection.execute(
+            `DELETE FROM catalog_panels WHERE component_id = ? AND id IN (${deletedIds.map(() => "?").join(",")})`,
+            [componentId, ...deletedIds],
+          );
+        }
+      }
+
+      for (const item of normalizedItems) {
+        if (item.id) {
+          await connection.execute(
+            "UPDATE catalog_panels SET panel_name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND component_id = ?",
+            [item.panelName, item.id, componentId],
+          );
+        } else {
+          await connection.execute(
+            "INSERT INTO catalog_panels (component_id, panel_name) VALUES (?, ?)",
+            [componentId, item.panelName],
+          );
+        }
+      }
+
+      await connection.commit();
+      return this.listPanelsByComponent(componentId);
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
   }
 
   async listOverview(unitId: string): Promise<CatalogOverview> {

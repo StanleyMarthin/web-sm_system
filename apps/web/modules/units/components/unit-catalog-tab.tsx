@@ -9,8 +9,9 @@ Side Effects: HTTP fetch/update catalog dan upload file reference.
 "use client";
 
 import type { CatalogOverview, CatalogWorkspace } from "@smsystem/contracts/unit-catalog";
-import { AlertCircle, ArrowUpDown, ImagePlus, Maximize2, Pencil, RotateCcw, Save, Search, Trash2, X, ZoomIn, ZoomOut } from "lucide-react";
+import { AlertCircle, ArrowUpDown, ImagePlus, Maximize2, Pencil, RotateCcw, Save, Search, Settings2, Trash2, X, ZoomIn, ZoomOut } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { CatalogPanelManager } from "@/modules/units/components/catalog-panel-manager";
 import { UnitCatalogEditor } from "@/modules/units/components/unit-catalog-editor";
 import {
   appendEmptyCatalogDraftRow,
@@ -108,6 +109,7 @@ export function UnitCatalogTab({ unitId, unitName }: UnitCatalogTabProps) {
   const [loadingPanel, setLoadingPanel] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editMode, setEditMode] = useState(false);
+  const [managePanelMode, setManagePanelMode] = useState(false);
   const [imageUrlInput, setImageUrlInput] = useState("");
   const [deletedItemIds, setDeletedItemIds] = useState<number[]>([]);
   const [deletedPanelImageIds, setDeletedPanelImageIds] = useState<number[]>([]);
@@ -467,7 +469,7 @@ export function UnitCatalogTab({ unitId, unitName }: UnitCatalogTabProps) {
 
       <PageHeader
         eyebrow={`Unit / Catalog · ${unitName}`}
-        title={selectedPanelId && workspace ? workspace.panel.panelName : "Catalog Unit"}
+        title={managePanelMode ? "Kelola Panel Catalog" : selectedPanelId && workspace ? workspace.panel.panelName : "Catalog Unit"}
         actions={selectedPanelId ? (
           editMode ? (
             <>
@@ -489,10 +491,21 @@ export function UnitCatalogTab({ unitId, unitName }: UnitCatalogTabProps) {
               </ActionButton>
             </>
           )
-        ) : undefined}
+        ) : managePanelMode ? undefined : (
+          <ActionButton variant="primary" onClick={() => setManagePanelMode(true)}>
+            <Settings2 className="h-3.5 w-3.5" />
+            Kelola Panel
+          </ActionButton>
+        )}
       />
 
-      {selectedPanelId && workspace ? (
+      {managePanelMode ? (
+        <CatalogPanelManager
+          components={overview?.components ?? []}
+          onClose={() => setManagePanelMode(false)}
+          onSaved={() => { void loadOverview(); }}
+        />
+      ) : selectedPanelId && workspace ? (
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1.75fr)_22rem]">
           <SectionCard
             label={`${workspace.panel.componentName} / ${workspace.panel.panelName}`}

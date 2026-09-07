@@ -161,3 +161,144 @@ describe("UnitCatalogRepository promoteAdditionalItem", () => {
     expect(statements.some(({ sql }) => sql.includes("sm_jobdesc_wo"))).toBe(false);
   });
 });
+
+describe("UnitCatalogRepository saveCatalogPanels", () => {
+  function createRepository(overrides: {
+    existingPanels?: Array<{ id: number; panelName: string }>;
+    dependencyCounts?: Record<number, { unitCatalogCount: number; imageCount: number; masterPanelCount: number }>;
+  } = {}) {
+    const statements: Array<{ sql: string; params: unknown[] }> = [];
+    const existingPanels = overrides.existingPanels ?? [];
+    const dependencyCounts = overrides.dependencyCounts ?? {};
+    const connection = {
+      beginTransaction: async () => undefined,
+      commit: async () => undefined,
+      rollback: async () => undefined,
+      release: () => undefined,
+      query: async (sql: string, params: unknown[] = []) => {
+        statements.push({ sql, params });
+        if (sql.includes("FROM catalog_components")) return [[{ id: 4, code: "BODY", componentName: "BODY" }]];
+        if (sql.includes("FROM catalog_panels") && sql.includes("FOR UPDATE")) {
+          return [existingPanels.map((panel) => ({
+            id: panel.id,
+            componentId: 4,
+            componentCode: "BODY",
+            componentName: "BODY",
+            panelName: panel.panelName,
+          }))];
+        }
+        if (sql.includes("unitCatalogCount")) {
+          const panelId = Number(params[0]);
+          return [[dependencyCounts[panelId] ?? { unitCatalogCount: 0, imageCount: 0, masterPanelCount: 0 }]];
+        }
+        return [[]];
+      },
+      execute: async (sql: string, params: unknown[] = []) => {
+        statements.push({ sql, params });
+        return [{ insertId: 901 }];
+      },
+    };
+
+    const repository = new UnitCatalogRepository(
+      () =>
+        ({
+          getConnection: async () => connection,
+        }) as never,
+      {} as never,
+    );
+    repository.listPanelsByComponent = async () => [];
+    return { repository, statements };
+  }
+
+  it("creates multiple panels through one batch", async () => {
+    const { repository, statements } = createRepository();
+
+    await repository.saveCatalogPanels(4, {
+      items: [
+        { id: null, panelName: " Front Door LH " },
+        { id: null, panelName: "Rear Door RH" },
+      ],
+      deletedIds: [],
+    });
+
+    const inserts = statements.filter(({ sql }) => sql.includes("INSERT INTO catalog_panels"));
+    expect(inserts.length).toBe(2);
+    expect(inserts[0]?.params).toEqual([4, "Front Door LH"]);
+    expect(inserts[1]?.params).toEqual([4, "Rear Door RH"]);
+  });
+
+  it("renames an existing panel without changing its id", async () => {
+    const { repository, statements } = createRepository({
+      existingPanels: [{ id: 12, panelName: "FRONT DOOR LH" }],
+    });
+
+    await repository.saveCatalogPanels(4, {
+      items: [{ id: 12, panelName: "FRONT DOOR LEFT" }],
+      deletedIds: [],
+    });
+
+    const update = statements.find(({ sql }) => sql.includes("UPDATE catalog_panels"));
+    expect(update?.params).toEqual(["FRONT DOOR LEFT", 12, 4]);
+  });
+
+  it("rejects duplicate panel name within the same component", async () => {
+    const { repository } = createRepository({
+      existingPanels: [{ id: 12, panelName: "FRONT DOOR LH" }],
+    });
+
+    let error: unknown;
+    try {
+      await repository.saveCatalogPanels(4, {
+        items: [
+          { id: 12, panelName: "FRONT DOOR LH" },
+          { id: null, panelName: " front door lh " },
+        ],
+        deletedIds: [],
+      });
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(error instanceof Error ? error.message : "").toBe("CATALOG_PANEL_DUPLICATE");
+  });
+
+  it("deletes an unused panel", async () => {
+    const { repository, statements } = createRepository({
+      existingPanels: [{ id: 12, panelName: "FRONT DOOR LH" }],
+    });
+
+    await repository.saveCatalogPanels(4, {
+      items: [],
+      deletedIds: [12],
+    });
+
+    expect(statements.some(({ sql }) => sql.includes("DELETE FROM catalog_panels"))).toBe(true);
+  });
+
+  it("blocks deleting a panel used by unit catalog, images, or master panels", async () => {
+    const { repository } = createRepository({
+      existingPanels: [{ id: 12, panelName: "FRONT DOOR LH" }],
+      dependencyCounts: {
+        12: { unitCatalogCount: 1, imageCount: 1, masterPanelCount: 1 },
+      },
+    });
+
+    let error: any;
+    try {
+      await repository.saveCatalogPanels(4, {
+        items: [],
+        deletedIds: [12],
+      });
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(error?.message).toBe("CATALOG_PANEL_DELETE_CONFLICT");
+    expect(error?.conflict).toEqual({
+      panelId: 12,
+      unitCatalogCount: 1,
+      imageCount: 1,
+      masterPanelCount: 1,
+    });
+  });
+});

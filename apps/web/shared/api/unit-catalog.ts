@@ -8,9 +8,11 @@ import {
   createPanelJobdescsRequestSchema,
   openCatalogPanelRequestSchema,
   saveCatalogWorkspaceRequestSchema,
+  saveCatalogPanelsRequestSchema,
   updateCatalogSurveyRequestSchema,
   type CatalogItem,
   type CatalogOverview,
+  type SaveCatalogPanelsRequest,
   type CatalogWorkspace,
   type CreatePanelJobdescsRequest,
   type OpenCatalogPanelRequest,
@@ -87,6 +89,7 @@ interface ApiFailure {
   success: false;
   message: string;
   errorCode?: string;
+  data?: unknown;
 }
 
 async function parseFailure(response: Response): Promise<ApiFailure> {
@@ -96,6 +99,7 @@ async function parseFailure(response: Response): Promise<ApiFailure> {
       success: false,
       message: typeof data?.message === "string" ? data.message : "Request gagal.",
       errorCode: typeof data?.errorCode === "string" ? data.errorCode : undefined,
+      data: data?.data,
     };
   } catch {
     return { success: false, message: "Response API tidak valid.", errorCode: "INVALID_RESPONSE" };
@@ -127,6 +131,15 @@ export async function fetchCatalogComponents() {
 
 export async function fetchCatalogPanelsByComponent(componentId: number) {
   return requestJson(`/api/catalog/components/${componentId}/panels`, panelsEnvelopeSchema);
+}
+
+export async function saveCatalogPanels(componentId: number, input: SaveCatalogPanelsRequest) {
+  const body = saveCatalogPanelsRequestSchema.parse(input);
+  return requestJson(
+    `/api/catalog/components/${componentId}/panels/batch`,
+    panelsEnvelopeSchema,
+    { method: "PUT", body: JSON.stringify(body) },
+  );
 }
 
 export async function searchUnitCatalog(unitId: string, input: {
