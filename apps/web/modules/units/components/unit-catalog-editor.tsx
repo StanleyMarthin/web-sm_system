@@ -138,7 +138,7 @@ export function UnitCatalogEditor({
       </div>
 
       <div
-        className="ag-theme-alpine h-full min-h-[30rem] w-full"
+        className="ag-theme-alpine sms-ag-grid h-full min-h-[30rem] w-full"
         onPasteCapture={(event) => {
           if (!editMode) return;
           const text = event.clipboardData.getData("text/plain");

@@ -257,3 +257,61 @@
     background-clip: content-box;
   }
 }
+
+@layer components {
+  .sms-ag-grid {
+    --ag-background-color: var(--card);
+    --ag-foreground-color: var(--card-foreground);
+    --ag-header-background-color: var(--app-panel-muted);
+    --ag-header-foreground-color: var(--foreground);
+    --ag-odd-row-background-color: var(--card);
+    --ag-row-hover-color: var(--app-accent-soft);
+    --ag-selected-row-background-color: var(--app-accent-soft);
+    --ag-border-color: var(--border);
+    --ag-secondary-border-color: var(--app-line-soft);
+    --ag-row-border-color: var(--app-line-soft);
+    --ag-input-border-color: var(--input);
+    --ag-input-focus-border-color: var(--ring);
+    --ag-range-selection-border-color: var(--primary);
+    --ag-checkbox-checked-color: var(--primary);
+    --ag-invalid-color: var(--destructive);
+    --ag-font-family: var(--font-lexend-deca), sans-serif;
+    --ag-font-size: 13px;
+    --ag-cell-horizontal-padding: 16px;
+  }
+
+  .sms-ag-grid .ag-root-wrapper {
+    border: 0;
+    background: var(--card);
+  }
+
+  .sms-ag-grid .ag-header {
+    border-bottom: 1px solid var(--border);
+  }
+
+  .sms-ag-grid .ag-header-cell,
+  .sms-ag-grid .ag-cell {
+    color: var(--foreground);
+  }
+
+  .sms-ag-grid .ag-row {
+    background: var(--card);
+  }
+
+  .sms-ag-grid .ag-row-hover {
+    background: var(--app-accent-soft);
+  }
+
+  .sms-ag-grid .ag-row-selected::before {
+    background: var(--app-accent-soft);
+  }
+
+  .sms-ag-grid .ag-cell-focus:not(.ag-cell-range-selected):focus-within {
+    border-color: var(--ring);
+  }
+
+  .sms-ag-grid .catalog-cell-invalid {
+    background: color-mix(in srgb, var(--destructive) 16%, transparent);
+    color: var(--destructive);
+  }
+}
