@@ -94,6 +94,61 @@ describe("UnitCatalogRepository savePanelWorkspace", () => {
       false,
     );
   });
+
+  it("blocks update and delete for catalog rows already promoted to master panel", async () => {
+    let rolledBack = false;
+    const connection = {
+      beginTransaction: async () => undefined,
+      commit: async () => undefined,
+      rollback: async () => {
+        rolledBack = true;
+      },
+      release: () => undefined,
+      query: async (sql: string) => {
+        if (sql.includes("FROM master_panels") && sql.includes("source_part = 'CATALOG'")) {
+          return [[{ partId: 12 }]];
+        }
+        return [[]];
+      },
+      execute: async () => [{ insertId: 901 }],
+    };
+
+    const repository = new UnitCatalogRepository(
+      () => ({ getConnection: async () => connection }) as never,
+      {} as never,
+    ) as any;
+
+    repository.getCatalogPanel = async () => ({
+      id: 11,
+      componentId: 4,
+      componentCode: "BODY",
+      componentName: "BODY",
+      panelName: "FRONT FENDER LH",
+    });
+
+    let errorMessage = "";
+    try {
+      await repository.savePanelWorkspace("CAR-1", 11, "EMP-1", {
+        deletedItemIds: [12],
+        deletedPanelImageIds: [],
+        panelImages: [],
+        items: [{
+          id: 12,
+          clientRowId: null,
+          code: "12",
+          partNumber: null,
+          itemName: "Locked Item",
+          position: null,
+          qtyNormal: null,
+          isRestoration: true,
+        }],
+      });
+    } catch (error) {
+      errorMessage = error instanceof Error ? error.message : String(error);
+    }
+    expect(errorMessage).toBe("CATALOG_ITEM_ALREADY_PROMOTED");
+    expect(rolledBack).toBe(true);
+  });
 });
 
 describe("UnitCatalogRepository promoteAdditionalItem", () => {
@@ -193,6 +248,106 @@ describe("UnitCatalogRepository promoteAdditionalItem", () => {
     ]);
     expect(statements.some(({ sql }) => sql.includes("FROM catalog_panels"))).toBe(false);
     expect(statements.some(({ sql }) => sql.includes("FROM catalog_components"))).toBe(false);
+  });
+});
+
+describe("UnitCatalogRepository listWorkspaceItems", () => {
+  it("derives survey status and master panel alias from catalog source", async () => {
+    const repository = new UnitCatalogRepository(
+      () => ({
+        query: async () => [[{
+          id: 12,
+          promotedPanelId: 90,
+          aliasName: "Door Handle LH",
+          code: "A1",
+          partNumber: "PN-1",
+          itemName: "Inside Door Handle",
+          position: null,
+          qtyNormal: "1",
+          isRestoration: 1,
+          createdAt: null,
+          updatedAt: null,
+        }]],
+      }) as never,
+      {} as never,
+    ) as any;
+
+    const rows = await repository.listWorkspaceItems("CAR-1", 7);
+
+    expect(rows[0]).toMatchObject({
+      id: 12,
+      promotedPanelId: 90,
+      aliasName: "Door Handle LH",
+      surveyStatus: "MASTER_PANEL_CREATED",
+    });
+  });
+});
+
+describe("UnitCatalogRepository catalog materialization", () => {
+  it("creates master panel from unit catalog without operational side effects", async () => {
+    const statements: Array<{ sql: string; params: unknown[] }> = [];
+    const connection = {
+      query: async (sql: string, params: unknown[] = []) => {
+        statements.push({ sql, params });
+        if (sql.includes("SELECT id FROM master_panels")) return [[]];
+        if (sql.includes("FROM unit_catalog uc")) {
+          return [[{
+            id: 55,
+            carId: "CAR-1",
+            componentId: 4,
+            componentCode: "BODY",
+            componentName: "BODY",
+            panelId: 10,
+            panelName: "FRONT BUMPER",
+            itemName: "Rubber Seal",
+            partNumber: "PN-1",
+            position: null,
+            qtyNormal: "2",
+            isRestoration: 1,
+          }]];
+        }
+        if (sql.includes("FROM sm_car_panel_status")) return [[]];
+        return [[]];
+      },
+      execute: async (sql: string, params: unknown[] = []) => {
+        statements.push({ sql, params });
+        return [{ insertId: 901 }];
+      },
+    };
+    const repository = new UnitCatalogRepository(() => ({}) as never, {} as never) as any;
+
+    const result = await repository.materializeItemWithConnection(connection, "CAR-1", 55, "EMP-1", {
+      actualName: "Front Seal",
+      availabilityStatus: "AVAILABLE",
+      conditionStatus: "RESTORE",
+      isRestoration: true,
+      actionType: "NO_ACTION",
+      location: "UNIT",
+      notes: null,
+      mapping: null,
+      qtyOpname: null,
+    });
+
+    const masterInsert = statements.find(({ sql }) => sql.includes("INSERT INTO master_panels"));
+    expect(result).toEqual({ panelId: 901, alreadyPromoted: false });
+    expect(masterInsert?.params?.slice(0, 10)).toEqual([
+      "CAR-1",
+      55,
+      4,
+      10,
+      "BODY",
+      "FRONT BUMPER",
+      "Rubber Seal",
+      "Front Seal",
+      "PN-1",
+      2,
+    ]);
+    expect(masterInsert?.params?.[10]).toBe("RESTORE");
+    expect(masterInsert?.params?.[11]).toBe("WAITING");
+    expect(masterInsert?.sql.includes("'CATALOG'")).toBe(true);
+    expect(statements.some(({ sql }) => sql.includes("sm_jobdesc_countdown"))).toBe(false);
+    expect(statements.some(({ sql }) => sql.includes("sm_jobdesc_wo"))).toBe(false);
+    expect(statements.some(({ sql }) => sql.toLowerCase().includes("purchase"))).toBe(false);
   });
 });
 

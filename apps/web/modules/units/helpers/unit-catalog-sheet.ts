@@ -13,21 +13,20 @@ import {
 } from "@smsystem/contracts/unit-catalog";
 
 export const catalogGridFields = [
-  "code",
-  "partNumber",
   "itemName",
-  "position",
+  "partNumber",
+  "code",
   "qtyNormal",
   "isRestoration",
 ] as const;
 
-export type CatalogDraftField = typeof catalogGridFields[number];
+export type CatalogGridField = typeof catalogGridFields[number];
+export type CatalogDraftField = CatalogGridField | "position";
 
-const catalogGridHeaders: Record<CatalogDraftField, string> = {
-  code: "Code",
+const catalogGridHeaders: Record<CatalogGridField, string> = {
+  itemName: "Original Name",
   partNumber: "Part Number",
-  itemName: "Item Name",
-  position: "Position",
+  code: "Code",
   qtyNormal: "Qty Normal",
   isRestoration: "Restorasi",
 };
@@ -35,12 +34,17 @@ const catalogGridHeaders: Record<CatalogDraftField, string> = {
 export interface CatalogDraftRow {
   rowId: string;
   persistedId: number | null;
+  promotedPanelId: number | null;
+  aliasName: string;
   code: string;
   partNumber: string;
   itemName: string;
   position: string;
   qtyNormal: string;
   isRestoration: boolean;
+  availabilityStatus: "UNKNOWN" | "AVAILABLE" | "NOT_AVAILABLE" | null;
+  conditionStatus: "UNKNOWN" | "GOOD" | "RESTORE" | "NOT_USABLE" | null;
+  surveyStatus: "BELUM_DIDATA" | "SUDAH_DIDATA" | "MASTER_PANEL_CREATED";
 }
 
 export interface CatalogDraftPanelImage {
@@ -101,12 +105,17 @@ function rowFromItem(item: Partial<CatalogWorkspace["items"][number]> & { id?: n
   return {
     rowId: createRowId(),
     persistedId: item.id ?? null,
+    promotedPanelId: item.promotedPanelId ?? null,
+    aliasName: emptyString(item.aliasName),
     code: emptyString(item.code),
     partNumber: emptyString(item.partNumber),
     itemName: emptyString(item.itemName),
     position: emptyString(item.position),
     qtyNormal: item.qtyNormal == null ? "" : String(item.qtyNormal),
     isRestoration: Boolean(item.isRestoration),
+    availabilityStatus: item.availabilityStatus ?? null,
+    conditionStatus: item.conditionStatus ?? null,
+    surveyStatus: item.surveyStatus ?? "BELUM_DIDATA",
   };
 }
 
@@ -114,12 +123,17 @@ export function createCatalogDraftRow(partial: Partial<CatalogDraftRow> = {}): C
   return {
     rowId: partial.rowId ?? createRowId(),
     persistedId: partial.persistedId ?? null,
+    promotedPanelId: partial.promotedPanelId ?? null,
+    aliasName: partial.aliasName ?? "",
     code: partial.code ?? "",
     partNumber: partial.partNumber ?? "",
     itemName: partial.itemName ?? "",
     position: partial.position ?? "",
     qtyNormal: partial.qtyNormal ?? "",
     isRestoration: partial.isRestoration ?? false,
+    availabilityStatus: partial.availabilityStatus ?? null,
+    conditionStatus: partial.conditionStatus ?? null,
+    surveyStatus: partial.surveyStatus ?? "BELUM_DIDATA",
   };
 }
 
@@ -217,6 +231,30 @@ export function clampCatalogImageZoom(value: number) {
   return Math.min(Math.max(value, catalogImageZoomMin), catalogImageZoomMax);
 }
 
+export function catalogPositionFromPoint(xPercent: number, yPercent: number) {
+  return JSON.stringify({
+    x: Number((xPercent / 100).toFixed(4)),
+    y: Number((yPercent / 100).toFixed(4)),
+    page: 1,
+  });
+}
+
+export function parseCatalogPositionMarker(value: string | null | undefined) {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value) as { x?: unknown; y?: unknown };
+    const x = typeof parsed.x === "number" ? parsed.x : Number(parsed.x);
+    const y = typeof parsed.y === "number" ? parsed.y : Number(parsed.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+    return {
+      x: Math.min(Math.max(x <= 1 ? x * 100 : x, 0), 100),
+      y: Math.min(Math.max(y <= 1 ? y * 100 : y, 0), 100),
+    };
+  } catch {
+    return null;
+  }
+}
+
 export function getCatalogImageHoverPosition(
   clientX: number,
   clientY: number,
@@ -274,7 +312,7 @@ function draftRowToInput(row: CatalogDraftRow): CatalogWorkspaceItemInput {
 
 export function serializeCatalogDraftRows(rows: CatalogDraftRow[]) {
   return rows
-    .filter(draftRowHasValue)
+    .filter((row) => !row.promotedPanelId && draftRowHasValue(row))
     .map((row) => draftRowToInput(row));
 }
 
@@ -296,7 +334,7 @@ export function appendParsedCatalogRows(rows: CatalogDraftRow[], text: string) {
   return [...rows, ...parsed];
 }
 
-export function applyCatalogPaste(rows: CatalogDraftRow[], input: { rowIndex: number; column: CatalogDraftField; text: string }) {
+export function applyCatalogPaste(rows: CatalogDraftRow[], input: { rowIndex: number; column: CatalogGridField; text: string }) {
   const parsedRows = input.text
     .split(/\r?\n/u)
     .map((line) => line.split("\t"))
@@ -315,6 +353,7 @@ export function applyCatalogPaste(rows: CatalogDraftRow[], input: { rowIndex: nu
   return nextRows.map((row, rowIndex) => {
     const pastedRow = parsedRows[rowIndex - input.rowIndex];
     if (!pastedRow) return row;
+    if (row.promotedPanelId) return row;
     const next: CatalogDraftRow = { ...row };
     for (let columnOffset = 0; columnOffset < pastedRow.length; columnOffset += 1) {
       const field = catalogGridFields[startColumn + columnOffset];
@@ -333,14 +372,14 @@ function tsvCell(value: string | boolean) {
   return String(value).replace(/\r?\n/gu, " ").replace(/\t/gu, " ").trim();
 }
 
-function getCatalogCellValue(row: CatalogDraftRow, field: CatalogDraftField) {
+function getCatalogCellValue(row: CatalogDraftRow, field: CatalogGridField) {
   if (field === "isRestoration") return row.isRestoration ? "Ya" : "";
   return row[field];
 }
 
 export function catalogCellsToClipboardTsv(
   rows: CatalogDraftRow[],
-  fields: readonly CatalogDraftField[],
+  fields: readonly CatalogGridField[],
   options: { includeHeader?: boolean } = {},
 ) {
   const body = rows.map((row) => fields.map((field) => getCatalogCellValue(row, field)));

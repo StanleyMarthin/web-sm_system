@@ -12,6 +12,7 @@ export const availabilityStatusSchema = z.enum(["UNKNOWN", "AVAILABLE", "NOT_AVA
 export const conditionStatusSchema = z.enum(["UNKNOWN", "GOOD", "RESTORE", "NOT_USABLE"]);
 export const catalogActionTypeSchema = z.enum(["UNDECIDED", "NO_ACTION", "JOBDESC", "JOBDESC_ORDER"]);
 export const taskCategorySchema = z.enum(["MAIN", "ADDITIONAL"]);
+export const catalogSurveyStatusSchema = z.enum(["BELUM_DIDATA", "SUDAH_DIDATA", "MASTER_PANEL_CREATED"]);
 
 function nullableText(max: number) {
   return z.string().trim().max(max).nullable().optional().default(null);
@@ -88,12 +89,17 @@ export const catalogItemMappingSchema = z.object({
 export const catalogWorkspaceItemSchema = z.object({
   id: z.number().int().positive().nullable(),
   clientRowId: z.string().trim().max(64).nullable().optional().default(null),
+  promotedPanelId: z.number().int().positive().nullable().optional().default(null),
+  aliasName: nullableText(150),
   code: nullableText(50),
   partNumber: nullableText(100),
   itemName: nullableText(150),
   position: nullableText(50),
   qtyNormal: optionalNumber(10_000_000),
   isRestoration: z.boolean().optional().default(false),
+  availabilityStatus: availabilityStatusSchema.nullable().optional().default(null),
+  conditionStatus: conditionStatusSchema.nullable().optional().default(null),
+  surveyStatus: catalogSurveyStatusSchema.optional().default("BELUM_DIDATA"),
   createdAt: z.string().nullable().optional().default(null),
   updatedAt: z.string().nullable().optional().default(null),
 });

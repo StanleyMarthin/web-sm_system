@@ -4,6 +4,7 @@ import {
   applyCatalogPaste,
   appendParsedCatalogRows,
   catalogCellsToClipboardTsv,
+  catalogPositionFromPoint,
   catalogRowsToClipboardTsv,
   clampCatalogImageZoom,
   createCatalogDraftRow,
@@ -11,6 +12,7 @@ import {
   getCatalogImageFilesFromClipboardItems,
   getCatalogImageHoverPosition,
   isCatalogDraftDirty,
+  parseCatalogPositionMarker,
   removeCatalogDraftImage,
   resolveCatalogPanelImagesForSave,
   removeCatalogDraftRows,
@@ -140,8 +142,8 @@ describe("unit catalog sheet helper", () => {
   it("preserves empty cells and appends rows when paste starts from selected column", () => {
     const rows = applyCatalogPaste([createCatalogDraftRow()], {
       rowIndex: 0,
-      column: "partNumber",
-      text: "PN-1\tRubber Seal\t21\nPN-2\t\t22",
+      column: "itemName",
+      text: "Rubber Seal\tPN-1\n\tPN-2",
     });
 
     expect(rows.length).toBe(2);
@@ -149,13 +151,32 @@ describe("unit catalog sheet helper", () => {
       code: "",
       partNumber: "PN-1",
       itemName: "Rubber Seal",
-      position: "21",
+      position: "",
     });
     expect(rows[1]).toMatchObject({
       partNumber: "PN-2",
       itemName: "",
-      position: "22",
+      position: "",
     });
+  });
+
+  it("does not paste over rows already promoted to Master Panel", () => {
+    const locked = createCatalogDraftRow({
+      promotedPanelId: 90,
+      itemName: "Locked Item",
+    });
+    const editable = createCatalogDraftRow({
+      itemName: "Editable Item",
+    });
+
+    const rows = applyCatalogPaste([locked, editable], {
+      rowIndex: 0,
+      column: "itemName",
+      text: "Changed Locked\nChanged Editable",
+    });
+
+    expect(rows[0]?.itemName).toBe("Locked Item");
+    expect(rows[1]?.itemName).toBe("Changed Editable");
   });
 
   it("drops trailing empty row on save but keeps partial row", () => {
@@ -178,6 +199,24 @@ describe("unit catalog sheet helper", () => {
       qtyNormal: null,
       isRestoration: true,
     });
+  });
+
+  it("does not serialize rows already promoted to Master Panel", () => {
+    const items = serializeCatalogDraftRows([
+      createCatalogDraftRow({
+        persistedId: 7,
+        promotedPanelId: 88,
+        itemName: "Locked Item",
+        isRestoration: true,
+      }),
+      createCatalogDraftRow({
+        persistedId: 8,
+        itemName: "Editable Item",
+      }),
+    ]);
+
+    expect(items).toHaveLength(1);
+    expect(items[0]?.id).toBe(8);
   });
 
   it("tracks dirty state and cancel restore shape", () => {
@@ -300,6 +339,14 @@ describe("unit catalog sheet helper", () => {
     })).toEqual({ x: 0, y: 100 });
   });
 
+  it("stores image marker as internal position JSON", () => {
+    const value = catalogPositionFromPoint(45, 32);
+
+    expect(value).toBe("{\"x\":0.45,\"y\":0.32,\"page\":1}");
+    expect(parseCatalogPositionMarker(value)).toEqual({ x: 45, y: 32 });
+    expect(parseCatalogPositionMarker("legacy")).toBeNull();
+  });
+
   it("serializes catalog rows for Excel copy", () => {
     const text = catalogRowsToClipboardTsv([
       createCatalogDraftRow({
@@ -312,7 +359,7 @@ describe("unit catalog sheet helper", () => {
       }),
     ]);
 
-    expect(text).toBe("Code\tPart Number\tItem Name\tPosition\tQty Normal\tRestorasi\n1\tPN 1\tRubber Seal\t21\t1\tYa");
+    expect(text).toBe("Original Name\tPart Number\tCode\tQty Normal\tRestorasi\nRubber Seal\tPN 1\t1\t1\tYa");
   });
 
   it("serializes selected catalog cells without headers", () => {

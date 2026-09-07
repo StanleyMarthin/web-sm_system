@@ -12,7 +12,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { CellMouseDownEvent, CellMouseOverEvent, ColDef } from "ag-grid-community";
 import { AllCommunityModule, ModuleRegistry } from "ag-grid-community";
 import { AgGridReact } from "ag-grid-react";
-import { Clipboard, ClipboardPaste, Plus, Trash2 } from "lucide-react";
+import { CheckCircle2, Clipboard, ClipboardPaste, Eye, MapPin, Plus, Trash2 } from "lucide-react";
 import {
   ActionButton,
   CompactInput,
@@ -24,6 +24,7 @@ import {
   catalogRowsToClipboardTsv,
   updateCatalogDraftCell,
   type CatalogDraftField,
+  type CatalogGridField,
   type CatalogDraftRow,
 } from "@/modules/units/helpers/unit-catalog-sheet";
 
@@ -39,16 +40,49 @@ interface UnitCatalogEditorProps {
   onSelectedRowIdsChange: (rowIds: string[]) => void;
   onAddRow: () => void;
   onDeleteSelected: () => void;
+  onOpenDetail: (row: CatalogDraftRow) => void;
+  onMarkPosition: (row: CatalogDraftRow) => void;
+  onSurvey: (row: CatalogDraftRow) => void;
 }
 
 type GridRef = AgGridReact<CatalogDraftRow>;
-type CatalogCellRef = { rowIndex: number; field: CatalogDraftField };
+type CatalogCellRef = { rowIndex: number; field: CatalogGridField };
 type CatalogCellRange = { start: CatalogCellRef; end: CatalogCellRef };
 
 function qtyCellClass(value: unknown) {
   if (typeof value !== "string" || !value.trim()) return "";
   const parsed = Number(value.replace(",", "."));
   return Number.isFinite(parsed) && parsed > 0 ? "" : "catalog-cell-invalid";
+}
+
+function surveyStatusLabel(row: CatalogDraftRow) {
+  if (row.surveyStatus === "MASTER_PANEL_CREATED") return "Master Panel Created";
+  if (row.surveyStatus === "SUDAH_DIDATA" || row.isRestoration) return "Survey Selesai";
+  return "Belum Survey";
+}
+
+function surveyStatusTone(row: CatalogDraftRow) {
+  if (row.surveyStatus === "MASTER_PANEL_CREATED") return "bg-foreground";
+  if (row.surveyStatus === "SUDAH_DIDATA" || row.isRestoration) return "bg-success";
+  return "bg-amber-500";
+}
+
+function availabilityLabel(value: CatalogDraftRow["availabilityStatus"]) {
+  if (value === "AVAILABLE") return "Ada";
+  if (value === "NOT_AVAILABLE") return "Tidak Ada";
+  if (value === "UNKNOWN") return "Tidak Ditemukan";
+  return "-";
+}
+
+function conditionLabel(value: CatalogDraftRow["conditionStatus"]) {
+  if (value === "GOOD") return "Layak";
+  if (value === "RESTORE") return "Restorasi";
+  if (value === "NOT_USABLE") return "Tidak Layak";
+  return "-";
+}
+
+function isRowEditable(editMode: boolean, row?: CatalogDraftRow) {
+  return editMode && !row?.promotedPanelId;
 }
 
 export function UnitCatalogEditor({
@@ -61,6 +95,9 @@ export function UnitCatalogEditor({
   onSelectedRowIdsChange,
   onAddRow,
   onDeleteSelected,
+  onOpenDetail,
+  onMarkPosition,
+  onSurvey,
 }: UnitCatalogEditorProps) {
   const gridRef = useRef<GridRef>(null);
   const draggingCellRange = useRef(false);
@@ -80,10 +117,10 @@ export function UnitCatalogEditor({
   }, [cellRange]);
 
   function isCellInRange(rowIndex: number | null | undefined, field: string | undefined) {
-    if (rowIndex == null || !field || !catalogGridFields.includes(field as CatalogDraftField) || !cellRange) return false;
+    if (rowIndex == null || !field || !catalogGridFields.includes(field as CatalogGridField) || !cellRange) return false;
     const startColumn = catalogGridFields.indexOf(cellRange.start.field);
     const endColumn = catalogGridFields.indexOf(cellRange.end.field);
-    const fieldColumn = catalogGridFields.indexOf(field as CatalogDraftField);
+    const fieldColumn = catalogGridFields.indexOf(field as CatalogGridField);
     return rowIndex >= Math.min(cellRange.start.rowIndex, cellRange.end.rowIndex) &&
       rowIndex <= Math.max(cellRange.start.rowIndex, cellRange.end.rowIndex) &&
       fieldColumn >= Math.min(startColumn, endColumn) &&
@@ -99,58 +136,121 @@ export function UnitCatalogEditor({
 
   const columnDefs = useMemo<ColDef<CatalogDraftRow>[]>(() => ([
     {
-      field: "code",
-      headerName: "Code",
-      minWidth: 110,
-      editable: editMode,
-      cellClass: (params) => getCellClass("code", params.value, params.node.rowIndex),
+      field: "aliasName",
+      headerName: "Alias Name",
+      minWidth: 160,
+      editable: false,
+      valueGetter: (params) => params.data?.aliasName || params.data?.itemName || "-",
+    },
+    {
+      field: "itemName",
+      headerName: "Original Name",
+      minWidth: 220,
+      editable: (params) => isRowEditable(editMode, params.data),
+      flex: 1,
+      cellClass: (params) => getCellClass("itemName", params.value, params.node.rowIndex),
     },
     {
       field: "partNumber",
       headerName: "Part Number",
       minWidth: 160,
-      editable: editMode,
+      editable: (params) => isRowEditable(editMode, params.data),
       cellClass: (params) => getCellClass("partNumber", params.value, params.node.rowIndex),
     },
     {
-      field: "itemName",
-      headerName: "Item Name",
-      minWidth: 220,
-      editable: editMode,
-      flex: 1,
-      cellClass: (params) => getCellClass("itemName", params.value, params.node.rowIndex),
-    },
-    {
-      field: "position",
-      headerName: "Position",
-      minWidth: 120,
-      editable: editMode,
-      cellClass: (params) => getCellClass("position", params.value, params.node.rowIndex),
+      field: "code",
+      headerName: "Code",
+      minWidth: 110,
+      editable: (params) => isRowEditable(editMode, params.data),
+      cellClass: (params) => getCellClass("code", params.value, params.node.rowIndex),
     },
     {
       field: "qtyNormal",
       headerName: "Qty Normal",
-      minWidth: 120,
-      editable: editMode,
+      minWidth: 96,
+      editable: (params) => isRowEditable(editMode, params.data),
       cellClass: (params) => getCellClass("qtyNormal", params.value, params.node.rowIndex),
     },
     {
+      colId: "availabilityStatus",
+      headerName: "Availability",
+      minWidth: 130,
+      editable: false,
+      valueGetter: (params) => availabilityLabel(params.data?.availabilityStatus ?? null),
+    },
+    {
+      colId: "conditionStatus",
+      headerName: "Condition",
+      minWidth: 130,
+      editable: false,
+      valueGetter: (params) => conditionLabel(params.data?.conditionStatus ?? null),
+    },
+    {
       field: "isRestoration",
-      headerName: "Restorasi",
-      minWidth: 120,
-      editable: editMode,
+      headerName: "Progress Restorasi",
+      minWidth: 150,
+      editable: (params) => isRowEditable(editMode, params.data),
       cellEditor: "agCheckboxCellEditor",
       cellRenderer: (params: { value: boolean }) => (params.value ? "Ya" : "-"),
       valueFormatter: (params) => (params.value ? "Ya" : "-"),
       cellClass: (params) => getCellClass("isRestoration", params.value, params.node.rowIndex),
     },
-  ]), [editMode, cellRange]);
+    {
+      colId: "surveyStatus",
+      headerName: "Status",
+      minWidth: 140,
+      editable: false,
+      valueGetter: (params) => params.data ? surveyStatusLabel(params.data) : "",
+      cellRenderer: (params: { data?: CatalogDraftRow }) => {
+        if (!params.data) return null;
+        return (
+          <span className="inline-flex h-full items-center gap-2 text-xs font-medium">
+            <span className={`h-2 w-2 rounded-full ${surveyStatusTone(params.data)}`} />
+            {surveyStatusLabel(params.data)}
+          </span>
+        );
+      },
+      cellClass: (params) => params.data?.surveyStatus === "MASTER_PANEL_CREATED"
+        ? "text-success"
+        : params.data?.isRestoration
+          ? "text-app-accent-ink"
+          : "text-muted-foreground",
+    },
+    {
+      colId: "actions",
+      headerName: "Action",
+      minWidth: 128,
+      editable: false,
+      sortable: false,
+      resizable: false,
+      cellRenderer: (params: { data?: CatalogDraftRow }) => {
+        if (!params.data) return null;
+        const row = params.data as CatalogDraftRow;
+        const promoted = Boolean(row.promotedPanelId);
+        return (
+          <div className="flex h-full items-center gap-1">
+            <button type="button" className="catalog-icon-button" onClick={() => onOpenDetail(row)} title="Detail">
+              <Eye className="h-3.5 w-3.5" />
+            </button>
+            <button type="button" className="catalog-icon-button" onClick={() => onMarkPosition(row)} title={promoted ? "Lihat lokasi" : "Tandai lokasi"}>
+              <MapPin className="h-3.5 w-3.5" />
+            </button>
+            {!promoted ? (
+              <button type="button" className="catalog-icon-button" onClick={() => onSurvey(row)} title="Survey part">
+                <CheckCircle2 className="h-3.5 w-3.5" />
+              </button>
+            ) : null}
+          </div>
+        );
+      },
+    },
+  ]), [editMode, cellRange, onOpenDetail, onMarkPosition, onSurvey]);
 
   function handlePaste(text: string) {
     const focused = gridRef.current?.api?.getFocusedCell();
     const rowIndex = focused?.rowIndex ?? 0;
-    const column = focused?.column?.getColId() as CatalogDraftField | undefined;
-    const targetColumn = column && catalogGridFields.includes(column) ? column : "code";
+    const column = focused?.column?.getColId() as CatalogGridField | undefined;
+    const targetColumn = column && catalogGridFields.includes(column) ? column : "itemName";
     onRowsChange(applyCatalogPaste(rows, { rowIndex, column: targetColumn, text }));
   }
 
@@ -206,8 +306,8 @@ export function UnitCatalogEditor({
   function getEventCell(event: CellMouseDownEvent<CatalogDraftRow> | CellMouseOverEvent<CatalogDraftRow>): CatalogCellRef | null {
     const rowIndex = event.node.rowIndex;
     const field = event.column.getColId();
-    if (rowIndex == null || !catalogGridFields.includes(field as CatalogDraftField)) return null;
-    return { rowIndex, field: field as CatalogDraftField };
+    if (rowIndex == null || !catalogGridFields.includes(field as CatalogGridField)) return null;
+    return { rowIndex, field: field as CatalogGridField };
   }
 
   function startCellRange(event: CellMouseDownEvent<CatalogDraftRow>) {
@@ -232,7 +332,7 @@ export function UnitCatalogEditor({
           <CompactInput
             value={searchValue}
             onChange={(event) => onSearchChange(event.target.value)}
-            placeholder="Cari code, part number, atau nama item"
+            placeholder="Cari alias, part number, atau nama item"
           />
         </div>
         <ActionButton
@@ -309,9 +409,9 @@ export function UnitCatalogEditor({
           onCellMouseDown={startCellRange}
           onCellMouseOver={extendCellRange}
           onCellValueChanged={(event) => {
-            const field = event.colDef.field as CatalogDraftField | undefined;
-            if (!field) return;
-            onRowsChange(updateCatalogDraftCell(rows, event.data.rowId, field, event.newValue as string | boolean));
+            const field = event.colDef.field;
+            if (!field || !catalogGridFields.includes(field as CatalogGridField)) return;
+            onRowsChange(updateCatalogDraftCell(rows, event.data.rowId, field as CatalogGridField, event.newValue as string | boolean));
           }}
         />
       </div>

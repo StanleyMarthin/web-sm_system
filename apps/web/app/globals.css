@@ -319,4 +319,21 @@
     background: color-mix(in srgb, var(--destructive) 16%, transparent);
     color: var(--destructive);
   }
+
+  .sms-ag-grid .catalog-icon-button {
+    display: inline-flex;
+    height: 1.75rem;
+    width: 1.75rem;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border);
+    color: var(--muted-foreground);
+    background: var(--card);
+  }
+
+  .sms-ag-grid .catalog-icon-button:hover {
+    border-color: color-mix(in srgb, var(--primary) 45%, var(--border));
+    color: var(--foreground);
+    background: var(--app-accent-soft);
+  }
 }

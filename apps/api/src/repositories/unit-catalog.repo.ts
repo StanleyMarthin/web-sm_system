@@ -45,12 +45,16 @@ interface PanelSummaryRow extends PanelRow {
 
 interface WorkspaceItemRow extends RowDataPacket {
   id: number;
+  promotedPanelId: number | null;
+  aliasName: string | null;
   code: string | null;
   partNumber: string | null;
   itemName: string | null;
   position: string | null;
   qtyNormal: number | string | null;
   isRestoration: number | boolean | null;
+  availabilityStatus: string | null;
+  conditionStatus: string | null;
   createdAt: string | null;
   updatedAt: string | null;
 }
@@ -120,18 +124,32 @@ function mapPanel(row: PanelRow): CatalogPanel {
 }
 
 function mapWorkspaceItem(row: WorkspaceItemRow): CatalogWorkspaceItem {
+  const promotedPanelId = row.promotedPanelId == null ? null : Number(row.promotedPanelId);
   return {
     id: Number(row.id),
     clientRowId: null,
+    promotedPanelId,
+    aliasName: row.aliasName ?? null,
     code: row.code ?? null,
     partNumber: row.partNumber ?? null,
     itemName: row.itemName ?? null,
     position: row.position ?? null,
     qtyNormal: num(row.qtyNormal),
     isRestoration: row.isRestoration === true || row.isRestoration === 1,
+    availabilityStatus: normalizeAvailabilityStatus(row.availabilityStatus),
+    conditionStatus: normalizeConditionStatus(row.conditionStatus),
+    surveyStatus: promotedPanelId ? "MASTER_PANEL_CREATED" : row.isRestoration === true || row.isRestoration === 1 ? "SUDAH_DIDATA" : "BELUM_DIDATA",
     createdAt: row.createdAt ?? null,
     updatedAt: row.updatedAt ?? null,
   };
+}
+
+function normalizeAvailabilityStatus(value: string | null): CatalogWorkspaceItem["availabilityStatus"] {
+  return value === "AVAILABLE" || value === "NOT_AVAILABLE" || value === "UNKNOWN" ? value : null;
+}
+
+function normalizeConditionStatus(value: string | null): CatalogWorkspaceItem["conditionStatus"] {
+  return value === "GOOD" || value === "RESTORE" || value === "NOT_USABLE" || value === "UNKNOWN" ? value : null;
 }
 
 function buildBooleanSearch(query: string) {
@@ -374,6 +392,10 @@ export class UnitCatalogRepository {
       const normalizedItems = input.items
         .map((item) => this.normalizeItemInput(item))
         .filter((item) => !isEmptyCatalogRow(item));
+      await this.assertCatalogItemsEditable(connection, unitId, [
+        ...input.deletedItemIds,
+        ...normalizedItems.map((item) => item.id).filter((id): id is number => id != null),
+      ]);
 
       if (input.deletedItemIds.length > 0) {
         await connection.execute(
@@ -650,14 +672,6 @@ export class UnitCatalogRepository {
       `
         SELECT
           uc.id,
-          uc.code,
-          uc.part_number AS partNumber,
-          uc.item_name AS itemName,
-          uc.position AS position,
-          uc.qty_normal AS qtyNormal,
-          uc.is_restoration AS isRestoration,
-          DATE_FORMAT(uc.created_at, '%Y-%m-%d %H:%i:%s') AS createdAt,
-          DATE_FORMAT(uc.updated_at, '%Y-%m-%d %H:%i:%s') AS updatedAt,
           (
             SELECT mp.id
             FROM master_panels mp
@@ -666,7 +680,42 @@ export class UnitCatalogRepository {
               AND mp.part_id = uc.id
             ORDER BY mp.id DESC
             LIMIT 1
-          ) AS promotedPanelId
+          ) AS promotedPanelId,
+          (
+            SELECT mp.alias_name
+            FROM master_panels mp
+            WHERE mp.car_id = uc.car_id
+              AND mp.source_part = 'CATALOG'
+              AND mp.part_id = uc.id
+            ORDER BY mp.id DESC
+            LIMIT 1
+          ) AS aliasName,
+          (
+            SELECT mp.current_status
+            FROM master_panels mp
+            WHERE mp.car_id = uc.car_id
+              AND mp.source_part = 'CATALOG'
+              AND mp.part_id = uc.id
+            ORDER BY mp.id DESC
+            LIMIT 1
+          ) AS availabilityStatus,
+          (
+            SELECT mp.initial_condition
+            FROM master_panels mp
+            WHERE mp.car_id = uc.car_id
+              AND mp.source_part = 'CATALOG'
+              AND mp.part_id = uc.id
+            ORDER BY mp.id DESC
+            LIMIT 1
+          ) AS conditionStatus,
+          uc.code,
+          uc.part_number AS partNumber,
+          uc.item_name AS itemName,
+          uc.position AS position,
+          uc.qty_normal AS qtyNormal,
+          uc.is_restoration AS isRestoration,
+          DATE_FORMAT(uc.created_at, '%Y-%m-%d %H:%i:%s') AS createdAt,
+          DATE_FORMAT(uc.updated_at, '%Y-%m-%d %H:%i:%s') AS updatedAt
         FROM unit_catalog uc
         WHERE uc.id = ? AND uc.car_id = ?
         LIMIT 1
@@ -697,6 +746,7 @@ export class UnitCatalogRepository {
   async updateSurvey(unitId: string, itemId: number, _actorId: string, input: UpdateCatalogSurveyRequest) {
     const item = await this.getItem(unitId, itemId);
     if (!item) throw new Error("CATALOG_ITEM_NOT_FOUND");
+    if (item.promotedPanelId) throw new Error("CATALOG_ITEM_ALREADY_PROMOTED");
     await this.poolFactory(this.env).execute(
       "UPDATE unit_catalog SET is_restoration = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND car_id = ?",
       [resolveRestorationSelection(input, item.isRestoration) ? 1 : 0, itemId, unitId],
@@ -710,6 +760,16 @@ export class UnitCatalogRepository {
     const connection = await this.poolFactory(this.env).getConnection();
     try {
       await connection.beginTransaction();
+      const [existingRows] = await connection.query<Array<RowDataPacket & { id: number }>>(
+        "SELECT id FROM master_panels WHERE car_id = ? AND source_part = 'CATALOG' AND part_id = ? LIMIT 1 FOR UPDATE",
+        [unitId, itemId],
+      );
+      if (existingRows[0]?.id) {
+        const item = await this.getItem(unitId, itemId, connection);
+        if (!item) throw new Error("CATALOG_ITEM_NOT_FOUND");
+        await connection.commit();
+        return { item, panelId: Number(existingRows[0].id), alreadyPromoted: true };
+      }
       const shouldRestore = await this.saveSurveyWithConnection(connection, unitId, itemId, input);
       if (!shouldRestore) throw new Error("SURVEY_NOT_CONFIRMED");
       const promoted = await this.materializeItemWithConnection(connection, unitId, itemId, actorId, input);
@@ -920,6 +980,42 @@ export class UnitCatalogRepository {
       `
         SELECT
           id,
+          (
+            SELECT mp.id
+            FROM master_panels mp
+            WHERE mp.car_id = unit_catalog.car_id
+              AND mp.source_part = 'CATALOG'
+              AND mp.part_id = unit_catalog.id
+            ORDER BY mp.id DESC
+            LIMIT 1
+          ) AS promotedPanelId,
+          (
+            SELECT mp.alias_name
+            FROM master_panels mp
+            WHERE mp.car_id = unit_catalog.car_id
+              AND mp.source_part = 'CATALOG'
+              AND mp.part_id = unit_catalog.id
+            ORDER BY mp.id DESC
+            LIMIT 1
+          ) AS aliasName,
+          (
+            SELECT mp.current_status
+            FROM master_panels mp
+            WHERE mp.car_id = unit_catalog.car_id
+              AND mp.source_part = 'CATALOG'
+              AND mp.part_id = unit_catalog.id
+            ORDER BY mp.id DESC
+            LIMIT 1
+          ) AS availabilityStatus,
+          (
+            SELECT mp.initial_condition
+            FROM master_panels mp
+            WHERE mp.car_id = unit_catalog.car_id
+              AND mp.source_part = 'CATALOG'
+              AND mp.part_id = unit_catalog.id
+            ORDER BY mp.id DESC
+            LIMIT 1
+          ) AS conditionStatus,
           code,
           part_number AS partNumber,
           item_name AS itemName,
@@ -987,6 +1083,23 @@ export class UnitCatalogRepository {
       sortOrder: Number(row.sortOrder ?? 0),
       createdAt: row.createdAt ?? null,
     }));
+  }
+
+  private async assertCatalogItemsEditable(connection: PoolConnection, unitId: string, itemIds: number[]) {
+    const uniqueIds = [...new Set(itemIds)];
+    if (uniqueIds.length === 0) return;
+    const [rows] = await connection.query<Array<RowDataPacket & { partId: number }>>(
+      `
+        SELECT part_id AS partId
+        FROM master_panels
+        WHERE car_id = ?
+          AND source_part = 'CATALOG'
+          AND part_id IN (${uniqueIds.map(() => "?").join(",")})
+        LIMIT 1
+      `,
+      [unitId, ...uniqueIds],
+    );
+    if (rows.length > 0) throw new Error("CATALOG_ITEM_ALREADY_PROMOTED");
   }
 
   private async getCatalogPanel(panelId: number, db: Queryable = this.poolFactory(this.env)) {
@@ -1152,7 +1265,7 @@ export class UnitCatalogRepository {
         item.partNumber,
         num(item.qtyNormal) ?? 1,
         input.conditionStatus,
-        input.availabilityStatus,
+        "WAITING",
         input.location ?? "UNIT",
         input.notes,
         actorId,

@@ -132,6 +132,7 @@ function mapCatalogError(request: Request, error: unknown): Response {
     if (error.message === "CATALOG_PANEL_DUPLICATE") return errorResponse(request, "Nama panel sudah ada pada komponen ini.", 409, "CATALOG_PANEL_DUPLICATE");
     if (error.message === "CATALOG_COMPONENT_NOT_FOUND") return errorResponse(request, "Komponen catalog tidak ditemukan.", 404, "CATALOG_COMPONENT_NOT_FOUND");
     if (error.message === "CATALOG_ITEM_NOT_FOUND") return errorResponse(request, "Item catalog tidak ditemukan.", 404, "CATALOG_ITEM_NOT_FOUND");
+    if (error.message === "CATALOG_ITEM_ALREADY_PROMOTED") return errorResponse(request, "Item catalog sudah menjadi Master Panel dan tidak bisa diubah.", 409, "CATALOG_ITEM_ALREADY_PROMOTED");
     if (error.message === "ADDITIONAL_ITEM_NOT_FOUND") return errorResponse(request, "Item tambahan tidak ditemukan.", 404, "ADDITIONAL_ITEM_NOT_FOUND");
     if (error.message === "CATALOG_REFERENCE_NOT_FOUND") return errorResponse(request, "Workspace catalog tidak ditemukan.", 404, "CATALOG_REFERENCE_NOT_FOUND");
     if (error.message === "UNIT_PANEL_NOT_FOUND") return errorResponse(request, "Master panel tidak ditemukan.", 404, "UNIT_PANEL_NOT_FOUND");

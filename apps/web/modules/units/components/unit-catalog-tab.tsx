@@ -9,12 +9,14 @@ Side Effects: HTTP fetch/update catalog dan upload file reference.
 "use client";
 
 import type { CatalogOverview, CatalogWorkspace } from "@smsystem/contracts/unit-catalog";
-import { AlertCircle, ArrowUpDown, ImagePlus, Maximize2, Pencil, RotateCcw, Save, Search, Settings2, Trash2, X, ZoomIn, ZoomOut } from "lucide-react";
+import { AlertCircle, ArrowUpDown, CheckCircle2, Eye, ImagePlus, MapPin, Maximize2, Pencil, RotateCcw, Save, Search, Settings2, Trash2, X, ZoomIn, ZoomOut } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CatalogPanelManager } from "@/modules/units/components/catalog-panel-manager";
 import { UnitCatalogEditor } from "@/modules/units/components/unit-catalog-editor";
 import {
   appendEmptyCatalogDraftRow,
+  catalogPositionFromPoint,
   catalogImageMaxBytes,
   clampCatalogImageZoom,
   createCatalogWorkspaceDraft,
@@ -22,6 +24,7 @@ import {
   getCatalogImageHoverPosition,
   isCatalogDraftDirty,
   isValidCatalogImageFile,
+  parseCatalogPositionMarker,
   removeCatalogDraftImage,
   resolveCatalogPanelImagesForSave,
   serializeCatalogDraftRows,
@@ -30,20 +33,30 @@ import {
   type CatalogWorkspaceDraft,
 } from "@/modules/units/helpers/unit-catalog-sheet";
 import {
+  confirmUnitCatalogSurvey,
   fetchUnitCatalog,
   fetchUnitCatalogPanelWorkspace,
+  saveUnitCatalogSurvey,
   saveUnitCatalogPanelWorkspace,
   searchUnitCatalog,
 } from "@/shared/api/unit-catalog";
 import { getApiBaseUrl, getProxiedImageUrl } from "@/shared/api/config";
 import { useSweetAlert } from "@/shared/ui/sweet-alert";
-import { ActionButton, CompactInput, PageHeader, SectionCard } from "@/shared/ui/compact";
+import { ActionButton, CompactInput, CompactTextarea, FieldLabel, PageHeader, SectionCard } from "@/shared/ui/compact";
 
 interface UnitCatalogTabProps {
   unitId: string;
   unitName: string;
   canManageCatalog: boolean;
 }
+
+type SurveyForm = {
+  actualName: string;
+  availabilityStatus: "AVAILABLE" | "NOT_AVAILABLE" | "UNKNOWN";
+  conditionStatus: "GOOD" | "RESTORE" | "NOT_USABLE";
+  isRestoration: boolean;
+  notes: string;
+};
 
 function groupPanelsByComponent(overview: CatalogOverview | null) {
   if (!overview) return [];
@@ -59,6 +72,26 @@ function formatItemCount(value: number) {
 
 function formatBytes(value: number) {
   return `${Math.round(value / 1024 / 1024)} MB`;
+}
+
+function surveyStatusText(row: CatalogWorkspaceDraft["rows"][number]) {
+  if (row.surveyStatus === "MASTER_PANEL_CREATED") return "Sudah jadi Master Panel";
+  if (row.surveyStatus === "SUDAH_DIDATA" || row.isRestoration) return "Sudah didata";
+  return "Belum didata";
+}
+
+function availabilityText(value: CatalogWorkspaceDraft["rows"][number]["availabilityStatus"]) {
+  if (value === "AVAILABLE") return "Ada";
+  if (value === "NOT_AVAILABLE") return "Tidak Ada";
+  if (value === "UNKNOWN") return "Tidak Ditemukan";
+  return "-";
+}
+
+function conditionText(value: CatalogWorkspaceDraft["rows"][number]["conditionStatus"]) {
+  if (value === "GOOD") return "Layak";
+  if (value === "RESTORE") return "Restorasi";
+  if (value === "NOT_USABLE") return "Tidak Layak";
+  return "-";
 }
 
 function MediaThumb({
@@ -85,6 +118,7 @@ function MediaThumb({
 }
 
 export function UnitCatalogTab({ unitId, unitName, canManageCatalog }: UnitCatalogTabProps) {
+  const router = useRouter();
   const sweetAlert = useSweetAlert();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [overview, setOverview] = useState<CatalogOverview | null>(null);
@@ -118,9 +152,22 @@ export function UnitCatalogTab({ unitId, unitName, canManageCatalog }: UnitCatal
   const [imageZoomOpen, setImageZoomOpen] = useState(false);
   const [imageZoom, setImageZoom] = useState(1);
   const [imageHoverPosition, setImageHoverPosition] = useState<{ x: number; y: number } | null>(null);
+  const [drawerRowId, setDrawerRowId] = useState<string | null>(null);
+  const [markerRowId, setMarkerRowId] = useState<string | null>(null);
+  const [surveySaving, setSurveySaving] = useState(false);
+  const [surveyForm, setSurveyForm] = useState<SurveyForm>({
+    actualName: "",
+    availabilityStatus: "AVAILABLE",
+    conditionStatus: "RESTORE",
+    isRestoration: false,
+    notes: "",
+  });
 
   const dirty = baseline ? isCatalogDraftDirty(baseline, draft) : false;
   const groupedPanels = useMemo(() => groupPanelsByComponent(overview), [overview]);
+  const drawerRow = useMemo(() => draft.rows.find((row) => row.rowId === drawerRowId) ?? null, [draft.rows, drawerRowId]);
+  const markerRow = useMemo(() => draft.rows.find((row) => row.rowId === markerRowId) ?? null, [draft.rows, markerRowId]);
+  const markerPosition = useMemo(() => parseCatalogPositionMarker(markerRow?.position), [markerRow?.position]);
   const filteredGroups = useMemo(() => {
     const keyword = panelSearch.trim().toLowerCase();
     return groupedPanels
@@ -215,6 +262,8 @@ export function UnitCatalogTab({ unitId, unitName, canManageCatalog }: UnitCatal
     setImageUrlInput("");
     setDeletedItemIds([]);
     setDeletedPanelImageIds([]);
+    setDrawerRowId(null);
+    setMarkerRowId(null);
   }
 
   function closePanel() {
@@ -229,6 +278,8 @@ export function UnitCatalogTab({ unitId, unitName, canManageCatalog }: UnitCatal
     setImageUrlInput("");
     setDeletedItemIds([]);
     setDeletedPanelImageIds([]);
+    setDrawerRowId(null);
+    setMarkerRowId(null);
   }
 
   async function handleSave() {
@@ -372,20 +423,126 @@ export function UnitCatalogTab({ unitId, unitName, canManageCatalog }: UnitCatal
 
   function handleDeleteSelectedRows() {
     setDraft((current) => {
+      const promotedRows = current.rows.filter((row) => selectedRowIds.includes(row.rowId) && row.promotedPanelId);
+      if (promotedRows.length > 0) {
+        sweetAlert.notifyError("Item terkunci", "Item yang sudah jadi Master Panel tidak bisa dihapus.");
+      }
       const deletedIds = current.rows
-        .filter((row) => selectedRowIds.includes(row.rowId) && row.persistedId != null)
+        .filter((row) => selectedRowIds.includes(row.rowId) && !row.promotedPanelId && row.persistedId != null)
         .map((row) => row.persistedId as number);
       if (deletedIds.length > 0) {
         setDeletedItemIds((existing) => [...new Set([...existing, ...deletedIds])]);
       }
+      const selectedMutableIds = new Set(
+        current.rows
+          .filter((row) => selectedRowIds.includes(row.rowId) && !row.promotedPanelId)
+          .map((row) => row.rowId),
+      );
       return {
         ...current,
-        rows: current.rows.filter((row) => !selectedRowIds.includes(row.rowId)).length > 0
-          ? current.rows.filter((row) => !selectedRowIds.includes(row.rowId))
+        rows: current.rows.filter((row) => !selectedMutableIds.has(row.rowId)).length > 0
+          ? current.rows.filter((row) => !selectedMutableIds.has(row.rowId))
           : appendEmptyCatalogDraftRow([]),
       };
     });
     setSelectedRowIds([]);
+  }
+
+  function itemLabel(row: CatalogWorkspaceDraft["rows"][number] | null) {
+    if (!row) return "-";
+    return row.aliasName || row.itemName || row.partNumber || row.code || "Item belum bernama";
+  }
+
+  function openItemDrawer(row: CatalogWorkspaceDraft["rows"][number]) {
+    setDrawerRowId(row.rowId);
+    setSurveyForm({
+      actualName: row.aliasName,
+      availabilityStatus: row.availabilityStatus ?? "AVAILABLE",
+      conditionStatus: row.conditionStatus === "UNKNOWN" || row.conditionStatus == null ? "RESTORE" : row.conditionStatus,
+      isRestoration: row.isRestoration,
+      notes: "",
+    });
+  }
+
+  function openSurvey(row: CatalogWorkspaceDraft["rows"][number]) {
+    if (row.promotedPanelId) {
+      openItemDrawer(row);
+      return;
+    }
+    if (!row.persistedId) {
+      sweetAlert.notifyError("Simpan item dulu", "Item baru harus disimpan sebelum survey.");
+      return;
+    }
+    if (dirty) {
+      sweetAlert.notifyError("Simpan Data dulu", "Selesaikan perubahan catalog sebelum survey item.");
+      return;
+    }
+    openItemDrawer(row);
+  }
+
+  function startMarkPosition(row: CatalogWorkspaceDraft["rows"][number]) {
+    if (!currentMedia) {
+      sweetAlert.notifyError("Gambar panel belum ada", "Tambahkan gambar referensi panel sebelum menandai lokasi item.");
+      return;
+    }
+    if (row.promotedPanelId) {
+      setMarkerRowId(row.rowId);
+      setDrawerRowId(row.rowId);
+      if (!parseCatalogPositionMarker(row.position)) {
+        sweetAlert.notifyError("Lokasi belum ditandai", "Item ini belum memiliki marker lokasi.");
+      }
+      return;
+    }
+    if (!editMode) setEditMode(true);
+    setMarkerRowId(row.rowId);
+    setDrawerRowId(row.rowId);
+    sweetAlert.notifySuccess("Mode tandai lokasi", "Klik posisi item pada gambar panel, lalu Simpan Data.");
+  }
+
+  async function saveSurvey() {
+    if (!drawerRow?.persistedId) return;
+    if (drawerRow.promotedPanelId) {
+      sweetAlert.notifyError("Item terkunci", "Item ini sudah jadi Master Panel.");
+      return;
+    }
+    if (dirty) {
+      sweetAlert.notifyError("Simpan Data dulu", "Selesaikan perubahan catalog sebelum survey item.");
+      return;
+    }
+    setSurveySaving(true);
+    const payload = {
+      actualName: surveyForm.actualName.trim() || null,
+      availabilityStatus: surveyForm.availabilityStatus,
+      conditionStatus: surveyForm.conditionStatus,
+      isRestoration: surveyForm.isRestoration,
+      actionType: "NO_ACTION" as const,
+      location: "UNIT",
+      notes: surveyForm.notes.trim() || null,
+      mapping: null,
+      qtyOpname: null,
+    };
+    const result = surveyForm.isRestoration
+      ? await confirmUnitCatalogSurvey(unitId, drawerRow.persistedId, payload)
+      : await saveUnitCatalogSurvey(unitId, drawerRow.persistedId, payload);
+    setSurveySaving(false);
+    if (!result.success) {
+      sweetAlert.notifyError("Survey belum tersimpan", result.message);
+      return;
+    }
+    if (selectedPanelId) {
+      const refreshed = await fetchUnitCatalogPanelWorkspace(unitId, selectedPanelId);
+      if (refreshed.success) {
+        const nextWorkspace = refreshed.payload.data.workspace;
+        const nextDraft = workspaceDraftFromWorkspace(nextWorkspace);
+        setWorkspace(nextWorkspace);
+        setBaseline(nextDraft);
+        setDraft(nextDraft);
+      }
+    }
+    setDrawerRowId(null);
+    setMarkerRowId(null);
+    sweetAlert.notifySuccess("Survey tersimpan", surveyForm.isRestoration ? "Item sudah masuk Master Panel." : "Pendataan item tersimpan.");
+    void loadOverview();
   }
 
   const currentMedia = draft.panelImages[selectedMediaIndex] ?? null;
@@ -480,7 +637,7 @@ export function UnitCatalogTab({ unitId, unitName, canManageCatalog }: UnitCatal
               </ActionButton>
               <ActionButton variant="primary" onClick={() => { void handleSave(); }} disabled={saving}>
                 <Save className="h-3.5 w-3.5" />
-                {saving ? "Menyimpan" : "Simpan"}
+                {saving ? "Menyimpan" : "Simpan Data"}
               </ActionButton>
             </>
           ) : (
@@ -509,32 +666,12 @@ export function UnitCatalogTab({ unitId, unitName, canManageCatalog }: UnitCatal
           onSaved={() => { void loadOverview(); }}
         />
       ) : selectedPanelId && workspace ? (
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.75fr)_22rem]">
-          <SectionCard
-            label={`${workspace.panel.componentName} / ${workspace.panel.panelName}`}
-            count={draft.rows.length}
-            className="min-h-[42rem]"
-          >
-            <div className="h-[34rem] border border-border">
-              <UnitCatalogEditor
-                rows={draft.rows}
-                editMode={editMode}
-                searchValue={gridSearch}
-                selectedRowIds={selectedRowIds}
-                onSearchChange={setGridSearch}
-                onRowsChange={(rows) => setDraft((current) => ({ ...current, rows }))}
-                onSelectedRowIdsChange={setSelectedRowIds}
-                onAddRow={() => setDraft((current) => ({ ...current, rows: appendEmptyCatalogDraftRow(current.rows) }))}
-                onDeleteSelected={handleDeleteSelectedRows}
-              />
-            </div>
-          </SectionCard>
-
-          <SectionCard label="Gambar Panel" count={draft.panelImages.length} className="min-h-[42rem]">
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.85fr)_minmax(23rem,0.85fr)]">
+          <SectionCard label="Gambar Referensi Panel" count={draft.panelImages.length} className="min-h-[42rem]">
             {currentMedia ? (
               <div className="space-y-3">
                 <div
-                  className="relative aspect-[4/3] overflow-hidden border border-border bg-muted"
+                  className={`relative min-h-[36rem] overflow-hidden border border-border bg-muted ${markerRowId ? "cursor-crosshair" : ""}`}
                   onMouseMove={(event) => {
                     const position = getCatalogImageHoverPosition(
                       event.clientX,
@@ -544,12 +681,31 @@ export function UnitCatalogTab({ unitId, unitName, canManageCatalog }: UnitCatal
                     setImageHoverPosition(position);
                   }}
                   onMouseLeave={() => setImageHoverPosition(null)}
+                  onClick={(event) => {
+                    if (!markerRowId) return;
+                    const activeMarkerRow = draft.rows.find((row) => row.rowId === markerRowId);
+                    if (activeMarkerRow?.promotedPanelId) return;
+                    const position = getCatalogImageHoverPosition(
+                      event.clientX,
+                      event.clientY,
+                      event.currentTarget.getBoundingClientRect(),
+                    );
+                    setDraft((current) => ({
+                      ...current,
+                      rows: current.rows.map((row) => (
+                        row.rowId === markerRowId
+                          ? { ...row, position: catalogPositionFromPoint(position.x, position.y) }
+                          : row
+                      )),
+                    }));
+                    sweetAlert.notifySuccess("Lokasi item ditandai", "Klik Simpan Data untuk menyimpan lokasi.");
+                  }}
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={currentMediaSrc}
                     alt={workspace.panel.panelName}
-                    className="h-full w-full object-contain transition-transform duration-150"
+                    className="h-full min-h-[36rem] w-full object-contain transition-transform duration-150"
                     style={{
                       transform: imageHoverPosition ? "scale(1.35)" : "scale(1)",
                       transformOrigin: imageHoverPosition
@@ -559,15 +715,30 @@ export function UnitCatalogTab({ unitId, unitName, canManageCatalog }: UnitCatal
                   />
                   <button
                     type="button"
-                    onClick={() => {
+                    onClick={(event) => {
+                      event.stopPropagation();
                       setImageZoom(1);
                       setImageZoomOpen(true);
                     }}
                     className="absolute right-2 top-2 flex items-center gap-1 border border-border bg-background/90 px-2 py-1 text-xs font-medium text-foreground shadow-sm hover:border-primary"
                   >
                     <Maximize2 className="h-3.5 w-3.5" />
-                    Zoom
-                  </button>
+                      Zoom
+                    </button>
+                  {markerPosition ? (
+                    <div
+                      className="pointer-events-none absolute -translate-x-1/2 -translate-y-full text-primary drop-shadow"
+                      style={{ left: `${markerPosition.x}%`, top: `${markerPosition.y}%` }}
+                      title="Lokasi item"
+                    >
+                      <MapPin className="h-7 w-7 fill-primary/20" />
+                    </div>
+                  ) : null}
+                  {markerRowId ? (
+                    <div className="absolute left-3 top-3 border border-primary/35 bg-background/90 px-3 py-2 text-xs font-medium text-foreground shadow-sm">
+                      Klik gambar untuk tandai lokasi: {itemLabel(markerRow)}
+                    </div>
+                  ) : null}
                 </div>
                 <CompactInput
                   value={currentMedia.caption}
@@ -657,6 +828,29 @@ export function UnitCatalogTab({ unitId, unitName, canManageCatalog }: UnitCatal
                 </div>
               </div>
             ) : null}
+          </SectionCard>
+
+          <SectionCard
+            label={`${workspace.panel.componentName} / ${workspace.panel.panelName}`}
+            count={draft.rows.length}
+            className="min-h-[42rem]"
+          >
+            <div className="h-[34rem] border border-border">
+              <UnitCatalogEditor
+                rows={draft.rows}
+                editMode={editMode}
+                searchValue={gridSearch}
+                selectedRowIds={selectedRowIds}
+                onSearchChange={setGridSearch}
+                onRowsChange={(rows) => setDraft((current) => ({ ...current, rows }))}
+                onSelectedRowIdsChange={setSelectedRowIds}
+                onAddRow={() => setDraft((current) => ({ ...current, rows: appendEmptyCatalogDraftRow(current.rows) }))}
+                onDeleteSelected={handleDeleteSelectedRows}
+                onOpenDetail={openItemDrawer}
+                onMarkPosition={startMarkPosition}
+                onSurvey={openSurvey}
+              />
+            </div>
           </SectionCard>
         </div>
       ) : (
@@ -748,6 +942,157 @@ export function UnitCatalogTab({ unitId, unitName, canManageCatalog }: UnitCatal
 
       {selectedPanelId && loadingPanel ? (
         <div className="border border-border px-3 py-4 text-sm text-muted-foreground">Memuat workspace panel...</div>
+      ) : null}
+
+      {drawerRow ? (
+        <div className="fixed inset-y-0 right-0 z-40 flex w-full max-w-md flex-col border-l border-border bg-card shadow-2xl">
+          <div className="flex items-center justify-between border-b border-border px-4 py-3">
+            <div className="min-w-0">
+              <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground">Part Information</p>
+              <p className="truncate text-sm font-semibold text-foreground">{itemLabel(drawerRow)}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setDrawerRowId(null);
+                setMarkerRowId(null);
+              }}
+              className="border border-border p-2 text-muted-foreground hover:bg-muted hover:text-foreground"
+              aria-label="Tutup detail item"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
+            <div className="grid gap-3 text-sm">
+              <div>
+                <p className="text-xs text-muted-foreground">Alias</p>
+                <p className="font-medium text-foreground">{drawerRow.aliasName || "-"}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Original Name</p>
+                <p className="font-medium text-foreground">{drawerRow.itemName || "-"}</p>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <p className="text-xs text-muted-foreground">Part Number</p>
+                  <p className="font-medium text-foreground">{drawerRow.partNumber || "-"}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Code</p>
+                  <p className="font-medium text-foreground">{drawerRow.code || "-"}</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <p className="text-xs text-muted-foreground">Qty</p>
+                  <p className="font-medium text-foreground">{drawerRow.qtyNormal || "-"}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Status</p>
+                  <p className="font-medium text-foreground">{surveyStatusText(drawerRow)}</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <p className="text-xs text-muted-foreground">Availability</p>
+                  <p className="font-medium text-foreground">{availabilityText(drawerRow.availabilityStatus)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Condition</p>
+                  <p className="font-medium text-foreground">{conditionText(drawerRow.conditionStatus)}</p>
+                </div>
+              </div>
+            </div>
+
+            {!drawerRow.promotedPanelId ? (
+            <div className="border-t border-border pt-4">
+              <FieldLabel>Survey Part</FieldLabel>
+              <div className="space-y-3">
+                <CompactInput
+                  value={surveyForm.actualName}
+                  onChange={(event) => setSurveyForm((current) => ({ ...current, actualName: event.target.value }))}
+                  placeholder="Alias name"
+                />
+                <div>
+                  <p className="mb-1.5 text-xs text-muted-foreground">Availability</p>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {[
+                      ["AVAILABLE", "Ada"],
+                      ["NOT_AVAILABLE", "Tidak Ada"],
+                      ["UNKNOWN", "Tidak Ditemukan"],
+                    ].map(([value, label]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => setSurveyForm((current) => ({ ...current, availabilityStatus: value as SurveyForm["availabilityStatus"] }))}
+                        className={`border px-2 py-2 text-xs ${surveyForm.availabilityStatus === value ? "border-primary bg-primary/10 text-app-accent-ink" : "border-border text-muted-foreground hover:bg-muted"}`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <p className="mb-1.5 text-xs text-muted-foreground">Condition</p>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {[
+                      ["GOOD", "Layak"],
+                      ["RESTORE", "Restorasi"],
+                      ["NOT_USABLE", "Tidak Layak"],
+                    ].map(([value, label]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => setSurveyForm((current) => ({ ...current, conditionStatus: value as SurveyForm["conditionStatus"] }))}
+                        className={`border px-2 py-2 text-xs ${surveyForm.conditionStatus === value ? "border-primary bg-primary/10 text-app-accent-ink" : "border-border text-muted-foreground hover:bg-muted"}`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <label className="flex items-center gap-2 border border-border px-3 py-2 text-sm text-foreground">
+                  <input
+                    type="checkbox"
+                    checked={surveyForm.isRestoration}
+                    onChange={(event) => setSurveyForm((current) => ({ ...current, isRestoration: event.target.checked }))}
+                  />
+                  Masuk Progress Restorasi
+                </label>
+                <CompactTextarea
+                  value={surveyForm.notes}
+                  onChange={(event) => setSurveyForm((current) => ({ ...current, notes: event.target.value }))}
+                  placeholder="Catatan pendataan"
+                  rows={3}
+                />
+              </div>
+            </div>
+            ) : null}
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-4 py-3">
+            <div className="flex items-center gap-1.5">
+              <ActionButton onClick={() => startMarkPosition(drawerRow)}>
+                <MapPin className="h-3.5 w-3.5" />
+                {drawerRow.promotedPanelId ? "Lihat Lokasi" : "Tandai Lokasi"}
+              </ActionButton>
+              {drawerRow.promotedPanelId ? (
+                <ActionButton onClick={() => router.push(`/units/${encodeURIComponent(unitId)}?tab=master-panel`)}>
+                  <Eye className="h-3.5 w-3.5" />
+                  Master Panel
+                </ActionButton>
+              ) : null}
+            </div>
+            {!drawerRow.promotedPanelId ? (
+              <ActionButton variant="primary" onClick={() => { void saveSurvey(); }} disabled={!drawerRow.persistedId || surveySaving}>
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                {surveySaving ? "Menyimpan" : "Simpan Data"}
+              </ActionButton>
+            ) : null}
+          </div>
+        </div>
       ) : null}
 
       {selectedPanelId && workspace ? (
