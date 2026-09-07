@@ -23,6 +23,15 @@ export const catalogGridFields = [
 
 export type CatalogDraftField = typeof catalogGridFields[number];
 
+const catalogGridHeaders: Record<CatalogDraftField, string> = {
+  code: "Code",
+  partNumber: "Part Number",
+  itemName: "Item Name",
+  position: "Position",
+  qtyNormal: "Qty Normal",
+  isRestoration: "Restorasi",
+};
+
 export interface CatalogDraftRow {
   rowId: string;
   persistedId: number | null;
@@ -324,19 +333,27 @@ function tsvCell(value: string | boolean) {
   return String(value).replace(/\r?\n/gu, " ").replace(/\t/gu, " ").trim();
 }
 
-export function catalogRowsToClipboardTsv(rows: CatalogDraftRow[]) {
-  const header = ["Code", "Part Number", "Item Name", "Position", "Qty Normal", "Restorasi"];
-  const body = rows.map((row) => [
-    row.code,
-    row.partNumber,
-    row.itemName,
-    row.position,
-    row.qtyNormal,
-    row.isRestoration ? "Ya" : "",
-  ]);
-  return [header, ...body]
+function getCatalogCellValue(row: CatalogDraftRow, field: CatalogDraftField) {
+  if (field === "isRestoration") return row.isRestoration ? "Ya" : "";
+  return row[field];
+}
+
+export function catalogCellsToClipboardTsv(
+  rows: CatalogDraftRow[],
+  fields: readonly CatalogDraftField[],
+  options: { includeHeader?: boolean } = {},
+) {
+  const body = rows.map((row) => fields.map((field) => getCatalogCellValue(row, field)));
+  const lines = options.includeHeader
+    ? [fields.map((field) => catalogGridHeaders[field]), ...body]
+    : body;
+  return lines
     .map((cells) => cells.map(tsvCell).join("\t"))
     .join("\n");
+}
+
+export function catalogRowsToClipboardTsv(rows: CatalogDraftRow[]) {
+  return catalogCellsToClipboardTsv(rows, catalogGridFields, { includeHeader: true });
 }
 
 export function isCatalogDraftDirty(base: CatalogWorkspaceDraft, current: CatalogWorkspaceDraft) {

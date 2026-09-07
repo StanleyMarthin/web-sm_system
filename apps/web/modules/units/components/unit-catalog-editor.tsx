@@ -8,8 +8,8 @@ Side Effects: Tidak ada langsung.
 
 "use client";
 
-import { useMemo, useRef } from "react";
-import type { ColDef } from "ag-grid-community";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { CellMouseDownEvent, CellMouseOverEvent, ColDef } from "ag-grid-community";
 import { AllCommunityModule, ModuleRegistry } from "ag-grid-community";
 import { AgGridReact } from "ag-grid-react";
 import { Clipboard, ClipboardPaste, Plus, Trash2 } from "lucide-react";
@@ -19,6 +19,7 @@ import {
 } from "@/shared/ui/compact";
 import {
   applyCatalogPaste,
+  catalogCellsToClipboardTsv,
   catalogGridFields,
   catalogRowsToClipboardTsv,
   updateCatalogDraftCell,
@@ -41,6 +42,8 @@ interface UnitCatalogEditorProps {
 }
 
 type GridRef = AgGridReact<CatalogDraftRow>;
+type CatalogCellRef = { rowIndex: number; field: CatalogDraftField };
+type CatalogCellRange = { start: CatalogCellRef; end: CatalogCellRef };
 
 function qtyCellClass(value: unknown) {
   if (typeof value !== "string" || !value.trim()) return "";
@@ -60,18 +63,76 @@ export function UnitCatalogEditor({
   onDeleteSelected,
 }: UnitCatalogEditorProps) {
   const gridRef = useRef<GridRef>(null);
+  const draggingCellRange = useRef(false);
+  const [cellRange, setCellRange] = useState<CatalogCellRange | null>(null);
+
+  useEffect(() => {
+    function stopDragging() {
+      draggingCellRange.current = false;
+    }
+
+    window.addEventListener("mouseup", stopDragging);
+    return () => window.removeEventListener("mouseup", stopDragging);
+  }, []);
+
+  useEffect(() => {
+    gridRef.current?.api.refreshCells({ force: true });
+  }, [cellRange]);
+
+  function isCellInRange(rowIndex: number | null | undefined, field: string | undefined) {
+    if (rowIndex == null || !field || !catalogGridFields.includes(field as CatalogDraftField) || !cellRange) return false;
+    const startColumn = catalogGridFields.indexOf(cellRange.start.field);
+    const endColumn = catalogGridFields.indexOf(cellRange.end.field);
+    const fieldColumn = catalogGridFields.indexOf(field as CatalogDraftField);
+    return rowIndex >= Math.min(cellRange.start.rowIndex, cellRange.end.rowIndex) &&
+      rowIndex <= Math.max(cellRange.start.rowIndex, cellRange.end.rowIndex) &&
+      fieldColumn >= Math.min(startColumn, endColumn) &&
+      fieldColumn <= Math.max(startColumn, endColumn);
+  }
+
+  function getCellClass(field: CatalogDraftField, value: unknown, rowIndex: number | null | undefined) {
+    return [
+      field === "qtyNormal" ? qtyCellClass(value) : "",
+      isCellInRange(rowIndex, field) ? "catalog-cell-range-selected" : "",
+    ].filter(Boolean).join(" ");
+  }
 
   const columnDefs = useMemo<ColDef<CatalogDraftRow>[]>(() => ([
-    { field: "code", headerName: "Code", minWidth: 110, editable: editMode },
-    { field: "partNumber", headerName: "Part Number", minWidth: 160, editable: editMode },
-    { field: "itemName", headerName: "Item Name", minWidth: 220, editable: editMode, flex: 1 },
-    { field: "position", headerName: "Position", minWidth: 120, editable: editMode },
+    {
+      field: "code",
+      headerName: "Code",
+      minWidth: 110,
+      editable: editMode,
+      cellClass: (params) => getCellClass("code", params.value, params.node.rowIndex),
+    },
+    {
+      field: "partNumber",
+      headerName: "Part Number",
+      minWidth: 160,
+      editable: editMode,
+      cellClass: (params) => getCellClass("partNumber", params.value, params.node.rowIndex),
+    },
+    {
+      field: "itemName",
+      headerName: "Item Name",
+      minWidth: 220,
+      editable: editMode,
+      flex: 1,
+      cellClass: (params) => getCellClass("itemName", params.value, params.node.rowIndex),
+    },
+    {
+      field: "position",
+      headerName: "Position",
+      minWidth: 120,
+      editable: editMode,
+      cellClass: (params) => getCellClass("position", params.value, params.node.rowIndex),
+    },
     {
       field: "qtyNormal",
       headerName: "Qty Normal",
       minWidth: 120,
       editable: editMode,
-      cellClass: (params) => qtyCellClass(params.value),
+      cellClass: (params) => getCellClass("qtyNormal", params.value, params.node.rowIndex),
     },
     {
       field: "isRestoration",
@@ -81,8 +142,9 @@ export function UnitCatalogEditor({
       cellEditor: "agCheckboxCellEditor",
       cellRenderer: (params: { value: boolean }) => (params.value ? "Ya" : "-"),
       valueFormatter: (params) => (params.value ? "Ya" : "-"),
+      cellClass: (params) => getCellClass("isRestoration", params.value, params.node.rowIndex),
     },
-  ]), [editMode]);
+  ]), [editMode, cellRange]);
 
   function handlePaste(text: string) {
     const focused = gridRef.current?.api.getFocusedCell();
@@ -104,7 +166,27 @@ export function UnitCatalogEditor({
     return visible.length > 0 ? visible : rows;
   }
 
+  function getRangeForCopy() {
+    if (!cellRange) return null;
+    const visibleRows: CatalogDraftRow[] = [];
+    gridRef.current?.api.forEachNodeAfterFilterAndSort((node) => {
+      if (node.data) visibleRows.push(node.data);
+    });
+
+    const rowStart = Math.min(cellRange.start.rowIndex, cellRange.end.rowIndex);
+    const rowEnd = Math.max(cellRange.start.rowIndex, cellRange.end.rowIndex);
+    const columnStart = Math.min(catalogGridFields.indexOf(cellRange.start.field), catalogGridFields.indexOf(cellRange.end.field));
+    const columnEnd = Math.max(catalogGridFields.indexOf(cellRange.start.field), catalogGridFields.indexOf(cellRange.end.field));
+
+    return {
+      rows: visibleRows.slice(rowStart, rowEnd + 1),
+      fields: catalogGridFields.slice(columnStart, columnEnd + 1),
+    };
+  }
+
   function getClipboardText() {
+    const range = getRangeForCopy();
+    if (range && range.rows.length > 0) return catalogCellsToClipboardTsv(range.rows, range.fields);
     return catalogRowsToClipboardTsv(getRowsForCopy());
   }
 
@@ -119,6 +201,28 @@ export function UnitCatalogEditor({
     } catch {
       return;
     }
+  }
+
+  function getEventCell(event: CellMouseDownEvent<CatalogDraftRow> | CellMouseOverEvent<CatalogDraftRow>): CatalogCellRef | null {
+    const rowIndex = event.node.rowIndex;
+    const field = event.column.getColId();
+    if (rowIndex == null || !catalogGridFields.includes(field as CatalogDraftField)) return null;
+    return { rowIndex, field: field as CatalogDraftField };
+  }
+
+  function startCellRange(event: CellMouseDownEvent<CatalogDraftRow>) {
+    if (event.event instanceof MouseEvent && event.event.button !== 0) return;
+    const cell = getEventCell(event);
+    if (!cell) return;
+    draggingCellRange.current = true;
+    setCellRange({ start: cell, end: cell });
+  }
+
+  function extendCellRange(event: CellMouseOverEvent<CatalogDraftRow>) {
+    if (!draggingCellRange.current) return;
+    const cell = getEventCell(event);
+    if (!cell) return;
+    setCellRange((current) => current ? { ...current, end: cell } : { start: cell, end: cell });
   }
 
   return (
@@ -202,6 +306,8 @@ export function UnitCatalogEditor({
             const selected = gridRef.current?.api.getSelectedRows() ?? [];
             onSelectedRowIdsChange(selected.map((row) => row.rowId));
           }}
+          onCellMouseDown={startCellRange}
+          onCellMouseOver={extendCellRange}
           onCellValueChanged={(event) => {
             const field = event.colDef.field as CatalogDraftField | undefined;
             if (!field) return;
