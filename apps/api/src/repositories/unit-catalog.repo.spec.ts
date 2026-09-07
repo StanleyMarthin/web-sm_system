@@ -97,7 +97,13 @@ describe("UnitCatalogRepository savePanelWorkspace", () => {
 });
 
 describe("UnitCatalogRepository promoteAdditionalItem", () => {
-  it("creates master panel with ADDITIONAL provenance", async () => {
+  function createAdditionalRepository(additionalItem: {
+    componentName: string | null;
+    panelName: string | null;
+    itemName: string;
+    partNumber: string | null;
+    deskription: string | null;
+  }) {
     const statements: Array<{ sql: string; params: unknown[] }> = [];
     const connection = {
       beginTransaction: async () => undefined,
@@ -111,20 +117,11 @@ describe("UnitCatalogRepository promoteAdditionalItem", () => {
           return [[{
             id: 77,
             carId: "CAR-1",
-            componentName: "BODY",
-            panelName: "FRONT BUMPER",
-            itemName: "Bracket Bumper",
-            partNumber: "ADD-001",
-            deskription: "temuan tambahan",
+            ...additionalItem,
           }]];
         }
         if (sql.includes("FROM catalog_panels")) {
-          return [[{
-            componentId: 4,
-            panelId: 1,
-            componentName: "BODY",
-            panelName: "FRONT BUMPER",
-          }]];
+          throw new Error("ADDITIONAL_PROMOTE_MUST_NOT_QUERY_CATALOG_PANELS");
         }
         if (sql.includes("FROM sm_car_panel_status")) return [[]];
         return [[]];
@@ -135,13 +132,22 @@ describe("UnitCatalogRepository promoteAdditionalItem", () => {
       },
     };
 
-    const repository: any = new UnitCatalogRepository(
-      () =>
-        ({
-          getConnection: async () => connection,
-        }) as never,
+    const repository = new UnitCatalogRepository(
+      () => ({ getConnection: async () => connection }) as never,
       {} as never,
-    );
+    ) as any;
+
+    return { repository, statements };
+  }
+
+  it("creates master panel with ADDITIONAL provenance", async () => {
+    const { repository, statements } = createAdditionalRepository({
+      componentName: "BODY",
+      panelName: "FRONT BUMPER",
+      itemName: "Bracket Bumper",
+      partNumber: "ADD-001",
+      deskription: "temuan tambahan",
+    });
 
     await repository.promoteAdditionalItem("CAR-1", 77, "EMP-1");
 
@@ -149,16 +155,44 @@ describe("UnitCatalogRepository promoteAdditionalItem", () => {
     expect(masterInsert?.params?.slice(0, 8)).toEqual([
       "CAR-1",
       77,
-      4,
-      1,
+      null,
+      null,
       "BODY",
       "FRONT BUMPER",
       "Bracket Bumper",
       "ADD-001",
     ]);
     expect(masterInsert?.sql.includes("'ADDITIONAL'")).toBe(true);
+    expect(statements.some(({ sql }) => sql.includes("FROM catalog_panels"))).toBe(false);
+    expect(statements.some(({ sql }) => sql.includes("FROM catalog_components"))).toBe(false);
     expect(statements.some(({ sql }) => sql.includes("sm_jobdesc_countdown"))).toBe(false);
     expect(statements.some(({ sql }) => sql.includes("sm_jobdesc_wo"))).toBe(false);
+  });
+
+  it("promotes additional snapshot without catalog master dependency", async () => {
+    const { repository, statements } = createAdditionalRepository({
+      componentName: "ENGINE",
+      panelName: "CUSTOM BRACKET AREA",
+      itemName: "Custom Radiator Bracket",
+      partNumber: null,
+      deskription: null,
+    });
+
+    await repository.promoteAdditionalItem("CAR-1", 77, "EMP-1");
+
+    const masterInsert = statements.find(({ sql }) => sql.includes("INSERT INTO master_panels"));
+    expect(masterInsert?.params?.slice(0, 8)).toEqual([
+      "CAR-1",
+      77,
+      null,
+      null,
+      "ENGINE",
+      "CUSTOM BRACKET AREA",
+      "Custom Radiator Bracket",
+      null,
+    ]);
+    expect(statements.some(({ sql }) => sql.includes("FROM catalog_panels"))).toBe(false);
+    expect(statements.some(({ sql }) => sql.includes("FROM catalog_components"))).toBe(false);
   });
 });
 

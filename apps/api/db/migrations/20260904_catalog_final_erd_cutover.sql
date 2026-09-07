@@ -210,8 +210,8 @@ INSERT INTO unit_additional_items_cutover (
 SELECT
   uai.id,
   uai.car_id,
-  cc.component_name,
-  cp.panel_name,
+  uai.component_name,
+  uai.panel_name,
   uai.item_name,
   uai.part_number,
   uai.description,
@@ -219,9 +219,7 @@ SELECT
   COALESCE(uai.created_at, CURRENT_TIMESTAMP),
   COALESCE(uai.updated_at, CURRENT_TIMESTAMP)
 FROM unit_additional_items uai
-JOIN cars c ON c.id = uai.car_id
-LEFT JOIN catalog_components cc ON cc.id = uai.component_id
-LEFT JOIN catalog_panels cp ON cp.id = uai.panel_id;
+JOIN cars c ON c.id = uai.car_id;
 
 DROP TABLE IF EXISTS master_panels_cutover;
 CREATE TABLE master_panels_cutover (

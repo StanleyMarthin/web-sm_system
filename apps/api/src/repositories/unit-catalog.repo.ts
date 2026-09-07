@@ -610,9 +610,6 @@ export class UnitCatalogRepository {
 
       const item = await this.getAdditionalItem(unitId, itemId, connection);
       if (!item) throw new Error("ADDITIONAL_ITEM_NOT_FOUND");
-      const classification = await this.resolveAdditionalClassification(item, connection);
-      const componentName = classification?.componentName ?? item.componentName ?? null;
-      const panelName = classification?.panelName ?? item.panelName ?? null;
 
       const [result] = await connection.execute<ResultSetHeader>(
         `
@@ -625,10 +622,10 @@ export class UnitCatalogRepository {
         [
           unitId,
           itemId,
-          classification?.componentId ?? null,
-          classification?.panelId ?? null,
-          componentName,
-          panelName,
+          null,
+          null,
+          item.componentName ?? null,
+          item.panelName ?? null,
           item.itemName,
           item.partNumber,
           item.deskription,
@@ -1029,41 +1026,6 @@ export class UnitCatalogRepository {
       [itemId, unitId],
     );
     return rows[0] ?? null;
-  }
-
-  private async resolveAdditionalClassification(item: AdditionalItemRow, db: Queryable = this.poolFactory(this.env)) {
-    const componentName = item.componentName ? normalizePanelName(item.componentName) : null;
-    const panelName = item.panelName ? normalizePanelName(item.panelName) : null;
-    if (!componentName || !panelName) return null;
-
-    const [rows] = await db.query<Array<RowDataPacket & {
-      componentId: number;
-      panelId: number;
-      componentName: string;
-      panelName: string;
-    }>>(
-      `
-        SELECT
-          c.id AS componentId,
-          p.id AS panelId,
-          c.component_name AS componentName,
-          p.panel_name AS panelName
-        FROM catalog_panels p
-        JOIN catalog_components c ON c.id = p.component_id
-        WHERE (UPPER(TRIM(c.code)) = ? OR UPPER(TRIM(c.component_name)) = ?)
-          AND UPPER(TRIM(p.panel_name)) = ?
-        LIMIT 1
-      `,
-      [componentName, componentName, panelName],
-    );
-    return rows[0]
-      ? {
-          componentId: Number(rows[0].componentId),
-          panelId: Number(rows[0].panelId),
-          componentName: String(rows[0].componentName),
-          panelName: String(rows[0].panelName),
-        }
-      : null;
   }
 
   private async ensurePanelByName(connection: PoolConnection, componentCode: CatalogComponent["code"], panelName: string) {
