@@ -107,18 +107,27 @@ async function parseFailure(response: Response): Promise<ApiFailure> {
 }
 
 async function requestJson<T>(path: string, schema: z.ZodType<T>, init?: RequestInit) {
-  const response = await fetch(`${getApiBaseUrl()}${path}`, {
-    credentials: "include",
-    cache: "no-store",
-    ...init,
-    headers: {
-      ...(init?.body ? { "Content-Type": "application/json" } : {}),
-      ...init?.headers,
-    },
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${getApiBaseUrl()}${path}`, {
+      credentials: "include",
+      cache: "no-store",
+      ...init,
+      headers: {
+        ...(init?.body ? { "Content-Type": "application/json" } : {}),
+        ...init?.headers,
+      },
+    });
+  } catch {
+    return { success: false as const, message: "API catalog belum bisa dihubungi.", errorCode: "NETWORK_ERROR" };
+  }
 
   if (!response.ok) return parseFailure(response);
-  return { success: true as const, payload: schema.parse(await response.json()) };
+  try {
+    return { success: true as const, payload: schema.parse(await response.json()) };
+  } catch {
+    return { success: false as const, message: "Format data catalog dari server belum sesuai.", errorCode: "INVALID_RESPONSE" };
+  }
 }
 
 export async function fetchUnitCatalog(unitId: string) {
