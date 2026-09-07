@@ -76,7 +76,7 @@ export function UnitCatalogEditor({
   }, []);
 
   useEffect(() => {
-    gridRef.current?.api.refreshCells({ force: true });
+    gridRef.current?.api?.refreshCells({ force: true });
   }, [cellRange]);
 
   function isCellInRange(rowIndex: number | null | undefined, field: string | undefined) {
@@ -147,7 +147,7 @@ export function UnitCatalogEditor({
   ]), [editMode, cellRange]);
 
   function handlePaste(text: string) {
-    const focused = gridRef.current?.api.getFocusedCell();
+    const focused = gridRef.current?.api?.getFocusedCell();
     const rowIndex = focused?.rowIndex ?? 0;
     const column = focused?.column?.getColId() as CatalogDraftField | undefined;
     const targetColumn = column && catalogGridFields.includes(column) ? column : "code";
@@ -157,7 +157,7 @@ export function UnitCatalogEditor({
   function getRowsForCopy() {
     const visible: CatalogDraftRow[] = [];
     const selectedVisible: CatalogDraftRow[] = [];
-    gridRef.current?.api.forEachNodeAfterFilterAndSort((node) => {
+    gridRef.current?.api?.forEachNodeAfterFilterAndSort((node) => {
       if (!node.data) return;
       visible.push(node.data);
       if (node.isSelected()) selectedVisible.push(node.data);
@@ -169,7 +169,7 @@ export function UnitCatalogEditor({
   function getRangeForCopy() {
     if (!cellRange) return null;
     const visibleRows: CatalogDraftRow[] = [];
-    gridRef.current?.api.forEachNodeAfterFilterAndSort((node) => {
+    gridRef.current?.api?.forEachNodeAfterFilterAndSort((node) => {
       if (node.data) visibleRows.push(node.data);
     });
 
@@ -303,7 +303,7 @@ export function UnitCatalogEditor({
           quickFilterText={searchValue}
           getRowId={(params) => params.data.rowId}
           onSelectionChanged={() => {
-            const selected = gridRef.current?.api.getSelectedRows() ?? [];
+            const selected = gridRef.current?.api?.getSelectedRows() ?? [];
             onSelectedRowIdsChange(selected.map((row) => row.rowId));
           }}
           onCellMouseDown={startCellRange}

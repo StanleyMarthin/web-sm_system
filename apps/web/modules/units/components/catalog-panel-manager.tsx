@@ -108,14 +108,14 @@ export function CatalogPanelManager({ components, onClose, onSaved }: CatalogPan
   }
 
   function handlePaste(text: string) {
-    const rowIndex = gridRef.current?.api.getFocusedCell()?.rowIndex ?? 0;
+    const rowIndex = gridRef.current?.api?.getFocusedCell()?.rowIndex ?? 0;
     setRows((current) => applyCatalogPanelPaste(current, { rowIndex, text }));
   }
 
   function getRowsForCopy() {
     const visible: CatalogPanelDraftRow[] = [];
     const selectedVisible: CatalogPanelDraftRow[] = [];
-    gridRef.current?.api.forEachNodeAfterFilterAndSort((node) => {
+    gridRef.current?.api?.forEachNodeAfterFilterAndSort((node) => {
       if (!node.data) return;
       visible.push(node.data);
       if (node.isSelected()) selectedVisible.push(node.data);
@@ -331,7 +331,7 @@ export function CatalogPanelManager({ components, onClose, onSaved }: CatalogPan
           stopEditingWhenCellsLoseFocus
           getRowId={(params) => params.data.rowId}
           onSelectionChanged={() => {
-            const selected = gridRef.current?.api.getSelectedRows() ?? [];
+            const selected = gridRef.current?.api?.getSelectedRows() ?? [];
             setSelectedRowIds(selected.map((row) => row.rowId));
           }}
           onCellValueChanged={(event) => {
