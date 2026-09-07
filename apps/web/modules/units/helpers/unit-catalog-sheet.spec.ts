@@ -3,6 +3,7 @@ import type { CatalogWorkspace } from "@smsystem/contracts/unit-catalog";
 import {
   applyCatalogPaste,
   appendParsedCatalogRows,
+  catalogRowsToClipboardTsv,
   clampCatalogImageZoom,
   createCatalogDraftRow,
   createCatalogWorkspaceDraft,
@@ -296,5 +297,20 @@ describe("unit catalog sheet helper", () => {
       width: 200,
       height: 80,
     })).toEqual({ x: 0, y: 100 });
+  });
+
+  it("serializes catalog rows for Excel copy", () => {
+    const text = catalogRowsToClipboardTsv([
+      createCatalogDraftRow({
+        code: "1",
+        partNumber: "PN\t1",
+        itemName: "Rubber\nSeal",
+        position: "21",
+        qtyNormal: "1",
+        isRestoration: true,
+      }),
+    ]);
+
+    expect(text).toBe("Code\tPart Number\tItem Name\tPosition\tQty Normal\tRestorasi\n1\tPN 1\tRubber Seal\t21\t1\tYa");
   });
 });

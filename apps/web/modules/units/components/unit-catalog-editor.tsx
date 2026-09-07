@@ -12,7 +12,7 @@ import { useMemo, useRef } from "react";
 import type { ColDef } from "ag-grid-community";
 import { AllCommunityModule, ModuleRegistry } from "ag-grid-community";
 import { AgGridReact } from "ag-grid-react";
-import { ClipboardPaste, Plus, Trash2 } from "lucide-react";
+import { Clipboard, ClipboardPaste, Plus, Trash2 } from "lucide-react";
 import {
   ActionButton,
   CompactInput,
@@ -20,6 +20,7 @@ import {
 import {
   applyCatalogPaste,
   catalogGridFields,
+  catalogRowsToClipboardTsv,
   updateCatalogDraftCell,
   type CatalogDraftField,
   type CatalogDraftRow,
@@ -91,6 +92,26 @@ export function UnitCatalogEditor({
     onRowsChange(applyCatalogPaste(rows, { rowIndex, column: targetColumn, text }));
   }
 
+  function getRowsForCopy() {
+    const visible: CatalogDraftRow[] = [];
+    const selectedVisible: CatalogDraftRow[] = [];
+    gridRef.current?.api.forEachNodeAfterFilterAndSort((node) => {
+      if (!node.data) return;
+      visible.push(node.data);
+      if (node.isSelected()) selectedVisible.push(node.data);
+    });
+    if (selectedVisible.length > 0) return selectedVisible;
+    return visible.length > 0 ? visible : rows;
+  }
+
+  function getClipboardText() {
+    return catalogRowsToClipboardTsv(getRowsForCopy());
+  }
+
+  async function copyRows() {
+    await navigator.clipboard?.writeText(getClipboardText());
+  }
+
   async function handleClipboardPaste() {
     try {
       const text = await navigator.clipboard?.readText();
@@ -110,6 +131,15 @@ export function UnitCatalogEditor({
             placeholder="Cari code, part number, atau nama item"
           />
         </div>
+        <ActionButton
+          onClick={() => {
+            void copyRows();
+          }}
+          title="Copy ke Excel"
+        >
+          <Clipboard className="h-3.5 w-3.5" />
+          Copy
+        </ActionButton>
         {editMode ? (
           <>
             <ActionButton onClick={onAddRow} title="Tambah row kosong">
@@ -145,6 +175,12 @@ export function UnitCatalogEditor({
           if (!text.trim()) return;
           event.preventDefault();
           handlePaste(text);
+        }}
+        onCopyCapture={(event) => {
+          const activeElement = document.activeElement;
+          if (activeElement instanceof HTMLInputElement || activeElement instanceof HTMLTextAreaElement) return;
+          event.preventDefault();
+          event.clipboardData.setData("text/plain", getClipboardText());
         }}
       >
         <AgGridReact<CatalogDraftRow>

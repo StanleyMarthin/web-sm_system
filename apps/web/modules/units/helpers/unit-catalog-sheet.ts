@@ -320,6 +320,25 @@ export function applyCatalogPaste(rows: CatalogDraftRow[], input: { rowIndex: nu
   });
 }
 
+function tsvCell(value: string | boolean) {
+  return String(value).replace(/\r?\n/gu, " ").replace(/\t/gu, " ").trim();
+}
+
+export function catalogRowsToClipboardTsv(rows: CatalogDraftRow[]) {
+  const header = ["Code", "Part Number", "Item Name", "Position", "Qty Normal", "Restorasi"];
+  const body = rows.map((row) => [
+    row.code,
+    row.partNumber,
+    row.itemName,
+    row.position,
+    row.qtyNormal,
+    row.isRestoration ? "Ya" : "",
+  ]);
+  return [header, ...body]
+    .map((cells) => cells.map(tsvCell).join("\t"))
+    .join("\n");
+}
+
 export function isCatalogDraftDirty(base: CatalogWorkspaceDraft, current: CatalogWorkspaceDraft) {
   return JSON.stringify({
     panelId: base.panelId,
