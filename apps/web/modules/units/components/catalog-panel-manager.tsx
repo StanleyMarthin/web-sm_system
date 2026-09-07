@@ -4,13 +4,14 @@ import type { CatalogComponent } from "@smsystem/contracts/unit-catalog";
 import type { ColDef } from "ag-grid-community";
 import { AllCommunityModule, ModuleRegistry } from "ag-grid-community";
 import { AgGridReact } from "ag-grid-react";
-import { Clipboard, ClipboardPaste, Plus, Save, Trash2, X } from "lucide-react";
+import { Save, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  appendCatalogPanelDraftRow,
   applyCatalogPanelPaste,
   catalogPanelDraftRowsFromPanels,
   catalogPanelRowsToClipboardTsv,
+  ensureCatalogPanelPlaceholderRows,
+  getDuplicateCatalogPanelRowIds,
   isCatalogPanelDraftDirty,
   removeCatalogPanelDraftRows,
   serializeCatalogPanelDraftRows,
@@ -42,14 +43,36 @@ export function CatalogPanelManager({ components, onClose, onSaved }: CatalogPan
   const [rows, setRows] = useState<CatalogPanelDraftRow[]>([]);
   const [selectedRowIds, setSelectedRowIds] = useState<string[]>([]);
   const [deletedIds, setDeletedIds] = useState<number[]>([]);
+  const [pendingComponentId, setPendingComponentId] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const dirty = isCatalogPanelDraftDirty(baseline, rows, deletedIds);
+  const duplicateRowIds = useMemo(() => getDuplicateCatalogPanelRowIds(rows), [rows]);
+  const activeComponent = components.find((component) => component.id === componentId) ?? components[0] ?? null;
   const columnDefs = useMemo<ColDef<CatalogPanelDraftRow>[]>(() => ([
     { field: "id", headerName: "ID", hide: true },
-    { field: "panelName", headerName: "Panel Name", editable: true, flex: 1, minWidth: 240 },
-  ]), []);
+    {
+      headerName: "NO",
+      valueGetter: (params) => (params.node?.rowIndex ?? 0) + 1,
+      editable: false,
+      width: 82,
+      minWidth: 72,
+      sortable: false,
+      resizable: false,
+      cellClass: "font-mono text-muted-foreground",
+    },
+    {
+      field: "panelName",
+      headerName: "PANEL NAME",
+      editable: true,
+      flex: 1,
+      minWidth: 240,
+      cellClass: (params) => (
+        params.data && duplicateRowIds.has(params.data.rowId) ? "catalog-cell-invalid" : ""
+      ),
+    },
+  ]), [duplicateRowIds]);
 
   async function loadPanels(nextComponentId: number) {
     setLoading(true);
@@ -74,17 +97,12 @@ export function CatalogPanelManager({ components, onClose, onSaved }: CatalogPan
     if (componentId > 0) void loadPanels(componentId);
   }, [componentId]);
 
-  async function changeComponent(nextValue: string) {
-    const nextComponentId = Number(nextValue);
+  function requestComponentChange(nextComponentId: number) {
     if (!Number.isFinite(nextComponentId) || nextComponentId <= 0) return;
+    if (nextComponentId === componentId) return;
     if (dirty) {
-      const confirmed = await sweetAlert.confirm({
-        title: "Perubahan belum disimpan",
-        description: "Perubahan panel akan dibuang bila pindah komponen sekarang.",
-        confirmLabel: "Pindah",
-        cancelLabel: "Tetap",
-      });
-      if (!confirmed) return;
+      setPendingComponentId(nextComponentId);
+      return;
     }
     setComponentId(nextComponentId);
   }
@@ -105,15 +123,6 @@ export function CatalogPanelManager({ components, onClose, onSaved }: CatalogPan
     return selectedVisible.length > 0 ? selectedVisible : visible;
   }
 
-  async function copyRows() {
-    await navigator.clipboard?.writeText(catalogPanelRowsToClipboardTsv(getRowsForCopy()));
-  }
-
-  async function pasteFromClipboard() {
-    const text = await navigator.clipboard?.readText().catch(() => "");
-    if (text.trim()) handlePaste(text);
-  }
-
   function deleteSelectedRows() {
     setRows((current) => {
       const selected = new Set(selectedRowIds);
@@ -125,12 +134,6 @@ export function CatalogPanelManager({ components, onClose, onSaved }: CatalogPan
       }
       return removeCatalogPanelDraftRows(current, selectedRowIds);
     });
-    setSelectedRowIds([]);
-  }
-
-  async function cancel() {
-    setRows(baseline);
-    setDeletedIds([]);
     setSelectedRowIds([]);
   }
 
@@ -148,7 +151,14 @@ export function CatalogPanelManager({ components, onClose, onSaved }: CatalogPan
   }
 
   async function save() {
-    if (!componentId) return;
+    return saveCurrentComponent();
+  }
+
+  async function saveCurrentComponent() {
+    if (!componentId || duplicateRowIds.size > 0) {
+      sweetAlert.notifyError("Nama panel duplikat", "Panel dengan nama yang sama tidak boleh ada dalam satu komponen.");
+      return false;
+    }
     setSaving(true);
     let items;
     try {
@@ -156,7 +166,7 @@ export function CatalogPanelManager({ components, onClose, onSaved }: CatalogPan
     } catch {
       sweetAlert.notifyError("Nama panel duplikat", "Panel dengan nama yang sama tidak boleh ada dalam satu komponen.");
       setSaving(false);
-      return;
+      return false;
     }
 
     const result = await saveCatalogPanels(componentId, { items, deletedIds });
@@ -173,7 +183,7 @@ export function CatalogPanelManager({ components, onClose, onSaved }: CatalogPan
           ? `Unit catalog: ${conflict.unitCatalogCount ?? 0}, gambar: ${conflict.imageCount ?? 0}, master panel: ${conflict.masterPanelCount ?? 0}.`
           : result.message,
       );
-      return;
+      return false;
     }
     const nextRows = catalogPanelDraftRowsFromPanels(result.payload.data.panels);
     setBaseline(nextRows);
@@ -182,6 +192,26 @@ export function CatalogPanelManager({ components, onClose, onSaved }: CatalogPan
     setSelectedRowIds([]);
     sweetAlert.notifySuccess("Panel catalog tersimpan");
     onSaved();
+    return true;
+  }
+
+  async function saveAndContinue() {
+    if (pendingComponentId == null) return;
+    const nextComponentId = pendingComponentId;
+    const saved = await saveCurrentComponent();
+    if (!saved) return;
+    setPendingComponentId(null);
+    setComponentId(nextComponentId);
+  }
+
+  function discardAndContinue() {
+    if (pendingComponentId == null) return;
+    const nextComponentId = pendingComponentId;
+    setPendingComponentId(null);
+    setRows(baseline);
+    setDeletedIds([]);
+    setSelectedRowIds([]);
+    setComponentId(nextComponentId);
   }
 
   function activeRowCount() {
@@ -192,14 +222,37 @@ export function CatalogPanelManager({ components, onClose, onSaved }: CatalogPan
     }
   }
 
+  const pendingComponent = components.find((component) => component.id === pendingComponentId) ?? null;
+
   return (
-    <SectionCard label="Kelola Panel Catalog" count={activeRowCount()} className="min-h-[42rem]">
+    <SectionCard label="Master Panel Catalog" count={activeRowCount()} className="min-h-[42rem]">
       {sweetAlert.alertElement}
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-foreground">Kelola Master Panel Catalog</p>
+            <p className="text-xs text-muted-foreground">
+              Klik cell untuk mengetik • Ctrl+V untuk paste dari Excel/Sheets • Enter untuk baris berikutnya
+            </p>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <ActionButton onClick={() => { void close(); }}>Kembali</ActionButton>
+            <ActionButton
+              onClick={() => { void save(); }}
+              disabled={!dirty || saving || loading}
+              variant="primary"
+              title={duplicateRowIds.size > 0 ? "Ada nama panel duplikat" : undefined}
+            >
+              <Save className="h-3.5 w-3.5" />
+              {saving ? "Menyimpan" : "Simpan"}
+            </ActionButton>
+          </div>
+        </div>
+
         <select
           value={componentId}
-          onChange={(event) => { void changeComponent(event.target.value); }}
-          className="h-9 min-w-[14rem] border border-border bg-card px-3 text-sm"
+          onChange={(event) => requestComponentChange(Number(event.target.value))}
+          className="h-10 w-full border border-border bg-card px-3 text-sm md:hidden"
         >
           {components.map((component) => (
             <option key={component.id} value={component.id}>
@@ -207,35 +260,51 @@ export function CatalogPanelManager({ components, onClose, onSaved }: CatalogPan
             </option>
           ))}
         </select>
-        <ActionButton onClick={() => setRows((current) => appendCatalogPanelDraftRow(current))}>
-          <Plus className="h-3.5 w-3.5" />
-          Tambah Baris
-        </ActionButton>
-        <ActionButton onClick={() => { void pasteFromClipboard(); }}>
-          <ClipboardPaste className="h-3.5 w-3.5" />
-          Paste
-        </ActionButton>
-        <ActionButton onClick={() => { void copyRows(); }}>
-          <Clipboard className="h-3.5 w-3.5" />
-          Copy
-        </ActionButton>
-        <ActionButton onClick={deleteSelectedRows} disabled={selectedRowIds.length === 0} variant="danger">
-          <Trash2 className="h-3.5 w-3.5" />
-          Delete Row
-        </ActionButton>
-        <div className="flex-1" />
-        <ActionButton onClick={() => { void cancel(); }} disabled={!dirty}>
-          <X className="h-3.5 w-3.5" />
-          Batal
-        </ActionButton>
-        <ActionButton onClick={() => { void save(); }} disabled={!dirty || saving || loading} variant="primary">
-          <Save className="h-3.5 w-3.5" />
-          {saving ? "Menyimpan" : "Simpan"}
-        </ActionButton>
-        <ActionButton onClick={() => { void close(); }}>Kembali</ActionButton>
+
+        <div className="hidden gap-1 overflow-x-auto border-b border-border pb-2 md:flex">
+          {components.map((component) => (
+            <button
+              key={component.id}
+              type="button"
+              onClick={() => requestComponentChange(component.id)}
+              className={`h-10 shrink-0 border px-4 font-mono text-[12px] font-medium uppercase tracking-[0.08em] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${
+                component.id === activeComponent?.id
+                  ? "border-primary/45 bg-primary/10 text-app-accent-ink"
+                  : "border-border text-muted-foreground hover:bg-muted hover:text-foreground"
+              }`}
+            >
+              {component.componentName}
+            </button>
+          ))}
+        </div>
+
+        {pendingComponent ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 border border-primary/25 bg-primary/10 px-3 py-2 text-sm">
+            <span className="text-foreground">Perubahan belum disimpan.</span>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <ActionButton variant="primary" onClick={() => { void saveAndContinue(); }}>
+                Simpan & lanjut
+              </ActionButton>
+              <ActionButton onClick={discardAndContinue}>Buang perubahan</ActionButton>
+              <ActionButton onClick={() => setPendingComponentId(null)}>
+                <X className="h-3.5 w-3.5" />
+                Batal
+              </ActionButton>
+            </div>
+          </div>
+        ) : null}
       </div>
       <div
         className="ag-theme-alpine sms-ag-grid h-[34rem] w-full border border-border"
+        onKeyDownCapture={(event) => {
+          const target = event.target;
+          const isTyping = target instanceof HTMLInputElement ||
+            target instanceof HTMLTextAreaElement ||
+            (target instanceof HTMLElement && target.isContentEditable);
+          if (isTyping || selectedRowIds.length === 0 || !["Delete", "Backspace"].includes(event.key)) return;
+          event.preventDefault();
+          deleteSelectedRows();
+        }}
         onPasteCapture={(event) => {
           const text = event.clipboardData.getData("text/plain");
           if (!text.trim()) return;
@@ -256,6 +325,10 @@ export function CatalogPanelManager({ components, onClose, onSaved }: CatalogPan
           suppressMovableColumns
           suppressClipboardPaste
           defaultColDef={{ sortable: true, resizable: true, editable: true }}
+          singleClickEdit
+          enterNavigatesVertically
+          enterNavigatesVerticallyAfterEdit
+          stopEditingWhenCellsLoseFocus
           getRowId={(params) => params.data.rowId}
           onSelectionChanged={() => {
             const selected = gridRef.current?.api.getSelectedRows() ?? [];
@@ -264,11 +337,9 @@ export function CatalogPanelManager({ components, onClose, onSaved }: CatalogPan
           onCellValueChanged={(event) => {
             setRows((current) => updateCatalogPanelDraftCell(current, event.data.rowId, String(event.newValue ?? "")));
           }}
+          onGridReady={() => setRows((current) => ensureCatalogPanelPlaceholderRows(current))}
         />
       </div>
-      <p className="text-xs text-muted-foreground">
-        Paste dari Excel/Google Sheets masuk ke kolom Panel Name. Delete akan ditolak bila panel sudah dipakai.
-      </p>
     </SectionCard>
   );
 }

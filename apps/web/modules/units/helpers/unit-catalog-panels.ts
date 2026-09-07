@@ -1,5 +1,7 @@
 import type { CatalogPanel } from "@smsystem/contracts/unit-catalog";
 
+export const catalogPanelPlaceholderRowCount = 20;
+
 export interface CatalogPanelDraftRow {
   rowId: string;
   id: number | null;
@@ -18,6 +20,10 @@ function copyCell(value: string) {
   return value.replace(/\r?\n/gu, " ").replace(/\t/gu, " ").trim();
 }
 
+function hasPanelName(row: CatalogPanelDraftRow) {
+  return row.panelName.trim().length > 0;
+}
+
 export function createCatalogPanelDraftRow(partial: Partial<CatalogPanelDraftRow> = {}): CatalogPanelDraftRow {
   return {
     rowId: partial.rowId ?? createRowId(),
@@ -26,33 +32,46 @@ export function createCatalogPanelDraftRow(partial: Partial<CatalogPanelDraftRow
   };
 }
 
+export function ensureCatalogPanelPlaceholderRows(
+  rows: CatalogPanelDraftRow[],
+  minRows = catalogPanelPlaceholderRowCount,
+) {
+  const next = rows.length > 0 ? [...rows] : [createCatalogPanelDraftRow()];
+  while (next.length < minRows || hasPanelName(next[next.length - 1]!)) {
+    next.push(createCatalogPanelDraftRow());
+  }
+  return next;
+}
+
 export function catalogPanelDraftRowsFromPanels(panels: CatalogPanel[]) {
-  return panels.length > 0
+  const rows = panels.length > 0
     ? panels.map((panel) => createCatalogPanelDraftRow({ id: panel.id, panelName: panel.panelName }))
     : [createCatalogPanelDraftRow()];
+  return ensureCatalogPanelPlaceholderRows(rows);
 }
 
 export function appendCatalogPanelDraftRow(rows: CatalogPanelDraftRow[]) {
-  return [...rows, createCatalogPanelDraftRow()];
+  return ensureCatalogPanelPlaceholderRows([...rows, createCatalogPanelDraftRow()]);
 }
 
 export function removeCatalogPanelDraftRows(rows: CatalogPanelDraftRow[], rowIds: string[]) {
   const rowIdSet = new Set(rowIds);
   const next = rows.filter((row) => !rowIdSet.has(row.rowId));
-  return next.length > 0 ? next : [createCatalogPanelDraftRow()];
+  return ensureCatalogPanelPlaceholderRows(next);
 }
 
 export function updateCatalogPanelDraftCell(rows: CatalogPanelDraftRow[], rowId: string, value: string) {
-  return rows.map((row) => (
+  return ensureCatalogPanelPlaceholderRows(rows.map((row) => (
     row.rowId === rowId ? { ...row, panelName: value.replace(/\r/gu, "") } : row
-  ));
+  )));
 }
 
 export function applyCatalogPanelPaste(rows: CatalogPanelDraftRow[], input: { rowIndex: number; text: string }) {
   const names = input.text
     .split(/\r?\n/u)
     .map((line) => line.split("\t")[0] ?? "")
-    .filter((name) => name.trim().length > 0);
+    .map((name) => name.trim())
+    .filter((name) => name.length > 0);
   if (names.length === 0) return rows;
 
   const nextRows = [...rows];
@@ -60,10 +79,10 @@ export function applyCatalogPanelPaste(rows: CatalogPanelDraftRow[], input: { ro
     nextRows.push(createCatalogPanelDraftRow());
   }
 
-  return nextRows.map((row, rowIndex) => {
+  return ensureCatalogPanelPlaceholderRows(nextRows.map((row, rowIndex) => {
     const name = names[rowIndex - input.rowIndex];
     return name === undefined ? row : { ...row, panelName: name };
-  });
+  }));
 }
 
 export function serializeCatalogPanelDraftRows(rows: CatalogPanelDraftRow[]) {
@@ -84,14 +103,37 @@ export function serializeCatalogPanelDraftRows(rows: CatalogPanelDraftRow[]) {
   return items;
 }
 
+export function getDuplicateCatalogPanelRowIds(rows: CatalogPanelDraftRow[]) {
+  const seen = new Map<string, string>();
+  const duplicates = new Set<string>();
+  for (const row of rows) {
+    const panelName = normalizePanelName(row.panelName);
+    if (!panelName) continue;
+    const key = panelName.toUpperCase();
+    const firstRowId = seen.get(key);
+    if (firstRowId) {
+      duplicates.add(firstRowId);
+      duplicates.add(row.rowId);
+      continue;
+    }
+    seen.set(key, row.rowId);
+  }
+  return duplicates;
+}
+
 export function catalogPanelRowsToClipboardTsv(rows: CatalogPanelDraftRow[]) {
-  return ["Panel Name", ...rows.map((row) => copyCell(row.panelName))].join("\n");
+  return rows
+    .map((row) => copyCell(row.panelName))
+    .filter((value) => value.length > 0)
+    .join("\n");
 }
 
 export function isCatalogPanelDraftDirty(base: CatalogPanelDraftRow[], current: CatalogPanelDraftRow[], deletedIds: number[]) {
-  const simplify = (rows: CatalogPanelDraftRow[]) => rows.map(({ rowId: _rowId, ...row }) => ({
-    ...row,
-    panelName: normalizePanelName(row.panelName),
-  }));
+  const simplify = (rows: CatalogPanelDraftRow[]) => rows
+    .map(({ rowId: _rowId, ...row }) => ({
+      ...row,
+      panelName: normalizePanelName(row.panelName),
+    }))
+    .filter((row) => row.id !== null || row.panelName.length > 0);
   return deletedIds.length > 0 || JSON.stringify(simplify(base)) !== JSON.stringify(simplify(current));
 }

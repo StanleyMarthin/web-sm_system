@@ -470,7 +470,7 @@ export function UnitCatalogTab({ unitId, unitName, canManageCatalog }: UnitCatal
 
       <PageHeader
         eyebrow={`Unit / Catalog · ${unitName}`}
-        title={managePanelMode ? "Kelola Panel Catalog" : selectedPanelId && workspace ? workspace.panel.panelName : "Catalog Unit"}
+        title={managePanelMode ? "Kelola Master Panel Catalog" : selectedPanelId && workspace ? workspace.panel.panelName : "Catalog Unit"}
         actions={selectedPanelId ? (
           editMode ? (
             <>
