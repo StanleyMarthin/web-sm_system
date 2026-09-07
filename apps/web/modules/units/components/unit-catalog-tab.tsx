@@ -42,6 +42,7 @@ import { ActionButton, CompactInput, PageHeader, SectionCard } from "@/shared/ui
 interface UnitCatalogTabProps {
   unitId: string;
   unitName: string;
+  canManageCatalog: boolean;
 }
 
 function groupPanelsByComponent(overview: CatalogOverview | null) {
@@ -83,7 +84,7 @@ function MediaThumb({
   );
 }
 
-export function UnitCatalogTab({ unitId, unitName }: UnitCatalogTabProps) {
+export function UnitCatalogTab({ unitId, unitName, canManageCatalog }: UnitCatalogTabProps) {
   const sweetAlert = useSweetAlert();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [overview, setOverview] = useState<CatalogOverview | null>(null);
@@ -485,13 +486,15 @@ export function UnitCatalogTab({ unitId, unitName }: UnitCatalogTabProps) {
           ) : (
             <>
               <ActionButton onClick={closePanel}>Kembali</ActionButton>
-              <ActionButton variant="primary" onClick={() => setEditMode(true)}>
-                <Pencil className="h-3.5 w-3.5" />
-                Edit Catalog
-              </ActionButton>
+              {canManageCatalog ? (
+                <ActionButton variant="primary" onClick={() => setEditMode(true)}>
+                  <Pencil className="h-3.5 w-3.5" />
+                  Edit Catalog
+                </ActionButton>
+              ) : null}
             </>
           )
-        ) : managePanelMode ? undefined : (
+        ) : managePanelMode || !canManageCatalog ? undefined : (
           <ActionButton variant="primary" onClick={() => setManagePanelMode(true)}>
             <Settings2 className="h-3.5 w-3.5" />
             Kelola Panel

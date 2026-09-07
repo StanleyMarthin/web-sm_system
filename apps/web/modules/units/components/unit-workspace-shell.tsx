@@ -32,6 +32,7 @@ interface UnitWorkspaceShellProps {
   canDownloadPhotos: boolean;
   canManagePanels: boolean;
   canUseCatalog: boolean;
+  canManageCatalog: boolean;
 }
 
 type UnitStatusKey = "TOP_URGENT" | "URGENT" | "NORMAL" | "SLOW" | "HOLD";
@@ -392,6 +393,7 @@ export function UnitWorkspaceShell({
   canDownloadPhotos,
   canManagePanels,
   canUseCatalog,
+  canManageCatalog,
 }: UnitWorkspaceShellProps) {
   const searchParams = useSearchParams();
   const requestedTab = resolveTab(searchParams.get("tab"));
@@ -752,7 +754,7 @@ export function UnitWorkspaceShell({
           </section>
         </div>
       ) : activeTab === "catalog" ? (
-        <UnitCatalogTab unitId={unit.unitId} unitName={unit.unitName} />
+        <UnitCatalogTab unitId={unit.unitId} unitName={unit.unitName} canManageCatalog={canManageCatalog} />
       ) : activeTab === "parts-panels" ? (
         <BomTrackerTab
           carId={unit.unitId}
