@@ -76,7 +76,7 @@ function formatBytes(value: number) {
 
 function surveyStatusText(row: CatalogWorkspaceDraft["rows"][number]) {
   if (row.surveyStatus === "MASTER_PANEL_CREATED") return "Sudah jadi Master Panel";
-  if (row.surveyStatus === "SUDAH_DIDATA" || row.isRestoration) return "Sudah didata";
+  if (row.surveyStatus === "SUDAH_DIDATA" || row.isRestoration) return "Pendataan selesai";
   return "Belum didata";
 }
 
@@ -92,6 +92,22 @@ function conditionText(value: CatalogWorkspaceDraft["rows"][number]["conditionSt
   if (value === "RESTORE") return "Restorasi";
   if (value === "NOT_USABLE") return "Tidak Layak";
   return "-";
+}
+
+function humanizeCatalogLabel(value: string, options: { removeLeadingCode?: boolean } = {}) {
+  let cleaned = value
+    .replace(/[_-]+/gu, " ")
+    .replace(/[`´’]/gu, "'")
+    .replace(/\s+/gu, " ")
+    .trim();
+
+  if (options.removeLeadingCode) {
+    cleaned = cleaned.replace(/^\d+[A-Z]?\s+/iu, "");
+  }
+
+  return cleaned
+    .toLowerCase()
+    .replace(/\b\p{L}/gu, (char) => char.toUpperCase());
 }
 
 function MediaThumb({
@@ -168,6 +184,10 @@ export function UnitCatalogTab({ unitId, unitName, canManageCatalog }: UnitCatal
   const drawerRow = useMemo(() => draft.rows.find((row) => row.rowId === drawerRowId) ?? null, [draft.rows, drawerRowId]);
   const markerRow = useMemo(() => draft.rows.find((row) => row.rowId === markerRowId) ?? null, [draft.rows, markerRowId]);
   const markerPosition = useMemo(() => parseCatalogPositionMarker(markerRow?.position), [markerRow?.position]);
+  const selectedComponentLabel = workspace ? humanizeCatalogLabel(workspace.panel.componentName) : "";
+  const selectedPanelTitle = workspace ? humanizeCatalogLabel(workspace.panel.panelName, { removeLeadingCode: true }) : "";
+  const activeMarkerRow = markerRowId ? draft.rows.find((row) => row.rowId === markerRowId) ?? null : null;
+  const canWriteMarker = Boolean(activeMarkerRow && !activeMarkerRow.promotedPanelId);
   const filteredGroups = useMemo(() => {
     const keyword = panelSearch.trim().toLowerCase();
     return groupedPanels
@@ -496,7 +516,7 @@ export function UnitCatalogTab({ unitId, unitName, canManageCatalog }: UnitCatal
     if (!editMode) setEditMode(true);
     setMarkerRowId(row.rowId);
     setDrawerRowId(row.rowId);
-    sweetAlert.notifySuccess("Mode tandai lokasi", "Klik posisi item pada gambar panel, lalu Simpan Data.");
+    sweetAlert.notifySuccess("Mode tandai", "Klik posisi item pada gambar panel, lalu Simpan Data.");
   }
 
   async function saveSurvey() {
@@ -526,7 +546,7 @@ export function UnitCatalogTab({ unitId, unitName, canManageCatalog }: UnitCatal
       : await saveUnitCatalogSurvey(unitId, drawerRow.persistedId, payload);
     setSurveySaving(false);
     if (!result.success) {
-      sweetAlert.notifyError("Survey belum tersimpan", result.message);
+      sweetAlert.notifyError("Pendataan belum tersimpan", result.message);
       return;
     }
     if (selectedPanelId) {
@@ -541,7 +561,7 @@ export function UnitCatalogTab({ unitId, unitName, canManageCatalog }: UnitCatal
     }
     setDrawerRowId(null);
     setMarkerRowId(null);
-    sweetAlert.notifySuccess("Survey tersimpan", surveyForm.isRestoration ? "Item sudah masuk Master Panel." : "Pendataan item tersimpan.");
+    sweetAlert.notifySuccess("Pendataan tersimpan", surveyForm.isRestoration ? "Item sudah masuk Master Panel." : "Pendataan item tersimpan.");
     void loadOverview();
   }
 
@@ -573,7 +593,7 @@ export function UnitCatalogTab({ unitId, unitName, canManageCatalog }: UnitCatal
         <div className="fixed inset-0 z-50 bg-black/90 p-4 text-white" role="dialog" aria-modal="true">
           <div className="flex h-full flex-col gap-3">
             <div className="flex items-center justify-between gap-3">
-              <p className="truncate text-sm font-medium">{workspace?.panel.panelName ?? "Gambar Panel"}</p>
+              <p className="truncate text-sm font-medium">{selectedPanelTitle || "Gambar Panel"}</p>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
@@ -627,7 +647,7 @@ export function UnitCatalogTab({ unitId, unitName, canManageCatalog }: UnitCatal
 
       <PageHeader
         eyebrow={`Unit / Catalog · ${unitName}`}
-        title={managePanelMode ? "Kelola Master Panel Catalog" : selectedPanelId && workspace ? workspace.panel.panelName : "Catalog Unit"}
+        title={managePanelMode ? "Kelola Master Panel Catalog" : selectedPanelId && workspace ? selectedPanelTitle : "Catalog Unit"}
         actions={selectedPanelId ? (
           editMode ? (
             <>
@@ -670,9 +690,16 @@ export function UnitCatalogTab({ unitId, unitName, canManageCatalog }: UnitCatal
           <SectionCard label="Gambar Referensi Panel" count={draft.panelImages.length} className="min-h-[42rem]">
             {currentMedia ? (
               <div className="space-y-3">
+                {workspace ? (
+                  <div>
+                    <p className="text-sm text-muted-foreground">{selectedComponentLabel}</p>
+                    <h3 className="text-2xl font-semibold text-foreground">{selectedPanelTitle}</h3>
+                  </div>
+                ) : null}
                 <div
-                  className={`relative min-h-[36rem] overflow-hidden border border-border bg-muted ${markerRowId ? "cursor-crosshair" : ""}`}
+                  className={`relative min-h-[36rem] overflow-hidden border border-border bg-muted ${canWriteMarker ? "cursor-crosshair" : ""}`}
                   onMouseMove={(event) => {
+                    if (markerRowId) return;
                     const position = getCatalogImageHoverPosition(
                       event.clientX,
                       event.clientY,
@@ -683,8 +710,7 @@ export function UnitCatalogTab({ unitId, unitName, canManageCatalog }: UnitCatal
                   onMouseLeave={() => setImageHoverPosition(null)}
                   onClick={(event) => {
                     if (!markerRowId) return;
-                    const activeMarkerRow = draft.rows.find((row) => row.rowId === markerRowId);
-                    if (activeMarkerRow?.promotedPanelId) return;
+                    if (!canWriteMarker) return;
                     const position = getCatalogImageHoverPosition(
                       event.clientX,
                       event.clientY,
@@ -704,27 +730,30 @@ export function UnitCatalogTab({ unitId, unitName, canManageCatalog }: UnitCatal
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={currentMediaSrc}
-                    alt={workspace.panel.panelName}
+                    alt={selectedPanelTitle}
+                    draggable={false}
                     className="h-full min-h-[36rem] w-full object-contain transition-transform duration-150"
                     style={{
-                      transform: imageHoverPosition ? "scale(1.35)" : "scale(1)",
+                      transform: imageHoverPosition && !markerRowId ? "scale(1.35)" : "scale(1)",
                       transformOrigin: imageHoverPosition
                         ? `${imageHoverPosition.x}% ${imageHoverPosition.y}%`
                         : "50% 50%",
                     }}
                   />
-                  <button
-                    type="button"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      setImageZoom(1);
-                      setImageZoomOpen(true);
-                    }}
-                    className="absolute right-2 top-2 flex items-center gap-1 border border-border bg-background/90 px-2 py-1 text-xs font-medium text-foreground shadow-sm hover:border-primary"
-                  >
-                    <Maximize2 className="h-3.5 w-3.5" />
+                  {!markerRowId ? (
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setImageZoom(1);
+                        setImageZoomOpen(true);
+                      }}
+                      className="absolute right-2 top-2 flex items-center gap-1 border border-border bg-background/90 px-2 py-1 text-xs font-medium text-foreground shadow-sm hover:border-primary"
+                    >
+                      <Maximize2 className="h-3.5 w-3.5" />
                       Zoom
                     </button>
+                  ) : null}
                   {markerPosition ? (
                     <div
                       className="pointer-events-none absolute -translate-x-1/2 -translate-y-full text-primary drop-shadow"
@@ -736,7 +765,7 @@ export function UnitCatalogTab({ unitId, unitName, canManageCatalog }: UnitCatal
                   ) : null}
                   {markerRowId ? (
                     <div className="absolute left-3 top-3 border border-primary/35 bg-background/90 px-3 py-2 text-xs font-medium text-foreground shadow-sm">
-                      Klik gambar untuk tandai lokasi: {itemLabel(markerRow)}
+                      {canWriteMarker ? "📌 Tandai: " : "Lokasi item: "}{itemLabel(markerRow)}
                     </div>
                   ) : null}
                 </div>
@@ -764,7 +793,7 @@ export function UnitCatalogTab({ unitId, unitName, canManageCatalog }: UnitCatal
                   <MediaThumb
                     key={`${media.id ?? "new"}-${index}`}
                     src={media.fileUrl}
-                    alt={`${workspace.panel.panelName} ${index + 1}`}
+                    alt={`${selectedPanelTitle} ${index + 1}`}
                     active={selectedMediaIndex === index}
                     onClick={() => setSelectedMediaIndex(index)}
                   />
@@ -772,7 +801,7 @@ export function UnitCatalogTab({ unitId, unitName, canManageCatalog }: UnitCatal
               </div>
             ) : null}
 
-            {editMode ? (
+            {editMode && !markerRowId ? (
               <div className="space-y-2 border-t border-border pt-3">
                 <div
                   role="button"
@@ -831,7 +860,7 @@ export function UnitCatalogTab({ unitId, unitName, canManageCatalog }: UnitCatal
           </SectionCard>
 
           <SectionCard
-            label={`${workspace.panel.componentName} / ${workspace.panel.panelName}`}
+            label="Daftar Item"
             count={draft.rows.length}
             className="min-h-[42rem]"
           >
@@ -948,7 +977,7 @@ export function UnitCatalogTab({ unitId, unitName, canManageCatalog }: UnitCatal
         <div className="fixed inset-y-0 right-0 z-40 flex w-full max-w-md flex-col border-l border-border bg-card shadow-2xl">
           <div className="flex items-center justify-between border-b border-border px-4 py-3">
             <div className="min-w-0">
-              <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground">Part Information</p>
+              <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground">Data Item</p>
               <p className="truncate text-sm font-semibold text-foreground">{itemLabel(drawerRow)}</p>
             </div>
             <button
@@ -966,10 +995,12 @@ export function UnitCatalogTab({ unitId, unitName, canManageCatalog }: UnitCatal
 
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
             <div className="grid gap-3 text-sm">
-              <div>
-                <p className="text-xs text-muted-foreground">Alias</p>
-                <p className="font-medium text-foreground">{drawerRow.aliasName || "-"}</p>
-              </div>
+              {drawerRow.aliasName?.trim() ? (
+                <div>
+                  <p className="text-xs text-muted-foreground">Alias Name</p>
+                  <p className="font-medium text-foreground">{drawerRow.aliasName}</p>
+                </div>
+              ) : null}
               <div>
                 <p className="text-xs text-muted-foreground">Original Name</p>
                 <p className="font-medium text-foreground">{drawerRow.itemName || "-"}</p>
@@ -1008,7 +1039,7 @@ export function UnitCatalogTab({ unitId, unitName, canManageCatalog }: UnitCatal
 
             {!drawerRow.promotedPanelId ? (
             <div className="border-t border-border pt-4">
-              <FieldLabel>Survey Part</FieldLabel>
+              <FieldLabel>Pendataan</FieldLabel>
               <div className="space-y-3">
                 <CompactInput
                   value={surveyForm.actualName}
@@ -1075,8 +1106,8 @@ export function UnitCatalogTab({ unitId, unitName, canManageCatalog }: UnitCatal
           <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-4 py-3">
             <div className="flex items-center gap-1.5">
               <ActionButton onClick={() => startMarkPosition(drawerRow)}>
-                <MapPin className="h-3.5 w-3.5" />
-                {drawerRow.promotedPanelId ? "Lihat Lokasi" : "Tandai Lokasi"}
+                <span aria-hidden="true" className="text-[13px] leading-none">📌</span>
+                {drawerRow.promotedPanelId ? "Lihat Lokasi" : "Tandai"}
               </ActionButton>
               {drawerRow.promotedPanelId ? (
                 <ActionButton onClick={() => router.push(`/units/${encodeURIComponent(unitId)}?tab=master-panel`)}>
@@ -1085,12 +1116,20 @@ export function UnitCatalogTab({ unitId, unitName, canManageCatalog }: UnitCatal
                 </ActionButton>
               ) : null}
             </div>
-            {!drawerRow.promotedPanelId ? (
-              <ActionButton variant="primary" onClick={() => { void saveSurvey(); }} disabled={!drawerRow.persistedId || surveySaving}>
-                <CheckCircle2 className="h-3.5 w-3.5" />
-                {surveySaving ? "Menyimpan" : "Simpan Data"}
+            <div className="flex items-center gap-1.5">
+              <ActionButton onClick={() => {
+                setDrawerRowId(null);
+                setMarkerRowId(null);
+              }}>
+                Kembali
               </ActionButton>
-            ) : null}
+              {!drawerRow.promotedPanelId ? (
+                <ActionButton variant="primary" onClick={() => { void saveSurvey(); }} disabled={!drawerRow.persistedId || surveySaving}>
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  {surveySaving ? "Menyimpan" : "Simpan Data"}
+                </ActionButton>
+              ) : null}
+            </div>
           </div>
         </div>
       ) : null}

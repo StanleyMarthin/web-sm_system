@@ -12,7 +12,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { CellMouseDownEvent, CellMouseOverEvent, ColDef } from "ag-grid-community";
 import { AllCommunityModule, ModuleRegistry } from "ag-grid-community";
 import { AgGridReact } from "ag-grid-react";
-import { CheckCircle2, Clipboard, ClipboardPaste, Eye, MapPin, Plus, Trash2 } from "lucide-react";
+import { CheckCircle2, Clipboard, ClipboardPaste, Eye, Plus, Trash2 } from "lucide-react";
 import {
   ActionButton,
   CompactInput,
@@ -57,8 +57,8 @@ function qtyCellClass(value: unknown) {
 
 function surveyStatusLabel(row: CatalogDraftRow) {
   if (row.surveyStatus === "MASTER_PANEL_CREATED") return "Master Panel Created";
-  if (row.surveyStatus === "SUDAH_DIDATA" || row.isRestoration) return "Survey Selesai";
-  return "Belum Survey";
+  if (row.surveyStatus === "SUDAH_DIDATA" || row.isRestoration) return "Pendataan Selesai";
+  return "Belum Didata";
 }
 
 function surveyStatusTone(row: CatalogDraftRow) {
@@ -140,7 +140,7 @@ export function UnitCatalogEditor({
       headerName: "Alias Name",
       minWidth: 160,
       editable: false,
-      valueGetter: (params) => params.data?.aliasName || params.data?.itemName || "-",
+      valueGetter: (params) => params.data?.aliasName || "-",
     },
     {
       field: "itemName",
@@ -232,11 +232,11 @@ export function UnitCatalogEditor({
             <button type="button" className="catalog-icon-button" onClick={() => onOpenDetail(row)} title="Detail">
               <Eye className="h-3.5 w-3.5" />
             </button>
-            <button type="button" className="catalog-icon-button" onClick={() => onMarkPosition(row)} title={promoted ? "Lihat lokasi" : "Tandai lokasi"}>
-              <MapPin className="h-3.5 w-3.5" />
+            <button type="button" className="catalog-icon-button" onClick={() => onMarkPosition(row)} title={promoted ? "Lihat lokasi" : "Tandai"}>
+              <span aria-hidden="true" className="text-[13px] leading-none">📌</span>
             </button>
             {!promoted ? (
-              <button type="button" className="catalog-icon-button" onClick={() => onSurvey(row)} title="Survey part">
+              <button type="button" className="catalog-icon-button" onClick={() => onSurvey(row)} title="Pendataan">
                 <CheckCircle2 className="h-3.5 w-3.5" />
               </button>
             ) : null}
