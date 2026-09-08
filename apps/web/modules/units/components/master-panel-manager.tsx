@@ -1,7 +1,7 @@
 "use client";
 
 import type { UnitPanelRecord } from "@smsystem/contracts/unit-panel";
-import type { ColDef } from "ag-grid-community";
+import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { AllCommunityModule, ModuleRegistry } from "ag-grid-community";
 import { AgGridReact } from "ag-grid-react";
 import { Image as ImageIcon, Plus, RefreshCw, Search, X } from "lucide-react";
@@ -131,29 +131,6 @@ function progressFromParts(totalPart: number, completedPart: number): number {
   return Math.max(0, Math.min(100, Math.round((completedPart / totalPart) * 100)));
 }
 
-function makeGridButton(label: string, className: string, onClick: () => void, title?: string): HTMLButtonElement {
-  const button = document.createElement("button");
-  button.type = "button";
-  button.textContent = label;
-  button.className = className;
-  if (title) button.title = title;
-  button.addEventListener("click", (event) => {
-    event.stopPropagation();
-    onClick();
-  });
-  return button;
-}
-
-function makeStatusBadge(record: UnitPanelRecord): HTMLSpanElement {
-  const badge = partProgressLabel(record);
-  const wrapper = document.createElement("span");
-  wrapper.className = `inline-flex items-center gap-1.5 border px-2 py-1 text-[12px] font-semibold ${badge.className}`;
-  const dot = document.createElement("span");
-  dot.className = `h-1.5 w-1.5 rounded-full ${badge.dotClassName}`;
-  wrapper.append(dot, document.createTextNode(badge.label));
-  return wrapper;
-}
-
 function sumBy<T>(items: T[], read: (item: T) => number | null | undefined): number {
   return items.reduce((total, item) => total + Number(read(item) ?? 0), 0);
 }
@@ -281,6 +258,124 @@ function matchesPartFilter(part: UnitPanelRecord, filter: PartFilter): boolean {
   return normalizeStatus(part.sourcePart) === filter;
 }
 
+interface MasterPanelGridContext {
+  expandedComponentKey: string | null;
+  expandedPanelKey: string | null;
+  onToggleComponent: (component: MasterPanelComponentGroup) => void;
+  onTogglePanel: (panel: MasterPanelPanelGroup) => void;
+  onOpenPart: (part: UnitPanelRecord) => void;
+}
+
+function getGridContext<T>(params: ICellRendererParams<T>): MasterPanelGridContext {
+  return params.context as MasterPanelGridContext;
+}
+
+function ComponentNameRenderer(params: ICellRendererParams<MasterPanelComponentGroup>) {
+  const data = params.data;
+  if (!data) return null;
+  const context = getGridContext(params);
+  return (
+    <button
+      type="button"
+      className="text-left font-semibold text-foreground hover:text-app-accent-ink"
+      onClick={(event) => {
+        event.stopPropagation();
+        context.onToggleComponent(data);
+      }}
+    >
+      {data.componentName}
+    </button>
+  );
+}
+
+function ComponentExpandRenderer(params: ICellRendererParams<MasterPanelComponentGroup>) {
+  const data = params.data;
+  if (!data) return null;
+  const context = getGridContext(params);
+  return (
+    <button
+      type="button"
+      className="catalog-icon-button px-2 text-[12px] font-mono uppercase"
+      title="Buka panel"
+      onClick={(event) => {
+        event.stopPropagation();
+        context.onToggleComponent(data);
+      }}
+    >
+      {context.expandedComponentKey === data.key ? "Tutup" : "Buka"}
+    </button>
+  );
+}
+
+function PanelNameRenderer(params: ICellRendererParams<MasterPanelPanelGroup>) {
+  const data = params.data;
+  if (!data) return null;
+  const context = getGridContext(params);
+  return (
+    <button
+      type="button"
+      className="text-left font-medium text-foreground hover:text-app-accent-ink"
+      onClick={(event) => {
+        event.stopPropagation();
+        context.onTogglePanel(data);
+      }}
+    >
+      {data.panelName}
+    </button>
+  );
+}
+
+function PanelExpandRenderer(params: ICellRendererParams<MasterPanelPanelGroup>) {
+  const data = params.data;
+  if (!data) return null;
+  const context = getGridContext(params);
+  return (
+    <button
+      type="button"
+      className="catalog-icon-button px-2 text-[12px] font-mono uppercase"
+      title="Buka part"
+      onClick={(event) => {
+        event.stopPropagation();
+        context.onTogglePanel(data);
+      }}
+    >
+      {context.expandedPanelKey === data.key ? "Tutup" : "Buka"}
+    </button>
+  );
+}
+
+function PartNameRenderer(params: ICellRendererParams<UnitPanelRecord>) {
+  const data = params.data;
+  if (!data) return null;
+  const context = getGridContext(params);
+  const aliasName = data.aliasName?.trim();
+  return (
+    <button
+      type="button"
+      className="block w-full text-left text-foreground hover:text-app-accent-ink"
+      onClick={(event) => {
+        event.stopPropagation();
+        context.onOpenPart(data);
+      }}
+    >
+      <span className="block truncate font-medium">{aliasName || data.name}</span>
+      {aliasName ? <span className="block truncate text-[12px] text-muted-foreground">{data.name}</span> : null}
+    </button>
+  );
+}
+
+function PartStatusRenderer(params: ICellRendererParams<UnitPanelRecord>) {
+  const data = params.data;
+  if (!data) return null;
+  const badge = partProgressLabel(data);
+  return (
+    <span className={`inline-flex items-center gap-1.5 border px-2 py-1 text-[12px] font-semibold ${badge.className}`}>
+      <span className={`h-1.5 w-1.5 rounded-full ${badge.dotClassName}`} />
+      {badge.label}
+    </span>
+  );
+}
+
 export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPanelManagerProps) {
   const [rows, setRows] = useState<UnitPanelRecord[]>(() => initialRows ?? []);
   const [isLoading, setIsLoading] = useState(() => initialRows === undefined);
@@ -349,20 +444,20 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
   const togglePanel = useCallback((panel: MasterPanelPanelGroup) => {
     setExpandedPanelKey((current) => current === panel.key ? null : panel.key);
   }, []);
+  const gridContext = useMemo<MasterPanelGridContext>(() => ({
+    expandedComponentKey,
+    expandedPanelKey,
+    onToggleComponent: toggleComponent,
+    onTogglePanel: togglePanel,
+    onOpenPart: setSelectedPart,
+  }), [expandedComponentKey, expandedPanelKey, toggleComponent, togglePanel]);
   const componentColumnDefs = useMemo<ColDef<MasterPanelComponentGroup>[]>(() => [
     {
       headerName: "Bagian",
       field: "componentName",
       minWidth: 240,
       flex: 1.7,
-      cellRenderer: ({ data }: { data?: MasterPanelComponentGroup }) =>
-        data
-          ? makeGridButton(
-            data.componentName,
-            "text-left font-semibold text-foreground hover:text-app-accent-ink",
-            () => toggleComponent(data),
-          )
-          : "-",
+      cellRenderer: ComponentNameRenderer,
     },
     { headerName: "Panel", field: "totalPanel", width: 110, cellClass: "font-mono text-muted-foreground" },
     { headerName: "Part", field: "totalPart", width: 110, cellClass: "font-mono text-muted-foreground" },
@@ -386,31 +481,16 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
       width: 90,
       sortable: false,
       filter: false,
-      cellRenderer: ({ data }: { data?: MasterPanelComponentGroup }) =>
-        data
-          ? makeGridButton(
-            expandedComponentKey === data.key ? "Tutup" : "Buka",
-            "catalog-icon-button px-2 text-[12px] font-mono uppercase",
-            () => toggleComponent(data),
-            "Buka panel",
-          )
-          : null,
+      cellRenderer: ComponentExpandRenderer,
     },
-  ], [expandedComponentKey, toggleComponent]);
+  ], []);
   const panelColumnDefs = useMemo<ColDef<MasterPanelPanelGroup>[]>(() => [
     {
       headerName: "Panel",
       field: "panelName",
       minWidth: 220,
       flex: 1.4,
-      cellRenderer: ({ data }: { data?: MasterPanelPanelGroup }) =>
-        data
-          ? makeGridButton(
-            data.panelName,
-            "text-left font-medium text-foreground hover:text-app-accent-ink",
-            () => togglePanel(data),
-          )
-          : "-",
+      cellRenderer: PanelNameRenderer,
     },
     {
       headerName: "Part",
@@ -451,17 +531,9 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
       width: 90,
       sortable: false,
       filter: false,
-      cellRenderer: ({ data }: { data?: MasterPanelPanelGroup }) =>
-        data
-          ? makeGridButton(
-            expandedPanelKey === data.key ? "Tutup" : "Buka",
-            "catalog-icon-button px-2 text-[12px] font-mono uppercase",
-            () => togglePanel(data),
-            "Buka part",
-          )
-          : null,
+      cellRenderer: PanelExpandRenderer,
     },
-  ], [expandedPanelKey, togglePanel]);
+  ], []);
   const partColumnDefs = useMemo<ColDef<UnitPanelRecord>[]>(() => [
     { headerName: "Code", field: "code", width: 110, valueGetter: ({ data }) => data?.code ?? "-" },
     {
@@ -469,22 +541,7 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
       field: "name",
       minWidth: 260,
       flex: 1.8,
-      cellRenderer: ({ data }: { data?: UnitPanelRecord }) => {
-        if (!data) return null;
-        const aliasName = data.aliasName?.trim();
-        const button = makeGridButton(
-          aliasName || data.name,
-          "block w-full text-left font-medium text-foreground hover:text-app-accent-ink",
-          () => setSelectedPart(data),
-        );
-        if (aliasName) {
-          const originalName = document.createElement("span");
-          originalName.textContent = data.name;
-          originalName.className = "block truncate text-[12px] font-normal text-muted-foreground";
-          button.append(originalName);
-        }
-        return button;
-      },
+      cellRenderer: PartNameRenderer,
     },
     {
       headerName: "Part Number",
@@ -510,7 +567,7 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
       headerName: "Status",
       minWidth: 150,
       flex: 0.9,
-      cellRenderer: ({ data }: { data?: UnitPanelRecord }) => data ? makeStatusBadge(data) : null,
+      cellRenderer: PartStatusRenderer,
     },
   ], []);
 
@@ -681,6 +738,7 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
                 <AgGridReact<MasterPanelComponentGroup>
                   rowData={filteredComponents}
                   columnDefs={componentColumnDefs}
+                  context={gridContext}
                   defaultColDef={{
                     sortable: true,
                     resizable: true,
@@ -724,6 +782,7 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
                     <AgGridReact<MasterPanelPanelGroup>
                       rowData={filteredPanels}
                       columnDefs={panelColumnDefs}
+                      context={gridContext}
                       defaultColDef={{
                         sortable: true,
                         resizable: true,
@@ -767,6 +826,7 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
                         <AgGridReact<UnitPanelRecord>
                           rowData={filteredParts}
                           columnDefs={partColumnDefs}
+                          context={gridContext}
                           defaultColDef={{
                             sortable: true,
                             resizable: true,
