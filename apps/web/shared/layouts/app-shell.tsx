@@ -159,7 +159,7 @@ export function AppShell({ user, navigation, children }: AppShellProps) {
           },
           {
             id: "unit-master-panel",
-            label: "Master Panel",
+            label: "Struktur Panel Unit",
             href: `/units/${currentUnitSegment}?tab=master-panel`,
             permission: permissionCodes.viewUnits,
           },

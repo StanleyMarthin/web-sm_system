@@ -4,7 +4,7 @@ import type { UnitPanelRecord } from "@smsystem/contracts/unit-panel";
 import type { ColDef } from "ag-grid-community";
 import { AllCommunityModule, ModuleRegistry } from "ag-grid-community";
 import { AgGridReact } from "ag-grid-react";
-import { ChevronDown, ChevronRight, Image as ImageIcon, Plus, RefreshCw, Search, X } from "lucide-react";
+import { Image as ImageIcon, Plus, RefreshCw, Search, X } from "lucide-react";
 import Link from "next/link";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { createUnitAdditionalMasterPanel } from "@/shared/api/unit-catalog";
@@ -77,11 +77,6 @@ function formatNumber(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
 
-function progressFromHours(totalHours: number, remainingHours: number): number {
-  if (totalHours <= 0) return 0;
-  return Math.max(0, Math.min(100, Math.round(((totalHours - remainingHours) / totalHours) * 100)));
-}
-
 const DONE_STATUS_VALUES = new Set(["DONE", "SELESAI", "FINISH", "FINISHED", "COMPLETED", "COMPLETE"]);
 
 type PartFilter = "ALL" | "WAITING" | "RESTORE" | "DONE" | "ADDITIONAL" | "CATALOG";
@@ -134,6 +129,29 @@ function partProgressLabel(record: UnitPanelRecord): { label: string; className:
 function progressFromParts(totalPart: number, completedPart: number): number {
   if (totalPart <= 0) return 0;
   return Math.max(0, Math.min(100, Math.round((completedPart / totalPart) * 100)));
+}
+
+function makeGridButton(label: string, className: string, onClick: () => void, title?: string): HTMLButtonElement {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.textContent = label;
+  button.className = className;
+  if (title) button.title = title;
+  button.addEventListener("click", (event) => {
+    event.stopPropagation();
+    onClick();
+  });
+  return button;
+}
+
+function makeStatusBadge(record: UnitPanelRecord): HTMLSpanElement {
+  const badge = partProgressLabel(record);
+  const wrapper = document.createElement("span");
+  wrapper.className = `inline-flex items-center gap-1.5 border px-2 py-1 text-[12px] font-semibold ${badge.className}`;
+  const dot = document.createElement("span");
+  dot.className = `h-1.5 w-1.5 rounded-full ${badge.dotClassName}`;
+  wrapper.append(dot, document.createTextNode(badge.label));
+  return wrapper;
 }
 
 function sumBy<T>(items: T[], read: (item: T) => number | null | undefined): number {
@@ -221,7 +239,7 @@ function buildMasterPanelHierarchy(records: UnitPanelRecord[]): MasterPanelCompo
             totalJobdesc: sumBy(parts, part => part.totalJobdesc),
             totalHours,
             remainingHours,
-            progress: totalHours > 0 ? progressFromHours(totalHours, remainingHours) : progressFromParts(parts.length, completedPart),
+            progress: progressFromParts(parts.length, completedPart),
           };
         });
       const totalHours = sumBy(panels, panel => panel.totalHours);
@@ -238,7 +256,7 @@ function buildMasterPanelHierarchy(records: UnitPanelRecord[]): MasterPanelCompo
         remainingPart: totalPart - completedPart,
         totalHours,
         remainingHours,
-        progress: totalHours > 0 ? progressFromHours(totalHours, remainingHours) : progressFromParts(totalPart, completedPart),
+        progress: progressFromParts(totalPart, completedPart),
       };
     });
 }
@@ -337,18 +355,14 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
       field: "componentName",
       minWidth: 240,
       flex: 1.7,
-      cellRenderer: ({ data }: { data?: MasterPanelComponentGroup }) => (
-        <button
-          type="button"
-          className="text-left font-semibold text-foreground hover:text-app-accent-ink"
-          onClick={(event) => {
-            event.stopPropagation();
-            if (data) toggleComponent(data);
-          }}
-        >
-          {data?.componentName ?? "-"}
-        </button>
-      ),
+      cellRenderer: ({ data }: { data?: MasterPanelComponentGroup }) =>
+        data
+          ? makeGridButton(
+            data.componentName,
+            "text-left font-semibold text-foreground hover:text-app-accent-ink",
+            () => toggleComponent(data),
+          )
+          : "-",
     },
     { headerName: "Panel", field: "totalPanel", width: 110, cellClass: "font-mono text-muted-foreground" },
     { headerName: "Part", field: "totalPart", width: 110, cellClass: "font-mono text-muted-foreground" },
@@ -372,21 +386,15 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
       width: 90,
       sortable: false,
       filter: false,
-      cellRenderer: ({ data }: { data?: MasterPanelComponentGroup }) => data ? (
-        <button
-          type="button"
-          className="catalog-icon-button"
-          title="Buka panel"
-          onClick={(event) => {
-            event.stopPropagation();
-            toggleComponent(data);
-          }}
-        >
-          {expandedComponentKey === data.key
-            ? <ChevronDown className="h-3.5 w-3.5" strokeWidth={ICON_STROKE_WIDTH} />
-            : <ChevronRight className="h-3.5 w-3.5" strokeWidth={ICON_STROKE_WIDTH} />}
-        </button>
-      ) : null,
+      cellRenderer: ({ data }: { data?: MasterPanelComponentGroup }) =>
+        data
+          ? makeGridButton(
+            expandedComponentKey === data.key ? "Tutup" : "Buka",
+            "catalog-icon-button px-2 text-[12px] font-mono uppercase",
+            () => toggleComponent(data),
+            "Buka panel",
+          )
+          : null,
     },
   ], [expandedComponentKey, toggleComponent]);
   const panelColumnDefs = useMemo<ColDef<MasterPanelPanelGroup>[]>(() => [
@@ -395,18 +403,14 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
       field: "panelName",
       minWidth: 220,
       flex: 1.4,
-      cellRenderer: ({ data }: { data?: MasterPanelPanelGroup }) => (
-        <button
-          type="button"
-          className="text-left font-medium text-foreground hover:text-app-accent-ink"
-          onClick={(event) => {
-            event.stopPropagation();
-            if (data) togglePanel(data);
-          }}
-        >
-          {data?.panelName ?? "-"}
-        </button>
-      ),
+      cellRenderer: ({ data }: { data?: MasterPanelPanelGroup }) =>
+        data
+          ? makeGridButton(
+            data.panelName,
+            "text-left font-medium text-foreground hover:text-app-accent-ink",
+            () => togglePanel(data),
+          )
+          : "-",
     },
     {
       headerName: "Part",
@@ -447,21 +451,15 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
       width: 90,
       sortable: false,
       filter: false,
-      cellRenderer: ({ data }: { data?: MasterPanelPanelGroup }) => data ? (
-        <button
-          type="button"
-          className="catalog-icon-button"
-          title="Buka part"
-          onClick={(event) => {
-            event.stopPropagation();
-            togglePanel(data);
-          }}
-        >
-          {expandedPanelKey === data.key
-            ? <ChevronDown className="h-3.5 w-3.5" strokeWidth={ICON_STROKE_WIDTH} />
-            : <ChevronRight className="h-3.5 w-3.5" strokeWidth={ICON_STROKE_WIDTH} />}
-        </button>
-      ) : null,
+      cellRenderer: ({ data }: { data?: MasterPanelPanelGroup }) =>
+        data
+          ? makeGridButton(
+            expandedPanelKey === data.key ? "Tutup" : "Buka",
+            "catalog-icon-button px-2 text-[12px] font-mono uppercase",
+            () => togglePanel(data),
+            "Buka part",
+          )
+          : null,
     },
   ], [expandedPanelKey, togglePanel]);
   const partColumnDefs = useMemo<ColDef<UnitPanelRecord>[]>(() => [
@@ -474,16 +472,18 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
       cellRenderer: ({ data }: { data?: UnitPanelRecord }) => {
         if (!data) return null;
         const aliasName = data.aliasName?.trim();
-        return (
-          <button
-            type="button"
-            className="block w-full text-left text-foreground hover:text-app-accent-ink"
-            onClick={() => setSelectedPart(data)}
-          >
-            <span className="block truncate font-medium">{aliasName || data.name}</span>
-            {aliasName ? <span className="block truncate text-[12px] text-muted-foreground">{data.name}</span> : null}
-          </button>
+        const button = makeGridButton(
+          aliasName || data.name,
+          "block w-full text-left font-medium text-foreground hover:text-app-accent-ink",
+          () => setSelectedPart(data),
         );
+        if (aliasName) {
+          const originalName = document.createElement("span");
+          originalName.textContent = data.name;
+          originalName.className = "block truncate text-[12px] font-normal text-muted-foreground";
+          button.append(originalName);
+        }
+        return button;
       },
     },
     {
@@ -510,16 +510,7 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
       headerName: "Status",
       minWidth: 150,
       flex: 0.9,
-      cellRenderer: ({ data }: { data?: UnitPanelRecord }) => {
-        if (!data) return null;
-        const badge = partProgressLabel(data);
-        return (
-          <span className={`inline-flex items-center gap-1.5 border px-2 py-1 text-[12px] font-semibold ${badge.className}`}>
-            <span className={`h-1.5 w-1.5 rounded-full ${badge.dotClassName}`} />
-            {badge.label}
-          </span>
-        );
-      },
+      cellRenderer: ({ data }: { data?: UnitPanelRecord }) => data ? makeStatusBadge(data) : null,
     },
   ], []);
 
