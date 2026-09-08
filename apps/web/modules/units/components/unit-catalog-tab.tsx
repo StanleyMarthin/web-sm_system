@@ -9,7 +9,7 @@ Side Effects: HTTP fetch/update catalog dan upload file reference.
 "use client";
 
 import type { CatalogOverview, CatalogWorkspace } from "@smsystem/contracts/unit-catalog";
-import { AlertCircle, ArrowUpDown, CheckCircle2, Eye, ImagePlus, MapPin, Maximize2, Pencil, RotateCcw, Save, Search, Settings2, Trash2, X, ZoomIn, ZoomOut } from "lucide-react";
+import { AlertCircle, ArrowUpDown, CheckCircle2, Eye, ImagePlus, MapPin, Maximize2, Pencil, Printer, RotateCcw, Save, Search, Settings2, Trash2, X, ZoomIn, ZoomOut } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CatalogPanelManager } from "@/modules/units/components/catalog-panel-manager";
@@ -519,6 +519,10 @@ export function UnitCatalogTab({ unitId, unitName, canManageCatalog }: UnitCatal
     sweetAlert.notifySuccess("Mode tandai", "Klik posisi item pada gambar panel, lalu Simpan Data.");
   }
 
+  function printPanelCatalog() {
+    window.setTimeout(() => window.print(), 50);
+  }
+
   async function saveSurvey() {
     if (!drawerRow?.persistedId) return;
     if (drawerRow.promotedPanelId) {
@@ -586,7 +590,17 @@ export function UnitCatalogTab({ unitId, unitName, canManageCatalog }: UnitCatal
   }, [imageZoomOpen]);
 
   return (
-    <div className="space-y-4">
+    <>
+    {selectedPanelId && workspace ? (
+      <CatalogPanelPrintView
+        unitName={unitName}
+        componentLabel={selectedComponentLabel}
+        panelTitle={selectedPanelTitle}
+        imageSrc={currentMediaSrc}
+        rows={draft.rows}
+      />
+    ) : null}
+    <div className="space-y-4 print:hidden">
       {sweetAlert.alertElement}
 
       {imageZoomOpen && currentMediaSrc ? (
@@ -651,6 +665,10 @@ export function UnitCatalogTab({ unitId, unitName, canManageCatalog }: UnitCatal
         actions={selectedPanelId ? (
           editMode ? (
             <>
+              <ActionButton onClick={printPanelCatalog}>
+                <Printer className="h-3.5 w-3.5" />
+                Cetak/PDF
+              </ActionButton>
               <ActionButton onClick={handleCancelEdit}>
                 <X className="h-3.5 w-3.5" />
                 Batal
@@ -662,6 +680,10 @@ export function UnitCatalogTab({ unitId, unitName, canManageCatalog }: UnitCatal
             </>
           ) : (
             <>
+              <ActionButton onClick={printPanelCatalog}>
+                <Printer className="h-3.5 w-3.5" />
+                Cetak/PDF
+              </ActionButton>
               <ActionButton onClick={closePanel}>Kembali</ActionButton>
               {canManageCatalog ? (
                 <ActionButton variant="primary" onClick={() => setEditMode(true)}>
@@ -1145,6 +1167,96 @@ export function UnitCatalogTab({ unitId, unitName, canManageCatalog }: UnitCatal
           </div>
         </div>
       ) : null}
+    </div>
+    </>
+  );
+}
+
+function printCheck(active: boolean) {
+  return active ? "✓" : "";
+}
+
+function CatalogPanelPrintView({
+  unitName,
+  componentLabel,
+  panelTitle,
+  imageSrc,
+  rows,
+}: {
+  unitName: string;
+  componentLabel: string;
+  panelTitle: string;
+  imageSrc?: string;
+  rows: CatalogWorkspaceDraft["rows"];
+}) {
+  const printableRows = rows.filter((row) => (
+    row.aliasName.trim() ||
+    row.itemName.trim() ||
+    row.partNumber.trim() ||
+    row.code.trim() ||
+    row.qtyNormal.trim()
+  ));
+
+  return (
+    <div className="hidden bg-white p-3 text-black print:block">
+      <div className="border border-black">
+        <div className="border-b border-black px-2 py-2 text-center text-xl font-bold">
+          {unitName}
+        </div>
+        <div className="border-b border-black bg-[#12c8b8] px-2 py-2 text-center text-base font-bold uppercase">
+          {componentLabel} · {panelTitle}
+        </div>
+        <div className="border-b border-black p-2">
+          {imageSrc ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={imageSrc} alt={panelTitle} className="mx-auto max-h-[34vh] max-w-full object-contain" />
+          ) : (
+            <div className="flex h-32 items-center justify-center text-sm">Belum ada gambar referensi</div>
+          )}
+        </div>
+        <table className="w-full border-collapse text-[10px]">
+          <thead>
+            <tr className="bg-[#12c8b8] text-center font-bold">
+              <th rowSpan={2} className="border border-black px-1 py-1">No.</th>
+              <th rowSpan={2} className="border border-black px-1 py-1">Parts Number</th>
+              <th rowSpan={2} className="border border-black px-1 py-1">Name</th>
+              <th rowSpan={2} className="border border-black px-1 py-1">Code</th>
+              <th rowSpan={2} className="border border-black px-1 py-1">Qty Normal</th>
+              <th colSpan={3} className="border border-black px-1 py-1">Status</th>
+              <th colSpan={4} className="border border-black px-1 py-1">Kondisi</th>
+              <th rowSpan={2} className="border border-black px-1 py-1">Lokasi</th>
+            </tr>
+            <tr className="bg-white text-center font-bold">
+              <th className="border border-black px-1 py-1">Ada</th>
+              <th className="border border-black px-1 py-1">Tidak</th>
+              <th className="border border-black px-1 py-1">Tidak Ditemukan</th>
+              <th className="border border-black px-1 py-1">Layak</th>
+              <th className="border border-black px-1 py-1">Restore</th>
+              <th className="border border-black px-1 py-1">Tidak Layak</th>
+              <th className="border border-black px-1 py-1">Progress</th>
+            </tr>
+          </thead>
+          <tbody>
+            {printableRows.map((row, index) => (
+              <tr key={row.rowId} className={index % 2 === 0 ? "bg-[#dff4f1]" : "bg-white"}>
+                <td className="border border-black px-1 py-1 text-center">{index + 1}</td>
+                <td className="border border-black px-1 py-1">{row.partNumber}</td>
+                <td className="border border-black px-1 py-1">{row.aliasName || row.itemName}</td>
+                <td className="border border-black px-1 py-1 text-center">{row.code}</td>
+                <td className="border border-black px-1 py-1 text-center">{row.qtyNormal}</td>
+                <td className="border border-black px-1 py-1 text-center">{printCheck(row.availabilityStatus === "AVAILABLE")}</td>
+                <td className="border border-black px-1 py-1 text-center">{printCheck(row.availabilityStatus === "NOT_AVAILABLE")}</td>
+                <td className="border border-black px-1 py-1 text-center">{printCheck(row.availabilityStatus === "UNKNOWN")}</td>
+                <td className="border border-black px-1 py-1 text-center">{printCheck(row.conditionStatus === "GOOD")}</td>
+                <td className="border border-black px-1 py-1 text-center">{printCheck(row.conditionStatus === "RESTORE")}</td>
+                <td className="border border-black px-1 py-1 text-center">{printCheck(row.conditionStatus === "NOT_USABLE")}</td>
+                <td className="border border-black px-1 py-1 text-center">{printCheck(row.isRestoration)}</td>
+                <td className="border border-black px-1 py-1 text-center">{parseCatalogPositionMarker(row.position) ? "Ditandai" : ""}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

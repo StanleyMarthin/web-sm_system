@@ -12,9 +12,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { CellMouseDownEvent, CellMouseOverEvent, ColDef } from "ag-grid-community";
 import { AllCommunityModule, ModuleRegistry } from "ag-grid-community";
 import { AgGridReact } from "ag-grid-react";
-import { CheckCircle2, Clipboard, ClipboardPaste, Eye, Plus, Trash2 } from "lucide-react";
+import { CheckCircle2, Eye } from "lucide-react";
 import {
-  ActionButton,
   CompactInput,
 } from "@/shared/ui/compact";
 import {
@@ -102,6 +101,14 @@ export function UnitCatalogEditor({
   const gridRef = useRef<GridRef>(null);
   const draggingCellRange = useRef(false);
   const [cellRange, setCellRange] = useState<CatalogCellRange | null>(null);
+
+  useEffect(() => {
+    if (!editMode) return;
+    const lastRow = rows.at(-1);
+    if (!lastRow || lastRow.code || lastRow.partNumber || lastRow.itemName || lastRow.qtyNormal || lastRow.isRestoration) {
+      onAddRow();
+    }
+  }, [editMode, onAddRow, rows]);
 
   useEffect(() => {
     function stopDragging() {
@@ -290,19 +297,6 @@ export function UnitCatalogEditor({
     return catalogRowsToClipboardTsv(getRowsForCopy());
   }
 
-  async function copyRows() {
-    await navigator.clipboard?.writeText(getClipboardText());
-  }
-
-  async function handleClipboardPaste() {
-    try {
-      const text = await navigator.clipboard?.readText();
-      if (text?.trim()) handlePaste(text);
-    } catch {
-      return;
-    }
-  }
-
   function getEventCell(event: CellMouseDownEvent<CatalogDraftRow> | CellMouseOverEvent<CatalogDraftRow>): CatalogCellRef | null {
     const rowIndex = event.node.rowIndex;
     const field = event.column.getColId();
@@ -335,44 +329,19 @@ export function UnitCatalogEditor({
             placeholder="Cari alias, part number, atau nama item"
           />
         </div>
-        <ActionButton
-          onClick={() => {
-            void copyRows();
-          }}
-          title="Copy ke Excel"
-        >
-          <Clipboard className="h-3.5 w-3.5" />
-          Copy
-        </ActionButton>
-        {editMode ? (
-          <>
-            <ActionButton onClick={onAddRow} title="Tambah row kosong">
-              <Plus className="h-3.5 w-3.5" />
-              + Row
-            </ActionButton>
-            <ActionButton
-              onClick={() => {
-                void handleClipboardPaste();
-              }}
-              title="Tempel isi spreadsheet"
-            >
-              <ClipboardPaste className="h-3.5 w-3.5" />
-              Paste
-            </ActionButton>
-            <ActionButton
-              onClick={onDeleteSelected}
-              disabled={selectedRowIds.length === 0}
-              title="Hapus row terpilih"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-              Delete Row
-            </ActionButton>
-          </>
-        ) : null}
       </div>
 
       <div
         className="ag-theme-alpine sms-ag-grid h-full min-h-[30rem] w-full"
+        onKeyDownCapture={(event) => {
+          if (!editMode) return;
+          const activeElement = document.activeElement;
+          if (activeElement instanceof HTMLInputElement || activeElement instanceof HTMLTextAreaElement) return;
+          if ((event.key === "Delete" || event.key === "Backspace") && selectedRowIds.length > 0) {
+            event.preventDefault();
+            onDeleteSelected();
+          }
+        }}
         onPasteCapture={(event) => {
           if (!editMode) return;
           const text = event.clipboardData.getData("text/plain");
