@@ -4,7 +4,7 @@ import type { UnitPanelRecord } from "@smsystem/contracts/unit-panel";
 import type { ColDef } from "ag-grid-community";
 import { AllCommunityModule, ModuleRegistry } from "ag-grid-community";
 import { AgGridReact } from "ag-grid-react";
-import { ChevronRight, Eye, Image as ImageIcon, Plus, RefreshCw, Search, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Image as ImageIcon, Plus, RefreshCw, Search, X } from "lucide-react";
 import Link from "next/link";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { createUnitAdditionalMasterPanel } from "@/shared/api/unit-catalog";
@@ -195,8 +195,8 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
   const [message, setMessage] = useState<string | null>(null);
 
   const [search, setSearch] = useState<string>("");
-  const [selectedComponentKey, setSelectedComponentKey] = useState<string | null>(null);
-  const [selectedPanelKey, setSelectedPanelKey] = useState<string | null>(null);
+  const [expandedComponentKey, setExpandedComponentKey] = useState<string | null>(null);
+  const [expandedPanelKey, setExpandedPanelKey] = useState<string | null>(null);
   const [selectedPart, setSelectedPart] = useState<UnitPanelRecord | null>(null);
   const [isAddingAdditional, setIsAddingAdditional] = useState(false);
   const [additionalForm, setAdditionalForm] = useState<AdditionalFormState>(EMPTY_ADDITIONAL_FORM);
@@ -206,13 +206,13 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
 
   const rootCount = hierarchy.reduce((total, component) => total + component.totalPanel, 0);
   const partCount = flatRows.length;
-  const selectedComponent = useMemo(
-    () => hierarchy.find(component => component.key === selectedComponentKey) ?? null,
-    [hierarchy, selectedComponentKey],
+  const expandedComponent = useMemo(
+    () => hierarchy.find(component => component.key === expandedComponentKey) ?? null,
+    [hierarchy, expandedComponentKey],
   );
-  const selectedPanel = useMemo(
-    () => selectedComponent?.panels.find(panel => panel.key === selectedPanelKey) ?? null,
-    [selectedComponent, selectedPanelKey],
+  const expandedPanel = useMemo(
+    () => expandedComponent?.panels.find(panel => panel.key === expandedPanelKey) ?? null,
+    [expandedComponent, expandedPanelKey],
   );
   const filteredComponents = useMemo(() => {
     if (!searchTerm) return hierarchy;
@@ -225,18 +225,25 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
     );
   }, [hierarchy, searchTerm]);
   const filteredPanels = useMemo(() => {
-    if (!selectedComponent) return [];
-    if (!searchTerm) return selectedComponent.panels;
-    return selectedComponent.panels.filter(panel =>
+    if (!expandedComponent) return [];
+    if (!searchTerm) return expandedComponent.panels;
+    return expandedComponent.panels.filter(panel =>
       panel.panelName.toLowerCase().includes(searchTerm) ||
       panel.parts.some(part => matchesPart(part, searchTerm))
     );
-  }, [searchTerm, selectedComponent]);
+  }, [searchTerm, expandedComponent]);
   const filteredParts = useMemo(() => {
-    if (!selectedPanel) return [];
-    if (!searchTerm) return selectedPanel.parts;
-    return selectedPanel.parts.filter(part => matchesPart(part, searchTerm));
-  }, [searchTerm, selectedPanel]);
+    if (!expandedPanel) return [];
+    if (!searchTerm) return expandedPanel.parts;
+    return expandedPanel.parts.filter(part => matchesPart(part, searchTerm));
+  }, [searchTerm, expandedPanel]);
+  const toggleComponent = useCallback((component: MasterPanelComponentGroup) => {
+    setExpandedComponentKey((current) => current === component.key ? null : component.key);
+    setExpandedPanelKey(null);
+  }, []);
+  const togglePanel = useCallback((panel: MasterPanelPanelGroup) => {
+    setExpandedPanelKey((current) => current === panel.key ? null : panel.key);
+  }, []);
   const componentColumnDefs = useMemo<ColDef<MasterPanelComponentGroup>[]>(() => [
     {
       headerName: "Component",
@@ -247,10 +254,9 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
         <button
           type="button"
           className="text-left font-semibold text-foreground hover:text-app-accent-ink"
-          onClick={() => {
-            if (!data) return;
-            setSelectedComponentKey(data.key);
-            setSelectedPanelKey(null);
+          onClick={(event) => {
+            event.stopPropagation();
+            if (data) toggleComponent(data);
           }}
         >
           {data?.componentName ?? "-"}
@@ -273,7 +279,7 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
       ) : null,
     },
     {
-      headerName: "Action",
+      headerName: "Expand",
       width: 90,
       sortable: false,
       filter: false,
@@ -282,16 +288,18 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
           type="button"
           className="catalog-icon-button"
           title="Buka panel"
-          onClick={() => {
-            setSelectedComponentKey(data.key);
-            setSelectedPanelKey(null);
+          onClick={(event) => {
+            event.stopPropagation();
+            toggleComponent(data);
           }}
         >
-          <ChevronRight className="h-3.5 w-3.5" strokeWidth={ICON_STROKE_WIDTH} />
+          {expandedComponentKey === data.key
+            ? <ChevronDown className="h-3.5 w-3.5" strokeWidth={ICON_STROKE_WIDTH} />
+            : <ChevronRight className="h-3.5 w-3.5" strokeWidth={ICON_STROKE_WIDTH} />}
         </button>
       ) : null,
     },
-  ], []);
+  ], [expandedComponentKey, toggleComponent]);
   const panelColumnDefs = useMemo<ColDef<MasterPanelPanelGroup>[]>(() => [
     {
       headerName: "Panel Name",
@@ -302,7 +310,10 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
         <button
           type="button"
           className="text-left font-medium text-foreground hover:text-app-accent-ink"
-          onClick={() => data && setSelectedPanelKey(data.key)}
+          onClick={(event) => {
+            event.stopPropagation();
+            if (data) togglePanel(data);
+          }}
         >
           {data?.panelName ?? "-"}
         </button>
@@ -343,20 +354,30 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
       valueFormatter: ({ value }) => `${formatNumber(Number(value ?? 0))}j`,
     },
     {
-      headerName: "Action",
+      headerName: "Expand",
       width: 90,
       sortable: false,
       filter: false,
       cellRenderer: ({ data }: { data?: MasterPanelPanelGroup }) => data ? (
-        <button type="button" className="catalog-icon-button" title="Buka part" onClick={() => setSelectedPanelKey(data.key)}>
-          <ChevronRight className="h-3.5 w-3.5" strokeWidth={ICON_STROKE_WIDTH} />
+        <button
+          type="button"
+          className="catalog-icon-button"
+          title="Buka part"
+          onClick={(event) => {
+            event.stopPropagation();
+            togglePanel(data);
+          }}
+        >
+          {expandedPanelKey === data.key
+            ? <ChevronDown className="h-3.5 w-3.5" strokeWidth={ICON_STROKE_WIDTH} />
+            : <ChevronRight className="h-3.5 w-3.5" strokeWidth={ICON_STROKE_WIDTH} />}
         </button>
       ) : null,
     },
-  ], []);
+  ], [expandedPanelKey, togglePanel]);
   const partColumnDefs = useMemo<ColDef<UnitPanelRecord>[]>(() => [
     { headerName: "Code", field: "code", width: 110, valueGetter: ({ data }) => data?.code ?? "-" },
-    { headerName: "Part Number", field: "partNumber", minWidth: 160, flex: 0.9, valueGetter: ({ data }) => data?.partNumber ?? "-" },
+    { headerName: "Alias Name", field: "aliasName", minWidth: 150, flex: 0.8, valueGetter: ({ data }) => data?.aliasName ?? "-" },
     {
       headerName: "Name Part",
       field: "name",
@@ -373,9 +394,18 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
       ),
     },
     {
-      headerName: "Source",
-      valueGetter: ({ data }) => data ? displaySource(data) : "-",
-      width: 120,
+      headerName: "Part Number",
+      field: "partNumber",
+      minWidth: 160,
+      flex: 0.9,
+      valueGetter: ({ data }) => data?.partNumber ?? "-",
+    },
+    {
+      headerName: "Qty",
+      field: "qty",
+      width: 90,
+      cellClass: "font-mono text-muted-foreground",
+      valueFormatter: ({ value }) => formatNumber(Number(value ?? 0)),
     },
     {
       headerName: "Condition",
@@ -389,27 +419,7 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
       minWidth: 140,
       flex: 0.8,
     },
-    {
-      headerName: "Qty",
-      field: "qty",
-      width: 90,
-      cellClass: "font-mono text-muted-foreground",
-      valueFormatter: ({ value }) => formatNumber(Number(value ?? 0)),
-    },
-    {
-      headerName: "Action",
-      width: 120,
-      sortable: false,
-      filter: false,
-      cellRenderer: ({ data }: { data?: UnitPanelRecord }) => data ? (
-        <div className="flex h-full items-center gap-1">
-          <button type="button" onClick={() => setSelectedPart(data)} className="catalog-icon-button" title="View Detail">
-            <Eye className="h-3.5 w-3.5" strokeWidth={ICON_STROKE_WIDTH} />
-          </button>
-        </div>
-      ) : null,
-    },
-  ], [unitId]);
+  ], []);
 
   const loadPanels = useCallback(async () => {
     setIsLoading(true);
@@ -438,8 +448,8 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
 
   function openAdditionalForm() {
     setAdditionalForm({
-      componentName: selectedPanel?.componentName ?? selectedComponent?.componentName ?? "",
-      panelName: selectedPanel?.panelName ?? "",
+      componentName: expandedPanel?.componentName ?? expandedComponent?.componentName ?? "",
+      panelName: expandedPanel?.panelName ?? "",
       itemName: "",
       partNumber: "",
       deskription: "",
@@ -529,24 +539,8 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
               </button>
             )}
           </div>
-          <div className="flex shrink-0 items-center gap-1 text-[13px] font-mono uppercase tracking-[0.1em] text-muted-foreground">
-            <button type="button" onClick={() => { setSelectedComponentKey(null); setSelectedPanelKey(null); }} className={!selectedComponent ? "text-app-accent-ink" : "hover:text-foreground"}>
-              Component
-            </button>
-            {selectedComponent ? (
-              <>
-                <span>/</span>
-                <button type="button" onClick={() => setSelectedPanelKey(null)} className={!selectedPanel ? "text-app-accent-ink" : "hover:text-foreground"}>
-                  {selectedComponent.componentName}
-                </button>
-              </>
-            ) : null}
-            {selectedPanel ? (
-              <>
-                <span>/</span>
-                <span className="text-app-accent-ink">{selectedPanel.panelName}</span>
-              </>
-            ) : null}
+          <div className="hidden shrink-0 text-[13px] font-mono uppercase tracking-[0.1em] text-muted-foreground lg:block">
+            Expand component lalu panel
           </div>
         </div>
       </div>
@@ -574,74 +568,44 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
             </div>
           ) : (
             <div className="space-y-4 p-4">
-              {selectedPanel ? (
+              <div className="ag-theme-alpine sms-ag-grid h-[18rem] w-full border border-border">
+                <AgGridReact<MasterPanelComponentGroup>
+                  rowData={filteredComponents}
+                  columnDefs={componentColumnDefs}
+                  defaultColDef={{
+                    sortable: true,
+                    resizable: true,
+                    filter: true,
+                    suppressHeaderMenuButton: true,
+                  }}
+                  getRowId={({ data }) => data.key}
+                  rowHeight={46}
+                  suppressCellFocus={false}
+                  suppressMovableColumns
+                  onRowClicked={({ data }) => data && toggleComponent(data)}
+                  overlayNoRowsTemplate="<span class='text-muted-foreground'>Belum ada component master panel.</span>"
+                />
+              </div>
+
+              {expandedComponent ? (
                 <div className="border border-border bg-background">
                   <div className="flex items-start justify-between gap-4 border-b border-border px-4 py-3">
                     <div>
-                      <p className="text-[13px] font-mono uppercase tracking-[0.12em] text-muted-foreground">
-                        {selectedPanel.componentName} &gt; {selectedPanel.panelName}
-                      </p>
-                      <h4 className="mt-1 text-[18px] font-semibold text-foreground">{selectedPanel.panelName}</h4>
-                      <p className="mt-1 text-[14px] text-muted-foreground">
-                        {selectedPanel.totalPart} part · {selectedPanel.conditionSummary}
-                      </p>
+                      <p className="text-[13px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Panel</p>
+                      <h4 className="mt-1 text-[18px] font-semibold text-foreground">{expandedComponent.componentName}</h4>
+                      <p className="mt-1 text-[14px] text-muted-foreground">{expandedComponent.totalPanel} panel · {expandedComponent.totalPart} part</p>
                     </div>
-                    <div className="flex shrink-0 items-center gap-2">
-                      {canManage ? (
-                        <button
-                          type="button"
-	                          onClick={openAdditionalForm}
-	                          className="inline-flex items-center gap-1.5 border border-primary/30 bg-primary/[0.04] px-2 py-1 text-[14px] font-mono uppercase text-app-accent-ink hover:bg-primary/10"
-	                        >
-	                          <Plus className="h-3 w-3" strokeWidth={ICON_STROKE_WIDTH} /> Tambah Item
-	                        </button>
-                      ) : null}
+                    {canManage ? (
                       <button
                         type="button"
-                        onClick={() => setSelectedPanelKey(null)}
-                        className="border border-border px-3 py-1 text-[14px] font-mono uppercase tracking-[0.08em] text-muted-foreground hover:text-foreground"
+                        onClick={openAdditionalForm}
+                        className="inline-flex items-center gap-1.5 border border-primary/30 bg-primary/[0.04] px-2 py-1 text-[14px] font-mono uppercase text-app-accent-ink hover:bg-primary/10"
                       >
-                        Kembali ke Panel
+                        <Plus className="h-3 w-3" strokeWidth={ICON_STROKE_WIDTH} /> Tambah Panel Baru
                       </button>
-                    </div>
+                    ) : null}
                   </div>
-                  <div className="ag-theme-alpine sms-ag-grid h-[28rem] w-full">
-                    <AgGridReact<UnitPanelRecord>
-                      rowData={filteredParts}
-                      columnDefs={partColumnDefs}
-                      defaultColDef={{
-                        sortable: true,
-                        resizable: true,
-                        filter: true,
-                        suppressHeaderMenuButton: true,
-                      }}
-                      getRowId={({ data }) => String(data.id)}
-                      rowHeight={44}
-                      suppressCellFocus={false}
-                      suppressMovableColumns
-                      onRowClicked={({ data }) => data && setSelectedPart(data)}
-                      onRowDoubleClicked={({ data }) => data && setSelectedPart(data)}
-                      overlayNoRowsTemplate="<span class='text-muted-foreground'>Belum ada part pada panel ini.</span>"
-                    />
-                  </div>
-                </div>
-              ) : selectedComponent ? (
-                <div className="border border-border bg-background">
-                  <div className="flex items-start justify-between gap-4 border-b border-border px-4 py-3">
-                    <div>
-                      <p className="text-[13px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Component</p>
-                      <h4 className="mt-1 text-[18px] font-semibold text-foreground">{selectedComponent.componentName}</h4>
-                      <p className="mt-1 text-[14px] text-muted-foreground">{selectedComponent.totalPanel} panel · {selectedComponent.totalPart} part</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedComponentKey(null)}
-                      className="border border-border px-3 py-1 text-[14px] font-mono uppercase tracking-[0.08em] text-muted-foreground hover:text-foreground"
-                    >
-                      Kembali ke Component
-                    </button>
-                  </div>
-                  <div className="ag-theme-alpine sms-ag-grid h-[32rem] w-full">
+                  <div className="ag-theme-alpine sms-ag-grid h-[16rem] w-full">
                     <AgGridReact<MasterPanelPanelGroup>
                       rowData={filteredPanels}
                       columnDefs={panelColumnDefs}
@@ -655,35 +619,51 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
                       rowHeight={46}
                       suppressCellFocus={false}
                       suppressMovableColumns
-                      onRowClicked={({ data }) => data && setSelectedPanelKey(data.key)}
-                      onRowDoubleClicked={({ data }) => data && setSelectedPanelKey(data.key)}
+                      onRowClicked={({ data }) => data && togglePanel(data)}
+                      overlayNoRowsTemplate="<span class='text-muted-foreground'>Belum ada panel pada component ini.</span>"
                     />
                   </div>
+
+                  {expandedPanel ? (
+                    <div className="border-t border-border bg-card">
+                      <div className="flex items-start justify-between gap-4 border-b border-border px-4 py-3">
+                        <div>
+                          <p className="text-[13px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Master Panel Parts</p>
+                          <h4 className="mt-1 text-[18px] font-semibold text-foreground">{expandedPanel.panelName}</h4>
+                          <p className="mt-1 text-[14px] text-muted-foreground">{expandedPanel.totalPart} part · {expandedPanel.totalJobdesc} jobdesc</p>
+                        </div>
+                        {canManage ? (
+                          <button
+                            type="button"
+                            onClick={openAdditionalForm}
+                            className="inline-flex items-center gap-1.5 border border-primary/30 bg-primary/[0.04] px-2 py-1 text-[14px] font-mono uppercase text-app-accent-ink hover:bg-primary/10"
+                          >
+                            <Plus className="h-3 w-3" strokeWidth={ICON_STROKE_WIDTH} /> Tambah Item
+                          </button>
+                        ) : null}
+                      </div>
+                      <div className="ag-theme-alpine sms-ag-grid h-[24rem] w-full">
+                        <AgGridReact<UnitPanelRecord>
+                          rowData={filteredParts}
+                          columnDefs={partColumnDefs}
+                          defaultColDef={{
+                            sortable: true,
+                            resizable: true,
+                            filter: true,
+                            suppressHeaderMenuButton: true,
+                          }}
+                          getRowId={({ data }) => String(data.id)}
+                          rowHeight={44}
+                          suppressCellFocus={false}
+                          suppressMovableColumns
+                          onRowClicked={({ data }) => data && setSelectedPart(data)}
+                          overlayNoRowsTemplate="<span class='text-muted-foreground'>Belum ada part pada panel ini.</span>"
+                        />
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
-              ) : (
-                <div className="ag-theme-alpine sms-ag-grid h-[34rem] w-full border border-border">
-                  <AgGridReact<MasterPanelComponentGroup>
-                    rowData={filteredComponents}
-                    columnDefs={componentColumnDefs}
-                    defaultColDef={{
-                      sortable: true,
-                      resizable: true,
-                      filter: true,
-                      suppressHeaderMenuButton: true,
-                    }}
-                    getRowId={({ data }) => data.key}
-                    rowHeight={46}
-                    suppressCellFocus={false}
-                    suppressMovableColumns
-                    onRowClicked={({ data }) => {
-                      if (!data) return;
-                      setSelectedComponentKey(data.key);
-                      setSelectedPanelKey(null);
-                    }}
-                    onRowDoubleClicked={({ data }) => data && setSelectedComponentKey(data.key)}
-                  />
-                </div>
-              )}
+              ) : null}
             </div>
           )}
         </div>

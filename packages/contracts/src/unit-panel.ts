@@ -20,6 +20,7 @@ export interface UnitPanelRecordShape {
   componentId: number | null;
   catalogPanelId: number | null;
   code?: string | null;
+  aliasName?: string | null;
   partNumber?: string | null;
   sourcePart?: "CATALOG" | "ADDITIONAL" | null;
   initialCondition?: string | null;
@@ -56,6 +57,7 @@ export const unitPanelRecordSchema: z.ZodType<UnitPanelRecordShape> = z.lazy(() 
     componentId: z.number().int().positive().nullable(),
     catalogPanelId: z.number().int().positive().nullable(),
     code: z.string().nullable().optional(),
+    aliasName: z.string().nullable().optional(),
     partNumber: z.string().nullable().optional(),
     sourcePart: z.enum(["CATALOG", "ADDITIONAL"]).nullable().optional(),
     initialCondition: z.string().nullable().optional(),

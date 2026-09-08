@@ -207,6 +207,7 @@ interface UnitPanelRow extends RowDataPacket {
   componentId: number | null;
   catalogPanelId: number | null;
   code: string | null;
+  aliasName: string | null;
   partNumber: string | null;
   sourcePart: "CATALOG" | "ADDITIONAL" | null;
   initialCondition: string | null;
@@ -475,6 +476,7 @@ function mapUnitPanelRecord(row: UnitPanelRow): UnitPanelRecord {
     componentId: row.componentId == null ? null : Number(row.componentId),
     catalogPanelId: row.catalogPanelId == null ? null : Number(row.catalogPanelId),
     code: toNullableText(row.code),
+    aliasName: toNullableText(row.aliasName),
     partNumber: toNullableText(row.partNumber),
     sourcePart: row.sourcePart === "CATALOG" || row.sourcePart === "ADDITIONAL" ? row.sourcePart : null,
     initialCondition: toNullableText(row.initialCondition),
@@ -1980,7 +1982,8 @@ export class UnitsRepository {
           mp.car_id AS carId,
           mp.component_id AS componentId,
           mp.panel_id AS catalogPanelId,
-          uc.code AS code,
+          NULL AS code,
+          mp.alias_name AS aliasName,
           mp.part_number AS partNumber,
           mp.source_part AS sourcePart,
           mp.initial_condition AS initialCondition,
@@ -2007,9 +2010,6 @@ export class UnitsRepository {
           DATE_FORMAT(mp.created_at, '%Y-%m-%d %H:%i:%s') AS createdAt,
           DATE_FORMAT(mp.updated_at, '%Y-%m-%d %H:%i:%s') AS updatedAt
         FROM master_panels mp
-        LEFT JOIN unit_catalog uc
-          ON mp.source_part = 'CATALOG'
-         AND uc.id = mp.part_id
         LEFT JOIN (
           SELECT
             panel_id,
@@ -2029,7 +2029,7 @@ export class UnitsRepository {
           mp.car_id,
           mp.component_id,
           mp.panel_id,
-          uc.code,
+          mp.alias_name,
           mp.part_number,
           mp.source_part,
           mp.initial_condition,
@@ -2070,7 +2070,8 @@ export class UnitsRepository {
           mp.car_id AS carId,
           mp.component_id AS componentId,
           mp.panel_id AS catalogPanelId,
-          uc.code AS code,
+          NULL AS code,
+          mp.alias_name AS aliasName,
           mp.part_number AS partNumber,
           mp.source_part AS sourcePart,
           mp.initial_condition AS initialCondition,
@@ -2097,9 +2098,6 @@ export class UnitsRepository {
           DATE_FORMAT(mp.created_at, '%Y-%m-%d %H:%i:%s') AS createdAt,
           DATE_FORMAT(mp.updated_at, '%Y-%m-%d %H:%i:%s') AS updatedAt
         FROM master_panels mp
-        LEFT JOIN unit_catalog uc
-          ON mp.source_part = 'CATALOG'
-         AND uc.id = mp.part_id
         LEFT JOIN (
           SELECT
             panel_id,
@@ -2118,7 +2116,7 @@ export class UnitsRepository {
           mp.car_id,
           mp.component_id,
           mp.panel_id,
-          uc.code,
+          mp.alias_name,
           mp.part_number,
           mp.source_part,
           mp.initial_condition,
