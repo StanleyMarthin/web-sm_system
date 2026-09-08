@@ -520,6 +520,10 @@ export function UnitCatalogTab({ unitId, unitName, canManageCatalog }: UnitCatal
   }
 
   function printPanelCatalog() {
+    document.body.classList.add("catalog-panel-printing");
+    window.addEventListener("afterprint", () => {
+      document.body.classList.remove("catalog-panel-printing");
+    }, { once: true });
     window.setTimeout(() => window.print(), 50);
   }
 
@@ -1198,65 +1202,87 @@ function CatalogPanelPrintView({
   ));
 
   return (
-    <div className="hidden bg-white p-3 text-black print:block">
-      <div className="border border-black">
-        <div className="border-b border-black px-2 py-2 text-center text-xl font-bold">
-          {unitName}
-        </div>
-        <div className="border-b border-black bg-[#12c8b8] px-2 py-2 text-center text-base font-bold uppercase">
-          {componentLabel} · {panelTitle}
-        </div>
-        <div className="border-b border-black p-2">
+    <div className="catalog-print-root hidden bg-white text-black">
+      <section className="catalog-print-page catalog-print-image-page">
+        <h1 className="catalog-print-title">{unitName}</h1>
+        <div className="catalog-print-subtitle">{componentLabel} · {panelTitle}</div>
+        <div className="catalog-print-image-frame">
           {imageSrc ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={imageSrc} alt={panelTitle} className="mx-auto max-h-[34vh] max-w-full object-contain" />
+            <img src={imageSrc} alt={panelTitle} />
           ) : (
-            <div className="flex h-32 items-center justify-center text-sm">Belum ada gambar referensi</div>
+            <div className="catalog-print-empty-image">Belum ada gambar referensi</div>
           )}
         </div>
-        <table className="w-full border-collapse text-[10px]">
+      </section>
+
+      <section className="catalog-print-page">
+        <h1 className="catalog-print-title">{unitName}</h1>
+        <div className="catalog-print-subtitle">{componentLabel} · {panelTitle}</div>
+        <table className="catalog-print-table">
+          <colgroup>
+            <col className="w-[3%]" />
+            <col className="w-[12%]" />
+            <col className="w-[25%]" />
+            <col className="w-[5%]" />
+            <col className="w-[5%]" />
+            <col className="w-[6%]" />
+            <col className="w-[4%]" />
+            <col className="w-[4%]" />
+            <col className="w-[7%]" />
+            <col className="w-[4%]" />
+            <col className="w-[5%]" />
+            <col className="w-[7%]" />
+            <col className="w-[5%]" />
+            <col className="w-[6%]" />
+            <col className="w-[7%]" />
+          </colgroup>
           <thead>
-            <tr className="bg-[#12c8b8] text-center font-bold">
-              <th rowSpan={2} className="border border-black px-1 py-1">No.</th>
-              <th rowSpan={2} className="border border-black px-1 py-1">Parts Number</th>
-              <th rowSpan={2} className="border border-black px-1 py-1">Name</th>
-              <th rowSpan={2} className="border border-black px-1 py-1">Code</th>
-              <th rowSpan={2} className="border border-black px-1 py-1">Qty Normal</th>
-              <th colSpan={3} className="border border-black px-1 py-1">Status</th>
-              <th colSpan={4} className="border border-black px-1 py-1">Kondisi</th>
-              <th rowSpan={2} className="border border-black px-1 py-1">Lokasi</th>
+            <tr>
+              <th rowSpan={2}>No.</th>
+              <th rowSpan={2}>Parts Number</th>
+              <th rowSpan={2}>Name</th>
+              <th rowSpan={2}>Code</th>
+              <th rowSpan={2}>Qty Normal</th>
+              <th rowSpan={2}>Qty Opname</th>
+              <th colSpan={3}>Status</th>
+              <th colSpan={4}>Kondisi</th>
+              <th rowSpan={2}>Lokasi</th>
+              <th rowSpan={2}>Keterangan</th>
             </tr>
-            <tr className="bg-white text-center font-bold">
-              <th className="border border-black px-1 py-1">Ada</th>
-              <th className="border border-black px-1 py-1">Tidak</th>
-              <th className="border border-black px-1 py-1">Tidak Ditemukan</th>
-              <th className="border border-black px-1 py-1">Layak</th>
-              <th className="border border-black px-1 py-1">Restore</th>
-              <th className="border border-black px-1 py-1">Tidak Layak</th>
-              <th className="border border-black px-1 py-1">Progress</th>
+            <tr>
+              <th>Ada</th>
+              <th>Tidak</th>
+              <th>Tidak Ditemukan</th>
+              <th>Layak</th>
+              <th>Restore</th>
+              <th>Tidak Layak</th>
+              <th>Progress</th>
             </tr>
           </thead>
           <tbody>
             {printableRows.map((row, index) => (
-              <tr key={row.rowId} className={index % 2 === 0 ? "bg-[#dff4f1]" : "bg-white"}>
-                <td className="border border-black px-1 py-1 text-center">{index + 1}</td>
-                <td className="border border-black px-1 py-1">{row.partNumber}</td>
-                <td className="border border-black px-1 py-1">{row.aliasName || row.itemName}</td>
-                <td className="border border-black px-1 py-1 text-center">{row.code}</td>
-                <td className="border border-black px-1 py-1 text-center">{row.qtyNormal}</td>
-                <td className="border border-black px-1 py-1 text-center">{printCheck(row.availabilityStatus === "AVAILABLE")}</td>
-                <td className="border border-black px-1 py-1 text-center">{printCheck(row.availabilityStatus === "NOT_AVAILABLE")}</td>
-                <td className="border border-black px-1 py-1 text-center">{printCheck(row.availabilityStatus === "UNKNOWN")}</td>
-                <td className="border border-black px-1 py-1 text-center">{printCheck(row.conditionStatus === "GOOD")}</td>
-                <td className="border border-black px-1 py-1 text-center">{printCheck(row.conditionStatus === "RESTORE")}</td>
-                <td className="border border-black px-1 py-1 text-center">{printCheck(row.conditionStatus === "NOT_USABLE")}</td>
-                <td className="border border-black px-1 py-1 text-center">{printCheck(row.isRestoration)}</td>
-                <td className="border border-black px-1 py-1 text-center">{parseCatalogPositionMarker(row.position) ? "Ditandai" : ""}</td>
+              <tr key={row.rowId}>
+                <td>{index + 1}</td>
+                <td>{row.partNumber}</td>
+                <td>{row.aliasName || row.itemName}</td>
+                <td>{row.code}</td>
+                <td>{row.qtyNormal}</td>
+                <td />
+                <td>{printCheck(row.availabilityStatus === "AVAILABLE")}</td>
+                <td>{printCheck(row.availabilityStatus === "NOT_AVAILABLE")}</td>
+                <td>{printCheck(row.availabilityStatus === "UNKNOWN")}</td>
+                <td>{printCheck(row.conditionStatus === "GOOD")}</td>
+                <td>{printCheck(row.conditionStatus === "RESTORE")}</td>
+                <td>{printCheck(row.conditionStatus === "NOT_USABLE")}</td>
+                <td>{printCheck(row.isRestoration)}</td>
+                <td>{parseCatalogPositionMarker(row.position) ? "Ditandai" : ""}</td>
+                <td />
               </tr>
             ))}
           </tbody>
         </table>
-      </div>
+      </section>
     </div>
   );
 }

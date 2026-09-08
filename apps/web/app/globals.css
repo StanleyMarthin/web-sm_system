@@ -337,3 +337,119 @@
     background: var(--app-accent-soft);
   }
 }
+
+@media print {
+  body.catalog-panel-printing * {
+    visibility: hidden !important;
+  }
+
+  body.catalog-panel-printing .catalog-print-root,
+  body.catalog-panel-printing .catalog-print-root * {
+    visibility: visible !important;
+  }
+
+  body.catalog-panel-printing .catalog-print-root {
+    display: block !important;
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100% !important;
+    background: #ffffff !important;
+    color: #111111 !important;
+    font-family: Arial, sans-serif !important;
+  }
+
+  body.catalog-panel-printing .catalog-print-page {
+    box-sizing: border-box;
+    min-height: 185mm;
+    padding: 6mm;
+    break-after: page;
+    page-break-after: always;
+    background: #ffffff;
+  }
+
+  body.catalog-panel-printing .catalog-print-page:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+
+  body.catalog-panel-printing .catalog-print-title {
+    margin: 0 0 3mm;
+    text-align: center;
+    font-size: 16pt;
+    font-weight: 800;
+    line-height: 1.1;
+    letter-spacing: 0;
+  }
+
+  body.catalog-panel-printing .catalog-print-subtitle {
+    margin-bottom: 3mm;
+    border: 1.5px solid #111111;
+    background: #e4e1dc;
+    color: #111111;
+    padding: 2mm;
+    text-align: center;
+    font-size: 12pt;
+    font-weight: 800;
+    line-height: 1.15;
+    text-transform: uppercase;
+  }
+
+  body.catalog-panel-printing .catalog-print-image-frame {
+    display: flex;
+    height: 160mm;
+    align-items: center;
+    justify-content: center;
+    border: 1.5px solid #111111;
+    background: #f9f7f6;
+    overflow: hidden;
+  }
+
+  body.catalog-panel-printing .catalog-print-image-frame img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+  }
+
+  body.catalog-panel-printing .catalog-print-empty-image {
+    font-size: 11pt;
+    font-weight: 600;
+  }
+
+  body.catalog-panel-printing .catalog-print-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+    font-size: 7.2pt;
+    line-height: 1.15;
+  }
+
+  body.catalog-panel-printing .catalog-print-table th,
+  body.catalog-panel-printing .catalog-print-table td {
+    border: 1px solid #111111;
+    padding: 1mm;
+    vertical-align: middle;
+    overflow-wrap: anywhere;
+  }
+
+  body.catalog-panel-printing .catalog-print-table th {
+    background: #e4e1dc;
+    text-align: center;
+    font-weight: 800;
+  }
+
+  body.catalog-panel-printing .catalog-print-table thead tr:nth-child(2) th {
+    background: #f2efeb;
+  }
+
+  body.catalog-panel-printing .catalog-print-table tbody tr:nth-child(odd) td {
+    background: #f9f7f6;
+  }
+
+  body.catalog-panel-printing .catalog-print-table td:nth-child(1),
+  body.catalog-panel-printing .catalog-print-table td:nth-child(4),
+  body.catalog-panel-printing .catalog-print-table td:nth-child(5),
+  body.catalog-panel-printing .catalog-print-table td:nth-child(6),
+  body.catalog-panel-printing .catalog-print-table td:nth-child(n + 7):nth-child(-n + 14) {
+    text-align: center;
+  }
+}
