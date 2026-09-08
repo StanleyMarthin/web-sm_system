@@ -82,6 +82,60 @@ function progressFromHours(totalHours: number, remainingHours: number): number {
   return Math.max(0, Math.min(100, Math.round(((totalHours - remainingHours) / totalHours) * 100)));
 }
 
+const DONE_STATUS_VALUES = new Set(["DONE", "SELESAI", "FINISH", "FINISHED", "COMPLETED", "COMPLETE"]);
+
+type PartFilter = "ALL" | "WAITING" | "RESTORE" | "DONE" | "ADDITIONAL" | "CATALOG";
+
+const PART_FILTERS: Array<{ value: PartFilter; label: string }> = [
+  { value: "ALL", label: "Semua" },
+  { value: "WAITING", label: "Belum Progress" },
+  { value: "RESTORE", label: "Restorasi" },
+  { value: "DONE", label: "Selesai" },
+  { value: "ADDITIONAL", label: "Additional" },
+  { value: "CATALOG", label: "Catalog" },
+];
+
+function normalizeStatus(value: string | null | undefined): string {
+  return (value ?? "").trim().toUpperCase();
+}
+
+function isPartComplete(record: UnitPanelRecord): boolean {
+  return DONE_STATUS_VALUES.has(normalizeStatus(record.currentStatus));
+}
+
+function isRestorationPart(record: UnitPanelRecord): boolean {
+  return displayCondition(record).toUpperCase().includes("RESTOR");
+}
+
+function partProgressLabel(record: UnitPanelRecord): { label: string; className: string; dotClassName: string } {
+  if (isPartComplete(record)) {
+    return {
+      label: "SELESAI",
+      className: "border-success/30 bg-success/[0.08] text-success",
+      dotClassName: "bg-success",
+    };
+  }
+
+  if (isRestorationPart(record)) {
+    return {
+      label: "RESTORASI",
+      className: "border-primary/35 bg-primary/[0.08] text-app-accent-ink",
+      dotClassName: "bg-primary",
+    };
+  }
+
+  return {
+    label: "MENUNGGU",
+    className: "border-border bg-muted text-muted-foreground",
+    dotClassName: "bg-muted-foreground",
+  };
+}
+
+function progressFromParts(totalPart: number, completedPart: number): number {
+  if (totalPart <= 0) return 0;
+  return Math.max(0, Math.min(100, Math.round((completedPart / totalPart) * 100)));
+}
+
 function sumBy<T>(items: T[], read: (item: T) => number | null | undefined): number {
   return items.reduce((total, item) => total + Number(read(item) ?? 0), 0);
 }
@@ -109,6 +163,8 @@ interface MasterPanelPanelGroup {
   panelName: string;
   parts: UnitPanelRecord[];
   totalPart: number;
+  completedPart: number;
+  remainingPart: number;
   conditionSummary: string;
   status: string;
   totalJobdesc: number;
@@ -123,6 +179,8 @@ interface MasterPanelComponentGroup {
   panels: MasterPanelPanelGroup[];
   totalPanel: number;
   totalPart: number;
+  completedPart: number;
+  remainingPart: number;
   totalHours: number;
   remainingHours: number;
   progress: number;
@@ -149,31 +207,38 @@ function buildMasterPanelHierarchy(records: UnitPanelRecord[]): MasterPanelCompo
         .map(([panelName, parts]) => {
           const totalHours = sumBy(parts, part => part.totalHours);
           const remainingHours = sumBy(parts, part => part.remainingHours);
+          const completedPart = parts.filter(isPartComplete).length;
           return {
             key: `${componentName}\u0000${panelName}`,
             componentName,
             panelName,
             parts,
             totalPart: parts.length,
+            completedPart,
+            remainingPart: parts.length - completedPart,
             conditionSummary: conditionSummary(parts),
             status: parts.some((part) => displayPanelStatus(part) === "Operational") ? "Operational" : "Siap",
             totalJobdesc: sumBy(parts, part => part.totalJobdesc),
             totalHours,
             remainingHours,
-            progress: progressFromHours(totalHours, remainingHours),
+            progress: totalHours > 0 ? progressFromHours(totalHours, remainingHours) : progressFromParts(parts.length, completedPart),
           };
         });
       const totalHours = sumBy(panels, panel => panel.totalHours);
       const remainingHours = sumBy(panels, panel => panel.remainingHours);
+      const completedPart = panels.reduce((total, panel) => total + panel.completedPart, 0);
+      const totalPart = panels.reduce((total, panel) => total + panel.totalPart, 0);
       return {
         key: componentName,
         componentName,
         panels,
         totalPanel: panels.length,
-        totalPart: panels.reduce((total, panel) => total + panel.totalPart, 0),
+        totalPart,
+        completedPart,
+        remainingPart: totalPart - completedPart,
         totalHours,
         remainingHours,
-        progress: progressFromHours(totalHours, remainingHours),
+        progress: totalHours > 0 ? progressFromHours(totalHours, remainingHours) : progressFromParts(totalPart, completedPart),
       };
     });
 }
@@ -181,10 +246,21 @@ function buildMasterPanelHierarchy(records: UnitPanelRecord[]): MasterPanelCompo
 function matchesPart(part: UnitPanelRecord, term: string): boolean {
   return (
     part.name.toLowerCase().includes(term) ||
+    (part.aliasName ?? "").toLowerCase().includes(term) ||
     (part.partNumber ?? "").toLowerCase().includes(term) ||
     (part.code ?? "").toLowerCase().includes(term) ||
-    displaySource(part).toLowerCase().includes(term)
+    displaySource(part).toLowerCase().includes(term) ||
+    displayCondition(part).toLowerCase().includes(term) ||
+    displayCurrentStatus(part).toLowerCase().includes(term)
   );
+}
+
+function matchesPartFilter(part: UnitPanelRecord, filter: PartFilter): boolean {
+  if (filter === "ALL") return true;
+  if (filter === "WAITING") return !isPartComplete(part);
+  if (filter === "RESTORE") return isRestorationPart(part);
+  if (filter === "DONE") return isPartComplete(part);
+  return normalizeStatus(part.sourcePart) === filter;
 }
 
 export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPanelManagerProps) {
@@ -195,6 +271,7 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
   const [message, setMessage] = useState<string | null>(null);
 
   const [search, setSearch] = useState<string>("");
+  const [partFilter, setPartFilter] = useState<PartFilter>("ALL");
   const [expandedComponentKey, setExpandedComponentKey] = useState<string | null>(null);
   const [expandedPanelKey, setExpandedPanelKey] = useState<string | null>(null);
   const [selectedPart, setSelectedPart] = useState<UnitPanelRecord | null>(null);
@@ -215,28 +292,38 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
     [expandedComponent, expandedPanelKey],
   );
   const filteredComponents = useMemo(() => {
-    if (!searchTerm) return hierarchy;
+    if (!searchTerm && partFilter === "ALL") return hierarchy;
     return hierarchy.filter(component =>
-      component.componentName.toLowerCase().includes(searchTerm) ||
-      component.panels.some(panel =>
-        panel.panelName.toLowerCase().includes(searchTerm) ||
-        panel.parts.some(part => matchesPart(part, searchTerm))
-      )
+      (
+        !searchTerm ||
+        component.componentName.toLowerCase().includes(searchTerm) ||
+        component.panels.some(panel =>
+          panel.panelName.toLowerCase().includes(searchTerm) ||
+          panel.parts.some(part => matchesPart(part, searchTerm))
+        )
+      ) &&
+      (partFilter === "ALL" || component.panels.some(panel => panel.parts.some(part => matchesPartFilter(part, partFilter))))
     );
-  }, [hierarchy, searchTerm]);
+  }, [hierarchy, searchTerm, partFilter]);
   const filteredPanels = useMemo(() => {
     if (!expandedComponent) return [];
-    if (!searchTerm) return expandedComponent.panels;
+    if (!searchTerm && partFilter === "ALL") return expandedComponent.panels;
     return expandedComponent.panels.filter(panel =>
-      panel.panelName.toLowerCase().includes(searchTerm) ||
-      panel.parts.some(part => matchesPart(part, searchTerm))
+      (
+        !searchTerm ||
+        panel.panelName.toLowerCase().includes(searchTerm) ||
+        panel.parts.some(part => matchesPart(part, searchTerm))
+      ) &&
+      (partFilter === "ALL" || panel.parts.some(part => matchesPartFilter(part, partFilter)))
     );
-  }, [searchTerm, expandedComponent]);
+  }, [searchTerm, expandedComponent, partFilter]);
   const filteredParts = useMemo(() => {
     if (!expandedPanel) return [];
-    if (!searchTerm) return expandedPanel.parts;
-    return expandedPanel.parts.filter(part => matchesPart(part, searchTerm));
-  }, [searchTerm, expandedPanel]);
+    return expandedPanel.parts.filter(part =>
+      (!searchTerm || matchesPart(part, searchTerm)) &&
+      matchesPartFilter(part, partFilter)
+    );
+  }, [searchTerm, expandedPanel, partFilter]);
   const toggleComponent = useCallback((component: MasterPanelComponentGroup) => {
     setExpandedComponentKey((current) => current === component.key ? null : component.key);
     setExpandedPanelKey(null);
@@ -246,7 +333,7 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
   }, []);
   const componentColumnDefs = useMemo<ColDef<MasterPanelComponentGroup>[]>(() => [
     {
-      headerName: "Component",
+      headerName: "Bagian",
       field: "componentName",
       minWidth: 240,
       flex: 1.7,
@@ -263,8 +350,10 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
         </button>
       ),
     },
-    { headerName: "Total Panel", field: "totalPanel", width: 140, cellClass: "font-mono text-muted-foreground" },
-    { headerName: "Total Part", field: "totalPart", width: 140, cellClass: "font-mono text-muted-foreground" },
+    { headerName: "Panel", field: "totalPanel", width: 110, cellClass: "font-mono text-muted-foreground" },
+    { headerName: "Part", field: "totalPart", width: 110, cellClass: "font-mono text-muted-foreground" },
+    { headerName: "Selesai", field: "completedPart", width: 115, cellClass: "font-mono text-muted-foreground" },
+    { headerName: "Sisa", field: "remainingPart", width: 100, cellClass: "font-mono text-muted-foreground" },
     {
       headerName: "Progress",
       field: "progress",
@@ -302,7 +391,7 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
   ], [expandedComponentKey, toggleComponent]);
   const panelColumnDefs = useMemo<ColDef<MasterPanelPanelGroup>[]>(() => [
     {
-      headerName: "Panel Name",
+      headerName: "Panel",
       field: "panelName",
       minWidth: 220,
       flex: 1.4,
@@ -320,13 +409,13 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
       ),
     },
     {
-      headerName: "Total Part",
+      headerName: "Part",
       field: "totalPart",
       width: 120,
       cellClass: "font-mono text-muted-foreground",
     },
     {
-      headerName: "Progress %",
+      headerName: "Progress",
       field: "progress",
       width: 130,
       cellRenderer: ({ data }: { data?: MasterPanelPanelGroup }) => data ? (
@@ -338,20 +427,20 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
         </div>
       ) : null,
     },
-    { headerName: "Total Jobdesc", field: "totalJobdesc", width: 135, cellClass: "font-mono text-muted-foreground" },
+    { headerName: "Pekerjaan", field: "totalJobdesc", width: 120, cellClass: "font-mono text-muted-foreground" },
     {
-      headerName: "Total Hours",
+      headerName: "Durasi",
       field: "totalHours",
       width: 125,
       cellClass: "font-mono text-muted-foreground",
-      valueFormatter: ({ value }) => `${formatNumber(Number(value ?? 0))}j`,
+      valueFormatter: ({ value }) => `${formatNumber(Number(value ?? 0))} jam`,
     },
     {
-      headerName: "Remaining Hours",
+      headerName: "Sisa",
       field: "remainingHours",
       width: 150,
       cellClass: "font-mono text-muted-foreground",
-      valueFormatter: ({ value }) => `${formatNumber(Number(value ?? 0))}j`,
+      valueFormatter: ({ value }) => `${formatNumber(Number(value ?? 0))} jam`,
     },
     {
       headerName: "Expand",
@@ -377,21 +466,25 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
   ], [expandedPanelKey, togglePanel]);
   const partColumnDefs = useMemo<ColDef<UnitPanelRecord>[]>(() => [
     { headerName: "Code", field: "code", width: 110, valueGetter: ({ data }) => data?.code ?? "-" },
-    { headerName: "Alias Name", field: "aliasName", minWidth: 150, flex: 0.8, valueGetter: ({ data }) => data?.aliasName ?? "-" },
     {
-      headerName: "Name Part",
+      headerName: "Nama Part",
       field: "name",
-      minWidth: 230,
-      flex: 1.4,
-      cellRenderer: ({ data }: { data?: UnitPanelRecord }) => (
-        <button
-          type="button"
-          className="text-left font-medium text-foreground hover:text-app-accent-ink"
-          onClick={() => data && setSelectedPart(data)}
-        >
-          {data?.name ?? "-"}
-        </button>
-      ),
+      minWidth: 260,
+      flex: 1.8,
+      cellRenderer: ({ data }: { data?: UnitPanelRecord }) => {
+        if (!data) return null;
+        const aliasName = data.aliasName?.trim();
+        return (
+          <button
+            type="button"
+            className="block w-full text-left text-foreground hover:text-app-accent-ink"
+            onClick={() => setSelectedPart(data)}
+          >
+            <span className="block truncate font-medium">{aliasName || data.name}</span>
+            {aliasName ? <span className="block truncate text-[12px] text-muted-foreground">{data.name}</span> : null}
+          </button>
+        );
+      },
     },
     {
       headerName: "Part Number",
@@ -408,16 +501,25 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
       valueFormatter: ({ value }) => formatNumber(Number(value ?? 0)),
     },
     {
-      headerName: "Condition",
+      headerName: "Kondisi",
       valueGetter: ({ data }) => data ? displayCondition(data) : "-",
       minWidth: 130,
       flex: 0.8,
     },
     {
-      headerName: "Current Status",
-      valueGetter: ({ data }) => data ? displayCurrentStatus(data) : "-",
-      minWidth: 140,
-      flex: 0.8,
+      headerName: "Status",
+      minWidth: 150,
+      flex: 0.9,
+      cellRenderer: ({ data }: { data?: UnitPanelRecord }) => {
+        if (!data) return null;
+        const badge = partProgressLabel(data);
+        return (
+          <span className={`inline-flex items-center gap-1.5 border px-2 py-1 text-[12px] font-semibold ${badge.className}`}>
+            <span className={`h-1.5 w-1.5 rounded-full ${badge.dotClassName}`} />
+            {badge.label}
+          </span>
+        );
+      },
     },
   ], []);
 
@@ -428,7 +530,7 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
     const result = await fetchUnitPanels("", unitId);
     if (!result.payload) {
       setRows([]);
-      setError("Master panel unit belum bisa dimuat.");
+      setError("Struktur panel unit belum bisa dimuat.");
       setIsLoading(false);
       return;
     }
@@ -474,7 +576,7 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
     };
 
     if (!payload.componentName || !payload.panelName || !payload.itemName) {
-      setError("Component, panel, dan item wajib diisi.");
+      setError("Bagian, panel, dan item wajib diisi.");
       return;
     }
 
@@ -488,7 +590,7 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
       return;
     }
 
-    setMessage("Item tambahan berhasil masuk Master Panel.");
+    setMessage("Item tambahan berhasil masuk Struktur Panel Unit.");
     setIsAddingAdditional(false);
     setAdditionalForm(EMPTY_ADDITIONAL_FORM);
     await loadPanels();
@@ -501,8 +603,8 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
       {/* ── HEADER ── */}
       <div className="flex items-center justify-between border-b border-border px-4 py-2">
         <div>
-          <p className="text-[14px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Master Panel</p>
-          <h3 className="text-[15px] font-mono text-foreground">Component · Panel · Part</h3>
+          <p className="text-[14px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Struktur Panel Unit</p>
+          <h3 className="text-[15px] font-mono text-foreground">Bagian · Panel · Part</h3>
         </div>
         <div className="flex items-center gap-2">
           <span className="font-mono text-[14px] text-muted-foreground">{rootCount} panel · {partCount} part</span>
@@ -514,7 +616,7 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
           {canManage && (
             <button type="button" onClick={openAdditionalForm}
               className="inline-flex items-center gap-1.5 border border-primary/30 bg-primary/[0.04] px-2 py-1 text-[14px] font-mono uppercase text-app-accent-ink hover:bg-primary/10 transition-colors">
-              <Plus className="h-3 w-3" strokeWidth={ICON_STROKE_WIDTH} /> Tambah Panel / Item Tambahan
+              <Plus className="h-3 w-3" strokeWidth={ICON_STROKE_WIDTH} /> Tambah Panel Baru
             </button>
           )}
         </div>
@@ -527,7 +629,7 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Cari component, panel, atau part..."
+              placeholder="Cari bagian, panel, atau part..."
               className="h-8 w-full bg-transparent text-[15px] font-mono text-foreground outline-none placeholder:text-muted-foreground"
             />
             {search && (
@@ -540,8 +642,24 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
             )}
           </div>
           <div className="hidden shrink-0 text-[13px] font-mono uppercase tracking-[0.1em] text-muted-foreground lg:block">
-            Expand component lalu panel
+            Klik bagian lalu panel
           </div>
+        </div>
+        <div className="flex gap-2 overflow-x-auto px-4 pb-3">
+          {PART_FILTERS.map((filter) => (
+            <button
+              key={filter.value}
+              type="button"
+              onClick={() => setPartFilter(filter.value)}
+              className={`shrink-0 border px-2.5 py-1 text-[12px] font-mono uppercase tracking-[0.08em] transition-colors ${
+                partFilter === filter.value
+                  ? "border-primary/40 bg-primary/[0.08] text-app-accent-ink"
+                  : "border-border bg-card text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {filter.label}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -561,10 +679,10 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
           )}
 
           {isLoading ? (
-            <div className="px-4 py-6 text-[15px] font-mono text-muted-foreground">Memuat master panel...</div>
+            <div className="px-4 py-6 text-[15px] font-mono text-muted-foreground">Memuat struktur panel unit...</div>
           ) : filteredComponents.length === 0 ? (
             <div className="m-4 border border-dashed border-border px-4 py-8 text-center text-[15px] font-mono text-muted-foreground">
-              {search ? `Tidak ada hasil untuk "${search}"` : "Belum ada Master Panel."}
+              {search || partFilter !== "ALL" ? "Tidak ada struktur panel yang cocok." : "Belum ada struktur panel unit."}
             </div>
           ) : (
             <div className="space-y-4 p-4">
@@ -583,7 +701,7 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
                   suppressCellFocus={false}
                   suppressMovableColumns
                   onRowClicked={({ data }) => data && toggleComponent(data)}
-                  overlayNoRowsTemplate="<span class='text-muted-foreground'>Belum ada component master panel.</span>"
+                  overlayNoRowsTemplate="<span class='text-muted-foreground'>Belum ada bagian pada struktur panel unit.</span>"
                 />
               </div>
 
@@ -593,7 +711,13 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
                     <div>
                       <p className="text-[13px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Panel</p>
                       <h4 className="mt-1 text-[18px] font-semibold text-foreground">{expandedComponent.componentName}</h4>
-                      <p className="mt-1 text-[14px] text-muted-foreground">{expandedComponent.totalPanel} panel · {expandedComponent.totalPart} part</p>
+                      <div className="mt-2 grid grid-cols-2 gap-x-6 gap-y-1 text-[14px] text-muted-foreground sm:grid-cols-5">
+                        <span>Panel <strong className="font-mono text-foreground">{expandedComponent.totalPanel}</strong></span>
+                        <span>Part <strong className="font-mono text-foreground">{expandedComponent.totalPart}</strong></span>
+                        <span>Progress <strong className="font-mono text-foreground">{expandedComponent.progress}%</strong></span>
+                        <span>Selesai <strong className="font-mono text-foreground">{expandedComponent.completedPart}</strong></span>
+                        <span>Sisa <strong className="font-mono text-foreground">{expandedComponent.remainingPart}</strong></span>
+                      </div>
                     </div>
                     {canManage ? (
                       <button
@@ -620,7 +744,7 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
                       suppressCellFocus={false}
                       suppressMovableColumns
                       onRowClicked={({ data }) => data && togglePanel(data)}
-                      overlayNoRowsTemplate="<span class='text-muted-foreground'>Belum ada panel pada component ini.</span>"
+                      overlayNoRowsTemplate="<span class='text-muted-foreground'>Belum ada panel pada bagian ini.</span>"
                     />
                   </div>
 
@@ -628,9 +752,15 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
                     <div className="border-t border-border bg-card">
                       <div className="flex items-start justify-between gap-4 border-b border-border px-4 py-3">
                         <div>
-                          <p className="text-[13px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Master Panel Parts</p>
+                          <p className="text-[13px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Daftar Part</p>
                           <h4 className="mt-1 text-[18px] font-semibold text-foreground">{expandedPanel.panelName}</h4>
-                          <p className="mt-1 text-[14px] text-muted-foreground">{expandedPanel.totalPart} part · {expandedPanel.totalJobdesc} jobdesc</p>
+                          <div className="mt-2 grid grid-cols-2 gap-x-6 gap-y-1 text-[14px] text-muted-foreground sm:grid-cols-5">
+                            <span>Part <strong className="font-mono text-foreground">{expandedPanel.totalPart}</strong></span>
+                            <span>Progress <strong className="font-mono text-foreground">{expandedPanel.progress}%</strong></span>
+                            <span>Pekerjaan <strong className="font-mono text-foreground">{expandedPanel.totalJobdesc}</strong></span>
+                            <span>Durasi <strong className="font-mono text-foreground">{formatNumber(expandedPanel.totalHours)} jam</strong></span>
+                            <span>Sisa <strong className="font-mono text-foreground">{formatNumber(expandedPanel.remainingHours)} jam</strong></span>
+                          </div>
                         </div>
                         {canManage ? (
                           <button
@@ -674,7 +804,7 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
           <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
             <div>
               <p className="text-[13px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Item Tambahan</p>
-              <h4 className="mt-1 text-[18px] font-semibold text-foreground">Tambah Panel / Item Tambahan</h4>
+              <h4 className="mt-1 text-[18px] font-semibold text-foreground">Tambah Panel Baru</h4>
             </div>
             <button type="button" onClick={() => setIsAddingAdditional(false)} className="catalog-icon-button" title="Tutup">
               <X className="h-3.5 w-3.5" strokeWidth={ICON_STROKE_WIDTH} />
@@ -683,7 +813,7 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
           <form className="flex flex-1 flex-col" onSubmit={(event) => void handleAdditionalSubmit(event)}>
             <div className="flex-1 space-y-3 overflow-auto px-5 py-4">
               <label className="block space-y-1">
-                <span className="text-[13px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Component</span>
+                <span className="text-[13px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Bagian</span>
                 <input
                   value={additionalForm.componentName}
                   onChange={(event) => setAdditionalForm((current) => ({ ...current, componentName: event.target.value }))}
@@ -692,7 +822,7 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
                 />
               </label>
               <label className="block space-y-1">
-                <span className="text-[13px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Panel Name</span>
+                <span className="text-[13px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Nama Panel</span>
                 <input
                   value={additionalForm.panelName}
                   onChange={(event) => setAdditionalForm((current) => ({ ...current, panelName: event.target.value }))}
@@ -701,7 +831,7 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
                 />
               </label>
               <label className="block space-y-1">
-                <span className="text-[13px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Item / Part</span>
+                <span className="text-[13px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Nama Part</span>
                 <input
                   value={additionalForm.itemName}
                   onChange={(event) => setAdditionalForm((current) => ({ ...current, itemName: event.target.value }))}
@@ -715,7 +845,7 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
                   value={additionalForm.partNumber}
                   onChange={(event) => setAdditionalForm((current) => ({ ...current, partNumber: event.target.value }))}
                   className="h-9 w-full border border-border bg-background px-3 text-[14px] text-foreground outline-none focus:border-primary/45"
-                  placeholder="Optional"
+                  placeholder="Opsional"
                 />
               </label>
               <label className="block space-y-1">
@@ -724,7 +854,7 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
                   value={additionalForm.deskription}
                   onChange={(event) => setAdditionalForm((current) => ({ ...current, deskription: event.target.value }))}
                   className="min-h-24 w-full resize-y border border-border bg-background px-3 py-2 text-[14px] text-foreground outline-none focus:border-primary/45"
-                  placeholder="Optional"
+                  placeholder="Opsional"
                 />
               </label>
             </div>
@@ -743,7 +873,7 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
         <div className="fixed inset-y-0 right-0 z-40 flex w-full max-w-md flex-col border-l border-border bg-card shadow-2xl">
           <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
             <div>
-              <p className="text-[13px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Part Detail</p>
+              <p className="text-[13px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Detail Panel</p>
               <h4 className="mt-1 text-[18px] font-semibold text-foreground">{selectedPart.name}</h4>
             </div>
             <button
@@ -758,7 +888,7 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
           <div className="flex-1 space-y-4 overflow-auto px-5 py-4">
             <div className="grid grid-cols-2 gap-3">
               <div className="col-span-2 border border-border bg-background px-3 py-2">
-                <p className="text-[12px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Name Part</p>
+                <p className="text-[12px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Nama Part</p>
                 <p className="mt-1 text-[14px] text-foreground">{displayText(selectedPart.name)}</p>
               </div>
               <div className="border border-border bg-background px-3 py-2">
@@ -766,11 +896,11 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
                 <p className="mt-1 text-[14px] text-foreground">{displayText(selectedPart.partNumber)}</p>
               </div>
               <div className="border border-border bg-background px-3 py-2">
-                <p className="text-[12px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Source Part</p>
+                <p className="text-[12px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Source</p>
                 <p className="mt-1 text-[14px] text-foreground">{displaySource(selectedPart)}</p>
               </div>
               <div className="border border-border bg-background px-3 py-2">
-                <p className="text-[12px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Initial Condition</p>
+                <p className="text-[12px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Condition</p>
                 <p className="mt-1 text-[14px] text-foreground">{displayCondition(selectedPart)}</p>
               </div>
               <div className="border border-border bg-background px-3 py-2">
@@ -799,16 +929,16 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
               </div>
             </div>
             <div className="border border-border bg-background px-3 py-3">
-              <p className="text-[12px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Master Panel Image</p>
+              <p className="text-[12px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Foto</p>
               <p className="mt-2 text-[14px] text-muted-foreground">
-                Foto operational dibuka dari detail Master Panel existing.
+                Foto operasional dibuka dari detail panel existing.
               </p>
               <div className="mt-3 flex gap-2">
                 <Link
                   href={buildPanelDetailHref(unitId, selectedPart.id)}
                   className="inline-flex items-center gap-1.5 border border-border px-3 py-1.5 text-[13px] font-mono uppercase tracking-[0.08em] text-muted-foreground hover:text-foreground"
                 >
-                  <ImageIcon className="h-3.5 w-3.5" strokeWidth={ICON_STROKE_WIDTH} /> View Image
+                  <ImageIcon className="h-3.5 w-3.5" strokeWidth={ICON_STROKE_WIDTH} /> Lihat Foto
                 </Link>
               </div>
             </div>
