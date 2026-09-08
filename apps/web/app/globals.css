@@ -432,17 +432,17 @@
   }
 
   body.catalog-panel-printing .catalog-print-table th {
-    background: #e4e1dc;
+    background: #10c5b8;
     text-align: center;
     font-weight: 800;
   }
 
   body.catalog-panel-printing .catalog-print-table thead tr:nth-child(2) th {
-    background: #f2efeb;
+    background: #eefbf9;
   }
 
   body.catalog-panel-printing .catalog-print-table tbody tr:nth-child(odd) td {
-    background: #f9f7f6;
+    background: #ddf3f0;
   }
 
   body.catalog-panel-printing .catalog-print-table td:nth-child(1),

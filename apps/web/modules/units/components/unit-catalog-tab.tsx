@@ -1221,9 +1221,20 @@ function CatalogPanelPrintView({
         <div className="catalog-print-subtitle">{componentLabel} · {panelTitle}</div>
         <table className="catalog-print-table">
           <colgroup>
-            {Array.from({ length: 14 }, (_, index) => (
-              <col key={index} style={{ width: "7.142857%" }} />
-            ))}
+            <col className="w-[3%]" />
+            <col className="w-[12%]" />
+            <col className="w-[23%]" />
+            <col className="w-[5%]" />
+            <col className="w-[5%]" />
+            <col className="w-[6%]" />
+            <col className="w-[4%]" />
+            <col className="w-[4%]" />
+            <col className="w-[7%]" />
+            <col className="w-[4%]" />
+            <col className="w-[5%]" />
+            <col className="w-[7%]" />
+            <col className="w-[5%]" />
+            <col className="w-[10%]" />
           </colgroup>
           <thead>
             <tr>
