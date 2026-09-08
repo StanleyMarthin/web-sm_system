@@ -1,7 +1,10 @@
 "use client";
 
 import type { UnitPanelGeneralRecord, UnitPanelRecord } from "@smsystem/contracts/unit-panel";
-import { ArrowUpRight, Boxes, ChevronDown, ChevronRight, Plus, RefreshCw, Search } from "lucide-react";
+import type { ColDef } from "ag-grid-community";
+import { AllCommunityModule, ModuleRegistry } from "ag-grid-community";
+import { AgGridReact } from "ag-grid-react";
+import { Boxes, Eye, Image as ImageIcon, Plus, RefreshCw, Search, X } from "lucide-react";
 import Link from "next/link";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -24,8 +27,9 @@ import {
 } from "@/modules/units/helpers/unit-panel-form";
 import { SearchableField, type SearchOption } from "./shared/SearchableField";
 
-const PAGE_SIZE = 20;
 const ICON_STROKE_WIDTH = 2.5;
+
+ModuleRegistry.registerModules([AllCommunityModule]);
 
 function displayCategory(value: string | null | undefined): string {
   return value?.trim() || "Lainnya";
@@ -63,6 +67,29 @@ function buildPanelDetailHref(unitId: string, recordId: number): string {
   return `/units/${unitId}/panels/panel-${recordId}`;
 }
 
+function displaySource(record: UnitPanelRecord): "CATALOG" | "ADDITIONAL" {
+  return record.componentId || record.catalogPanelId ? "CATALOG" : "ADDITIONAL";
+}
+
+function displayPanelStatus(record: UnitPanelRecord): string {
+  if (!record.isActive) return "Nonaktif";
+  if (record.statusUsageCount > 0 || record.countdownUsageCount > 0) return "Operational";
+  return "Siap";
+}
+
+function conditionSummary(record: UnitPanelRecord): string {
+  const source = record.children.length > 0 ? record.children : [record];
+  const counts = source.reduce<Record<string, number>>((acc, item) => {
+    const label = CONDITION_LABEL[item.defaultConditionType];
+    acc[label] = (acc[label] ?? 0) + 1;
+    return acc;
+  }, {});
+
+  return Object.entries(counts)
+    .map(([label, count]) => `${label} ${count}`)
+    .join(" · ");
+}
+
 export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPanelManagerProps) {
   const [rows, setRows] = useState<UnitPanelRecord[]>(() => initialRows ?? []);
   const [generalRows, setGeneralRows] = useState<UnitPanelGeneralRecord[]>([]);
@@ -77,8 +104,8 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
   const [activeCategory, setActiveCategory] = useState<string>("ALL");
   const [activeSection, setActiveSection] = useState<string>("ALL");
   const [search, setSearch] = useState<string>("");
-  const [currentPage, setCurrentPage] = useState(1);
-  const [expandedPanelIds, setExpandedPanelIds] = useState<Set<string>>(new Set());
+  const [selectedPanelId, setSelectedPanelId] = useState<number | null>(null);
+  const [selectedPart, setSelectedPart] = useState<UnitPanelRecord | null>(null);
   const flatGeneralRecords = useMemo(() => flattenGeneralPanelRecords(generalRows), [generalRows]);
 
   useEffect(() => {
@@ -196,25 +223,9 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
     });
   }, [rows, activeCategory, activeSection, search]);
 
-  const totalPages = Math.ceil(filteredRows.length / PAGE_SIZE);
-  const paginatedRows = filteredRows.slice(
-    (currentPage - 1) * PAGE_SIZE,
-    currentPage * PAGE_SIZE,
-  );
-
   function handleCategoryChange(cat: string) {
     setActiveCategory(cat);
     setActiveSection("ALL");
-    setCurrentPage(1);
-  }
-
-  function togglePanel(id: string) {
-    setExpandedPanelIds(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
   }
 
   const rootCount = rows.length;
@@ -222,6 +233,135 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
     () => rows.reduce((total, row) => total + row.children.length, 0),
     [rows],
   );
+  const selectedPanel = useMemo(
+    () => rows.find(row => row.id === selectedPanelId) ?? null,
+    [rows, selectedPanelId],
+  );
+  const panelColumnDefs = useMemo<ColDef<UnitPanelRecord>[]>(() => [
+    {
+      headerName: "Component",
+      valueGetter: ({ data }) => displayCategory(data?.category),
+      minWidth: 150,
+      flex: 0.9,
+    },
+    {
+      headerName: "Panel",
+      field: "name",
+      minWidth: 220,
+      flex: 1.4,
+      cellRenderer: ({ data }: { data?: UnitPanelRecord }) => (
+        <button
+          type="button"
+          className="text-left font-medium text-foreground hover:text-app-accent-ink"
+          onClick={() => data && setSelectedPanelId(data.id)}
+        >
+          {data?.name ?? "-"}
+        </button>
+      ),
+    },
+    {
+      headerName: "Total Part",
+      field: "childCount",
+      width: 120,
+      cellClass: "font-mono text-muted-foreground",
+    },
+    {
+      headerName: "Condition Summary",
+      valueGetter: ({ data }) => data ? conditionSummary(data) : "-",
+      minWidth: 190,
+      flex: 1.2,
+    },
+    {
+      headerName: "Status",
+      valueGetter: ({ data }) => data ? displayPanelStatus(data) : "-",
+      width: 130,
+    },
+    {
+      headerName: "Action",
+      width: canManage ? 230 : 150,
+      sortable: false,
+      filter: false,
+      cellRenderer: ({ data }: { data?: UnitPanelRecord }) => {
+        if (!data) return null;
+        return (
+          <div className="flex h-full items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setSelectedPanelId(data.id)}
+              className="catalog-icon-button"
+              title="View Detail"
+            >
+              <Eye className="h-3.5 w-3.5" strokeWidth={ICON_STROKE_WIDTH} />
+            </button>
+            <Link href={buildPanelDetailHref(unitId, data.id)} className="catalog-icon-button" title="View Image">
+              <ImageIcon className="h-3.5 w-3.5" strokeWidth={ICON_STROKE_WIDTH} />
+            </Link>
+            {canManage ? (
+              <>
+                <button type="button" onClick={() => openEdit(data)} className="border border-border px-2 py-0.5 text-[13px] text-muted-foreground hover:text-foreground">
+                  Edit
+                </button>
+                <button type="button" onClick={() => void handleDelete(data)} className="border border-destructive/20 px-2 py-0.5 text-[13px] text-destructive/60 hover:text-destructive">
+                  Hapus
+                </button>
+              </>
+            ) : null}
+          </div>
+        );
+      },
+    },
+  ], [canManage, unitId]);
+  const partColumnDefs = useMemo<ColDef<UnitPanelRecord>[]>(() => [
+    {
+      headerName: "Alias/Name",
+      field: "name",
+      minWidth: 230,
+      flex: 1.4,
+      cellRenderer: ({ data }: { data?: UnitPanelRecord }) => (
+        <button
+          type="button"
+          className="text-left font-medium text-foreground hover:text-app-accent-ink"
+          onClick={() => data && setSelectedPart(data)}
+        >
+          {data?.name ?? "-"}
+        </button>
+      ),
+    },
+    { headerName: "Part Number", valueGetter: () => "-", minWidth: 140, flex: 0.8 },
+    {
+      headerName: "Condition",
+      valueGetter: ({ data }) => data ? CONDITION_LABEL[data.defaultConditionType] : "-",
+      minWidth: 130,
+      flex: 0.8,
+    },
+    {
+      headerName: "Current Status",
+      valueGetter: ({ data }) => data ? displayPanelStatus(data) : "-",
+      minWidth: 140,
+      flex: 0.8,
+    },
+    {
+      headerName: "Source",
+      valueGetter: ({ data }) => data ? displaySource(data) : "-",
+      width: 120,
+    },
+    {
+      headerName: "Action",
+      width: 120,
+      sortable: false,
+      filter: false,
+      cellRenderer: ({ data }: { data?: UnitPanelRecord }) => data ? (
+        <div className="flex h-full items-center gap-1">
+          <button type="button" onClick={() => setSelectedPart(data)} className="catalog-icon-button" title="View Detail">
+            <Eye className="h-3.5 w-3.5" strokeWidth={ICON_STROKE_WIDTH} />
+          </button>
+          <Link href={buildPanelDetailHref(unitId, data.id)} className="catalog-icon-button" title="View Image">
+            <ImageIcon className="h-3.5 w-3.5" strokeWidth={ICON_STROKE_WIDTH} />
+          </Link>
+        </div>
+      ) : null,
+    },
+  ], [unitId]);
 
   const loadPanels = useCallback(async () => {
     setIsLoading(true);
@@ -569,20 +709,14 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
             <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground" strokeWidth={ICON_STROKE_WIDTH} />
             <input
               value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setCurrentPage(1);
-              }}
+              onChange={(e) => setSearch(e.target.value)}
               placeholder="Cari panel, part, section..."
               className="h-8 w-full bg-transparent text-[15px] font-mono text-foreground outline-none placeholder:text-muted-foreground"
             />
             {search && (
               <button
                 type="button"
-                onClick={() => {
-                  setSearch("");
-                  setCurrentPage(1);
-                }}
+                onClick={() => setSearch("")}
                 className="text-[14px] font-mono text-muted-foreground transition-colors hover:text-foreground">
                 ✕
               </button>
@@ -593,10 +727,7 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
           <div className="relative shrink-0">
             <select
               value={activeSection}
-              onChange={(e) => {
-                setActiveSection(e.target.value);
-                setCurrentPage(1);
-              }}
+              onChange={(e) => setActiveSection(e.target.value)}
               className="h-8 min-w-[160px] max-w-[220px] cursor-pointer appearance-none border border-border bg-card pl-3 pr-7 text-[14px] font-mono uppercase tracking-[0.08em] text-foreground outline-none focus:border-primary/40 dark:[color-scheme:dark]"
             >
               {sections.map(sec => (
@@ -651,245 +782,77 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
               {search ? `Tidak ada hasil untuk "${search}"` : "Belum ada panel pada filter ini."}
             </div>
           ) : (
-            <table className="w-full text-left">
-              <thead>
-                <tr className="sticky top-0 border-b border-border bg-background">
-                  <th className="px-4 py-2 text-[14px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Kategori</th>
-                  <th className="px-4 py-2 text-[14px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Section</th>
-                  <th className="px-4 py-2 text-[14px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Panel / Part</th>
-                  <th className="px-4 py-2 text-right text-[14px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Qty</th>
-                  <th className="px-4 py-2 text-[14px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Lokasi</th>
-                  <th className="px-4 py-2 text-[14px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Posisi</th>
-                  <th className="px-4 py-2 text-[14px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Kondisi Barang</th>
-                  <th className="px-4 py-2 text-[14px] font-mono uppercase tracking-[0.12em] text-muted-foreground text-center">Part</th>
-                  <th className="px-4 py-2 text-[14px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Aktif</th>
-                  {canManage && (
-                    <th className="px-4 py-2 text-right text-[14px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Aksi</th>
-                  )}
-                </tr>
-              </thead>
-              <tbody>
-                {paginatedRows.map((row) => (
-                  <React.Fragment key={row.id}>
-                    {/* Panel row */}
-                    <tr className="group border-b border-border transition-colors hover:bg-muted">
-                      <td className="align-middle px-4 py-1.5 text-[14px] font-mono text-muted-foreground">
-                        {row.category ?? "-"}
-                      </td>
-                      <td className="align-middle px-4 py-1.5 text-[14px] font-mono uppercase text-muted-foreground">
-                        {row.section}
-                      </td>
-                      <td className="px-4 py-1.5 align-middle">
-                        <div className="flex items-center gap-2">
-                          {/* Toggle expand */}
-                          {row.children.length > 0 ? (
-                            <button
-                              type="button"
-                              onClick={() => togglePanel(String(row.id))}
-                              className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
-                            >
-                              {expandedPanelIds.has(String(row.id))
-                                ? <ChevronDown className="h-3 w-3" strokeWidth={ICON_STROKE_WIDTH} />
-                                : <ChevronRight className="h-3 w-3" strokeWidth={ICON_STROKE_WIDTH} />
-                              }
-                            </button>
-                          ) : (
-                            <span className="w-3 shrink-0" />
-                          )}
-
-                          {/* Panel name + inline badges */}
-                          <div className="flex items-center gap-2 flex-wrap min-w-0">
-                            <p className="text-[15px] font-mono text-foreground truncate">{row.name}</p>
-                            <Link
-                              href={buildPanelDetailHref(unitId, row.id)}
-                              className="shrink-0 text-muted-foreground opacity-0 transition-[color,opacity] group-hover:opacity-100 group-focus-within:opacity-100 hover:text-app-accent-ink focus-visible:opacity-100"
-                              title="Buka detail workflow"
-                            >
-                              <ArrowUpRight className="h-3.5 w-3.5" strokeWidth={ICON_STROKE_WIDTH} />
-                            </Link>
-                            {row.countdownUsageCount > 0 && (
-                              <span className="shrink-0 border border-primary/20 px-1.5 py-0.5 text-[14px] font-mono text-app-accent-ink/60">
-                                {row.countdownUsageCount}cd
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="align-middle px-4 py-1.5 text-right font-mono text-[14px] text-muted-foreground">
-                        {row.qty}
-                      </td>
-                      <td className="align-middle px-4 py-1.5 font-mono text-[14px] text-muted-foreground">
-                        {LOCATION_LABEL[row.defaultLocationType]}
-                      </td>
-                      <td className="align-middle px-4 py-1.5 font-mono text-[14px] text-muted-foreground">
-                        {STOCK_STATUS_LABEL[row.defaultStockStatus]}
-                      </td>
-                      <td className="align-middle px-4 py-1.5 font-mono text-[14px] text-muted-foreground">
-                        {CONDITION_LABEL[row.defaultConditionType]}
-                      </td>
-                      <td className="px-4 py-1.5 text-center align-middle">
-                        <span className={`font-mono text-[15px] ${row.childCount > 0 ? "text-muted-foreground" : "text-muted-foreground"}`}>
-                          {row.childCount}
-                        </span>
-                      </td>
-                      <td className="align-middle px-4 py-1.5">
-                        {row.isActive
-                          ? <span className="border border-success/20 bg-success/[0.04] px-2 py-0.5 text-[15px] font-mono text-success">AKTIF</span>
-                          : <span className="border border-border px-2 py-0.5 text-[15px] font-mono text-muted-foreground">NONAKTIF</span>
-                        }
-                      </td>
-                      {canManage && (
-                        <td className="align-middle px-4 py-1.5 text-right">
-                          <div className="flex items-center justify-end gap-1">
-                            <button type="button" onClick={() => openEdit(row)}
-                              className="border border-border px-2 py-0.5 text-[15px] font-mono text-muted-foreground transition-colors hover:border-border hover:text-foreground">
-                              Edit
-                            </button>
-                            <button type="button" onClick={() => openCreateChild(row)}
-                              className="border border-border px-2 py-0.5 text-[15px] font-mono text-muted-foreground transition-colors hover:border-border hover:text-foreground">
-                              + Part
-                            </button>
-                            <button type="button" onClick={() => void handleDelete(row)}
-                              className="border border-destructive/20 px-2 py-0.5 text-[15px] font-mono text-destructive/50 transition-colors hover:border-destructive/40 hover:text-destructive">
-                              Hapus
-                            </button>
-                          </div>
-                        </td>
-                      )}
-                    </tr>
-
-                    {/* Child part rows */}
-                    {expandedPanelIds.has(String(row.id)) && row.children.map((child) => (
-                      <tr key={child.id} className="group border-b border-border bg-background/30 transition-colors hover:bg-muted">
-                        <td className="align-middle px-4 py-1 text-[15px] font-mono text-muted-foreground">{row.category ?? ""}</td>
-                        <td className="align-middle px-4 py-1 text-[15px] font-mono text-muted-foreground">{row.section}</td>
-                        <td className="px-4 py-1 align-middle">
-                          <div className="flex items-center gap-2" style={{ paddingLeft: "20px" }}>
-                            <span className="text-muted-foreground text-[15px] shrink-0">└</span>
-                            <span className="text-[14px] font-mono text-muted-foreground truncate">{child.name}</span>
-                            <Link
-                              href={buildPanelDetailHref(unitId, child.id)}
-                              className="shrink-0 text-muted-foreground opacity-0 transition-[color,opacity] group-hover:opacity-100 group-focus-within:opacity-100 hover:text-app-accent-ink focus-visible:opacity-100"
-                              title="Buka detail workflow"
-                            >
-                              <ArrowUpRight className="h-3 w-3" strokeWidth={ICON_STROKE_WIDTH} />
-                            </Link>
-                            {child.countdownUsageCount > 0 && (
-                              <span className="shrink-0 border border-primary/15 px-1 py-0.5 text-[14px] font-mono text-app-accent-ink/40">
-                                {child.countdownUsageCount}cd
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="align-middle px-4 py-1 text-right font-mono text-[15px] text-muted-foreground">{child.qty}</td>
-                        <td className="align-middle px-4 py-1 font-mono text-[15px] text-muted-foreground">{LOCATION_LABEL[child.defaultLocationType]}</td>
-                        <td className="align-middle px-4 py-1 font-mono text-[15px] text-muted-foreground">{STOCK_STATUS_LABEL[child.defaultStockStatus]}</td>
-                        <td className="align-middle px-4 py-1 font-mono text-[15px] text-muted-foreground">{CONDITION_LABEL[child.defaultConditionType]}</td>
-                        <td className="align-middle px-4 py-1 text-center">
-                          <span className="border border-border px-1.5 py-0.5 text-[14px] font-mono text-muted-foreground">PART</span>
-                        </td>
-                        <td className="align-middle px-4 py-1">
-                          {child.isActive
-                            ? <span className="border border-success/15 px-1.5 py-0.5 text-[14px] font-mono text-success/60">AKTIF</span>
-                            : <span className="border border-border px-1.5 py-0.5 text-[14px] font-mono text-muted-foreground">NONAKTIF</span>
-                          }
-                        </td>
-                        {canManage && (
-                          <td className="align-middle px-4 py-1 text-right">
-                            <div className="flex items-center justify-end gap-1">
-                              <button type="button" onClick={() => openEdit(child)}
-                                className="border border-border px-1.5 py-0.5 text-[14px] font-mono text-muted-foreground transition-colors hover:text-foreground">
-                                Edit
-                              </button>
-                              <button type="button" onClick={() => void handleDelete(child)}
-                                className="border border-destructive/15 px-1.5 py-0.5 text-[14px] font-mono text-destructive/40 transition-colors hover:text-destructive">
-                                Hapus
-                              </button>
-                            </div>
-                          </td>
-                        )}
-                      </tr>
-                    ))}
-                  </React.Fragment>
-                ))}
-              </tbody>
-            </table>
-          )}
-
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between border-t border-border bg-background px-4 py-2">
-              <span className="font-mono text-[14px] text-muted-foreground">
-                {filteredRows.length} panel · hal {currentPage} dari {totalPages}
-              </span>
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => setCurrentPage(1)}
-                  disabled={currentPage === 1}
-                  className="border border-border px-2 py-1 text-[14px] font-mono text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-20"
-                >
-                  «
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                  disabled={currentPage === 1}
-                  className="border border-border px-2 py-1 text-[14px] font-mono text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-20"
-                >
-                  ‹
-                </button>
-
-                {Array.from({ length: totalPages }, (_, i) => i + 1)
-                  .filter(page => {
-                    if (totalPages <= 5) return true;
-                    if (page === 1 || page === totalPages) return true;
-                    if (Math.abs(page - currentPage) <= 1) return true;
-                    return false;
-                  })
-                  .reduce<(number | "...")[]>((acc, page, idx, arr) => {
-                    if (idx > 0 && typeof arr[idx - 1] === "number" && page - arr[idx - 1] > 1) {
-                      acc.push("...");
-                    }
-                    acc.push(page);
-                    return acc;
-                  }, [])
-                  .map((item, idx) =>
-                    item === "..." ? (
-                      <span key={`ellipsis-${idx}`} className="px-2 text-[14px] font-mono text-muted-foreground">...</span>
-                    ) : (
+            <div className="space-y-4 p-4">
+              {selectedPanel ? (
+                <div className="border border-border bg-background">
+                  <div className="flex items-start justify-between gap-4 border-b border-border px-4 py-3">
+                    <div>
+                      <p className="text-[13px] font-mono uppercase tracking-[0.12em] text-muted-foreground">
+                        {displayCategory(selectedPanel.category)} &gt; {selectedPanel.name}
+                      </p>
+                      <h4 className="mt-1 text-[18px] font-semibold text-foreground">{selectedPanel.name}</h4>
+                      <p className="mt-1 text-[14px] text-muted-foreground">
+                        {selectedPanel.childCount} part · {conditionSummary(selectedPanel)}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      {canManage ? (
+                        <button
+                          type="button"
+                          onClick={() => openCreateChild(selectedPanel)}
+                          className="inline-flex items-center gap-1.5 border border-primary/30 bg-primary/[0.04] px-2 py-1 text-[14px] font-mono uppercase text-app-accent-ink hover:bg-primary/10"
+                        >
+                          <Plus className="h-3 w-3" strokeWidth={ICON_STROKE_WIDTH} /> Add Part
+                        </button>
+                      ) : null}
                       <button
-                        key={item}
                         type="button"
-                        onClick={() => setCurrentPage(item)}
-                        className={`border px-2.5 py-1 text-[14px] font-mono transition-colors ${
-                          currentPage === item
-                            ? "border-primary/40 bg-primary/[0.06] text-app-accent-ink"
-                            : "border-border text-muted-foreground hover:text-foreground"
-                        }`}
+                        onClick={() => setSelectedPanelId(null)}
+                        className="border border-border px-3 py-1 text-[14px] font-mono uppercase tracking-[0.08em] text-muted-foreground hover:text-foreground"
                       >
-                        {item}
+                        Kembali
                       </button>
-                    ),
-                  )
-                }
-
-                <button
-                  type="button"
-                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                  disabled={currentPage === totalPages}
-                  className="border border-border px-2 py-1 text-[14px] font-mono text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-20"
-                >
-                  ›
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setCurrentPage(totalPages)}
-                  disabled={currentPage === totalPages}
-                  className="border border-border px-2 py-1 text-[14px] font-mono text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-20"
-                >
-                  »
-                </button>
-              </div>
+                    </div>
+                  </div>
+                  <div className="ag-theme-alpine sms-ag-grid h-[28rem] w-full">
+                    <AgGridReact<UnitPanelRecord>
+                      rowData={selectedPanel.children}
+                      columnDefs={partColumnDefs}
+                      defaultColDef={{
+                        sortable: true,
+                        resizable: true,
+                        filter: true,
+                        suppressHeaderMenuButton: true,
+                      }}
+                      getRowId={({ data }) => String(data.id)}
+                      rowHeight={44}
+                      suppressCellFocus={false}
+                      suppressMovableColumns
+                      overlayNoRowsTemplate="<span class='text-muted-foreground'>Belum ada part pada panel ini.</span>"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div className="ag-theme-alpine sms-ag-grid h-[34rem] w-full border border-border">
+                  <AgGridReact<UnitPanelRecord>
+                    rowData={filteredRows}
+                    columnDefs={panelColumnDefs}
+                    defaultColDef={{
+                      sortable: true,
+                      resizable: true,
+                      filter: true,
+                      suppressHeaderMenuButton: true,
+                    }}
+                    getRowId={({ data }) => String(data.id)}
+                    rowHeight={46}
+                    pagination
+                    paginationPageSize={20}
+                    suppressCellFocus={false}
+                    suppressMovableColumns
+                    onRowDoubleClicked={({ data }) => data && setSelectedPanelId(data.id)}
+                  />
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -1171,6 +1134,64 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
         )}
 
       </div>
+      {selectedPart ? (
+        <div className="fixed inset-y-0 right-0 z-40 flex w-full max-w-md flex-col border-l border-border bg-card shadow-2xl">
+          <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
+            <div>
+              <p className="text-[13px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Part Detail</p>
+              <h4 className="mt-1 text-[18px] font-semibold text-foreground">{selectedPart.name}</h4>
+            </div>
+            <button
+              type="button"
+              onClick={() => setSelectedPart(null)}
+              className="catalog-icon-button"
+              title="Tutup"
+            >
+              <X className="h-3.5 w-3.5" strokeWidth={ICON_STROKE_WIDTH} />
+            </button>
+          </div>
+          <div className="flex-1 space-y-4 overflow-auto px-5 py-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="border border-border bg-background px-3 py-2">
+                <p className="text-[12px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Part Number</p>
+                <p className="mt-1 text-[14px] text-foreground">-</p>
+              </div>
+              <div className="border border-border bg-background px-3 py-2">
+                <p className="text-[12px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Source</p>
+                <p className="mt-1 text-[14px] text-foreground">{displaySource(selectedPart)}</p>
+              </div>
+              <div className="border border-border bg-background px-3 py-2">
+                <p className="text-[12px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Condition</p>
+                <p className="mt-1 text-[14px] text-foreground">{CONDITION_LABEL[selectedPart.defaultConditionType]}</p>
+              </div>
+              <div className="border border-border bg-background px-3 py-2">
+                <p className="text-[12px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Status</p>
+                <p className="mt-1 text-[14px] text-foreground">{displayPanelStatus(selectedPart)}</p>
+              </div>
+            </div>
+            <div className="border border-border bg-background px-3 py-3">
+              <p className="text-[12px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Image</p>
+              <p className="mt-2 text-[14px] text-muted-foreground">
+                Foto operational dibuka dari detail Master Panel existing.
+              </p>
+              <div className="mt-3 flex gap-2">
+                <Link
+                  href={buildPanelDetailHref(unitId, selectedPart.id)}
+                  className="inline-flex items-center gap-1.5 border border-primary/30 bg-primary/[0.04] px-3 py-1.5 text-[13px] font-mono uppercase tracking-[0.08em] text-app-accent-ink hover:bg-primary/10"
+                >
+                  <Eye className="h-3.5 w-3.5" strokeWidth={ICON_STROKE_WIDTH} /> View Detail
+                </Link>
+                <Link
+                  href={buildPanelDetailHref(unitId, selectedPart.id)}
+                  className="inline-flex items-center gap-1.5 border border-border px-3 py-1.5 text-[13px] font-mono uppercase tracking-[0.08em] text-muted-foreground hover:text-foreground"
+                >
+                  <ImageIcon className="h-3.5 w-3.5" strokeWidth={ICON_STROKE_WIDTH} /> View Image
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }
