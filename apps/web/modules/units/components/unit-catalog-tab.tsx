@@ -1234,8 +1234,7 @@ function CatalogPanelPrintView({
             <col className="w-[5%]" />
             <col className="w-[7%]" />
             <col className="w-[5%]" />
-            <col className="w-[6%]" />
-            <col className="w-[7%]" />
+            <col className="w-[13%]" />
           </colgroup>
           <thead>
             <tr>
@@ -1247,7 +1246,6 @@ function CatalogPanelPrintView({
               <th rowSpan={2}>Qty Opname</th>
               <th colSpan={3}>Status</th>
               <th colSpan={4}>Kondisi</th>
-              <th rowSpan={2}>Lokasi</th>
               <th rowSpan={2}>Keterangan</th>
             </tr>
             <tr>
@@ -1276,7 +1274,6 @@ function CatalogPanelPrintView({
                 <td>{printCheck(row.conditionStatus === "RESTORE")}</td>
                 <td>{printCheck(row.conditionStatus === "NOT_USABLE")}</td>
                 <td>{printCheck(row.isRestoration)}</td>
-                <td>{parseCatalogPositionMarker(row.position) ? "Ditandai" : ""}</td>
                 <td />
               </tr>
             ))}

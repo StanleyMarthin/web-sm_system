@@ -449,7 +449,7 @@
   body.catalog-panel-printing .catalog-print-table td:nth-child(4),
   body.catalog-panel-printing .catalog-print-table td:nth-child(5),
   body.catalog-panel-printing .catalog-print-table td:nth-child(6),
-  body.catalog-panel-printing .catalog-print-table td:nth-child(n + 7):nth-child(-n + 14) {
+  body.catalog-panel-printing .catalog-print-table td:nth-child(n + 7):nth-child(-n + 13) {
     text-align: center;
   }
 }
