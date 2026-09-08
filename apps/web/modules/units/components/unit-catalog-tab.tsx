@@ -1177,7 +1177,7 @@ export function UnitCatalogTab({ unitId, unitName, canManageCatalog }: UnitCatal
 }
 
 function printCheck(active: boolean) {
-  return active ? "✓" : "";
+  return <span className={active ? "catalog-print-checkbox is-checked" : "catalog-print-checkbox"} />;
 }
 
 function CatalogPanelPrintView({
@@ -1222,19 +1222,19 @@ function CatalogPanelPrintView({
         <table className="catalog-print-table">
           <colgroup>
             <col className="w-[3%]" />
-            <col className="w-[12%]" />
-            <col className="w-[23%]" />
+            <col className="w-[13%]" />
+            <col className="w-[27%]" />
             <col className="w-[5%]" />
             <col className="w-[5%]" />
             <col className="w-[6%]" />
-            <col className="w-[4%]" />
-            <col className="w-[4%]" />
-            <col className="w-[7%]" />
+            <col className="w-[3%]" />
+            <col className="w-[3%]" />
+            <col className="w-[6%]" />
+            <col className="w-[3%]" />
             <col className="w-[4%]" />
             <col className="w-[5%]" />
-            <col className="w-[7%]" />
-            <col className="w-[5%]" />
-            <col className="w-[10%]" />
+            <col className="w-[4%]" />
+            <col className="w-[13%]" />
           </colgroup>
           <thead>
             <tr>
