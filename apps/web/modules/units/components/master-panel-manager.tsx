@@ -273,18 +273,10 @@ function getGridContext<T>(params: ICellRendererParams<T>): MasterPanelGridConte
 function ComponentNameRenderer(params: ICellRendererParams<MasterPanelComponentGroup>) {
   const data = params.data;
   if (!data) return null;
-  const context = getGridContext(params);
   return (
-    <button
-      type="button"
-      className="text-left font-semibold text-foreground hover:text-app-accent-ink"
-      onClick={(event) => {
-        event.stopPropagation();
-        context.onToggleComponent(data);
-      }}
-    >
+    <span className="block text-left font-semibold text-foreground">
       {data.componentName}
-    </button>
+    </span>
   );
 }
 
@@ -293,35 +285,19 @@ function ComponentExpandRenderer(params: ICellRendererParams<MasterPanelComponen
   if (!data) return null;
   const context = getGridContext(params);
   return (
-    <button
-      type="button"
-      className="catalog-icon-button px-2 text-[12px] font-mono uppercase"
-      title="Buka panel"
-      onClick={(event) => {
-        event.stopPropagation();
-        context.onToggleComponent(data);
-      }}
-    >
+    <span className="inline-flex h-7 items-center border border-border px-2 text-[12px] font-mono uppercase text-muted-foreground">
       {context.expandedComponentKey === data.key ? "Tutup" : "Buka"}
-    </button>
+    </span>
   );
 }
 
 function PanelNameRenderer(params: ICellRendererParams<MasterPanelPanelGroup>) {
   const data = params.data;
   if (!data) return null;
-  const context = getGridContext(params);
   return (
-    <button
-      type="button"
-      className="text-left font-medium text-foreground hover:text-app-accent-ink"
-      onClick={(event) => {
-        event.stopPropagation();
-        context.onTogglePanel(data);
-      }}
-    >
+    <span className="block text-left font-medium text-foreground">
       {data.panelName}
-    </button>
+    </span>
   );
 }
 
@@ -330,37 +306,21 @@ function PanelExpandRenderer(params: ICellRendererParams<MasterPanelPanelGroup>)
   if (!data) return null;
   const context = getGridContext(params);
   return (
-    <button
-      type="button"
-      className="catalog-icon-button px-2 text-[12px] font-mono uppercase"
-      title="Buka part"
-      onClick={(event) => {
-        event.stopPropagation();
-        context.onTogglePanel(data);
-      }}
-    >
+    <span className="inline-flex h-7 items-center border border-border px-2 text-[12px] font-mono uppercase text-muted-foreground">
       {context.expandedPanelKey === data.key ? "Tutup" : "Buka"}
-    </button>
+    </span>
   );
 }
 
 function PartNameRenderer(params: ICellRendererParams<UnitPanelRecord>) {
   const data = params.data;
   if (!data) return null;
-  const context = getGridContext(params);
   const aliasName = data.aliasName?.trim();
   return (
-    <button
-      type="button"
-      className="block w-full text-left text-foreground hover:text-app-accent-ink"
-      onClick={(event) => {
-        event.stopPropagation();
-        context.onOpenPart(data);
-      }}
-    >
+    <span className="block w-full text-left text-foreground">
       <span className="block truncate font-medium">{aliasName || data.name}</span>
       {aliasName ? <span className="block truncate text-[12px] text-muted-foreground">{data.name}</span> : null}
-    </button>
+    </span>
   );
 }
 
