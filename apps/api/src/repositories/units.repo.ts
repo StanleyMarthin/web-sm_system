@@ -209,6 +209,13 @@ interface UnitPanelRow extends RowDataPacket {
   code: string | null;
   partNumber: string | null;
   sourcePart: "CATALOG" | "ADDITIONAL" | null;
+  initialCondition: string | null;
+  currentStatus: string | null;
+  location: string | null;
+  notes: string | null;
+  totalJobdesc: number | string | null;
+  totalHours: number | string | null;
+  remainingHours: number | string | null;
   parentId: number | null;
   sourceGeneralId: number | null;
   section: string;
@@ -470,6 +477,13 @@ function mapUnitPanelRecord(row: UnitPanelRow): UnitPanelRecord {
     code: toNullableText(row.code),
     partNumber: toNullableText(row.partNumber),
     sourcePart: row.sourcePart === "CATALOG" || row.sourcePart === "ADDITIONAL" ? row.sourcePart : null,
+    initialCondition: toNullableText(row.initialCondition),
+    currentStatus: toNullableText(row.currentStatus),
+    location: toNullableText(row.location),
+    notes: toNullableText(row.notes),
+    totalJobdesc: Number(row.totalJobdesc ?? 0),
+    totalHours: Number(row.totalHours ?? 0),
+    remainingHours: Number(row.remainingHours ?? 0),
     sourceGeneralId: null,
     parentId: null,
     nodeType: "PART",
@@ -1969,6 +1983,13 @@ export class UnitsRepository {
           uc.code AS code,
           mp.part_number AS partNumber,
           mp.source_part AS sourcePart,
+          mp.initial_condition AS initialCondition,
+          mp.current_status AS currentStatus,
+          mp.location AS location,
+          mp.notes AS notes,
+          COALESCE(countdown_summary.totalJobdesc, 0) AS totalJobdesc,
+          COALESCE(countdown_summary.totalHours, 0) AS totalHours,
+          COALESCE(countdown_summary.remainingHours, 0) AS remainingHours,
           NULL AS parentId,
           NULL AS sourceGeneralId,
           COALESCE(NULLIF(TRIM(mp.panel_name), ''), NULLIF(TRIM(mp.component_name), ''), 'Tanpa Panel') AS section,
@@ -1980,7 +2001,7 @@ export class UnitsRepository {
           ${masterPanelLocationSql("mp")} AS defaultLocationType,
           ${masterPanelStockStatusSql("mp")} AS defaultStockStatus,
           ${masterPanelConditionSql("mp")} AS defaultConditionType,
-          COUNT(DISTINCT cd.id) AS countdownUsageCount,
+          COALESCE(countdown_summary.totalJobdesc, 0) AS countdownUsageCount,
           COUNT(DISTINCT cps.id) AS statusUsageCount,
           0 AS childCount,
           DATE_FORMAT(mp.created_at, '%Y-%m-%d %H:%i:%s') AS createdAt,
@@ -1989,7 +2010,15 @@ export class UnitsRepository {
         LEFT JOIN unit_catalog uc
           ON mp.source_part = 'CATALOG'
          AND uc.id = mp.part_id
-        LEFT JOIN sm_jobdesc_countdown cd ON cd.panel_id = mp.id
+        LEFT JOIN (
+          SELECT
+            panel_id,
+            COUNT(*) AS totalJobdesc,
+            ROUND(SUM(COALESCE(target_hours_revised, target_hours_initial + time_extension_hours, target_hours_initial, 0)), 2) AS totalHours,
+            ROUND(SUM(COALESCE(remaining_hours, 0)), 2) AS remainingHours
+          FROM sm_jobdesc_countdown
+          GROUP BY panel_id
+        ) countdown_summary ON countdown_summary.panel_id = mp.id
         LEFT JOIN sm_car_panel_status cps
           ON cps.panel_id = mp.id
          AND cps.car_id = mp.car_id
@@ -2003,13 +2032,17 @@ export class UnitsRepository {
           uc.code,
           mp.part_number,
           mp.source_part,
+          mp.initial_condition,
+          mp.current_status,
+          mp.location,
+          mp.notes,
+          countdown_summary.totalJobdesc,
+          countdown_summary.totalHours,
+          countdown_summary.remainingHours,
           mp.panel_name,
           mp.component_name,
           mp.name_part,
           ${schema.hasQty ? "mp.qty," : ""}
-          mp.location,
-          mp.current_status,
-          mp.initial_condition,
           mp.created_at,
           mp.updated_at
         LIMIT 1
@@ -2040,6 +2073,13 @@ export class UnitsRepository {
           uc.code AS code,
           mp.part_number AS partNumber,
           mp.source_part AS sourcePart,
+          mp.initial_condition AS initialCondition,
+          mp.current_status AS currentStatus,
+          mp.location AS location,
+          mp.notes AS notes,
+          COALESCE(countdown_summary.totalJobdesc, 0) AS totalJobdesc,
+          COALESCE(countdown_summary.totalHours, 0) AS totalHours,
+          COALESCE(countdown_summary.remainingHours, 0) AS remainingHours,
           NULL AS parentId,
           NULL AS sourceGeneralId,
           COALESCE(NULLIF(TRIM(mp.panel_name), ''), NULLIF(TRIM(mp.component_name), ''), 'Tanpa Panel') AS section,
@@ -2051,7 +2091,7 @@ export class UnitsRepository {
           ${masterPanelLocationSql("mp")} AS defaultLocationType,
           ${masterPanelStockStatusSql("mp")} AS defaultStockStatus,
           ${masterPanelConditionSql("mp")} AS defaultConditionType,
-          COUNT(DISTINCT cd.id) AS countdownUsageCount,
+          COALESCE(countdown_summary.totalJobdesc, 0) AS countdownUsageCount,
           COUNT(DISTINCT cps.id) AS statusUsageCount,
           0 AS childCount,
           DATE_FORMAT(mp.created_at, '%Y-%m-%d %H:%i:%s') AS createdAt,
@@ -2060,7 +2100,15 @@ export class UnitsRepository {
         LEFT JOIN unit_catalog uc
           ON mp.source_part = 'CATALOG'
          AND uc.id = mp.part_id
-        LEFT JOIN sm_jobdesc_countdown cd ON cd.panel_id = mp.id
+        LEFT JOIN (
+          SELECT
+            panel_id,
+            COUNT(*) AS totalJobdesc,
+            ROUND(SUM(COALESCE(target_hours_revised, target_hours_initial + time_extension_hours, target_hours_initial, 0)), 2) AS totalHours,
+            ROUND(SUM(COALESCE(remaining_hours, 0)), 2) AS remainingHours
+          FROM sm_jobdesc_countdown
+          GROUP BY panel_id
+        ) countdown_summary ON countdown_summary.panel_id = mp.id
         LEFT JOIN sm_car_panel_status cps
           ON cps.panel_id = mp.id
          AND cps.car_id = mp.car_id
@@ -2073,13 +2121,17 @@ export class UnitsRepository {
           uc.code,
           mp.part_number,
           mp.source_part,
+          mp.initial_condition,
+          mp.current_status,
+          mp.location,
+          mp.notes,
+          countdown_summary.totalJobdesc,
+          countdown_summary.totalHours,
+          countdown_summary.remainingHours,
           mp.panel_name,
           mp.component_name,
           mp.name_part,
           ${schema.hasQty ? "mp.qty," : ""}
-          mp.location,
-          mp.current_status,
-          mp.initial_condition,
           mp.created_at,
           mp.updated_at
         ORDER BY
