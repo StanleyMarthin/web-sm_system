@@ -206,6 +206,9 @@ interface UnitPanelRow extends RowDataPacket {
   carId: string;
   componentId: number | null;
   catalogPanelId: number | null;
+  code: string | null;
+  partNumber: string | null;
+  sourcePart: "CATALOG" | "ADDITIONAL" | null;
   parentId: number | null;
   sourceGeneralId: number | null;
   section: string;
@@ -464,6 +467,9 @@ function mapUnitPanelRecord(row: UnitPanelRow): UnitPanelRecord {
     carId: row.carId,
     componentId: row.componentId == null ? null : Number(row.componentId),
     catalogPanelId: row.catalogPanelId == null ? null : Number(row.catalogPanelId),
+    code: toNullableText(row.code),
+    partNumber: toNullableText(row.partNumber),
+    sourcePart: row.sourcePart === "CATALOG" || row.sourcePart === "ADDITIONAL" ? row.sourcePart : null,
     sourceGeneralId: null,
     parentId: null,
     nodeType: "PART",
@@ -1960,6 +1966,9 @@ export class UnitsRepository {
           mp.car_id AS carId,
           mp.component_id AS componentId,
           mp.panel_id AS catalogPanelId,
+          uc.code AS code,
+          mp.part_number AS partNumber,
+          mp.source_part AS sourcePart,
           NULL AS parentId,
           NULL AS sourceGeneralId,
           COALESCE(NULLIF(TRIM(mp.panel_name), ''), NULLIF(TRIM(mp.component_name), ''), 'Tanpa Panel') AS section,
@@ -1977,6 +1986,9 @@ export class UnitsRepository {
           DATE_FORMAT(mp.created_at, '%Y-%m-%d %H:%i:%s') AS createdAt,
           DATE_FORMAT(mp.updated_at, '%Y-%m-%d %H:%i:%s') AS updatedAt
         FROM master_panels mp
+        LEFT JOIN unit_catalog uc
+          ON mp.source_part = 'CATALOG'
+         AND uc.id = mp.part_id
         LEFT JOIN sm_jobdesc_countdown cd ON cd.panel_id = mp.id
         LEFT JOIN sm_car_panel_status cps
           ON cps.panel_id = mp.id
@@ -1988,6 +2000,9 @@ export class UnitsRepository {
           mp.car_id,
           mp.component_id,
           mp.panel_id,
+          uc.code,
+          mp.part_number,
+          mp.source_part,
           mp.panel_name,
           mp.component_name,
           mp.name_part,
@@ -2022,6 +2037,9 @@ export class UnitsRepository {
           mp.car_id AS carId,
           mp.component_id AS componentId,
           mp.panel_id AS catalogPanelId,
+          uc.code AS code,
+          mp.part_number AS partNumber,
+          mp.source_part AS sourcePart,
           NULL AS parentId,
           NULL AS sourceGeneralId,
           COALESCE(NULLIF(TRIM(mp.panel_name), ''), NULLIF(TRIM(mp.component_name), ''), 'Tanpa Panel') AS section,
@@ -2039,6 +2057,9 @@ export class UnitsRepository {
           DATE_FORMAT(mp.created_at, '%Y-%m-%d %H:%i:%s') AS createdAt,
           DATE_FORMAT(mp.updated_at, '%Y-%m-%d %H:%i:%s') AS updatedAt
         FROM master_panels mp
+        LEFT JOIN unit_catalog uc
+          ON mp.source_part = 'CATALOG'
+         AND uc.id = mp.part_id
         LEFT JOIN sm_jobdesc_countdown cd ON cd.panel_id = mp.id
         LEFT JOIN sm_car_panel_status cps
           ON cps.panel_id = mp.id
@@ -2049,6 +2070,9 @@ export class UnitsRepository {
           mp.car_id,
           mp.component_id,
           mp.panel_id,
+          uc.code,
+          mp.part_number,
+          mp.source_part,
           mp.panel_name,
           mp.component_name,
           mp.name_part,

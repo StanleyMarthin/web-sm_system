@@ -19,6 +19,9 @@ export interface UnitPanelRecordShape {
   carId: string;
   componentId: number | null;
   catalogPanelId: number | null;
+  code?: string | null;
+  partNumber?: string | null;
+  sourcePart?: "CATALOG" | "ADDITIONAL" | null;
   sourceGeneralId: number | null;
   parentId: number | null;
   nodeType: "PANEL" | "PART";
@@ -45,6 +48,9 @@ export const unitPanelRecordSchema: z.ZodType<UnitPanelRecordShape> = z.lazy(() 
     carId: z.string(),
     componentId: z.number().int().positive().nullable(),
     catalogPanelId: z.number().int().positive().nullable(),
+    code: z.string().nullable().optional(),
+    partNumber: z.string().nullable().optional(),
+    sourcePart: z.enum(["CATALOG", "ADDITIONAL"]).nullable().optional(),
     sourceGeneralId: z.number().int().positive().nullable(),
     parentId: z.number().int().positive().nullable(),
     nodeType: unitPanelNodeTypeSchema,

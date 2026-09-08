@@ -15,6 +15,7 @@ import {
   type SaveCatalogPanelsRequest,
   type CatalogWorkspace,
   type CreatePanelJobdescsRequest,
+  type CreateAdditionalCatalogItemRequest,
   type OpenCatalogPanelRequest,
   type SaveCatalogWorkspaceRequest,
   type UpdateCatalogSurveyRequest,
@@ -83,6 +84,27 @@ const jobdescsEnvelopeSchema = z.object({
   success: z.boolean(),
   message: z.string(),
   data: z.object({ jobdescs: z.array(z.record(z.string(), z.unknown())) }),
+});
+
+const additionalCreateEnvelopeSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+  data: z.object({
+    item: z.object({
+      id: z.number().int().positive(),
+    }),
+  }),
+});
+
+const additionalPromoteEnvelopeSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+  data: z.object({
+    result: z.object({
+      panelId: z.number().int().positive(),
+      alreadyPromoted: z.boolean(),
+    }),
+  }),
 });
 
 interface ApiFailure {
@@ -264,6 +286,31 @@ export async function createUnitCatalogPanelJobdescs(unitId: string, panelId: nu
     jobdescsEnvelopeSchema,
     { method: "POST", body: JSON.stringify(body) },
   );
+}
+
+export async function createUnitAdditionalMasterPanel(unitId: string, input: CreateAdditionalCatalogItemRequest) {
+  const createResult = await requestJson(
+    `/api/units/${encodeURIComponent(unitId)}/catalog/additional`,
+    additionalCreateEnvelopeSchema,
+    { method: "POST", body: JSON.stringify(input) },
+  );
+  if (!createResult.success) return createResult;
+
+  const promoteResult = await requestJson(
+    `/api/units/${encodeURIComponent(unitId)}/catalog/additional/${createResult.payload.data.item.id}/promote`,
+    additionalPromoteEnvelopeSchema,
+    { method: "POST", body: JSON.stringify({}) },
+  );
+  if (!promoteResult.success) return promoteResult;
+
+  return {
+    success: true as const,
+    result: {
+      itemId: createResult.payload.data.item.id,
+      panelId: promoteResult.payload.data.result.panelId,
+      alreadyPromoted: promoteResult.payload.data.result.alreadyPromoted,
+    },
+  };
 }
 
 export type { CatalogItem, CatalogOverview, CatalogWorkspace };
