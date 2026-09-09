@@ -12,6 +12,7 @@ import type {
   CreateUnitPanelRequest,
   RenameUnitPanelCategoryRequest,
   UnitPanelCollection,
+  UnitPanelDetail,
   UnitPanelGeneralCollection,
   UnitPanelRecord,
   UpdateUnitPanelRequest,
@@ -39,6 +40,7 @@ export interface UnitsService {
   updateUnit(session: WebSession, unitId: string, input: UpdateUnitRequest): Promise<UnitBoardRow>;
   deleteUnit(session: WebSession, unitId: string): Promise<{ deletedUnitId: string }>;
   getUnitPanels(session: WebSession, unitId: string): Promise<UnitPanelCollection | null>;
+  getUnitPanelDetail(session: WebSession, unitId: string, panelId: number): Promise<UnitPanelDetail | null>;
   getGeneralUnitPanels(session: WebSession, query?: { q?: string; nodeType?: "PANEL" | "PART"; limit?: number }): Promise<UnitPanelGeneralCollection>;
   createUnitPanel(session: WebSession, unitId: string, input: CreateUnitPanelRequest): Promise<UnitPanelRecord>;
   updateUnitPanel(session: WebSession, unitId: string, panelId: number, input: UpdateUnitPanelRequest): Promise<UnitPanelRecord>;
@@ -168,6 +170,15 @@ export class DefaultUnitsService implements UnitsService {
       employeeId: session.user.employeeId,
       scope: session.user.scope,
       unitId,
+    });
+  }
+
+  async getUnitPanelDetail(session: WebSession, unitId: string, panelId: number): Promise<UnitPanelDetail | null> {
+    return this.repository.findUnitPanelDetail({
+      employeeId: session.user.employeeId,
+      scope: session.user.scope,
+      unitId,
+      panelId,
     });
   }
 

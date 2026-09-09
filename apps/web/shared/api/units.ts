@@ -17,6 +17,7 @@ import {
   unitPanelCategoryRenameEnvelopeSchema,
   unitPanelCollectionEnvelopeSchema,
   unitPanelDeleteEnvelopeSchema,
+  unitPanelDetailEnvelopeSchema,
   unitPanelGeneralCollectionEnvelopeSchema,
   unitPanelMutationEnvelopeSchema,
   type CreateUnitPanelRequest,
@@ -197,6 +198,32 @@ export async function fetchUnitBom(cookieHeader: string, unitId: string) {
 
     return {
       payload: unitBomWorkspaceEnvelopeSchema.parse(await response.json()),
+      status: response.status,
+    };
+  } catch {
+    return {
+      payload: null,
+      status: 503,
+    };
+  }
+}
+
+export async function fetchUnitPanelDetail(cookieHeader: string, unitId: string, panelId: number) {
+  try {
+    const response = await fetch(
+      `${getApiBaseUrl()}/api/units/${encodeURIComponent(unitId)}/master-panels/${panelId}`,
+      buildServerOrBrowserRequestInit(cookieHeader),
+    );
+
+    if (!response.ok) {
+      return {
+        payload: null,
+        status: response.status,
+      };
+    }
+
+    return {
+      payload: unitPanelDetailEnvelopeSchema.parse(await response.json()),
       status: response.status,
     };
   } catch {

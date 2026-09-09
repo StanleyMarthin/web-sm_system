@@ -1,14 +1,20 @@
 "use client";
 
-import type { UnitPanelRecord } from "@smsystem/contracts/unit-panel";
-import type { ColDef, ICellRendererParams } from "ag-grid-community";
+import type { UnitPanelDetail, UnitPanelRecord, UpdateUnitPanelRequest } from "@smsystem/contracts/unit-panel";
+import type { CellKeyDownEvent, CellValueChangedEvent, ColDef, ICellRendererParams, SelectionChangedEvent } from "ag-grid-community";
 import { AllCommunityModule, ModuleRegistry } from "ag-grid-community";
 import { AgGridReact } from "ag-grid-react";
-import { Image as ImageIcon, Plus, RefreshCw, Search, X } from "lucide-react";
-import Link from "next/link";
+import { ArrowLeft, ChevronRight, Image as ImageIcon, ListPlus, Plus, RefreshCw, Search, X } from "lucide-react";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { CountdownBoardForm, type CountdownFormValues } from "@/modules/countdown/components/forms/countdown-board-form";
+import { createCountdownRecord } from "@/shared/api/countdown";
 import { createUnitAdditionalMasterPanel } from "@/shared/api/unit-catalog";
-import { fetchUnitPanels } from "@/shared/api/units";
+import { deleteUnitPanel, fetchUnitPanelDetail, fetchUnitPanels, updateUnitPanel } from "@/shared/api/units";
+import { parseHHMMToDecimal } from "@/shared/format/time";
+import { MasterPanelActivityGrid } from "./master-panel-activity-grid";
+import { MasterPanelActivityMenu } from "./master-panel-activity-menu";
+import { MasterPanelPhotoGallery } from "./master-panel-photo-gallery";
+import { MasterPanelWoGrid } from "./master-panel-wo-grid";
 
 const ICON_STROKE_WIDTH = 2.5;
 
@@ -21,6 +27,7 @@ function displayCategory(value: string | null | undefined): string {
 interface MasterPanelManagerProps {
   unitId: string;
   canManage: boolean;
+  canCreateWo: boolean;
   initialRows?: UnitPanelRecord[];
 }
 
@@ -30,6 +37,20 @@ interface AdditionalFormState {
   itemName: string;
   partNumber: string;
   deskription: string;
+}
+
+type MasterPartGridRow = UnitPanelRecord & {
+  clientId: string;
+  isDraft?: boolean;
+};
+
+type PartEditableField = "name" | "partNumber" | "initialCondition" | "currentStatus" | "qty";
+
+const PART_PASTE_FIELDS: PartEditableField[] = ["name", "partNumber", "initialCondition", "currentStatus", "qty"];
+
+function withPartValue<T extends MasterPartGridRow>(row: T, field: PartEditableField, value: unknown): T {
+  const nextValue = field === "qty" ? toPositiveQty(value) : String(value ?? "");
+  return { ...row, [field]: nextValue };
 }
 
 const EMPTY_ADDITIONAL_FORM: AdditionalFormState = {
@@ -46,25 +67,56 @@ const CONDITION_LABEL: Record<UnitPanelRecord["defaultConditionType"], string> =
   RESTORE: "Restore",
 };
 
-function buildPanelDetailHref(unitId: string, recordId: number): string {
-  return `/units/${unitId}/panels/panel-${recordId}`;
-}
-
-function displaySource(record: UnitPanelRecord): string {
-  return record.sourcePart ?? "-";
-}
-
-function displayText(value: string | number | null | undefined): string {
-  if (value === null || value === undefined || value === "") return "-";
-  return String(value);
-}
-
 function displayCondition(record: UnitPanelRecord): string {
   return record.initialCondition ?? CONDITION_LABEL[record.defaultConditionType] ?? "-";
 }
 
 function displayCurrentStatus(record: UnitPanelRecord): string {
   return record.currentStatus ?? displayPanelStatus(record);
+}
+
+function toNullable(value: string | null | undefined): string | null {
+  const normalized = value?.trim();
+  return normalized ? normalized : null;
+}
+
+function toPositiveQty(value: unknown): number {
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) && numberValue > 0 ? numberValue : 1;
+}
+
+function recordToUpdateInput(record: UnitPanelRecord): UpdateUnitPanelRequest {
+  return {
+    section: record.section,
+    name: record.name,
+    category: record.category,
+    aliasName: toNullable(record.aliasName),
+    partNumber: toNullable(record.partNumber),
+    initialCondition: toNullable(record.initialCondition ?? record.defaultConditionType),
+    currentStatus: toNullable(record.currentStatus ?? record.defaultStockStatus),
+    location: toNullable(record.location ?? record.defaultLocationType),
+    notes: toNullable(record.notes),
+    qty: toPositiveQty(record.qty),
+    sortOrder: record.sortOrder,
+    defaultLocationType: record.defaultLocationType,
+    defaultStockStatus: record.defaultStockStatus,
+    defaultConditionType: record.defaultConditionType,
+    isActive: record.isActive,
+  };
+}
+
+function updateRecordTree(
+  records: UnitPanelRecord[],
+  id: number,
+  update: (record: UnitPanelRecord) => UnitPanelRecord,
+): UnitPanelRecord[] {
+  return records.map((record) => {
+    const nextRecord = record.id === id ? update(record) : record;
+    return {
+      ...nextRecord,
+      children: updateRecordTree(nextRecord.children, id, update),
+    };
+  });
 }
 
 function displayPanelStatus(record: UnitPanelRecord): string {
@@ -79,15 +131,13 @@ function formatNumber(value: number): string {
 
 const DONE_STATUS_VALUES = new Set(["DONE", "SELESAI", "FINISH", "FINISHED", "COMPLETED", "COMPLETE"]);
 
-type PartFilter = "ALL" | "WAITING" | "RESTORE" | "DONE" | "ADDITIONAL" | "CATALOG";
+type PartFilter = "ALL" | "WAITING" | "RESTORE" | "DONE";
 
 const PART_FILTERS: Array<{ value: PartFilter; label: string }> = [
   { value: "ALL", label: "Semua" },
   { value: "WAITING", label: "Belum Progress" },
   { value: "RESTORE", label: "Restorasi" },
   { value: "DONE", label: "Selesai" },
-  { value: "ADDITIONAL", label: "Additional" },
-  { value: "CATALOG", label: "Catalog" },
 ];
 
 function normalizeStatus(value: string | null | undefined): string {
@@ -244,7 +294,6 @@ function matchesPart(part: UnitPanelRecord, term: string): boolean {
     (part.aliasName ?? "").toLowerCase().includes(term) ||
     (part.partNumber ?? "").toLowerCase().includes(term) ||
     (part.code ?? "").toLowerCase().includes(term) ||
-    displaySource(part).toLowerCase().includes(term) ||
     displayCondition(part).toLowerCase().includes(term) ||
     displayCurrentStatus(part).toLowerCase().includes(term)
   );
@@ -255,15 +304,14 @@ function matchesPartFilter(part: UnitPanelRecord, filter: PartFilter): boolean {
   if (filter === "WAITING") return !isPartComplete(part);
   if (filter === "RESTORE") return isRestorationPart(part);
   if (filter === "DONE") return isPartComplete(part);
-  return normalizeStatus(part.sourcePart) === filter;
+  return true;
 }
 
 interface MasterPanelGridContext {
-  expandedComponentKey: string | null;
-  expandedPanelKey: string | null;
-  onToggleComponent: (component: MasterPanelComponentGroup) => void;
-  onTogglePanel: (panel: MasterPanelPanelGroup) => void;
-  onOpenPart: (part: UnitPanelRecord) => void;
+  onOpenComponent: (component: MasterPanelComponentGroup) => void;
+  onOpenPanel: (panel: MasterPanelPanelGroup) => void;
+  onOpenPartPhoto: (part: UnitPanelRecord) => void;
+  onOpenPartActivity: (part: UnitPanelRecord) => void;
 }
 
 function getGridContext<T>(params: ICellRendererParams<T>): MasterPanelGridContext {
@@ -280,14 +328,15 @@ function ComponentNameRenderer(params: ICellRendererParams<MasterPanelComponentG
   );
 }
 
-function ComponentExpandRenderer(params: ICellRendererParams<MasterPanelComponentGroup>) {
+function ComponentNavigationRenderer(params: ICellRendererParams<MasterPanelComponentGroup>) {
   const data = params.data;
   if (!data) return null;
   const context = getGridContext(params);
   return (
-    <span className="inline-flex h-7 items-center border border-border px-2 text-[12px] font-mono uppercase text-muted-foreground">
-      {context.expandedComponentKey === data.key ? "Tutup" : "Buka"}
-    </span>
+    <button type="button" className="catalog-icon-button" aria-label={`Buka ${data.componentName}`} title="Buka daftar panel"
+      onClick={(event) => { event.stopPropagation(); context.onOpenComponent(data); }}>
+      <ChevronRight className="h-4 w-4" />
+    </button>
   );
 }
 
@@ -301,26 +350,15 @@ function PanelNameRenderer(params: ICellRendererParams<MasterPanelPanelGroup>) {
   );
 }
 
-function PanelExpandRenderer(params: ICellRendererParams<MasterPanelPanelGroup>) {
+function PanelNavigationRenderer(params: ICellRendererParams<MasterPanelPanelGroup>) {
   const data = params.data;
   if (!data) return null;
   const context = getGridContext(params);
   return (
-    <span className="inline-flex h-7 items-center border border-border px-2 text-[12px] font-mono uppercase text-muted-foreground">
-      {context.expandedPanelKey === data.key ? "Tutup" : "Buka"}
-    </span>
-  );
-}
-
-function PartNameRenderer(params: ICellRendererParams<UnitPanelRecord>) {
-  const data = params.data;
-  if (!data) return null;
-  const aliasName = data.aliasName?.trim();
-  return (
-    <span className="block w-full text-left text-foreground">
-      <span className="block truncate font-medium">{aliasName || data.name}</span>
-      {aliasName ? <span className="block truncate text-[12px] text-muted-foreground">{data.name}</span> : null}
-    </span>
+    <button type="button" className="catalog-icon-button" aria-label={`Buka ${data.panelName}`} title="Buka daftar part"
+      onClick={(event) => { event.stopPropagation(); context.onOpenPanel(data); }}>
+      <ChevronRight className="h-4 w-4" />
+    </button>
   );
 }
 
@@ -336,18 +374,27 @@ function PartStatusRenderer(params: ICellRendererParams<UnitPanelRecord>) {
   );
 }
 
-export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPanelManagerProps) {
+export function MasterPanelManager({ unitId, canManage, canCreateWo, initialRows }: MasterPanelManagerProps) {
   const [rows, setRows] = useState<UnitPanelRecord[]>(() => initialRows ?? []);
   const [isLoading, setIsLoading] = useState(() => initialRows === undefined);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [activePartDetail, setActivePartDetail] = useState<UnitPanelDetail | null>(null);
+  const [activeDetailMode, setActiveDetailMode] = useState<"photos" | "activity" | null>(null);
+  const [isLoadingDetail, setIsLoadingDetail] = useState(false);
+  const [isCountdownOpen, setIsCountdownOpen] = useState(false);
+  const [isWoOpen, setIsWoOpen] = useState(false);
+  const [isSavingCountdown, setIsSavingCountdown] = useState(false);
 
   const [search, setSearch] = useState<string>("");
   const [partFilter, setPartFilter] = useState<PartFilter>("ALL");
   const [expandedComponentKey, setExpandedComponentKey] = useState<string | null>(null);
   const [expandedPanelKey, setExpandedPanelKey] = useState<string | null>(null);
-  const [selectedPart, setSelectedPart] = useState<UnitPanelRecord | null>(null);
+  const [dirtyPartIds, setDirtyPartIds] = useState<Set<number>>(() => new Set());
+  const [draftParts, setDraftParts] = useState<MasterPartGridRow[]>([]);
+  const [selectedPartRow, setSelectedPartRow] = useState<MasterPartGridRow | null>(null);
+  const [deletedPartIds, setDeletedPartIds] = useState<number[]>([]);
   const [isAddingAdditional, setIsAddingAdditional] = useState(false);
   const [additionalForm, setAdditionalForm] = useState<AdditionalFormState>(EMPTY_ADDITIONAL_FORM);
   const flatRows = useMemo(() => flattenPanelRecords(rows), [rows]);
@@ -397,23 +444,284 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
       matchesPartFilter(part, partFilter)
     );
   }, [searchTerm, expandedPanel, partFilter]);
+  const visibleDraftParts = useMemo(() => {
+    if (!expandedPanel) return [];
+    return draftParts.filter((part) => part.category === expandedPanel.componentName && part.section === expandedPanel.panelName);
+  }, [draftParts, expandedPanel]);
+  const partGridRows = useMemo<MasterPartGridRow[]>(() => {
+    const deletedIds = new Set(deletedPartIds);
+    return [
+      ...filteredParts
+        .filter((part) => !deletedIds.has(part.id))
+        .map((part) => ({ ...part, clientId: `id-${part.id}` })),
+      ...visibleDraftParts,
+    ];
+  }, [deletedPartIds, filteredParts, visibleDraftParts]);
+  const showAliasColumn = useMemo(() => partGridRows.some((part) => Boolean(part.aliasName?.trim())), [partGridRows]);
+  const hasPartChanges = dirtyPartIds.size > 0 || deletedPartIds.length > 0 || draftParts.some((part) => part.name.trim());
+  const [focusedPartCell, setFocusedPartCell] = useState<{ rowIndex: number; field: PartEditableField } | null>(null);
   const toggleComponent = useCallback((component: MasterPanelComponentGroup) => {
-    setExpandedComponentKey((current) => current === component.key ? null : component.key);
+    setExpandedComponentKey(component.key);
     setExpandedPanelKey(null);
+    setSelectedPartRow(null);
+    setSearch("");
   }, []);
   const togglePanel = useCallback((panel: MasterPanelPanelGroup) => {
-    setExpandedPanelKey((current) => current === panel.key ? null : panel.key);
+    setExpandedPanelKey(panel.key);
+    setSelectedPartRow(null);
+    setFocusedPartCell(null);
+    setSearch("");
   }, []);
+  const openPartDetail = useCallback(async (part: UnitPanelRecord, mode: "photos" | "activity") => {
+    setIsLoadingDetail(true);
+    setActiveDetailMode(mode);
+    setActivePartDetail(null);
+    setIsCountdownOpen(false);
+    setIsWoOpen(false);
+    setError(null);
+    const result = await fetchUnitPanelDetail("", unitId, part.id);
+    if (!result.payload) {
+      setError("Detail master panel belum bisa dimuat.");
+      setIsLoadingDetail(false);
+      return;
+    }
+    setActivePartDetail(result.payload.data);
+    setIsLoadingDetail(false);
+  }, [unitId]);
+  const reloadActivePartDetail = useCallback(async () => {
+    if (!activePartDetail) return;
+    const refreshed = await fetchUnitPanelDetail("", activePartDetail.unitId, activePartDetail.panel.id);
+    if (refreshed.payload) {
+      setActivePartDetail(refreshed.payload.data);
+    }
+  }, [activePartDetail]);
   const gridContext = useMemo<MasterPanelGridContext>(() => ({
-    expandedComponentKey,
-    expandedPanelKey,
-    onToggleComponent: toggleComponent,
-    onTogglePanel: togglePanel,
-    onOpenPart: setSelectedPart,
-  }), [expandedComponentKey, expandedPanelKey, toggleComponent, togglePanel]);
+    onOpenComponent: toggleComponent,
+    onOpenPanel: togglePanel,
+    onOpenPartPhoto: (part) => void openPartDetail(part, "photos"),
+    onOpenPartActivity: (part) => void openPartDetail(part, "activity"),
+  }), [openPartDetail, toggleComponent, togglePanel]);
+  const updatePartGridRow = useCallback((row: MasterPartGridRow, field: PartEditableField, value: unknown) => {
+    if (row.isDraft) {
+      setDraftParts((current) => current.map((part) => part.clientId === row.clientId ? withPartValue(part, field, value) : part));
+      return;
+    }
+
+    setRows((current) => updateRecordTree(current, row.id, (record) => withPartValue({ ...record, clientId: row.clientId }, field, value)));
+    setDirtyPartIds((current) => new Set(current).add(row.id));
+  }, []);
+  const createDraftPart = useCallback((panel: MasterPanelPanelGroup): MasterPartGridRow => ({
+    id: -Date.now(),
+    clientId: `tmp-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    isDraft: true,
+    carId: unitId,
+    componentId: null,
+    catalogPanelId: null,
+    code: null,
+    aliasName: null,
+    partNumber: null,
+    sourcePart: "ADDITIONAL",
+    initialCondition: "BEKAS",
+    currentStatus: "UNKNOWN",
+    location: "UNIT",
+    notes: null,
+    totalJobdesc: 0,
+    totalHours: 0,
+    remainingHours: 0,
+    sourceGeneralId: null,
+    parentId: null,
+    nodeType: "PART",
+    section: panel.panelName,
+    name: "",
+    category: panel.componentName,
+    isActive: true,
+    sortOrder: 0,
+    qty: 1,
+    defaultLocationType: "UNIT",
+    defaultStockStatus: "INSTALLED",
+    defaultConditionType: "BEKAS",
+    countdownUsageCount: 0,
+    statusUsageCount: 0,
+    childCount: 0,
+    createdAt: null,
+    updatedAt: null,
+    children: [],
+  }), [unitId]);
+  const handleAddPartRow = useCallback(() => {
+    if (!expandedPanel) return;
+    setDraftParts((current) => [...current, createDraftPart(expandedPanel)]);
+  }, [createDraftPart, expandedPanel]);
+  const loadPanels = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+
+    const result = await fetchUnitPanels("", unitId);
+    if (!result.payload) {
+      setRows([]);
+      setError("Struktur panel unit belum bisa dimuat.");
+      setIsLoading(false);
+      return;
+    }
+
+    setRows(result.payload.data.tree);
+    setIsLoading(false);
+  }, [unitId]);
+  const handlePartDelete = useCallback((row = selectedPartRow) => {
+    if (!row) return;
+    if (!window.confirm("Hapus part ini dari Struktur Panel Unit?")) return;
+    if (row.isDraft) {
+      setDraftParts((current) => current.filter((part) => part.clientId !== row.clientId));
+    } else {
+      setDeletedPartIds((current) => current.includes(row.id) ? current : [...current, row.id]);
+      setDirtyPartIds((current) => {
+        const next = new Set(current);
+        next.delete(row.id);
+        return next;
+      });
+    }
+    setSelectedPartRow(null);
+  }, [selectedPartRow]);
+  const handlePartCellValueChanged = useCallback((event: CellValueChangedEvent<MasterPartGridRow>) => {
+    const field = event.colDef.field as PartEditableField | undefined;
+    if (!event.data || !field || !PART_PASTE_FIELDS.includes(field)) return;
+    updatePartGridRow(event.data, field, event.newValue);
+  }, [updatePartGridRow]);
+  const handlePartSelectionChanged = useCallback((event: SelectionChangedEvent<MasterPartGridRow>) => {
+    setSelectedPartRow(event.api.getSelectedRows()[0] ?? null);
+  }, []);
+  const applyPastedRows = useCallback((text: string) => {
+    if (!expandedPanel) return;
+    const rowsToPaste = text
+      .replace(/\r\n/gu, "\n")
+      .split("\n")
+      .map((line) => line.split("\t"))
+      .filter((cells) => cells.some((cell) => cell.trim()));
+    if (rowsToPaste.length === 0) return;
+
+    const startRow = focusedPartCell?.rowIndex ?? partGridRows.length;
+    const startField = focusedPartCell?.field ?? "name";
+    const startFieldIndex = PART_PASTE_FIELDS.indexOf(startField);
+    const nextRows = [...partGridRows];
+    const newDrafts: MasterPartGridRow[] = [];
+
+    rowsToPaste.forEach((cells, offset) => {
+      const rowIndex = startRow + offset;
+      let target = nextRows[rowIndex];
+      if (!target) {
+        target = createDraftPart(expandedPanel);
+        nextRows.push(target);
+      }
+      cells.forEach((cell, cellIndex) => {
+        const field = PART_PASTE_FIELDS[startFieldIndex + cellIndex];
+        if (!field) return;
+        if (target.isDraft && !draftParts.some((part) => part.clientId === target.clientId)) {
+          target = withPartValue(target, field, cell.trim());
+          nextRows[rowIndex] = target;
+          return;
+        }
+        updatePartGridRow(target, field, cell.trim());
+      });
+      if (target.isDraft && !draftParts.some((part) => part.clientId === target.clientId)) {
+        newDrafts.push(target);
+      }
+    });
+    if (newDrafts.length > 0) {
+      setDraftParts((current) => [...current, ...newDrafts]);
+    }
+  }, [createDraftPart, draftParts, expandedPanel, focusedPartCell, partGridRows, updatePartGridRow]);
+  const handlePartKeyDown = useCallback((event: CellKeyDownEvent<MasterPartGridRow>) => {
+    const keyboardEvent = event.event as KeyboardEvent | undefined;
+    if (!keyboardEvent || !event.data) return;
+    if ((keyboardEvent.ctrlKey || keyboardEvent.metaKey) && keyboardEvent.key.toLowerCase() === "c") {
+      const row = event.data;
+      void navigator.clipboard?.writeText([
+        row.name,
+        row.aliasName ?? "",
+        row.partNumber ?? "",
+        displayCondition(row),
+        displayCurrentStatus(row),
+        formatNumber(row.qty),
+      ].join("\t"));
+    }
+    if (!canManage || isSubmitting) return;
+    if ((keyboardEvent.ctrlKey || keyboardEvent.metaKey) && keyboardEvent.key.toLowerCase() === "d" && focusedPartCell) {
+      const target = partGridRows[focusedPartCell.rowIndex + 1];
+      if (target) {
+        keyboardEvent.preventDefault();
+        updatePartGridRow(target, focusedPartCell.field, event.data[focusedPartCell.field]);
+      }
+    }
+    if (keyboardEvent.key === "Delete" || keyboardEvent.key === "Backspace") {
+      handlePartDelete(event.data);
+    }
+  }, [canManage, isSubmitting, focusedPartCell, handlePartDelete, partGridRows, updatePartGridRow]);
+  const handleSaveParts = useCallback(async () => {
+    if (!expandedPanel) return;
+    const dirtyRows = flatRows.filter((part) => dirtyPartIds.has(part.id));
+    const newRows = draftParts.filter((part) => part.name.trim());
+
+    setIsSubmitting(true);
+    setError(null);
+    setMessage(null);
+    try {
+      for (const id of deletedPartIds) {
+        const result = await deleteUnitPanel(unitId, id);
+        if (!result.success) throw new Error(result.message);
+      }
+      for (const part of dirtyRows) {
+        const result = await updateUnitPanel(unitId, part.id, recordToUpdateInput(part));
+        if (!result.success) throw new Error(result.message);
+      }
+      for (const part of newRows) {
+        const createResult = await createUnitAdditionalMasterPanel(unitId, {
+          componentName: part.category ?? expandedPanel.componentName,
+          panelName: part.section || expandedPanel.panelName,
+          itemName: part.name.trim(),
+          partNumber: toNullable(part.partNumber),
+          deskription: toNullable(part.notes),
+        });
+        if (!createResult.success) throw new Error(createResult.message);
+        const updateResult = await updateUnitPanel(unitId, createResult.result.panelId, recordToUpdateInput({
+          ...part,
+          id: createResult.result.panelId,
+          carId: unitId,
+        }));
+        if (!updateResult.success) throw new Error(updateResult.message);
+      }
+      setDirtyPartIds(new Set());
+      setDeletedPartIds([]);
+      setDraftParts([]);
+      setSelectedPartRow(null);
+      setMessage("Struktur Panel Unit berhasil disimpan.");
+      await loadPanels();
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Struktur Panel Unit belum bisa disimpan.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [deletedPartIds, dirtyPartIds, draftParts, expandedPanel, flatRows, loadPanels, unitId]);
+  const handleCancelPartChanges = useCallback(() => {
+    setDirtyPartIds(new Set());
+    setDeletedPartIds([]);
+    setDraftParts([]);
+    setSelectedPartRow(null);
+    void loadPanels();
+  }, [loadPanels]);
+  function navigateBack(toComponents = false) {
+    if (isSubmitting) return;
+    if (hasPartChanges) {
+      if (!window.confirm("Perubahan belum disimpan. Buang perubahan dan kembali?")) return;
+      handleCancelPartChanges();
+    }
+    if (toComponents || !expandedPanel) setExpandedComponentKey(null);
+    setExpandedPanelKey(null);
+    setSelectedPartRow(null);
+    setFocusedPartCell(null);
+    setSearch("");
+  }
   const componentColumnDefs = useMemo<ColDef<MasterPanelComponentGroup>[]>(() => [
     {
-      headerName: "Bagian",
+      headerName: "Component",
       field: "componentName",
       minWidth: 240,
       flex: 1.7,
@@ -421,8 +729,6 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
     },
     { headerName: "Panel", field: "totalPanel", width: 110, cellClass: "font-mono text-muted-foreground" },
     { headerName: "Part", field: "totalPart", width: 110, cellClass: "font-mono text-muted-foreground" },
-    { headerName: "Selesai", field: "completedPart", width: 115, cellClass: "font-mono text-muted-foreground" },
-    { headerName: "Sisa", field: "remainingPart", width: 100, cellClass: "font-mono text-muted-foreground" },
     {
       headerName: "Progress",
       field: "progress",
@@ -437,11 +743,11 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
       ) : null,
     },
     {
-      headerName: "Expand",
+      headerName: "Action",
       width: 90,
       sortable: false,
       filter: false,
-      cellRenderer: ComponentExpandRenderer,
+      cellRenderer: ComponentNavigationRenderer,
     },
   ], []);
   const panelColumnDefs = useMemo<ColDef<MasterPanelPanelGroup>[]>(() => [
@@ -487,65 +793,87 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
       valueFormatter: ({ value }) => `${formatNumber(Number(value ?? 0))} jam`,
     },
     {
-      headerName: "Expand",
+      headerName: "Action",
       width: 90,
       sortable: false,
       filter: false,
-      cellRenderer: PanelExpandRenderer,
+      cellRenderer: PanelNavigationRenderer,
     },
   ], []);
-  const partColumnDefs = useMemo<ColDef<UnitPanelRecord>[]>(() => [
-    { headerName: "Code", field: "code", width: 110, valueGetter: ({ data }) => data?.code ?? "-" },
+  const partColumnDefs = useMemo<ColDef<MasterPartGridRow>[]>(() => [
     {
       headerName: "Nama Part",
       field: "name",
       minWidth: 260,
       flex: 1.8,
-      cellRenderer: PartNameRenderer,
+      editable: canManage,
+      valueGetter: ({ data }) => data?.name ?? "-",
     },
+    ...(showAliasColumn ? [{
+      headerName: "Alias",
+      field: "aliasName" as const,
+      minWidth: 150,
+      flex: 0.8,
+      editable: false,
+      valueGetter: ({ data }: { data?: MasterPartGridRow }) => data?.aliasName?.trim() || "-",
+    }] : []),
     {
       headerName: "Part Number",
       field: "partNumber",
       minWidth: 160,
       flex: 0.9,
+      editable: canManage,
       valueGetter: ({ data }) => data?.partNumber ?? "-",
     },
     {
-      headerName: "Qty",
-      field: "qty",
-      width: 90,
-      cellClass: "font-mono text-muted-foreground",
-      valueFormatter: ({ value }) => formatNumber(Number(value ?? 0)),
-    },
-    {
       headerName: "Kondisi",
+      field: "initialCondition",
+      editable: canManage,
+      cellEditor: "agSelectCellEditor",
+      cellEditorParams: { values: ["BARU", "BEKAS", "RESTORE", "RESTORASI", "LAYAK", "TIDAK LAYAK", "UNKNOWN"] },
       valueGetter: ({ data }) => data ? displayCondition(data) : "-",
       minWidth: 130,
       flex: 0.8,
     },
     {
       headerName: "Status",
+      field: "currentStatus",
+      editable: canManage,
+      cellEditor: "agSelectCellEditor",
+      cellEditorParams: { values: ["WAITING", "UNKNOWN", "INSTALLED", "IN_PROGRESS", "DONE", "SELESAI"] },
       minWidth: 150,
       flex: 0.9,
       cellRenderer: PartStatusRenderer,
     },
-  ], []);
-
-  const loadPanels = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-
-    const result = await fetchUnitPanels("", unitId);
-    if (!result.payload) {
-      setRows([]);
-      setError("Struktur panel unit belum bisa dimuat.");
-      setIsLoading(false);
-      return;
-    }
-
-    setRows(result.payload.data.tree);
-    setIsLoading(false);
-  }, [unitId]);
+    {
+      headerName: "Qty",
+      field: "qty",
+      width: 90,
+      editable: canManage,
+      cellClass: "font-mono text-muted-foreground",
+      valueFormatter: ({ value }) => formatNumber(Number(value ?? 0)),
+      valueParser: ({ newValue }) => toPositiveQty(newValue),
+    },
+    {
+      headerName: "Action",
+      width: 120,
+      sortable: false,
+      filter: false,
+      editable: false,
+      cellRenderer: (params: ICellRendererParams<MasterPartGridRow>) => params.data && !params.data.isDraft ? (
+        <div className="flex h-full items-center gap-1">
+          <button type="button" className="catalog-icon-button" title="Foto" aria-label={`Foto ${params.data.name}`}
+            onClick={(event) => { event.stopPropagation(); getGridContext(params).onOpenPartPhoto(params.data!); }}>
+            <ImageIcon className="h-4 w-4" />
+          </button>
+          <button type="button" className="catalog-icon-button" title="Aktivitas" aria-label={`Aktivitas ${params.data.name}`}
+            onClick={(event) => { event.stopPropagation(); getGridContext(params).onOpenPartActivity(params.data!); }}>
+            <ListPlus className="h-4 w-4" />
+          </button>
+        </div>
+      ) : null,
+    },
+  ], [canManage, showAliasColumn]);
 
   useEffect(() => {
     if (initialRows !== undefined) {
@@ -605,23 +933,101 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
     setIsSubmitting(false);
   }
 
+  function buildCountdownInitialValues(detail: UnitPanelDetail): CountdownFormValues {
+    const today = new Date().toISOString().slice(0, 10);
+    return {
+      countdownId: "",
+      carId: detail.unitId,
+      divisionId: "",
+      panelId: String(detail.panel.id),
+      taskCategory: "ADDITIONAL",
+      sectionName: detail.panel.section,
+      jobTypeId: "",
+      targetHoursInitial: "01:00",
+      startDate: today,
+      deadlineDate: today,
+      prerequisiteCoreId: "",
+      refWoId: "",
+      note: "",
+      temuanAwal: "",
+      keterangan: detail.panel.name,
+      status: "PLAN",
+    };
+  }
+
+  async function handleCountdownSubmit(data: CountdownFormValues) {
+    if (!activePartDetail) return;
+    const payload = {
+      carId: activePartDetail.unitId,
+      divisionId: Number(data.divisionId),
+      panelId: activePartDetail.panel.id,
+      taskCategory: data.taskCategory,
+      sectionName: data.sectionName.trim(),
+      jobTypeId: toNullable(data.jobTypeId) ?? "",
+      targetHoursInitial: parseHHMMToDecimal(data.targetHoursInitial),
+      startDate: toNullable(data.startDate) ?? "",
+      deadlineDate: data.deadlineDate.trim(),
+      prerequisiteCoreId: toNullable(data.prerequisiteCoreId) ?? "",
+      refWoId: toNullable(data.refWoId) ?? "",
+      note: toNullable(data.note) ?? "",
+      temuanAwal: toNullable(data.temuanAwal) ?? "",
+      keterangan: toNullable(data.keterangan) ?? "",
+      status: data.status,
+    };
+
+    if (!Number.isFinite(payload.divisionId) || payload.divisionId <= 0) {
+      setError("Divisi wajib diisi.");
+      return;
+    }
+    if (!payload.sectionName) {
+      setError("Bagian wajib diisi.");
+      return;
+    }
+    if (!payload.jobTypeId) {
+      setError("Jobdesc wajib dipilih.");
+      return;
+    }
+    if (!Number.isFinite(payload.targetHoursInitial) || payload.targetHoursInitial < 0) {
+      setError("Target jam awal tidak valid.");
+      return;
+    }
+    if (!payload.deadlineDate) {
+      setError("Deadline wajib diisi.");
+      return;
+    }
+
+    setIsSavingCountdown(true);
+    setError(null);
+    setMessage(null);
+    const result = await createCountdownRecord(payload);
+    if (!result.success) {
+      setError(result.message);
+      setIsSavingCountdown(false);
+      return;
+    }
+    await reloadActivePartDetail();
+    setIsCountdownOpen(false);
+    setMessage("Countdown berhasil dibuat.");
+    setIsSavingCountdown(false);
+  }
+
   return (
     <section className="border border-border bg-card">
 
       {/* ── HEADER ── */}
-      <div className="flex items-center justify-between border-b border-border px-4 py-2">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-2">
         <div>
           <p className="text-[14px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Struktur Panel Unit</p>
-          <h3 className="text-[15px] font-mono text-foreground">Bagian · Panel · Part</h3>
+          <h3 className="text-[15px] text-foreground">{expandedPanel?.panelName ?? expandedComponent?.componentName ?? "Daftar Component"}</h3>
         </div>
         <div className="flex items-center gap-2">
           <span className="font-mono text-[14px] text-muted-foreground">{rootCount} panel · {partCount} part</span>
           <div className="w-px h-4 bg-muted" />
-          <button type="button" onClick={() => void loadPanels()}
+          <button type="button" disabled={hasPartChanges || isSubmitting} onClick={() => void loadPanels()}
             className="inline-flex items-center gap-1.5 border border-border px-2 py-1 text-[14px] font-mono uppercase text-foreground hover:text-foreground hover:border-border transition-colors">
             <RefreshCw className="h-3 w-3" strokeWidth={ICON_STROKE_WIDTH} /> Refresh
           </button>
-          {canManage && (
+          {canManage && !expandedPanel && (
             <button type="button" onClick={openAdditionalForm}
               className="inline-flex items-center gap-1.5 border border-primary/30 bg-primary/[0.04] px-2 py-1 text-[14px] font-mono uppercase text-app-accent-ink hover:bg-primary/10 transition-colors">
               <Plus className="h-3 w-3" strokeWidth={ICON_STROKE_WIDTH} /> Tambah Panel Baru
@@ -629,6 +1035,23 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
           )}
         </div>
       </div>
+
+      {expandedComponent && (
+        <nav aria-label="Navigasi struktur panel" className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3 text-[13px]">
+          <button type="button" disabled={isSubmitting} onClick={() => navigateBack()} className="mr-2 inline-flex items-center gap-1 text-muted-foreground hover:text-foreground">
+            <ArrowLeft className="h-4 w-4" /> Kembali
+          </button>
+          <button type="button" disabled={isSubmitting} onClick={() => navigateBack(true)} className="text-muted-foreground hover:text-foreground">Component</button>
+          <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+          {expandedPanel ? (
+            <>
+              <button type="button" disabled={isSubmitting} onClick={() => navigateBack()} className="text-muted-foreground hover:text-foreground">{expandedComponent.componentName}</button>
+              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+              <span aria-current="page">{expandedPanel.panelName}</span>
+            </>
+          ) : <span aria-current="page">{expandedComponent.componentName}</span>}
+        </nav>
+      )}
 
       <div className="border-b border-border bg-background">
         <div className="flex items-center gap-3 px-4 py-2">
@@ -648,9 +1071,6 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
                 x
               </button>
             )}
-          </div>
-          <div className="hidden shrink-0 text-[13px] font-mono uppercase tracking-[0.1em] text-muted-foreground lg:block">
-            Klik bagian lalu panel
           </div>
         </div>
         <div className="flex gap-2 overflow-x-auto px-4 pb-3">
@@ -688,13 +1108,13 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
 
           {isLoading ? (
             <div className="px-4 py-6 text-[15px] font-mono text-muted-foreground">Memuat struktur panel unit...</div>
-          ) : filteredComponents.length === 0 ? (
+          ) : !expandedComponent && filteredComponents.length === 0 ? (
             <div className="m-4 border border-dashed border-border px-4 py-8 text-center text-[15px] font-mono text-muted-foreground">
               {search || partFilter !== "ALL" ? "Tidak ada struktur panel yang cocok." : "Belum ada struktur panel unit."}
             </div>
           ) : (
             <div className="space-y-4 p-4">
-              <div className="ag-theme-alpine sms-ag-grid h-[18rem] w-full border border-border">
+              {!expandedComponent && <div className="ag-theme-alpine sms-ag-grid h-[32rem] w-full border border-border">
                 <AgGridReact<MasterPanelComponentGroup>
                   rowData={filteredComponents}
                   columnDefs={componentColumnDefs}
@@ -712,11 +1132,11 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
                   onRowClicked={({ data }) => data && toggleComponent(data)}
                   overlayNoRowsTemplate="<span class='text-muted-foreground'>Belum ada bagian pada struktur panel unit.</span>"
                 />
-              </div>
+              </div>}
 
               {expandedComponent ? (
-                <div className="border border-border bg-background">
-                  <div className="flex items-start justify-between gap-4 border-b border-border px-4 py-3">
+                <div>
+                  {!expandedPanel && <div className="flex items-start justify-between gap-4 border-b border-border px-4 py-3">
                     <div>
                       <p className="text-[13px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Panel</p>
                       <h4 className="mt-1 text-[18px] font-semibold text-foreground">{expandedComponent.componentName}</h4>
@@ -728,17 +1148,8 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
                         <span>Sisa <strong className="font-mono text-foreground">{expandedComponent.remainingPart}</strong></span>
                       </div>
                     </div>
-                    {canManage ? (
-                      <button
-                        type="button"
-                        onClick={openAdditionalForm}
-                        className="inline-flex items-center gap-1.5 border border-primary/30 bg-primary/[0.04] px-2 py-1 text-[14px] font-mono uppercase text-app-accent-ink hover:bg-primary/10"
-                      >
-                        <Plus className="h-3 w-3" strokeWidth={ICON_STROKE_WIDTH} /> Tambah Panel Baru
-                      </button>
-                    ) : null}
-                  </div>
-                  <div className="ag-theme-alpine sms-ag-grid h-[16rem] w-full">
+                  </div>}
+                  {!expandedPanel && <div className="ag-theme-alpine sms-ag-grid h-[32rem] w-full">
                     <AgGridReact<MasterPanelPanelGroup>
                       rowData={filteredPanels}
                       columnDefs={panelColumnDefs}
@@ -756,7 +1167,7 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
                       onRowClicked={({ data }) => data && togglePanel(data)}
                       overlayNoRowsTemplate="<span class='text-muted-foreground'>Belum ada panel pada bagian ini.</span>"
                     />
-                  </div>
+                  </div>}
 
                   {expandedPanel ? (
                     <div className="border-t border-border bg-card">
@@ -773,18 +1184,53 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
                           </div>
                         </div>
                         {canManage ? (
-                          <button
-                            type="button"
-                            onClick={openAdditionalForm}
-                            className="inline-flex items-center gap-1.5 border border-primary/30 bg-primary/[0.04] px-2 py-1 text-[14px] font-mono uppercase text-app-accent-ink hover:bg-primary/10"
-                          >
-                            <Plus className="h-3 w-3" strokeWidth={ICON_STROKE_WIDTH} /> Tambah Item
-                          </button>
+                          <div className="flex flex-wrap justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={handleAddPartRow}
+                              className="inline-flex items-center gap-1.5 border border-primary/30 bg-primary/[0.04] px-2 py-1 text-[14px] font-mono uppercase text-app-accent-ink hover:bg-primary/10"
+                            >
+                              <Plus className="h-3 w-3" strokeWidth={ICON_STROKE_WIDTH} /> Tambah Part
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handlePartDelete()}
+                              disabled={!selectedPartRow || isSubmitting}
+                              className="border border-border px-2 py-1 text-[14px] font-mono uppercase text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                            >
+                              Hapus
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleCancelPartChanges}
+                              disabled={!hasPartChanges || isSubmitting}
+                              className="border border-border px-2 py-1 text-[14px] font-mono uppercase text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                            >
+                              Batal
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void handleSaveParts()}
+                              disabled={!hasPartChanges || isSubmitting}
+                              className="border border-primary/40 bg-primary/[0.06] px-2 py-1 text-[14px] font-mono uppercase text-app-accent-ink hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-40"
+                            >
+                              {isSubmitting ? "Menyimpan..." : "Simpan Data"}
+                            </button>
+                          </div>
                         ) : null}
                       </div>
-                      <div className="ag-theme-alpine sms-ag-grid h-[24rem] w-full">
-                        <AgGridReact<UnitPanelRecord>
-                          rowData={filteredParts}
+                      <div
+                        className="ag-theme-alpine sms-ag-grid h-[32rem] w-full"
+                        onPaste={(event) => {
+                          if (!canManage || isSubmitting) return;
+                          const text = event.clipboardData.getData("text/plain");
+                          if (!text.trim()) return;
+                          event.preventDefault();
+                          applyPastedRows(text);
+                        }}
+                      >
+                        <AgGridReact<MasterPartGridRow>
+                          rowData={partGridRows}
                           columnDefs={partColumnDefs}
                           context={gridContext}
                           defaultColDef={{
@@ -793,11 +1239,20 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
                             filter: true,
                             suppressHeaderMenuButton: true,
                           }}
-                          getRowId={({ data }) => String(data.id)}
+                          getRowId={({ data }) => data.clientId}
                           rowHeight={44}
                           suppressCellFocus={false}
                           suppressMovableColumns
-                          onRowClicked={({ data }) => data && setSelectedPart(data)}
+                          rowSelection="single"
+                          onSelectionChanged={handlePartSelectionChanged}
+                          onCellValueChanged={handlePartCellValueChanged}
+                          onCellKeyDown={handlePartKeyDown}
+                          onCellFocused={({ rowIndex, column }) => {
+                            const field = typeof column === "string" ? undefined : column?.getColDef().field as PartEditableField | undefined;
+                            if (rowIndex !== null && field && PART_PASTE_FIELDS.includes(field)) {
+                              setFocusedPartCell({ rowIndex, field });
+                            }
+                          }}
                           overlayNoRowsTemplate="<span class='text-muted-foreground'>Belum ada part pada panel ini.</span>"
                         />
                       </div>
@@ -810,6 +1265,75 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
         </div>
 
       </div>
+      {isLoadingDetail ? (
+        <div className="border-t border-border px-4 py-4 text-[14px] font-mono text-muted-foreground">Memuat detail master panel...</div>
+      ) : activePartDetail && activeDetailMode ? (
+        <div className="space-y-4 border-t border-border bg-background p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-[13px] font-mono uppercase tracking-[0.12em] text-muted-foreground">
+                {activeDetailMode === "photos" ? "Foto Master Panel" : "Aktivitas Master Panel"}
+              </p>
+              <h4 className="mt-1 text-[18px] font-semibold text-foreground">{activePartDetail.panel.name}</h4>
+              <p className="mt-1 text-[13px] text-muted-foreground">{activePartDetail.panel.category ?? "-"} / {activePartDetail.panel.section}</p>
+            </div>
+            <div className="flex items-center gap-2">
+              {activeDetailMode === "activity" ? (
+                <MasterPanelActivityMenu
+                  canCreateCountdown={canManage}
+                  canCreateWo={canCreateWo}
+                  onCreateCountdown={() => {
+                    setIsWoOpen(false);
+                    setIsCountdownOpen(true);
+                  }}
+                  onCreateWo={() => {
+                    setIsCountdownOpen(false);
+                    setIsWoOpen(true);
+                  }}
+                />
+              ) : null}
+              <button
+                type="button"
+                onClick={() => {
+                  setActivePartDetail(null);
+                  setActiveDetailMode(null);
+                  setIsCountdownOpen(false);
+                  setIsWoOpen(false);
+                }}
+                className="catalog-icon-button"
+                title="Tutup"
+              >
+                <X className="h-4 w-4" strokeWidth={ICON_STROKE_WIDTH} />
+              </button>
+            </div>
+          </div>
+
+          {activeDetailMode === "photos" ? (
+            <MasterPanelPhotoGallery detail={activePartDetail} />
+          ) : (
+            <div className="space-y-4">
+              {isCountdownOpen ? (
+                <CountdownBoardForm
+                  initialValues={buildCountdownInitialValues(activePartDetail)}
+                  editorMode="create"
+                  references={activePartDetail.countdownReferences}
+                  isSaving={isSavingCountdown}
+                  onCancel={() => setIsCountdownOpen(false)}
+                  onSubmit={(data) => void handleCountdownSubmit(data)}
+                />
+              ) : null}
+              {isWoOpen ? (
+                <MasterPanelWoGrid
+                  detail={activePartDetail}
+                  canCreateWo={canCreateWo}
+                  onCreated={reloadActivePartDetail}
+                />
+              ) : null}
+              <MasterPanelActivityGrid detail={activePartDetail} />
+            </div>
+          )}
+        </div>
+      ) : null}
       {isAddingAdditional ? (
         <div className="fixed inset-y-0 right-0 z-40 flex w-full max-w-md flex-col border-l border-border bg-card shadow-2xl">
           <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
@@ -878,82 +1402,6 @@ export function MasterPanelManager({ unitId, canManage, initialRows }: MasterPan
               </button>
             </div>
           </form>
-        </div>
-      ) : null}
-      {selectedPart ? (
-        <div className="fixed inset-y-0 right-0 z-40 flex w-full max-w-md flex-col border-l border-border bg-card shadow-2xl">
-          <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
-            <div>
-              <p className="text-[13px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Detail Panel</p>
-              <h4 className="mt-1 text-[18px] font-semibold text-foreground">{selectedPart.name}</h4>
-            </div>
-            <button
-              type="button"
-              onClick={() => setSelectedPart(null)}
-              className="catalog-icon-button"
-              title="Tutup"
-            >
-              <X className="h-3.5 w-3.5" strokeWidth={ICON_STROKE_WIDTH} />
-            </button>
-          </div>
-          <div className="flex-1 space-y-4 overflow-auto px-5 py-4">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="col-span-2 border border-border bg-background px-3 py-2">
-                <p className="text-[12px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Nama Part</p>
-                <p className="mt-1 text-[14px] text-foreground">{displayText(selectedPart.name)}</p>
-              </div>
-              <div className="border border-border bg-background px-3 py-2">
-                <p className="text-[12px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Part Number</p>
-                <p className="mt-1 text-[14px] text-foreground">{displayText(selectedPart.partNumber)}</p>
-              </div>
-              <div className="border border-border bg-background px-3 py-2">
-                <p className="text-[12px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Source</p>
-                <p className="mt-1 text-[14px] text-foreground">{displaySource(selectedPart)}</p>
-              </div>
-              <div className="border border-border bg-background px-3 py-2">
-                <p className="text-[12px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Condition</p>
-                <p className="mt-1 text-[14px] text-foreground">{displayCondition(selectedPart)}</p>
-              </div>
-              <div className="border border-border bg-background px-3 py-2">
-                <p className="text-[12px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Current Status</p>
-                <p className="mt-1 text-[14px] text-foreground">{displayCurrentStatus(selectedPart)}</p>
-              </div>
-              <div className="border border-border bg-background px-3 py-2">
-                <p className="text-[12px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Qty</p>
-                <p className="mt-1 text-[14px] text-foreground">{formatNumber(selectedPart.qty)}</p>
-              </div>
-              <div className="border border-border bg-background px-3 py-2">
-                <p className="text-[12px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Location</p>
-                <p className="mt-1 text-[14px] text-foreground">{displayText(selectedPart.location ?? selectedPart.defaultLocationType)}</p>
-              </div>
-              <div className="border border-border bg-background px-3 py-2">
-                <p className="text-[12px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Created At</p>
-                <p className="mt-1 text-[14px] text-foreground">{displayText(selectedPart.createdAt)}</p>
-              </div>
-              <div className="border border-border bg-background px-3 py-2">
-                <p className="text-[12px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Updated At</p>
-                <p className="mt-1 text-[14px] text-foreground">{displayText(selectedPart.updatedAt)}</p>
-              </div>
-              <div className="col-span-2 border border-border bg-background px-3 py-2">
-                <p className="text-[12px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Notes</p>
-                <p className="mt-1 whitespace-pre-wrap text-[14px] text-foreground">{displayText(selectedPart.notes)}</p>
-              </div>
-            </div>
-            <div className="border border-border bg-background px-3 py-3">
-              <p className="text-[12px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Foto</p>
-              <p className="mt-2 text-[14px] text-muted-foreground">
-                Foto operasional dibuka dari detail panel existing.
-              </p>
-              <div className="mt-3 flex gap-2">
-                <Link
-                  href={buildPanelDetailHref(unitId, selectedPart.id)}
-                  className="inline-flex items-center gap-1.5 border border-border px-3 py-1.5 text-[13px] font-mono uppercase tracking-[0.08em] text-muted-foreground hover:text-foreground"
-                >
-                  <ImageIcon className="h-3.5 w-3.5" strokeWidth={ICON_STROKE_WIDTH} /> Lihat Foto
-                </Link>
-              </div>
-            </div>
-          </div>
         </div>
       ) : null}
     </section>

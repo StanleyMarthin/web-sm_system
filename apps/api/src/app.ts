@@ -775,6 +775,7 @@ export function createApiFetchHandler(dependencies: AppDependencies = {}) {
     { method: "GET", pattern: /^\/api\/units\/([^/]+)\/master-panels$/, handler: (request, match) => handleUnitPanelsRoute(request, match![1], getAuthService(), getUnitsService()) },
     { method: "POST", pattern: /^\/api\/units\/([^/]+)\/master-panels$/, handler: (request, match) => handleUnitPanelsRoute(request, match![1], getAuthService(), getUnitsService()) },
     { method: "PUT", pattern: /^\/api\/units\/([^/]+)\/master-panels\/category$/, handler: (request, match) => handleUnitPanelCategoryRoute(request, match![1], getAuthService(), getUnitsService()) },
+    { method: "GET", pattern: /^\/api\/units\/([^/]+)\/master-panels\/(\d+)$/, handler: (request, match) => handleUnitPanelDetailRoute(request, match![1], Number.parseInt(match![2], 10), getAuthService(), getUnitsService()) },
     { method: "PUT", pattern: /^\/api\/units\/([^/]+)\/master-panels\/(\d+)$/, handler: (request, match) => handleUnitPanelDetailRoute(request, match![1], Number.parseInt(match![2], 10), getAuthService(), getUnitsService()) },
     { method: "DELETE", pattern: /^\/api\/units\/([^/]+)\/master-panels\/(\d+)$/, handler: (request, match) => handleUnitPanelDetailRoute(request, match![1], Number.parseInt(match![2], 10), getAuthService(), getUnitsService()) },
     { method: "GET", pattern: /^\/api\/units\/([^/]+)$/, handler: (request, match) => handleUnitDetailRoute(request, match![1], getAuthService(), getUnitsService()) },

@@ -429,12 +429,24 @@ export async function handleUnitPanelDetailRoute(
   authService: AuthService,
   unitsService: UnitsService,
 ): Promise<Response> {
-  const sessionResult = await requireUnitPanelManageSession(request, authService);
+  const sessionResult =
+    request.method === "GET"
+      ? await requireUnitDetailSession(request, authService)
+      : await requireUnitPanelManageSession(request, authService);
   if ("response" in sessionResult) {
     return sessionResult.response;
   }
 
   try {
+    if (request.method === "GET") {
+      const detail = await unitsService.getUnitPanelDetail(sessionResult.session, unitId, panelId);
+      if (!detail) {
+        return errorResponse(request, "Master panel tidak ditemukan.", 404, "UNIT_PANEL_NOT_FOUND");
+      }
+
+      return successResponse(request, "Detail master panel ready", detail);
+    }
+
     if (request.method === "PUT") {
       const body = await parseJsonBody(request, updateUnitPanelRequestSchema);
       if (!body.success) {

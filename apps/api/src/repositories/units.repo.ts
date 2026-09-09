@@ -21,6 +21,9 @@ import type {
 } from "@smsystem/contracts/unit-bom";
 import type {
   CreateUnitPanelRequest,
+  UnitPanelActivity,
+  UnitPanelCountdownReferences,
+  UnitPanelDetail,
   UnitPanelGeneralCollection,
   UnitPanelGeneralRecord,
   UnitPanelCollection,
@@ -249,6 +252,51 @@ interface UnitPanelGeneralRow extends RowDataPacket {
   updatedAt: string | null;
 }
 
+interface UnitPanelImageRow extends RowDataPacket {
+  id: number;
+  partId: number;
+  fileUrl: string;
+  caption: string | null;
+  sortOrder: number;
+  createdAt: string | null;
+}
+
+interface UnitPanelActivityRow extends RowDataPacket {
+  type: UnitPanelActivity["type"];
+  id: string;
+  title: string | null;
+  status: string | null;
+  date: string | null;
+  url: string | null;
+  targetHours: number | string | null;
+  remainingHours: number | string | null;
+  progressPercent: number | string | null;
+  woNumber?: string | null;
+  requestDate?: string | null;
+  fromDivisionName?: string | null;
+  toDivisionName?: string | null;
+  jobDetail?: string | null;
+  estimatedHours?: number | string | null;
+  isPriority?: number | boolean | null;
+}
+
+interface UnitPanelReferenceOptionRow extends RowDataPacket {
+  value: string | number;
+  label: string;
+  carId?: string | null;
+  section?: string | null;
+  category?: string | null;
+  code?: string | null;
+  parentId?: number | null;
+  parentName?: string | null;
+  parentCode?: string | null;
+  divisionId?: number | null;
+  divisionName?: string | null;
+  divisionParentId?: number | null;
+  divisionParentName?: string | null;
+  divisionParentCode?: string | null;
+}
+
 interface MasterPanelInventorySchemaRow extends RowDataPacket {
   columnName: string;
 }
@@ -259,6 +307,25 @@ interface MasterPanelInventorySchema {
 
 function mapTinyIntBoolean(value: unknown): boolean {
   return value === true || value === 1 || value === "1";
+}
+
+function mapUnitPanelReference(row: UnitPanelReferenceOptionRow) {
+  return {
+    label: String(row.label ?? ""),
+    value: String(row.value ?? ""),
+    code: row.code ?? null,
+    carId: row.carId ?? null,
+    section: row.section ?? null,
+    category: row.category ?? null,
+    parentId: row.parentId === undefined || row.parentId === null ? null : Number(row.parentId),
+    parentName: row.parentName ?? null,
+    parentCode: row.parentCode ?? null,
+    divisionId: row.divisionId === undefined || row.divisionId === null ? null : Number(row.divisionId),
+    divisionName: row.divisionName ?? null,
+    divisionParentId: row.divisionParentId === undefined || row.divisionParentId === null ? null : Number(row.divisionParentId),
+    divisionParentName: row.divisionParentName ?? null,
+    divisionParentCode: row.divisionParentCode ?? null,
+  };
 }
 
 export interface UnitBoardListPayload {
@@ -2147,6 +2214,340 @@ export class UnitsRepository {
     };
   }
 
+  async findUnitPanelDetail(params: ScopeParams & { unitId: string; panelId: number }): Promise<UnitPanelDetail | null> {
+    const unitSummary = await this.findUnitSummary(params);
+    if (!unitSummary) {
+      return null;
+    }
+
+    const pool = this.poolFactory();
+    const row = await this.findUnitPanelRow(pool, params.unitId, params.panelId);
+    if (!row) {
+      return null;
+    }
+
+    const panel = mapUnitPanelRecord(row);
+    const purchasePrHeader = qualifyTable(this.purchaseDb, "pur_pr_header");
+    const vendorTable = qualifyTable(this.purchaseDb, "vnd_wo_vendor");
+    const divisionWhereParams: unknown[] = [];
+    let divisionWhere = "";
+    if (!params.scope.canViewAllUnits) {
+      if (params.scope.divisionIds.length > 0) {
+        divisionWhere = `WHERE d.id IN (${params.scope.divisionIds.map(() => "?").join(", ")})`;
+        divisionWhereParams.push(...params.scope.divisionIds);
+      } else {
+        divisionWhere = "WHERE 1 = 0";
+      }
+    }
+
+    const [
+      imageRows,
+      countdownRows,
+      jobdescRows,
+      prRows,
+      woRows,
+      wovRows,
+      divisionRows,
+      jobTypeRows,
+    ] = await Promise.all([
+      pool.query<UnitPanelImageRow[]>(
+        `
+          SELECT
+            id,
+            part_id AS partId,
+            url_image AS fileUrl,
+            caption,
+            sort_order AS sortOrder,
+            DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') AS createdAt
+          FROM masterpanel_images
+          WHERE part_id = ?
+          ORDER BY sort_order ASC, id ASC
+        `,
+        [params.panelId],
+      ),
+      pool.query<UnitPanelActivityRow[]>(
+        `
+          SELECT
+            'COUNTDOWN' AS type,
+            cd.id AS id,
+            COALESCE(mjt.job_name, cd.section_name, 'Countdown') AS title,
+            COALESCE(cd.status, 'PLAN') AS status,
+            DATE_FORMAT(COALESCE(cd.updated_at, cd.created_at), '%Y-%m-%d %H:%i:%s') AS date,
+            CONCAT('/countdown/', cd.id) AS url,
+            ROUND(COALESCE(cd.target_hours_revised, cd.target_hours_initial + cd.time_extension_hours, cd.target_hours_initial, 0), 2) AS targetHours,
+            ROUND(COALESCE(cd.remaining_hours, 0), 2) AS remainingHours,
+            ROUND(COALESCE(cd.actual_progress_percent, 0), 2) AS progressPercent
+          FROM sm_jobdesc_countdown cd
+          LEFT JOIN master_job_types mjt ON mjt.id = cd.job_type_id
+          WHERE cd.car_id = ?
+            AND cd.panel_id = ?
+        `,
+        [params.unitId, params.panelId],
+      ),
+      pool.query<UnitPanelActivityRow[]>(
+        `
+          SELECT
+            'JOBDESC' AS type,
+            p.id AS id,
+            COALESCE(NULLIF(TRIM(p.jobdescription), ''), mjt.job_name, cd.section_name, 'Jobdesc') AS title,
+            COALESCE(p.status, cd.status, 'PLAN') AS status,
+            DATE_FORMAT(COALESCE(p.created_at, cd.updated_at, cd.created_at), '%Y-%m-%d %H:%i:%s') AS date,
+            CONCAT('/job-plan?planId=', p.id) AS url,
+            ROUND(COALESCE(TIME_TO_SEC(p.dailyTargetHours) / 3600, cd.target_hours_revised, cd.target_hours_initial + cd.time_extension_hours, cd.target_hours_initial, 0), 2) AS targetHours,
+            ROUND(COALESCE(cd.remaining_hours, 0), 2) AS remainingHours,
+            ROUND(COALESCE(cd.actual_progress_percent, 0), 2) AS progressPercent
+          FROM sm_jobdesc_plan p
+          JOIN sm_jobdesc_countdown cd ON cd.id = p.core_id
+          LEFT JOIN master_job_types mjt ON mjt.id = cd.job_type_id
+          WHERE cd.car_id = ?
+            AND cd.panel_id = ?
+        `,
+        [params.unitId, params.panelId],
+      ),
+      pool.query<UnitPanelActivityRow[]>(
+        `
+          SELECT
+            'PR' AS type,
+            h.id AS id,
+            COALESCE(h.pr_number, 'PR') AS title,
+            COALESCE(h.status, h.acc_tracking, 'OPEN') AS status,
+            DATE_FORMAT(COALESCE(h.updated_at, h.created_at), '%Y-%m-%d %H:%i:%s') AS date,
+            CONCAT('/pr/', h.id) AS url,
+            NULL AS targetHours,
+            NULL AS remainingHours,
+            NULL AS progressPercent
+          FROM ${purchasePrHeader} h
+          WHERE h.car_id = ?
+            AND h.master_panel_id = ?
+        `,
+        [params.unitId, params.panelId],
+      ),
+      pool.query<UnitPanelActivityRow[]>(
+        `
+          SELECT
+            'WO' AS type,
+            w.id AS id,
+            COALESCE(w.wo_number, w.job_detail, 'WO') AS title,
+            COALESCE(w.status, 'SUBMITTED') AS status,
+            DATE_FORMAT(COALESCE(w.updated_at, w.created_at), '%Y-%m-%d %H:%i:%s') AS date,
+            CONCAT('/wo/', w.id) AS url,
+            ROUND(COALESCE(cd.target_hours_revised, cd.target_hours_initial + cd.time_extension_hours, cd.target_hours_initial, 0), 2) AS targetHours,
+            ROUND(COALESCE(cd.remaining_hours, 0), 2) AS remainingHours,
+            ROUND(COALESCE(cd.actual_progress_percent, 0), 2) AS progressPercent,
+            w.wo_number AS woNumber,
+            DATE_FORMAT(w.request_date, '%Y-%m-%d') AS requestDate,
+            from_div.name AS fromDivisionName,
+            to_div.name AS toDivisionName,
+            w.job_detail AS jobDetail,
+            w.estimated_hours AS estimatedHours,
+            COALESCE(w.is_priority, 0) AS isPriority
+          FROM sm_jobdesc_wo w
+          LEFT JOIN sm_jobdesc_countdown cd
+            ON cd.ref_taks_id = w.id
+           AND cd.car_id = ?
+           AND cd.panel_id = ?
+          LEFT JOIN sm_divisi from_div ON from_div.id = w.from_div_id
+          LEFT JOIN sm_divisi to_div ON to_div.id = w.to_div_id
+          WHERE w.car_id = ?
+            AND w.master_panel_id = ?
+
+          UNION
+
+          SELECT
+            'WO' AS type,
+            w.id AS id,
+            COALESCE(w.wo_number, w.job_detail, 'WO') AS title,
+            COALESCE(w.status, 'SUBMITTED') AS status,
+            DATE_FORMAT(COALESCE(w.updated_at, w.created_at), '%Y-%m-%d %H:%i:%s') AS date,
+            CONCAT('/wo/', w.id) AS url,
+            ROUND(COALESCE(cd.target_hours_revised, cd.target_hours_initial + cd.time_extension_hours, cd.target_hours_initial, 0), 2) AS targetHours,
+            ROUND(COALESCE(cd.remaining_hours, 0), 2) AS remainingHours,
+            ROUND(COALESCE(cd.actual_progress_percent, 0), 2) AS progressPercent,
+            w.wo_number AS woNumber,
+            DATE_FORMAT(w.request_date, '%Y-%m-%d') AS requestDate,
+            from_div.name AS fromDivisionName,
+            to_div.name AS toDivisionName,
+            w.job_detail AS jobDetail,
+            w.estimated_hours AS estimatedHours,
+            COALESCE(w.is_priority, 0) AS isPriority
+          FROM sm_jobdesc_countdown cd
+          JOIN sm_jobdesc_wo w ON w.id = cd.ref_taks_id
+          LEFT JOIN sm_divisi from_div ON from_div.id = w.from_div_id
+          LEFT JOIN sm_divisi to_div ON to_div.id = w.to_div_id
+          WHERE cd.car_id = ?
+            AND cd.panel_id = ?
+        `,
+        [params.unitId, params.panelId, params.unitId, params.panelId, params.unitId, params.panelId],
+      ),
+      pool.query<UnitPanelActivityRow[]>(
+        `
+          SELECT DISTINCT
+            'WOV' AS type,
+            w.id AS id,
+            COALESCE(w.wov_number, w.item_name, 'WOV') AS title,
+            COALESCE(w.status, 'OPEN') AS status,
+            DATE_FORMAT(COALESCE(w.updated_at, w.created_at), '%Y-%m-%d %H:%i:%s') AS date,
+            CONCAT('/vendor/', w.id) AS url,
+            NULL AS targetHours,
+            NULL AS remainingHours,
+            NULL AS progressPercent
+          FROM ${vendorTable} w
+          LEFT JOIN sm_jobdesc_countdown cd
+            ON cd.id = w.core_id
+           AND cd.car_id = ?
+           AND cd.panel_id = ?
+          LEFT JOIN ${purchasePrHeader} pr
+            ON pr.id = w.pr_id
+           AND pr.car_id = ?
+           AND pr.master_panel_id = ?
+          WHERE w.car_id = ?
+            AND (cd.id IS NOT NULL OR pr.id IS NOT NULL)
+        `,
+        [params.unitId, params.panelId, params.unitId, params.panelId, params.unitId],
+      ),
+      pool.query<UnitPanelReferenceOptionRow[]>(
+        `
+          SELECT
+            d.id AS value,
+            d.name AS label,
+            d.code AS code,
+            d.parent_id AS parentId,
+            parent.name AS parentName,
+            parent.code AS parentCode
+          FROM sm_divisi d
+          LEFT JOIN sm_divisi parent ON parent.id = d.parent_id
+          ${divisionWhere}
+          ORDER BY d.name ASC
+        `,
+        divisionWhereParams,
+      ),
+      pool.query<UnitPanelReferenceOptionRow[]>(
+        `
+          SELECT
+            mjt.id AS value,
+            mjt.job_name AS label,
+            mjt.division_id AS divisionId,
+            division.name AS divisionName,
+            division.parent_id AS divisionParentId,
+            parent.name AS divisionParentName,
+            parent.code AS divisionParentCode
+          FROM master_job_types mjt
+          LEFT JOIN sm_divisi division ON division.id = mjt.division_id
+          LEFT JOIN sm_divisi parent ON parent.id = division.parent_id
+          WHERE mjt.job_name IS NOT NULL
+          ORDER BY mjt.job_name ASC
+        `,
+      ),
+    ]);
+
+    const activityMap = new Map<string, UnitPanelActivity>();
+    for (const activity of [
+      ...countdownRows[0],
+      ...jobdescRows[0],
+      ...prRows[0],
+      ...woRows[0],
+      ...wovRows[0],
+    ]) {
+      activityMap.set(`${activity.type}:${activity.id}`, {
+        type: activity.type,
+        id: String(activity.id),
+        title: activity.title?.trim() || activity.type,
+        status: activity.status,
+        date: activity.date,
+        url: activity.url,
+        metadata: {
+          targetHours: activity.targetHours === null ? null : Number(activity.targetHours),
+          remainingHours: activity.remainingHours === null ? null : Number(activity.remainingHours),
+          progressPercent: activity.progressPercent === null ? null : Number(activity.progressPercent),
+          ...(activity.type === "WO" ? {
+            woNumber: activity.woNumber ?? null,
+            requestDate: activity.requestDate ?? null,
+            fromDivisionName: activity.fromDivisionName ?? null,
+            toDivisionName: activity.toDivisionName ?? null,
+            jobDetail: activity.jobDetail ?? null,
+            estimatedHours: activity.estimatedHours === null || activity.estimatedHours === undefined ? null : Number(activity.estimatedHours),
+            isPriority: mapTinyIntBoolean(activity.isPriority),
+          } : {}),
+        },
+      });
+    }
+
+    const activities = [...activityMap.values()].sort((left, right) => {
+      const leftTime = left.date ? Date.parse(left.date) : 0;
+      const rightTime = right.date ? Date.parse(right.date) : 0;
+      return rightTime - leftTime;
+    });
+
+    const summary = activities.reduce(
+      (current, activity) => {
+        const targetHours = Number(activity.metadata.targetHours ?? 0);
+        const remainingHours = Number(activity.metadata.remainingHours ?? 0);
+        const progressPercent = Number(activity.metadata.progressPercent ?? 0);
+        const next = { ...current };
+        if (activity.type === "COUNTDOWN") next.countdown += 1;
+        if (activity.type === "JOBDESC") next.jobdesc += 1;
+        if (activity.type === "PR") next.pr += 1;
+        if (activity.type === "WO") next.wo += 1;
+        if (activity.type === "WOV") next.wov += 1;
+        return {
+          ...next,
+          totalHours: next.totalHours + (Number.isFinite(targetHours) ? targetHours : 0),
+          remainingHours: next.remainingHours + (Number.isFinite(remainingHours) ? remainingHours : 0),
+          progressSamples: progressPercent > 0 ? next.progressSamples + 1 : next.progressSamples,
+          progressTotal: progressPercent > 0 ? next.progressTotal + progressPercent : next.progressTotal,
+        };
+      },
+      { countdown: 0, jobdesc: 0, pr: 0, wo: 0, wov: 0, totalHours: 0, remainingHours: 0, progressSamples: 0, progressTotal: 0 },
+    );
+
+    return {
+      unitId: params.unitId,
+      panel,
+      images: imageRows[0].map((image) => ({
+        id: Number(image.id),
+        partId: Number(image.partId),
+        fileUrl: image.fileUrl,
+        caption: image.caption,
+        sortOrder: Number(image.sortOrder ?? 0),
+        createdAt: image.createdAt,
+      })),
+      summary: {
+        countdown: summary.countdown,
+        jobdesc: summary.jobdesc,
+        pr: summary.pr,
+        wo: summary.wo,
+        wov: summary.wov,
+        totalHours: Number(summary.totalHours.toFixed(2)),
+        remainingHours: Number(summary.remainingHours.toFixed(2)),
+        progressPercent: summary.progressSamples > 0 ? Number((summary.progressTotal / summary.progressSamples).toFixed(2)) : 0,
+      },
+      activities,
+      countdownReferences: {
+        divisions: divisionRows[0].map(mapUnitPanelReference),
+        units: [{
+          label: unitSummary.unitName,
+          value: params.unitId,
+        }],
+        panels: [{
+          label: panel.name,
+          value: String(panel.id),
+          carId: params.unitId,
+          section: panel.section,
+          category: panel.category,
+        }],
+        sections: [{
+          label: panel.section,
+          value: panel.section,
+        }],
+        jobTypes: jobTypeRows[0].map(mapUnitPanelReference),
+        taskCategories: [
+          { label: "Main", value: "MAIN" },
+          { label: "Additional", value: "ADDITIONAL" },
+        ],
+      } satisfies UnitPanelCountdownReferences,
+    };
+  }
+
   async findGeneralUnitPanels(params: GeneralUnitPanelSearchParams): Promise<UnitPanelGeneralCollection> {
     if (!params.scope.canViewAllUnits && !params.scope.canViewAssignedUnits && params.scope.divisionIds.length === 0) {
       throw new Error("SCOPE_FORBIDDEN");
@@ -2232,23 +2633,29 @@ export class UnitsRepository {
           component_name,
           panel_name,
           name_part,
+          alias_name,
+          part_number,
           location,
           initial_condition,
           current_status,
           ${inventoryColumns.length ? `${inventoryColumns.join(",\n          ")},` : ""}
+          notes,
           created_by,
           updated_by
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ${inventoryColumns.map(() => "?").join(", ")}${inventoryColumns.length ? ", " : ""}?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ${inventoryColumns.map(() => "?").join(", ")}${inventoryColumns.length ? ", " : ""}?, ?, ?)
       `,
       [
         params.unitId,
         toNullableText(input.category),
         input.section.trim(),
         input.name.trim(),
-        input.defaultLocationType,
-        input.defaultConditionType,
-        input.defaultStockStatus,
+        toNullableText(input.aliasName),
+        toNullableText(input.partNumber),
+        toNullableText(input.location) ?? input.defaultLocationType,
+        toNullableText(input.initialCondition) ?? input.defaultConditionType,
+        toNullableText(input.currentStatus) ?? input.defaultStockStatus,
         ...inventoryValues,
+        toNullableText(input.notes),
         params.actorId,
         params.actorId,
       ],
@@ -2307,10 +2714,13 @@ export class UnitsRepository {
           component_name = ?,
           panel_name = ?,
           name_part = ?,
+          alias_name = ?,
+          part_number = ?,
           location = ?,
           initial_condition = ?,
           current_status = ?,
           ${inventoryAssignments.length ? `${inventoryAssignments.join(",\n          ")},` : ""}
+          notes = ?,
           updated_by = ?
         WHERE id = ?
           AND car_id = ?
@@ -2320,10 +2730,13 @@ export class UnitsRepository {
         toNullableText(input.category),
         input.section.trim(),
         input.name.trim(),
-        input.defaultLocationType,
-        input.defaultConditionType,
-        input.defaultStockStatus,
+        toNullableText(input.aliasName),
+        toNullableText(input.partNumber),
+        toNullableText(input.location) ?? input.defaultLocationType,
+        toNullableText(input.initialCondition) ?? input.defaultConditionType,
+        toNullableText(input.currentStatus) ?? input.defaultStockStatus,
         ...inventoryValues,
+        toNullableText(input.notes),
         params.actorId,
         params.panelId,
         params.unitId,
