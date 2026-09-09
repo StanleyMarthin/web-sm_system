@@ -46,6 +46,7 @@ interface WoRow extends RowDataPacket {
   fromDivisionName: string | null;
   toDivisionId: number | null;
   toDivisionName: string | null;
+  masterPanelId: number | null;
   panelName: string | null;
   jobDetail: string | null;
   estimatedHours: number | null;
@@ -88,6 +89,12 @@ interface LinkedCountdownRow extends RowDataPacket {
 
 interface ExistingCountdownRow extends RowDataPacket {
   coreId: string;
+}
+
+interface MasterPanelSnapshotRow extends RowDataPacket {
+  id: number;
+  panelName: string | null;
+  namePart: string | null;
 }
 
 function toBoolean(value: unknown): boolean {
@@ -156,6 +163,7 @@ function mapWoRow(row: WoRow): WoRecord {
     fromDivisionName: row.fromDivisionName ?? "-",
     toDivisionId: row.toDivisionId,
     toDivisionName: row.toDivisionName ?? "-",
+    masterPanelId: row.masterPanelId === null ? null : Number(row.masterPanelId),
     panelName: row.panelName,
     jobDetail: row.jobDetail ?? "",
     estimatedHours: row.estimatedHours === null ? null : Number(row.estimatedHours),
@@ -188,6 +196,7 @@ function buildWoSelectSql(): string {
       COALESCE(fd.name, '-') AS fromDivisionName,
       w.to_div_id AS toDivisionId,
       COALESCE(td.name, '-') AS toDivisionName,
+      w.master_panel_id AS masterPanelId,
       w.panel_name AS panelName,
       COALESCE(w.job_detail, '') AS jobDetail,
       w.estimated_hours AS estimatedHours,
@@ -752,6 +761,27 @@ export class MySqlWoRepository implements WoRepository {
     try {
       await connection.beginTransaction();
 
+      let masterPanelSnapshot: MasterPanelSnapshotRow | null = null;
+      if (input.masterPanelId !== undefined && input.masterPanelId !== null) {
+        const [masterPanelRows] = (await connection.query(
+          `
+            SELECT
+              id,
+              panel_name AS panelName,
+              name_part AS namePart
+            FROM master_panels
+            WHERE id = ?
+              AND car_id = ?
+            LIMIT 1
+          `,
+          [input.masterPanelId, input.carId],
+        )) as [MasterPanelSnapshotRow[], unknown];
+        masterPanelSnapshot = masterPanelRows[0] ?? null;
+        if (!masterPanelSnapshot) {
+          throw new Error("WO_MASTER_PANEL_NOT_FOUND");
+        }
+      }
+
       const createItems = input.items && input.items.length > 0
         ? input.items
         : [
@@ -785,24 +815,14 @@ export class MySqlWoRepository implements WoRepository {
         const year = String(requestDate.getUTCFullYear());
         const woNumber = `WO/${sequence}/${month}/${year}`;
 
-        const panelDisplay = item.panelName?.trim() || null;
+        const panelDisplay =
+          item.panelName?.trim() ||
+          input.panelName?.trim() ||
+          masterPanelSnapshot?.panelName ||
+          masterPanelSnapshot?.namePart ||
+          null;
         if (!panelDisplay) {
           throw new Error("WO_PANEL_REQUIRED");
-        }
-
-        const [panelRows] = (await connection.query(
-          `
-            SELECT id
-            FROM master_panels
-            WHERE name = ?
-              AND (car_id = ? OR car_id IS NULL)
-            ORDER BY CASE WHEN car_id = ? THEN 0 ELSE 1 END ASC
-            LIMIT 1
-          `,
-          [panelDisplay, input.carId, input.carId],
-        )) as [Array<RowDataPacket & { id: number }>, unknown];
-        if (!panelRows[0]) {
-          throw new Error("WO_PANEL_NOT_FOUND");
         }
 
         await connection.execute(
@@ -812,6 +832,7 @@ export class MySqlWoRepository implements WoRepository {
               wo_number,
               request_date,
               car_id,
+              master_panel_id,
               pic_id,
               from_div_id,
               to_div_id,
@@ -822,13 +843,14 @@ export class MySqlWoRepository implements WoRepository {
               status,
               acc_tracking,
               notes
-            ) VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, 'PENDING_TARGET_KD_APPROVAL', 0, ?)
+            ) VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, 'PENDING_TARGET_KD_APPROVAL', 0, ?)
           `,
           [
             woId,
             woNumber,
             input.requestDate,
             input.carId,
+            input.masterPanelId ?? null,
             params.fromDivisionId,
             input.toDivisionId,
             panelDisplay,

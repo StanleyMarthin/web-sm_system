@@ -186,6 +186,15 @@ function mapWoError(request: Request, error: unknown): Response {
         "WO_PANEL_NOT_FOUND",
       );
     }
+
+    if (error.message === "WO_MASTER_PANEL_NOT_FOUND") {
+      return errorResponse(
+        request,
+        "Master panel tidak valid untuk unit WO ini.",
+        400,
+        "WO_MASTER_PANEL_NOT_FOUND",
+      );
+    }
   }
 
   return errorResponse(
