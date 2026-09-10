@@ -6,15 +6,14 @@ import { AllCommunityModule, ModuleRegistry } from "ag-grid-community";
 import { AgGridReact } from "ag-grid-react";
 import { ArrowLeft, ChevronRight, Image as ImageIcon, ListPlus, Plus, RefreshCw, Search, X } from "lucide-react";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { CountdownBoardForm, type CountdownFormValues } from "@/modules/countdown/components/forms/countdown-board-form";
-import { createCountdownRecord } from "@/shared/api/countdown";
 import { createUnitAdditionalMasterPanel } from "@/shared/api/unit-catalog";
 import { deleteUnitPanel, fetchUnitPanelDetail, fetchUnitPanels, updateUnitPanel } from "@/shared/api/units";
-import { parseHHMMToDecimal } from "@/shared/format/time";
-import { MasterPanelActivityGrid } from "./master-panel-activity-grid";
 import { MasterPanelActivityMenu } from "./master-panel-activity-menu";
+import { MasterPanelCountdownGrid } from "./master-panel-countdown-grid";
 import { MasterPanelPhotoGallery } from "./master-panel-photo-gallery";
+import { MasterPanelPrGrid } from "./master-panel-pr-grid";
 import { MasterPanelWoGrid } from "./master-panel-wo-grid";
+import { MasterPanelWovGrid } from "./master-panel-wov-grid";
 
 const ICON_STROKE_WIDTH = 2.5;
 
@@ -28,6 +27,8 @@ interface MasterPanelManagerProps {
   unitId: string;
   canManage: boolean;
   canCreateWo: boolean;
+  canCreatePr: boolean;
+  canCreateVendor: boolean;
   initialRows?: UnitPanelRecord[];
 }
 
@@ -374,7 +375,9 @@ function PartStatusRenderer(params: ICellRendererParams<UnitPanelRecord>) {
   );
 }
 
-export function MasterPanelManager({ unitId, canManage, canCreateWo, initialRows }: MasterPanelManagerProps) {
+type ActiveActivityType = "COUNTDOWN" | "WO" | "PR" | "WOV" | null;
+
+export function MasterPanelManager({ unitId, canManage, canCreateWo, canCreatePr, canCreateVendor, initialRows }: MasterPanelManagerProps) {
   const [rows, setRows] = useState<UnitPanelRecord[]>(() => initialRows ?? []);
   const [isLoading, setIsLoading] = useState(() => initialRows === undefined);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -383,9 +386,7 @@ export function MasterPanelManager({ unitId, canManage, canCreateWo, initialRows
   const [activePartDetail, setActivePartDetail] = useState<UnitPanelDetail | null>(null);
   const [activeDetailMode, setActiveDetailMode] = useState<"photos" | "activity" | null>(null);
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
-  const [isCountdownOpen, setIsCountdownOpen] = useState(false);
-  const [isWoOpen, setIsWoOpen] = useState(false);
-  const [isSavingCountdown, setIsSavingCountdown] = useState(false);
+  const [activeActivityType, setActiveActivityType] = useState<ActiveActivityType>(null);
 
   const [search, setSearch] = useState<string>("");
   const [partFilter, setPartFilter] = useState<PartFilter>("ALL");
@@ -476,8 +477,7 @@ export function MasterPanelManager({ unitId, canManage, canCreateWo, initialRows
     setIsLoadingDetail(true);
     setActiveDetailMode(mode);
     setActivePartDetail(null);
-    setIsCountdownOpen(false);
-    setIsWoOpen(false);
+    setActiveActivityType(null);
     setError(null);
     const result = await fetchUnitPanelDetail("", unitId, part.id);
     if (!result.payload) {
@@ -933,84 +933,6 @@ export function MasterPanelManager({ unitId, canManage, canCreateWo, initialRows
     setIsSubmitting(false);
   }
 
-  function buildCountdownInitialValues(detail: UnitPanelDetail): CountdownFormValues {
-    const today = new Date().toISOString().slice(0, 10);
-    return {
-      countdownId: "",
-      carId: detail.unitId,
-      divisionId: "",
-      panelId: String(detail.panel.id),
-      taskCategory: "ADDITIONAL",
-      sectionName: detail.panel.section,
-      jobTypeId: "",
-      targetHoursInitial: "01:00",
-      startDate: today,
-      deadlineDate: today,
-      prerequisiteCoreId: "",
-      refWoId: "",
-      note: "",
-      temuanAwal: "",
-      keterangan: detail.panel.name,
-      status: "PLAN",
-    };
-  }
-
-  async function handleCountdownSubmit(data: CountdownFormValues) {
-    if (!activePartDetail) return;
-    const payload = {
-      carId: activePartDetail.unitId,
-      divisionId: Number(data.divisionId),
-      panelId: activePartDetail.panel.id,
-      taskCategory: data.taskCategory,
-      sectionName: data.sectionName.trim(),
-      jobTypeId: toNullable(data.jobTypeId) ?? "",
-      targetHoursInitial: parseHHMMToDecimal(data.targetHoursInitial),
-      startDate: toNullable(data.startDate) ?? "",
-      deadlineDate: data.deadlineDate.trim(),
-      prerequisiteCoreId: toNullable(data.prerequisiteCoreId) ?? "",
-      refWoId: toNullable(data.refWoId) ?? "",
-      note: toNullable(data.note) ?? "",
-      temuanAwal: toNullable(data.temuanAwal) ?? "",
-      keterangan: toNullable(data.keterangan) ?? "",
-      status: data.status,
-    };
-
-    if (!Number.isFinite(payload.divisionId) || payload.divisionId <= 0) {
-      setError("Divisi wajib diisi.");
-      return;
-    }
-    if (!payload.sectionName) {
-      setError("Bagian wajib diisi.");
-      return;
-    }
-    if (!payload.jobTypeId) {
-      setError("Jobdesc wajib dipilih.");
-      return;
-    }
-    if (!Number.isFinite(payload.targetHoursInitial) || payload.targetHoursInitial < 0) {
-      setError("Target jam awal tidak valid.");
-      return;
-    }
-    if (!payload.deadlineDate) {
-      setError("Deadline wajib diisi.");
-      return;
-    }
-
-    setIsSavingCountdown(true);
-    setError(null);
-    setMessage(null);
-    const result = await createCountdownRecord(payload);
-    if (!result.success) {
-      setError(result.message);
-      setIsSavingCountdown(false);
-      return;
-    }
-    await reloadActivePartDetail();
-    setIsCountdownOpen(false);
-    setMessage("Countdown berhasil dibuat.");
-    setIsSavingCountdown(false);
-  }
-
   return (
     <section className="border border-border bg-card">
 
@@ -1278,27 +1200,12 @@ export function MasterPanelManager({ unitId, canManage, canCreateWo, initialRows
               <p className="mt-1 text-[13px] text-muted-foreground">{activePartDetail.panel.category ?? "-"} / {activePartDetail.panel.section}</p>
             </div>
             <div className="flex items-center gap-2">
-              {activeDetailMode === "activity" ? (
-                <MasterPanelActivityMenu
-                  canCreateCountdown={canManage}
-                  canCreateWo={canCreateWo}
-                  onCreateCountdown={() => {
-                    setIsWoOpen(false);
-                    setIsCountdownOpen(true);
-                  }}
-                  onCreateWo={() => {
-                    setIsCountdownOpen(false);
-                    setIsWoOpen(true);
-                  }}
-                />
-              ) : null}
               <button
                 type="button"
                 onClick={() => {
                   setActivePartDetail(null);
                   setActiveDetailMode(null);
-                  setIsCountdownOpen(false);
-                  setIsWoOpen(false);
+                  setActiveActivityType(null);
                 }}
                 className="catalog-icon-button"
                 title="Tutup"
@@ -1312,24 +1219,54 @@ export function MasterPanelManager({ unitId, canManage, canCreateWo, initialRows
             <MasterPanelPhotoGallery detail={activePartDetail} />
           ) : (
             <div className="space-y-4">
-              {isCountdownOpen ? (
-                <CountdownBoardForm
-                  initialValues={buildCountdownInitialValues(activePartDetail)}
-                  editorMode="create"
-                  references={activePartDetail.countdownReferences}
-                  isSaving={isSavingCountdown}
-                  onCancel={() => setIsCountdownOpen(false)}
-                  onSubmit={(data) => void handleCountdownSubmit(data)}
+              {activeActivityType === null ? (
+                <MasterPanelActivityMenu
+                  detail={activePartDetail}
+                  canCreateCountdown={canManage}
+                  canCreateWo={canCreateWo}
+                  canCreatePr={canCreatePr}
+                  canCreateVendor={canCreateVendor}
+                  onSelect={setActiveActivityType}
                 />
               ) : null}
-              {isWoOpen ? (
+              {activeActivityType ? (
+                <button
+                  type="button"
+                  onClick={() => setActiveActivityType(null)}
+                  className="inline-flex items-center gap-1.5 border border-border px-3 py-2 text-[12px] font-mono uppercase tracking-[0.08em] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                >
+                  <ArrowLeft className="h-3.5 w-3.5" strokeWidth={ICON_STROKE_WIDTH} />
+                  Pilih Aktivitas
+                </button>
+              ) : null}
+              {activeActivityType === "COUNTDOWN" ? (
+                <MasterPanelCountdownGrid
+                  detail={activePartDetail}
+                  canCreateCountdown={canManage}
+                  onCreated={reloadActivePartDetail}
+                />
+              ) : null}
+              {activeActivityType === "WO" ? (
                 <MasterPanelWoGrid
                   detail={activePartDetail}
                   canCreateWo={canCreateWo}
                   onCreated={reloadActivePartDetail}
                 />
               ) : null}
-              <MasterPanelActivityGrid detail={activePartDetail} />
+              {activeActivityType === "PR" ? (
+                <MasterPanelPrGrid
+                  detail={activePartDetail}
+                  canCreatePr={canCreatePr}
+                  onCreated={reloadActivePartDetail}
+                />
+              ) : null}
+              {activeActivityType === "WOV" ? (
+                <MasterPanelWovGrid
+                  detail={activePartDetail}
+                  canCreateVendor={canCreateVendor}
+                  onCreated={reloadActivePartDetail}
+                />
+              ) : null}
             </div>
           )}
         </div>

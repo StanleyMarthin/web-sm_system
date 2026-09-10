@@ -32,6 +32,8 @@ interface UnitWorkspaceShellProps {
   canDownloadPhotos: boolean;
   canManagePanels: boolean;
   canCreateWo: boolean;
+  canCreatePr: boolean;
+  canCreateVendor: boolean;
   canUseCatalog: boolean;
   canManageCatalog: boolean;
 }
@@ -394,6 +396,8 @@ export function UnitWorkspaceShell({
   canDownloadPhotos,
   canManagePanels,
   canCreateWo,
+  canCreatePr,
+  canCreateVendor,
   canUseCatalog,
   canManageCatalog,
 }: UnitWorkspaceShellProps) {
@@ -772,6 +776,8 @@ export function UnitWorkspaceShell({
           unitId={unit.unitId}
           canManage={canManagePanels}
           canCreateWo={canCreateWo}
+          canCreatePr={canCreatePr}
+          canCreateVendor={canCreateVendor}
           initialRows={masterPanels?.tree}
         />
       )}

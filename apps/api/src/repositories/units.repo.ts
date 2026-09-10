@@ -272,12 +272,38 @@ interface UnitPanelActivityRow extends RowDataPacket {
   remainingHours: number | string | null;
   progressPercent: number | string | null;
   woNumber?: string | null;
+  unitName?: string | null;
+  carId?: string | null;
+  divisionName?: string | null;
+  sectionName?: string | null;
+  panelName?: string | null;
+  jobTypeName?: string | null;
+  temuanAwal?: string | null;
+  keterangan?: string | null;
+  totalActualHours?: number | string | null;
+  deadlineDate?: string | null;
+  isOverdue?: number | boolean | null;
   requestDate?: string | null;
   fromDivisionName?: string | null;
   toDivisionName?: string | null;
   jobDetail?: string | null;
   estimatedHours?: number | string | null;
   isPriority?: number | boolean | null;
+  linkedCountdownId?: string | null;
+  agingHours?: number | string | null;
+  agingScore?: number | string | null;
+  prNumber?: string | null;
+  requestedByName?: string | null;
+  accTracking?: string | null;
+  totalItems?: number | string | null;
+  vendorSummary?: string | null;
+  agingDays?: number | string | null;
+  riskScore?: number | string | null;
+  wovNumber?: string | null;
+  vendorName?: string | null;
+  itemName?: string | null;
+  targetDateReturn?: string | null;
+  qcStatus?: string | null;
 }
 
 interface UnitPanelReferenceOptionRow extends RowDataPacket {
@@ -2276,13 +2302,27 @@ export class UnitsRepository {
             CONCAT('/countdown/', cd.id) AS url,
             ROUND(COALESCE(cd.target_hours_revised, cd.target_hours_initial + cd.time_extension_hours, cd.target_hours_initial, 0), 2) AS targetHours,
             ROUND(COALESCE(cd.remaining_hours, 0), 2) AS remainingHours,
-            ROUND(COALESCE(cd.actual_progress_percent, 0), 2) AS progressPercent
+            ROUND(COALESCE(cd.actual_progress_percent, 0), 2) AS progressPercent,
+            ? AS carId,
+            ? AS unitName,
+            division.name AS divisionName,
+            cd.section_name AS sectionName,
+            mp.name_part AS panelName,
+            mjt.job_name AS jobTypeName,
+            cd.temuan_awal AS temuanAwal,
+            cd.keterangan AS keterangan,
+            ROUND(COALESCE(cd.target_hours_initial, 0), 2) AS targetHoursInitial,
+            ROUND(COALESCE(cd.total_actual_hours, 0), 2) AS totalActualHours,
+            DATE_FORMAT(cd.deadline_date, '%Y-%m-%d') AS deadlineDate,
+            CASE WHEN cd.deadline_date IS NOT NULL AND cd.deadline_date < CURDATE() AND COALESCE(cd.status, 'PLAN') <> 'DONE' THEN 1 ELSE 0 END AS isOverdue
           FROM sm_jobdesc_countdown cd
           LEFT JOIN master_job_types mjt ON mjt.id = cd.job_type_id
+          LEFT JOIN sm_divisi division ON division.id = cd.division_id
+          LEFT JOIN master_panels mp ON mp.id = cd.panel_id
           WHERE cd.car_id = ?
             AND cd.panel_id = ?
         `,
-        [params.unitId, params.panelId],
+        [params.unitId, unitSummary.unitName, params.unitId, params.panelId],
       ),
       pool.query<UnitPanelActivityRow[]>(
         `
@@ -2315,12 +2355,32 @@ export class UnitsRepository {
             CONCAT('/pr/', h.id) AS url,
             NULL AS targetHours,
             NULL AS remainingHours,
-            NULL AS progressPercent
+            NULL AS progressPercent,
+            h.pr_number AS prNumber,
+            ? AS unitName,
+            h.division_name AS divisionName,
+            h.requested_by_name AS requestedByName,
+            h.acc_tracking AS accTracking,
+            h.status AS status,
+            (
+              SELECT COUNT(*)
+              FROM ${qualifyTable(this.purchaseDb, "pur_pr_items")} item
+              WHERE item.pr_id = h.id
+            ) AS totalItems,
+            COALESCE((
+              SELECT GROUP_CONCAT(DISTINCT item.vendor_name ORDER BY item.vendor_name SEPARATOR ', ')
+              FROM ${qualifyTable(this.purchaseDb, "pur_pr_items")} item
+              WHERE item.pr_id = h.id
+                AND item.vendor_name IS NOT NULL
+                AND item.vendor_name <> ''
+            ), '-') AS vendorSummary,
+            GREATEST(DATEDIFF(CURDATE(), DATE(COALESCE(h.created_at, NOW()))), 0) AS agingDays,
+            LEAST(GREATEST(DATEDIFF(CURDATE(), DATE(COALESCE(h.created_at, NOW()))) * 10, 0), 100) AS riskScore
           FROM ${purchasePrHeader} h
           WHERE h.car_id = ?
             AND h.master_panel_id = ?
         `,
-        [params.unitId, params.panelId],
+        [unitSummary.unitName, params.unitId, params.panelId],
       ),
       pool.query<UnitPanelActivityRow[]>(
         `
@@ -2335,12 +2395,16 @@ export class UnitsRepository {
             ROUND(COALESCE(cd.remaining_hours, 0), 2) AS remainingHours,
             ROUND(COALESCE(cd.actual_progress_percent, 0), 2) AS progressPercent,
             w.wo_number AS woNumber,
+            ? AS unitName,
             DATE_FORMAT(w.request_date, '%Y-%m-%d') AS requestDate,
             from_div.name AS fromDivisionName,
             to_div.name AS toDivisionName,
             w.job_detail AS jobDetail,
             w.estimated_hours AS estimatedHours,
-            COALESCE(w.is_priority, 0) AS isPriority
+            COALESCE(w.is_priority, 0) AS isPriority,
+            cd.id AS linkedCountdownId,
+            GREATEST(TIMESTAMPDIFF(HOUR, COALESCE(w.created_at, NOW()), NOW()), 0) AS agingHours,
+            LEAST(GREATEST(TIMESTAMPDIFF(HOUR, COALESCE(w.created_at, NOW()), NOW()), 0), 100) AS agingScore
           FROM sm_jobdesc_wo w
           LEFT JOIN sm_jobdesc_countdown cd
             ON cd.ref_taks_id = w.id
@@ -2364,12 +2428,16 @@ export class UnitsRepository {
             ROUND(COALESCE(cd.remaining_hours, 0), 2) AS remainingHours,
             ROUND(COALESCE(cd.actual_progress_percent, 0), 2) AS progressPercent,
             w.wo_number AS woNumber,
+            ? AS unitName,
             DATE_FORMAT(w.request_date, '%Y-%m-%d') AS requestDate,
             from_div.name AS fromDivisionName,
             to_div.name AS toDivisionName,
             w.job_detail AS jobDetail,
             w.estimated_hours AS estimatedHours,
-            COALESCE(w.is_priority, 0) AS isPriority
+            COALESCE(w.is_priority, 0) AS isPriority,
+            cd.id AS linkedCountdownId,
+            GREATEST(TIMESTAMPDIFF(HOUR, COALESCE(w.created_at, NOW()), NOW()), 0) AS agingHours,
+            LEAST(GREATEST(TIMESTAMPDIFF(HOUR, COALESCE(w.created_at, NOW()), NOW()), 0), 100) AS agingScore
           FROM sm_jobdesc_countdown cd
           JOIN sm_jobdesc_wo w ON w.id = cd.ref_taks_id
           LEFT JOIN sm_divisi from_div ON from_div.id = w.from_div_id
@@ -2377,7 +2445,7 @@ export class UnitsRepository {
           WHERE cd.car_id = ?
             AND cd.panel_id = ?
         `,
-        [params.unitId, params.panelId, params.unitId, params.panelId, params.unitId, params.panelId],
+        [unitSummary.unitName, params.unitId, params.panelId, params.unitId, params.panelId, unitSummary.unitName, params.unitId, params.panelId],
       ),
       pool.query<UnitPanelActivityRow[]>(
         `
@@ -2390,7 +2458,16 @@ export class UnitsRepository {
             CONCAT('/vendor/', w.id) AS url,
             NULL AS targetHours,
             NULL AS remainingHours,
-            NULL AS progressPercent
+            NULL AS progressPercent,
+            w.wov_number AS wovNumber,
+            ? AS unitName,
+            w.vendor_name AS vendorName,
+            w.item_name AS itemName,
+            w.acc_tracking AS accTracking,
+            DATE_FORMAT(w.target_date_return, '%Y-%m-%d') AS targetDateReturn,
+            w.qc_status AS qcStatus,
+            GREATEST(DATEDIFF(CURDATE(), DATE(COALESCE(w.created_at, NOW()))), 0) AS agingDays,
+            LEAST(GREATEST(DATEDIFF(CURDATE(), DATE(COALESCE(w.created_at, NOW()))) * 10, 0), 100) AS riskScore
           FROM ${vendorTable} w
           LEFT JOIN sm_jobdesc_countdown cd
             ON cd.id = w.core_id
@@ -2403,7 +2480,7 @@ export class UnitsRepository {
           WHERE w.car_id = ?
             AND (cd.id IS NOT NULL OR pr.id IS NOT NULL)
         `,
-        [params.unitId, params.panelId, params.unitId, params.panelId, params.unitId],
+        [unitSummary.unitName, params.unitId, params.panelId, params.unitId, params.panelId, params.unitId],
       ),
       pool.query<UnitPanelReferenceOptionRow[]>(
         `
@@ -2461,12 +2538,51 @@ export class UnitsRepository {
           progressPercent: activity.progressPercent === null ? null : Number(activity.progressPercent),
           ...(activity.type === "WO" ? {
             woNumber: activity.woNumber ?? null,
+            unitName: activity.unitName ?? null,
             requestDate: activity.requestDate ?? null,
             fromDivisionName: activity.fromDivisionName ?? null,
             toDivisionName: activity.toDivisionName ?? null,
             jobDetail: activity.jobDetail ?? null,
             estimatedHours: activity.estimatedHours === null || activity.estimatedHours === undefined ? null : Number(activity.estimatedHours),
             isPriority: mapTinyIntBoolean(activity.isPriority),
+            linkedCountdownId: activity.linkedCountdownId ?? null,
+            agingHours: activity.agingHours === null || activity.agingHours === undefined ? null : Number(activity.agingHours),
+            agingScore: activity.agingScore === null || activity.agingScore === undefined ? null : Number(activity.agingScore),
+          } : {}),
+          ...(activity.type === "COUNTDOWN" ? {
+            carId: activity.carId ?? null,
+            unitName: activity.unitName ?? null,
+            divisionName: activity.divisionName ?? null,
+            sectionName: activity.sectionName ?? null,
+            panelName: activity.panelName ?? null,
+            jobTypeName: activity.jobTypeName ?? null,
+            temuanAwal: activity.temuanAwal ?? null,
+            keterangan: activity.keterangan ?? null,
+            totalActualHours: activity.totalActualHours === null || activity.totalActualHours === undefined ? null : Number(activity.totalActualHours),
+            deadlineDate: activity.deadlineDate ?? null,
+            isOverdue: mapTinyIntBoolean(activity.isOverdue),
+          } : {}),
+          ...(activity.type === "PR" ? {
+            prNumber: activity.prNumber ?? null,
+            unitName: activity.unitName ?? null,
+            divisionName: activity.divisionName ?? null,
+            requestedByName: activity.requestedByName ?? null,
+            accTracking: activity.accTracking ?? null,
+            totalItems: activity.totalItems === null || activity.totalItems === undefined ? null : Number(activity.totalItems),
+            vendorSummary: activity.vendorSummary ?? null,
+            agingDays: activity.agingDays === null || activity.agingDays === undefined ? null : Number(activity.agingDays),
+            riskScore: activity.riskScore === null || activity.riskScore === undefined ? null : Number(activity.riskScore),
+          } : {}),
+          ...(activity.type === "WOV" ? {
+            wovNumber: activity.wovNumber ?? null,
+            unitName: activity.unitName ?? null,
+            vendorName: activity.vendorName ?? null,
+            itemName: activity.itemName ?? null,
+            accTracking: activity.accTracking ?? null,
+            targetDateReturn: activity.targetDateReturn ?? null,
+            qcStatus: activity.qcStatus ?? null,
+            agingDays: activity.agingDays === null || activity.agingDays === undefined ? null : Number(activity.agingDays),
+            riskScore: activity.riskScore === null || activity.riskScore === undefined ? null : Number(activity.riskScore),
           } : {}),
         },
       });

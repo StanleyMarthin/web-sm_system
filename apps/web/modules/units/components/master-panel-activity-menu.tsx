@@ -1,87 +1,79 @@
 "use client";
 
-import { Clock3, FileText, MoreVertical, ShoppingCart, Truck } from "lucide-react";
-import { useState } from "react";
+import type { UnitPanelActivityType, UnitPanelDetail } from "@smsystem/contracts/unit-panel";
+import { Clock3, FileText, ShoppingCart, Truck } from "lucide-react";
 
 const ICON_STROKE_WIDTH = 2.4;
 
-export function MasterPanelActivityMenu({
-  canCreateCountdown,
-  canCreateWo,
-  onCreateCountdown,
-  onCreateWo,
-}: {
+type MasterPanelActivityChoice = Extract<UnitPanelActivityType, "COUNTDOWN" | "PR" | "WO" | "WOV">;
+
+interface MasterPanelActivityMenuProps {
+  detail: UnitPanelDetail;
   canCreateCountdown: boolean;
   canCreateWo: boolean;
-  onCreateCountdown: () => void;
-  onCreateWo: () => void;
-}) {
-  const [open, setOpen] = useState(false);
+  canCreatePr: boolean;
+  canCreateVendor: boolean;
+  onSelect: (type: MasterPanelActivityChoice) => void;
+}
 
-  function selectCountdown() {
-    if (!canCreateCountdown) return;
-    setOpen(false);
-    onCreateCountdown();
-  }
+const CHOICES: Array<{
+  type: MasterPanelActivityChoice;
+  label: string;
+  helper: string;
+  icon: typeof Clock3;
+}> = [
+  { type: "COUNTDOWN", label: "Countdown", helper: "Rencana kerja awal dari part ini", icon: Clock3 },
+  { type: "WO", label: "Work Order", helper: "Request pekerjaan langsung dari Master Panel", icon: FileText },
+  { type: "PR", label: "Purchase Request", helper: "Pengadaan yang terikat Master Panel", icon: ShoppingCart },
+  { type: "WOV", label: "Vendor WO", helper: "Pekerjaan vendor dari Countdown atau PR", icon: Truck },
+];
 
-  function selectWo() {
-    if (!canCreateWo) return;
-    setOpen(false);
-    onCreateWo();
-  }
+function countType(detail: UnitPanelDetail, type: MasterPanelActivityChoice): number {
+  return detail.activities.filter((activity) => activity.type === type).length;
+}
 
+export function MasterPanelActivityMenu({
+  detail,
+  canCreateCountdown,
+  canCreateWo,
+  canCreatePr,
+  canCreateVendor,
+  onSelect,
+}: MasterPanelActivityMenuProps) {
   return (
-    <div className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((current) => !current)}
-        className="inline-flex items-center gap-1.5 border border-primary/35 bg-primary/[0.06] px-3 py-2 text-[12px] font-mono uppercase tracking-[0.08em] text-app-accent-ink transition-colors hover:bg-primary/10"
-      >
-        <MoreVertical className="h-3.5 w-3.5" strokeWidth={ICON_STROKE_WIDTH} />
-        Aktivitas
-      </button>
-      {open ? (
-        <div className="absolute right-0 z-30 mt-2 w-64 border border-border bg-card shadow-xl">
-          <button
-            type="button"
-            onClick={selectCountdown}
-            disabled={!canCreateCountdown}
-            className="flex w-full items-start gap-3 border-b border-border px-3 py-3 text-left text-[13px] transition-colors hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-45"
-          >
-            <Clock3 className="mt-0.5 h-4 w-4 text-app-accent-ink" strokeWidth={ICON_STROKE_WIDTH} />
-            <span>
-              <span className="block font-medium text-foreground">Countdown</span>
-              <span className="block text-[12px] text-muted-foreground">{canCreateCountdown ? "Buat rencana kerja awal" : "Tidak ada akses buat countdown"}</span>
-            </span>
-          </button>
-          <button type="button" disabled className="flex w-full items-start gap-3 border-b border-border px-3 py-3 text-left text-[13px] opacity-45">
-            <ShoppingCart className="mt-0.5 h-4 w-4" strokeWidth={ICON_STROKE_WIDTH} />
-            <span>
-              <span className="block font-medium text-foreground">Purchase Request</span>
-              <span className="block text-[12px] text-muted-foreground">Read only pada Phase 1</span>
-            </span>
-          </button>
-          <button
-            type="button"
-            onClick={selectWo}
-            disabled={!canCreateWo}
-            className="flex w-full items-start gap-3 border-b border-border px-3 py-3 text-left text-[13px] transition-colors hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-45"
-          >
-            <FileText className="mt-0.5 h-4 w-4 text-app-accent-ink" strokeWidth={ICON_STROKE_WIDTH} />
-            <span>
-              <span className="block font-medium text-foreground">Work Order</span>
-              <span className="block text-[12px] text-muted-foreground">{canCreateWo ? "Buat request dari Master Panel" : "Tidak ada akses buat WO"}</span>
-            </span>
-          </button>
-          <button type="button" disabled className="flex w-full items-start gap-3 px-3 py-3 text-left text-[13px] opacity-45">
-            <Truck className="mt-0.5 h-4 w-4" strokeWidth={ICON_STROKE_WIDTH} />
-            <span>
-              <span className="block font-medium text-foreground">Vendor WO</span>
-              <span className="block text-[12px] text-muted-foreground">Melalui Countdown atau PR</span>
-            </span>
-          </button>
-        </div>
-      ) : null}
-    </div>
+    <section className="border border-border bg-card">
+      <div className="border-b border-border px-4 py-3">
+        <p className="text-[12px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Pilih Aktivitas</p>
+        <p className="mt-1 text-[13px] text-muted-foreground">Pilih satu modul. Master Panel hanya menampilkan grid modul yang dipilih.</p>
+      </div>
+      <div className="grid gap-2 p-3 md:grid-cols-2 xl:grid-cols-4">
+        {CHOICES.map((choice) => {
+          const Icon = choice.icon;
+          const count = countType(detail, choice.type);
+          const disabled =
+            (choice.type === "COUNTDOWN" && !canCreateCountdown) ||
+            (choice.type === "WO" && !canCreateWo) ||
+            (choice.type === "PR" && !canCreatePr) ||
+            (choice.type === "WOV" && !canCreateVendor);
+          return (
+            <button
+              key={choice.type}
+              type="button"
+              onClick={() => onSelect(choice.type)}
+              className="flex min-h-24 items-start gap-3 border border-border bg-background px-3 py-3 text-left transition-colors hover:border-primary/35 hover:bg-primary/[0.04] focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary/45 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <Icon className="mt-0.5 h-4 w-4 text-app-accent-ink" strokeWidth={ICON_STROKE_WIDTH} />
+              <span className="min-w-0 flex-1">
+                <span className="flex items-center justify-between gap-2">
+                  <span className="font-medium text-foreground">{choice.label}</span>
+                  <span className="font-mono text-[12px] text-muted-foreground">{count}</span>
+                </span>
+                <span className="mt-1 block text-[12px] leading-5 text-muted-foreground">{disabled ? "Tidak ada akses create, data tetap bisa dilihat." : choice.helper}</span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </section>
   );
 }

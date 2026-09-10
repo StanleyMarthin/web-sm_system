@@ -26,15 +26,17 @@ interface WoGridRow {
   id: string | null;
   isNew: boolean;
   woNumber: string;
+  unitName: string;
   requestDate: string;
   fromDivisionName: string;
   toDivisionId: string;
   toDivisionName: string;
   jobDetail: string;
-  estimatedHours: number | null;
   isPriority: boolean;
-  notes: string;
   status: string;
+  agingHours: number | null;
+  agingScore: number | null;
+  linkedCountdownId: string;
   error: string | null;
 }
 
@@ -57,21 +59,23 @@ function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-function makeDraftRow(): WoGridRow {
+function makeDraftRow(detail: UnitPanelDetail): WoGridRow {
   return {
     clientId: `draft-${crypto.randomUUID()}`,
     id: null,
     isNew: true,
     woNumber: "",
+    unitName: detail.panel.carId,
     requestDate: today(),
     fromDivisionName: "Divisi user",
     toDivisionId: "",
     toDivisionName: "",
     jobDetail: "",
-    estimatedHours: null,
     isPriority: false,
-    notes: "",
     status: "Draft",
+    agingHours: null,
+    agingScore: null,
+    linkedCountdownId: "",
     error: null,
   };
 }
@@ -84,15 +88,17 @@ function toExistingRows(activities: UnitPanelActivity[]): WoGridRow[] {
       id: activity.id,
       isNew: false,
       woNumber: textMetadata(activity, "woNumber") || activity.title,
+      unitName: textMetadata(activity, "unitName") || "-",
       requestDate: textMetadata(activity, "requestDate") || activity.date?.slice(0, 10) || "",
       fromDivisionName: textMetadata(activity, "fromDivisionName") || "-",
       toDivisionId: "",
       toDivisionName: textMetadata(activity, "toDivisionName") || "-",
       jobDetail: textMetadata(activity, "jobDetail") || activity.title,
-      estimatedHours: numberMetadata(activity, "estimatedHours"),
       isPriority: boolMetadata(activity, "isPriority"),
-      notes: "",
       status: activity.status ?? "-",
+      agingHours: numberMetadata(activity, "agingHours"),
+      agingScore: numberMetadata(activity, "agingScore"),
+      linkedCountdownId: textMetadata(activity, "linkedCountdownId"),
       error: null,
     }));
 }
@@ -102,10 +108,6 @@ function validateDraft(row: WoGridRow): string | null {
   if (!row.requestDate) return "Tanggal request wajib diisi.";
   if (!row.jobDetail.trim()) return "Detail pekerjaan wajib diisi.";
   if (row.jobDetail.trim().length > 1000) return "Detail pekerjaan maksimal 1000 karakter.";
-  if (row.notes.trim().length > 1000) return "Catatan maksimal 1000 karakter.";
-  if (row.estimatedHours !== null && (!Number.isFinite(row.estimatedHours) || row.estimatedHours <= 0 || row.estimatedHours > 72)) {
-    return "Estimasi jam harus lebih dari 0 dan maksimal 72.";
-  }
   return null;
 }
 
@@ -126,8 +128,8 @@ function buildPayload(detail: UnitPanelDetail, row: WoGridRow): WoCreateRequest 
       sectionName: null,
       panelCategory: null,
       addPanelToMaster: false,
-      estimatedHours: row.estimatedHours,
-      notes: row.notes.trim() || null,
+      estimatedHours: null,
+      notes: null,
     }],
   };
 }
@@ -174,11 +176,11 @@ export function MasterPanelWoGrid({ detail, canCreateWo, onCreated }: MasterPane
   const rows = useMemo(() => [...existingRows, ...draftRows], [draftRows, existingRows]);
 
   const columnDefs = useMemo<ColDef<WoGridRow>[]>(() => [
-    { headerName: "WO Number", field: "woNumber", editable: false, minWidth: 130 },
-    { headerName: "Tanggal", field: "requestDate", editable: ({ data }) => Boolean(data?.isNew), cellEditor: "agDateStringCellEditor", minWidth: 120 },
-    { headerName: "Divisi Peminta", field: "fromDivisionName", editable: false, minWidth: 140 },
+    { headerName: "WO", field: "woNumber", editable: false, minWidth: 130 },
+    { headerName: "Unit", field: "unitName", editable: false, minWidth: 130 },
+    { headerName: "Dari", field: "fromDivisionName", editable: false, minWidth: 130 },
     {
-      headerName: "Divisi Tujuan",
+      headerName: "Ke",
       field: "toDivisionId",
       editable: ({ data }) => Boolean(data?.isNew),
       cellEditor: DivisionCellEditor,
@@ -188,20 +190,13 @@ export function MasterPanelWoGrid({ detail, canCreateWo, onCreated }: MasterPane
         : data?.toDivisionName ?? "",
       minWidth: 150,
     },
-    { headerName: "Detail Pekerjaan", field: "jobDetail", editable: ({ data }) => Boolean(data?.isNew), flex: 1, minWidth: 220 },
-    {
-      headerName: "Estimasi Jam",
-      field: "estimatedHours",
-      editable: ({ data }) => Boolean(data?.isNew),
-      valueParser: ({ newValue }) => {
-        const next = Number(newValue);
-        return Number.isFinite(next) && next > 0 ? next : null;
-      },
-      minWidth: 120,
-    },
-    { headerName: "Prioritas", field: "isPriority", editable: ({ data }) => Boolean(data?.isNew), cellRenderer: "agCheckboxCellRenderer", cellEditor: "agCheckboxCellEditor", minWidth: 100 },
-    { headerName: "Catatan", field: "notes", editable: ({ data }) => Boolean(data?.isNew), minWidth: 180 },
+    { headerName: "Pekerjaan", field: "jobDetail", editable: ({ data }) => Boolean(data?.isNew), flex: 1, minWidth: 220 },
     { headerName: "Status", field: "status", editable: false, minWidth: 130 },
+    { headerName: "Tanggal", field: "requestDate", editable: ({ data }) => Boolean(data?.isNew), cellEditor: "agDateStringCellEditor", minWidth: 120 },
+    { headerName: "Aging", field: "agingHours", editable: false, minWidth: 95 },
+    { headerName: "Risk", field: "agingScore", editable: false, minWidth: 90 },
+    { headerName: "Prioritas", field: "isPriority", editable: ({ data }) => Boolean(data?.isNew), cellRenderer: "agCheckboxCellRenderer", cellEditor: "agCheckboxCellEditor", minWidth: 110, valueFormatter: ({ value }) => value ? "Tinggi" : "Normal" },
+    { headerName: "Countdown Terkait", field: "linkedCountdownId", editable: false, minWidth: 170 },
     { headerName: "Action", field: "error", editable: false, cellRenderer: ActionRenderer, minWidth: 150 },
   ], [divisionOptions]);
 
@@ -249,7 +244,7 @@ export function MasterPanelWoGrid({ detail, canCreateWo, onCreated }: MasterPane
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => setDraftRows((current) => [...current, makeDraftRow()])}
+              onClick={() => setDraftRows((current) => [...current, makeDraftRow(detail)])}
               disabled={isSaving}
               className="inline-flex items-center gap-1.5 border border-border px-2 py-1 text-[12px] font-mono uppercase text-foreground hover:bg-muted disabled:opacity-40"
             >

@@ -79,6 +79,8 @@ async function UnitDetailPageContent({ params, searchParams }: UnitDetailPagePro
         canDownloadPhotos={Boolean(user?.permissions.includes(permissionCodes.galleryDownload))}
         canManagePanels={Boolean(user?.permissions.includes(permissionCodes.unitPanelManage))}
         canCreateWo={Boolean(user?.permissions.includes(permissionCodes.woCreate))}
+        canCreatePr={Boolean(user?.permissions.includes(permissionCodes.prCreate))}
+        canCreateVendor={Boolean(user?.permissions.includes(permissionCodes.vendorCreate))}
         canManageCatalog={Boolean(user?.permissions.includes(permissionCodes.unitCatalogManage))}
         canUseCatalog={Boolean(
           user?.permissions.some((permission) => unitCatalogPermissions.has(permission)),
