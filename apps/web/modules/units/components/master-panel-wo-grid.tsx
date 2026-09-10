@@ -2,11 +2,12 @@
 
 import type { UnitPanelActivity, UnitPanelDetail } from "@smsystem/contracts/unit-panel";
 import type { WoCreateRequest } from "@smsystem/contracts/wo";
-import type { CellValueChangedEvent, ColDef, ICellEditorParams, ICellRendererParams } from "ag-grid-community";
+import type { CellValueChangedEvent, ColDef, ICellRendererParams } from "ag-grid-community";
 import { AgGridReact } from "ag-grid-react";
 import { Plus, Save, X } from "lucide-react";
-import React, { forwardRef, useImperativeHandle, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { createWo } from "@/shared/api/wo";
+import { SmartSelectCellEditor, type SmartSelectOption } from "./master-panel-smart-select-editor";
 
 const ICON_STROKE_WIDTH = 2.4;
 
@@ -16,27 +17,19 @@ interface MasterPanelWoGridProps {
   onCreated: () => Promise<void>;
 }
 
-interface DivisionOption {
-  label: string;
-  value: string;
-}
-
 interface WoGridRow {
   clientId: string;
   id: string | null;
   isNew: boolean;
   woNumber: string;
-  unitName: string;
   requestDate: string;
-  fromDivisionName: string;
   toDivisionId: string;
   toDivisionName: string;
   jobDetail: string;
+  estimatedHours: number | null;
   isPriority: boolean;
+  notes: string;
   status: string;
-  agingHours: number | null;
-  agingScore: number | null;
-  linkedCountdownId: string;
   error: string | null;
 }
 
@@ -59,23 +52,24 @@ function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-function makeDraftRow(detail: UnitPanelDetail): WoGridRow {
+function singleValue(options: SmartSelectOption[]): string {
+  return options.length === 1 ? options[0].value : "";
+}
+
+function makeDraftRow(divisionOptions: SmartSelectOption[]): WoGridRow {
   return {
     clientId: `draft-${crypto.randomUUID()}`,
     id: null,
     isNew: true,
     woNumber: "",
-    unitName: detail.panel.carId,
     requestDate: today(),
-    fromDivisionName: "Divisi user",
-    toDivisionId: "",
+    toDivisionId: singleValue(divisionOptions),
     toDivisionName: "",
     jobDetail: "",
+    estimatedHours: null,
     isPriority: false,
+    notes: "",
     status: "Draft",
-    agingHours: null,
-    agingScore: null,
-    linkedCountdownId: "",
     error: null,
   };
 }
@@ -88,17 +82,14 @@ function toExistingRows(activities: UnitPanelActivity[]): WoGridRow[] {
       id: activity.id,
       isNew: false,
       woNumber: textMetadata(activity, "woNumber") || activity.title,
-      unitName: textMetadata(activity, "unitName") || "-",
       requestDate: textMetadata(activity, "requestDate") || activity.date?.slice(0, 10) || "",
-      fromDivisionName: textMetadata(activity, "fromDivisionName") || "-",
       toDivisionId: "",
       toDivisionName: textMetadata(activity, "toDivisionName") || "-",
       jobDetail: textMetadata(activity, "jobDetail") || activity.title,
+      estimatedHours: numberMetadata(activity, "estimatedHours"),
       isPriority: boolMetadata(activity, "isPriority"),
+      notes: "",
       status: activity.status ?? "-",
-      agingHours: numberMetadata(activity, "agingHours"),
-      agingScore: numberMetadata(activity, "agingScore"),
-      linkedCountdownId: textMetadata(activity, "linkedCountdownId"),
       error: null,
     }));
 }
@@ -108,6 +99,10 @@ function validateDraft(row: WoGridRow): string | null {
   if (!row.requestDate) return "Tanggal request wajib diisi.";
   if (!row.jobDetail.trim()) return "Detail pekerjaan wajib diisi.";
   if (row.jobDetail.trim().length > 1000) return "Detail pekerjaan maksimal 1000 karakter.";
+  if (row.estimatedHours !== null && (!Number.isFinite(row.estimatedHours) || row.estimatedHours <= 0 || row.estimatedHours > 72)) {
+    return "Estimasi jam harus 1 sampai 72.";
+  }
+  if (row.notes.trim().length > 1000) return "Catatan maksimal 1000 karakter.";
   return null;
 }
 
@@ -128,32 +123,11 @@ function buildPayload(detail: UnitPanelDetail, row: WoGridRow): WoCreateRequest 
       sectionName: null,
       panelCategory: null,
       addPanelToMaster: false,
-      estimatedHours: null,
-      notes: null,
+      estimatedHours: row.estimatedHours,
+      notes: row.notes.trim() || null,
     }],
   };
 }
-
-const DivisionCellEditor = forwardRef(function DivisionCellEditor(
-  props: ICellEditorParams<WoGridRow, string> & { values?: DivisionOption[] },
-  ref,
-) {
-  const [value, setValue] = useState(String(props.value ?? ""));
-  useImperativeHandle(ref, () => ({ getValue: () => value }));
-  return (
-    <select
-      autoFocus
-      value={value}
-      onChange={(event) => setValue(event.target.value)}
-      className="h-full w-full bg-card px-2 text-[13px] text-foreground outline-none"
-    >
-      <option value="">Pilih divisi</option>
-      {(props.values ?? []).map((option) => (
-        <option key={option.value} value={option.value}>{option.label}</option>
-      ))}
-    </select>
-  );
-});
 
 function ActionRenderer(params: ICellRendererParams<WoGridRow>) {
   const row = params.data;
@@ -163,7 +137,7 @@ function ActionRenderer(params: ICellRendererParams<WoGridRow>) {
 
 export function MasterPanelWoGrid({ detail, canCreateWo, onCreated }: MasterPanelWoGridProps) {
   const existingRows = useMemo(() => toExistingRows(detail.activities), [detail.activities]);
-  const divisionOptions = useMemo<DivisionOption[]>(
+  const divisionOptions = useMemo<SmartSelectOption[]>(
     () => detail.countdownReferences.divisions.map((division) => ({
       label: division.label,
       value: String(division.value),
@@ -177,27 +151,25 @@ export function MasterPanelWoGrid({ detail, canCreateWo, onCreated }: MasterPane
 
   const columnDefs = useMemo<ColDef<WoGridRow>[]>(() => [
     { headerName: "WO", field: "woNumber", editable: false, minWidth: 130 },
-    { headerName: "Unit", field: "unitName", editable: false, minWidth: 130 },
-    { headerName: "Dari", field: "fromDivisionName", editable: false, minWidth: 130 },
     {
-      headerName: "Ke",
+      headerName: "Divisi Tujuan",
       field: "toDivisionId",
       editable: ({ data }) => Boolean(data?.isNew),
-      cellEditor: DivisionCellEditor,
+      cellEditor: SmartSelectCellEditor,
       cellEditorParams: { values: divisionOptions },
       valueFormatter: ({ value, data }) => data?.isNew
         ? divisionOptions.find((option) => option.value === String(value ?? ""))?.label ?? ""
         : data?.toDivisionName ?? "",
-      minWidth: 150,
+      minWidth: 160,
+      flex: 0.9,
     },
-    { headerName: "Pekerjaan", field: "jobDetail", editable: ({ data }) => Boolean(data?.isNew), flex: 1, minWidth: 220 },
-    { headerName: "Status", field: "status", editable: false, minWidth: 130 },
+    { headerName: "Pekerjaan", field: "jobDetail", editable: ({ data }) => Boolean(data?.isNew), flex: 1.5, minWidth: 220 },
+    { headerName: "Estimasi", field: "estimatedHours", editable: ({ data }) => Boolean(data?.isNew), minWidth: 95, width: 105, valueParser: ({ newValue }) => newValue === "" || newValue === null ? null : Number(newValue) },
     { headerName: "Tanggal", field: "requestDate", editable: ({ data }) => Boolean(data?.isNew), cellEditor: "agDateStringCellEditor", minWidth: 120 },
-    { headerName: "Aging", field: "agingHours", editable: false, minWidth: 95 },
-    { headerName: "Risk", field: "agingScore", editable: false, minWidth: 90 },
-    { headerName: "Prioritas", field: "isPriority", editable: ({ data }) => Boolean(data?.isNew), cellRenderer: "agCheckboxCellRenderer", cellEditor: "agCheckboxCellEditor", minWidth: 110, valueFormatter: ({ value }) => value ? "Tinggi" : "Normal" },
-    { headerName: "Countdown Terkait", field: "linkedCountdownId", editable: false, minWidth: 170 },
-    { headerName: "Action", field: "error", editable: false, cellRenderer: ActionRenderer, minWidth: 150 },
+    { headerName: "Prioritas", field: "isPriority", editable: ({ data }) => Boolean(data?.isNew), cellRenderer: "agCheckboxCellRenderer", cellEditor: "agCheckboxCellEditor", minWidth: 105, valueFormatter: ({ value }) => value ? "Tinggi" : "Normal" },
+    { headerName: "Status", field: "status", editable: false, minWidth: 120 },
+    { headerName: "Catatan", field: "notes", editable: ({ data }) => Boolean(data?.isNew), minWidth: 160, flex: 0.8 },
+    { headerName: "Tindakan", field: "error", editable: false, cellRenderer: ActionRenderer, minWidth: 130, pinned: "right" },
   ], [divisionOptions]);
 
   function updateDraft(event: CellValueChangedEvent<WoGridRow>) {
@@ -244,7 +216,7 @@ export function MasterPanelWoGrid({ detail, canCreateWo, onCreated }: MasterPane
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => setDraftRows((current) => [...current, makeDraftRow(detail)])}
+              onClick={() => setDraftRows((current) => [...current, makeDraftRow(divisionOptions)])}
               disabled={isSaving}
               className="inline-flex items-center gap-1.5 border border-border px-2 py-1 text-[12px] font-mono uppercase text-foreground hover:bg-muted disabled:opacity-40"
             >

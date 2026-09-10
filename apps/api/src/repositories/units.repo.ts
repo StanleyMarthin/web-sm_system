@@ -275,6 +275,7 @@ interface UnitPanelActivityRow extends RowDataPacket {
   unitName?: string | null;
   carId?: string | null;
   divisionName?: string | null;
+  picPlan?: string | null;
   sectionName?: string | null;
   panelName?: string | null;
   jobTypeName?: string | null;
@@ -296,6 +297,7 @@ interface UnitPanelActivityRow extends RowDataPacket {
   requestedByName?: string | null;
   accTracking?: string | null;
   totalItems?: number | string | null;
+  itemSummary?: string | null;
   vendorSummary?: string | null;
   agingDays?: number | string | null;
   riskScore?: number | string | null;
@@ -2306,6 +2308,7 @@ export class UnitsRepository {
             ? AS carId,
             ? AS unitName,
             division.name AS divisionName,
+            cd.pic_plan AS picPlan,
             cd.section_name AS sectionName,
             mp.name_part AS panelName,
             mjt.job_name AS jobTypeName,
@@ -2367,6 +2370,13 @@ export class UnitsRepository {
               FROM ${qualifyTable(this.purchaseDb, "pur_pr_items")} item
               WHERE item.pr_id = h.id
             ) AS totalItems,
+            COALESCE((
+              SELECT GROUP_CONCAT(item.item_name ORDER BY item.id SEPARATOR ', ')
+              FROM ${qualifyTable(this.purchaseDb, "pur_pr_items")} item
+              WHERE item.pr_id = h.id
+                AND item.item_name IS NOT NULL
+                AND item.item_name <> ''
+            ), '') AS itemSummary,
             COALESCE((
               SELECT GROUP_CONCAT(DISTINCT item.vendor_name ORDER BY item.vendor_name SEPARATOR ', ')
               FROM ${qualifyTable(this.purchaseDb, "pur_pr_items")} item
@@ -2553,6 +2563,7 @@ export class UnitsRepository {
             carId: activity.carId ?? null,
             unitName: activity.unitName ?? null,
             divisionName: activity.divisionName ?? null,
+            picPlan: activity.picPlan ?? null,
             sectionName: activity.sectionName ?? null,
             panelName: activity.panelName ?? null,
             jobTypeName: activity.jobTypeName ?? null,
@@ -2569,6 +2580,7 @@ export class UnitsRepository {
             requestedByName: activity.requestedByName ?? null,
             accTracking: activity.accTracking ?? null,
             totalItems: activity.totalItems === null || activity.totalItems === undefined ? null : Number(activity.totalItems),
+            itemSummary: activity.itemSummary ?? null,
             vendorSummary: activity.vendorSummary ?? null,
             agingDays: activity.agingDays === null || activity.agingDays === undefined ? null : Number(activity.agingDays),
             riskScore: activity.riskScore === null || activity.riskScore === undefined ? null : Number(activity.riskScore),

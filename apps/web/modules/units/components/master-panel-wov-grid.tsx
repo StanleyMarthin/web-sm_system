@@ -2,11 +2,12 @@
 
 import type { CreateVendorRequest } from "@smsystem/contracts/vendor";
 import type { UnitPanelActivity, UnitPanelDetail } from "@smsystem/contracts/unit-panel";
-import type { CellValueChangedEvent, ColDef, ICellEditorParams, ICellRendererParams } from "ag-grid-community";
+import type { CellValueChangedEvent, ColDef, ICellRendererParams } from "ag-grid-community";
 import { AgGridReact } from "ag-grid-react";
 import { Plus, Save, X } from "lucide-react";
-import React, { forwardRef, useImperativeHandle, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { createVendor } from "@/shared/api/vendor";
+import { SmartSelectCellEditor, type SmartSelectOption } from "./master-panel-smart-select-editor";
 
 const ICON_STROKE_WIDTH = 2.4;
 
@@ -16,25 +17,15 @@ interface MasterPanelWovGridProps {
   onCreated: () => Promise<void>;
 }
 
-interface Option {
-  label: string;
-  value: string;
-}
-
 interface WovGridRow {
   clientId: string;
   id: string | null;
   isNew: boolean;
   wovNumber: string;
-  unitName: string;
   vendorName: string;
   itemName: string;
-  accTracking: string;
   status: string;
   targetDateReturn: string;
-  qcStatus: string;
-  agingDays: number | null;
-  riskScore: number | null;
   parentKey: string;
   quantity: number | null;
   uom: string;
@@ -58,7 +49,7 @@ function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-function parentOptions(detail: UnitPanelDetail): Option[] {
+function parentOptions(detail: UnitPanelDetail): SmartSelectOption[] {
   return detail.activities
     .filter((activity) => activity.type === "COUNTDOWN" || activity.type === "PR")
     .map((activity) => ({
@@ -68,21 +59,17 @@ function parentOptions(detail: UnitPanelDetail): Option[] {
 }
 
 function makeDraftRow(detail: UnitPanelDetail): WovGridRow {
-  const firstParent = parentOptions(detail)[0]?.value ?? "";
+  const parents = parentOptions(detail);
+  const firstParent = parents.length === 1 ? parents[0].value : "";
   return {
     clientId: `wov-draft-${crypto.randomUUID()}`,
     id: null,
     isNew: true,
     wovNumber: "",
-    unitName: detail.panel.carId,
     vendorName: "",
     itemName: detail.panel.name,
-    accTracking: "Draft",
     status: "OPEN",
     targetDateReturn: today(),
-    qcStatus: "-",
-    agingDays: null,
-    riskScore: null,
     parentKey: firstParent,
     quantity: 1,
     uom: "pcs",
@@ -101,15 +88,10 @@ function toExistingRows(detail: UnitPanelDetail): WovGridRow[] {
       id: activity.id,
       isNew: false,
       wovNumber: textMetadata(activity, "wovNumber") || activity.title,
-      unitName: textMetadata(activity, "unitName") || detail.unitId,
       vendorName: textMetadata(activity, "vendorName") || "-",
       itemName: textMetadata(activity, "itemName") || activity.title,
-      accTracking: textMetadata(activity, "accTracking") || "-",
       status: activity.status ?? "-",
       targetDateReturn: textMetadata(activity, "targetDateReturn"),
-      qcStatus: textMetadata(activity, "qcStatus") || "-",
-      agingDays: numberMetadata(activity, "agingDays"),
-      riskScore: numberMetadata(activity, "riskScore"),
       parentKey: "",
       quantity: null,
       uom: "",
@@ -155,20 +137,6 @@ function buildPayload(detail: UnitPanelDetail, row: WovGridRow): CreateVendorReq
   };
 }
 
-const SelectEditor = forwardRef(function SelectEditor(
-  props: ICellEditorParams<WovGridRow, string> & { values?: Option[] },
-  ref,
-) {
-  const [value, setValue] = useState(String(props.value ?? ""));
-  useImperativeHandle(ref, () => ({ getValue: () => value }));
-  return (
-    <select autoFocus value={value} onChange={(event) => setValue(event.target.value)} className="h-full w-full bg-card px-2 text-[13px] text-foreground outline-none">
-      <option value="">Pilih</option>
-      {(props.values ?? []).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-    </select>
-  );
-});
-
 function ActionRenderer(params: ICellRendererParams<WovGridRow>) {
   const row = params.data;
   if (!row?.isNew) return row?.id ? <a href={`/vendor/${row.id}`} className="text-app-accent-ink hover:underline">Detail</a> : null;
@@ -184,27 +152,25 @@ export function MasterPanelWovGrid({ detail, canCreateVendor, onCreated }: Maste
 
   const columnDefs = useMemo<ColDef<WovGridRow>[]>(() => [
     { headerName: "WOV", field: "wovNumber", editable: false, minWidth: 130 },
-    { headerName: "Unit", field: "unitName", editable: false, minWidth: 130 },
-    { headerName: "Vendor", field: "vendorName", editable: ({ data }) => Boolean(data?.isNew), minWidth: 170 },
-    { headerName: "Item", field: "itemName", editable: ({ data }) => Boolean(data?.isNew), minWidth: 190 },
-    { headerName: "Approval", field: "accTracking", editable: false, minWidth: 135 },
-    { headerName: "Status", field: "status", editable: false, minWidth: 120 },
-    { headerName: "Target Return", field: "targetDateReturn", editable: ({ data }) => Boolean(data?.isNew), cellEditor: "agDateStringCellEditor", minWidth: 135 },
-    { headerName: "QC", field: "qcStatus", editable: false, minWidth: 90 },
-    { headerName: "Aging", field: "agingDays", editable: false, minWidth: 90 },
-    { headerName: "Risk", field: "riskScore", editable: false, minWidth: 90 },
     {
       headerName: "Parent",
       field: "parentKey",
       editable: ({ data }) => Boolean(data?.isNew),
-      cellEditor: SelectEditor,
+      cellEditor: SmartSelectCellEditor,
       cellEditorParams: { values: parentChoices },
       valueFormatter: ({ value }) => parentChoices.find((option) => option.value === String(value ?? ""))?.label ?? "",
       minWidth: 220,
     },
-    { headerName: "Qty", field: "quantity", editable: ({ data }) => Boolean(data?.isNew), minWidth: 90, valueParser: ({ newValue }) => Number(newValue) },
-    { headerName: "UOM", field: "uom", editable: ({ data }) => Boolean(data?.isNew), minWidth: 90 },
-    { headerName: "Action", field: "error", editable: false, cellRenderer: ActionRenderer, minWidth: 145 },
+    { headerName: "Vendor", field: "vendorName", editable: ({ data }) => Boolean(data?.isNew), minWidth: 170, flex: 1 },
+    { headerName: "Item", field: "itemName", editable: ({ data }) => Boolean(data?.isNew), minWidth: 190, flex: 1.2 },
+    { headerName: "Qty", field: "quantity", editable: ({ data }) => Boolean(data?.isNew), minWidth: 80, width: 85, valueParser: ({ newValue }) => Number(newValue) },
+    { headerName: "UOM", field: "uom", editable: ({ data }) => Boolean(data?.isNew), minWidth: 85, width: 90 },
+    { headerName: "Kondisi Keluar", field: "goodsConditionOut", editable: ({ data }) => Boolean(data?.isNew), minWidth: 145 },
+    { headerName: "Target Kembali", field: "targetDateReturn", editable: ({ data }) => Boolean(data?.isNew), cellEditor: "agDateStringCellEditor", minWidth: 135 },
+    { headerName: "Estimasi Biaya", field: "estimatedCost", editable: ({ data }) => Boolean(data?.isNew), minWidth: 125, valueParser: ({ newValue }) => newValue === "" || newValue === null ? null : Number(newValue) },
+    { headerName: "Status", field: "status", editable: false, minWidth: 110 },
+    { headerName: "Catatan", field: "remarks", editable: ({ data }) => Boolean(data?.isNew), minWidth: 160, flex: 0.8 },
+    { headerName: "Tindakan", field: "error", editable: false, cellRenderer: ActionRenderer, minWidth: 130, pinned: "right" },
   ], [parentChoices]);
 
   function updateDraft(event: CellValueChangedEvent<WovGridRow>) {

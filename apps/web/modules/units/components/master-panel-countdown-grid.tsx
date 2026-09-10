@@ -1,12 +1,13 @@
 "use client";
 
 import type { UnitPanelActivity, UnitPanelDetail } from "@smsystem/contracts/unit-panel";
-import type { CellValueChangedEvent, ColDef, ICellEditorParams, ICellRendererParams } from "ag-grid-community";
+import type { CellValueChangedEvent, ColDef, ICellRendererParams } from "ag-grid-community";
 import { AgGridReact } from "ag-grid-react";
 import { Plus, Save, X } from "lucide-react";
-import React, { forwardRef, useImperativeHandle, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { createCountdownRecord } from "@/shared/api/countdown";
 import { parseHHMMToDecimal } from "@/shared/format/time";
+import { SmartSelectCellEditor, type SmartSelectOption } from "./master-panel-smart-select-editor";
 
 const ICON_STROKE_WIDTH = 2.4;
 
@@ -16,11 +17,6 @@ interface MasterPanelCountdownGridProps {
   onCreated: () => Promise<void>;
 }
 
-interface Option {
-  label: string;
-  value: string;
-}
-
 interface CountdownGridRow {
   clientId: string;
   id: string | null;
@@ -28,19 +24,12 @@ interface CountdownGridRow {
   unitName: string;
   divisionId: string;
   divisionName: string;
-  sectionName: string;
-  panelName: string;
+  picPlan: string;
   jobTypeId: string;
   jobTypeName: string;
-  temuanAwal: string;
-  keterangan: string;
   targetHours: string;
-  totalActualHours: string;
-  remainingHours: string;
-  progressPercent: number;
   deadlineDate: string;
   status: string;
-  isOverdue: boolean;
   error: string | null;
 }
 
@@ -69,27 +58,24 @@ function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-function makeDraftRow(detail: UnitPanelDetail): CountdownGridRow {
+function singleValue(options: SmartSelectOption[]): string {
+  return options.length === 1 ? options[0].value : "";
+}
+
+function makeDraftRow(divisionOptions: SmartSelectOption[], jobTypeOptions: SmartSelectOption[]): CountdownGridRow {
   return {
     clientId: `countdown-draft-${crypto.randomUUID()}`,
     id: null,
     isNew: true,
-    unitName: detail.panel.carId,
-    divisionId: "",
+    unitName: "",
+    divisionId: singleValue(divisionOptions),
     divisionName: "",
-    sectionName: detail.panel.section,
-    panelName: detail.panel.name,
-    jobTypeId: "",
+    picPlan: "",
+    jobTypeId: singleValue(jobTypeOptions),
     jobTypeName: "",
-    temuanAwal: "",
-    keterangan: detail.panel.name,
     targetHours: "01:00",
-    totalActualHours: "00:00",
-    remainingHours: "00:00",
-    progressPercent: 0,
     deadlineDate: today(),
     status: "PLAN",
-    isOverdue: false,
     error: null,
   };
 }
@@ -101,22 +87,15 @@ function toExistingRows(detail: UnitPanelDetail): CountdownGridRow[] {
       clientId: `countdown-${activity.id}`,
       id: activity.id,
       isNew: false,
-      unitName: metadataText(activity, "unitName") || detail.unitId,
+      unitName: "",
       divisionId: "",
       divisionName: metadataText(activity, "divisionName") || "-",
-      sectionName: metadataText(activity, "sectionName") || detail.panel.section,
-      panelName: metadataText(activity, "panelName") || detail.panel.name,
+      picPlan: metadataText(activity, "picPlan"),
       jobTypeId: "",
       jobTypeName: metadataText(activity, "jobTypeName") || activity.title,
-      temuanAwal: metadataText(activity, "temuanAwal"),
-      keterangan: metadataText(activity, "keterangan"),
       targetHours: decimalToHHMM(activity.metadata.targetHours),
-      totalActualHours: decimalToHHMM(activity.metadata.totalActualHours),
-      remainingHours: decimalToHHMM(activity.metadata.remainingHours),
-      progressPercent: metadataNumber(activity, "progressPercent"),
       deadlineDate: metadataText(activity, "deadlineDate"),
       status: activity.status ?? "PLAN",
-      isOverdue: metadataBool(activity, "isOverdue"),
       error: null,
     }));
 }
@@ -124,27 +103,12 @@ function toExistingRows(detail: UnitPanelDetail): CountdownGridRow[] {
 function validateDraft(row: CountdownGridRow): string | null {
   if (!row.divisionId) return "Divisi wajib dipilih.";
   if (!row.jobTypeId) return "Jobdesc wajib dipilih.";
-  if (!row.sectionName.trim()) return "Bagian wajib diisi.";
   if (!row.deadlineDate) return "Deadline wajib diisi.";
   if (!Number.isFinite(parseHHMMToDecimal(row.targetHours)) || parseHHMMToDecimal(row.targetHours) <= 0) {
     return "Target harus format HH:MM dan lebih dari 0.";
   }
   return null;
 }
-
-const SelectEditor = forwardRef(function SelectEditor(
-  props: ICellEditorParams<CountdownGridRow, string> & { values?: Option[] },
-  ref,
-) {
-  const [value, setValue] = useState(String(props.value ?? ""));
-  useImperativeHandle(ref, () => ({ getValue: () => value }));
-  return (
-    <select autoFocus value={value} onChange={(event) => setValue(event.target.value)} className="h-full w-full bg-card px-2 text-[13px] text-foreground outline-none">
-      <option value="">Pilih</option>
-      {(props.values ?? []).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-    </select>
-  );
-});
 
 function ActionRenderer(params: ICellRendererParams<CountdownGridRow>) {
   const row = params.data;
@@ -153,11 +117,11 @@ function ActionRenderer(params: ICellRendererParams<CountdownGridRow>) {
 }
 
 export function MasterPanelCountdownGrid({ detail, canCreateCountdown, onCreated }: MasterPanelCountdownGridProps) {
-  const divisionOptions = useMemo<Option[]>(
+  const divisionOptions = useMemo<SmartSelectOption[]>(
     () => detail.countdownReferences.divisions.map((division) => ({ label: division.label, value: String(division.value) })),
     [detail.countdownReferences.divisions],
   );
-  const jobTypeOptions = useMemo<Option[]>(
+  const jobTypeOptions = useMemo<SmartSelectOption[]>(
     () => detail.countdownReferences.jobTypes.map((jobType) => ({ label: jobType.label, value: String(jobType.value) })),
     [detail.countdownReferences.jobTypes],
   );
@@ -167,37 +131,31 @@ export function MasterPanelCountdownGrid({ detail, canCreateCountdown, onCreated
   const rows = useMemo(() => [...toExistingRows(detail), ...draftRows], [detail, draftRows]);
 
   const columnDefs = useMemo<ColDef<CountdownGridRow>[]>(() => [
-    { headerName: "Unit", field: "unitName", editable: false, minWidth: 130 },
     {
       headerName: "Divisi",
       field: "divisionId",
       editable: ({ data }) => Boolean(data?.isNew),
-      cellEditor: SelectEditor,
+      cellEditor: SmartSelectCellEditor,
       cellEditorParams: { values: divisionOptions },
       valueFormatter: ({ data, value }) => data?.isNew ? divisionOptions.find((option) => option.value === String(value ?? ""))?.label ?? "" : data?.divisionName ?? "",
-      minWidth: 150,
+      minWidth: 140,
+      flex: 0.9,
     },
-    { headerName: "Bagian", field: "sectionName", editable: false, minWidth: 130 },
-    { headerName: "Panel", field: "panelName", editable: false, minWidth: 170 },
+    { headerName: "PIC", field: "picPlan", editable: ({ data }) => Boolean(data?.isNew), minWidth: 125, flex: 0.8 },
     {
       headerName: "Jobdesc",
       field: "jobTypeId",
       editable: ({ data }) => Boolean(data?.isNew),
-      cellEditor: SelectEditor,
+      cellEditor: SmartSelectCellEditor,
       cellEditorParams: { values: jobTypeOptions },
       valueFormatter: ({ data, value }) => data?.isNew ? jobTypeOptions.find((option) => option.value === String(value ?? ""))?.label ?? "" : data?.jobTypeName ?? "",
-      minWidth: 180,
+      minWidth: 220,
+      flex: 1.4,
     },
-    { headerName: "Temuan Awal", field: "temuanAwal", editable: ({ data }) => Boolean(data?.isNew), minWidth: 180 },
-    { headerName: "Keterangan", field: "keterangan", editable: ({ data }) => Boolean(data?.isNew), minWidth: 180 },
-    { headerName: "Target", field: "targetHours", editable: ({ data }) => Boolean(data?.isNew), minWidth: 100 },
-    { headerName: "Aktual", field: "totalActualHours", editable: false, minWidth: 100 },
-    { headerName: "Sisa", field: "remainingHours", editable: false, minWidth: 100 },
-    { headerName: "Progress %", field: "progressPercent", editable: false, minWidth: 120 },
+    { headerName: "Target", field: "targetHours", editable: ({ data }) => Boolean(data?.isNew), minWidth: 95, width: 105 },
     { headerName: "Deadline", field: "deadlineDate", editable: ({ data }) => Boolean(data?.isNew), cellEditor: "agDateStringCellEditor", minWidth: 125 },
-    { headerName: "Status", field: "status", editable: false, minWidth: 110 },
-    { headerName: "Risiko", field: "isOverdue", editable: false, minWidth: 125, valueFormatter: ({ value }) => value ? "Terlambat" : "Sesuai Jadwal" },
-    { headerName: "Tindakan", field: "error", editable: false, cellRenderer: ActionRenderer, minWidth: 130 },
+    { headerName: "Status", field: "status", editable: false, minWidth: 105 },
+    { headerName: "Tindakan", field: "error", editable: false, cellRenderer: ActionRenderer, minWidth: 120, pinned: "right" },
   ], [divisionOptions, jobTypeOptions]);
 
   function updateDraft(event: CellValueChangedEvent<CountdownGridRow>) {
@@ -224,16 +182,17 @@ export function MasterPanelCountdownGrid({ detail, canCreateCountdown, onCreated
         divisionId: Number(row.divisionId),
         panelId: detail.panel.id,
         taskCategory: "ADDITIONAL",
-        sectionName: row.sectionName,
+        sectionName: detail.panel.section,
         jobTypeId: row.jobTypeId,
         targetHoursInitial: parseHHMMToDecimal(row.targetHours),
         startDate: today(),
         deadlineDate: row.deadlineDate,
         prerequisiteCoreId: "",
         refWoId: "",
+        picPlan: row.picPlan.trim() || null,
         note: "",
-        temuanAwal: row.temuanAwal.trim(),
-        keterangan: row.keterangan.trim(),
+        temuanAwal: "",
+        keterangan: detail.panel.name,
         status: "PLAN",
       });
       if (!result.success) {
@@ -257,7 +216,7 @@ export function MasterPanelCountdownGrid({ detail, canCreateCountdown, onCreated
         </div>
         {canCreateCountdown ? (
           <div className="flex items-center gap-2">
-            <button type="button" onClick={() => setDraftRows((current) => [...current, makeDraftRow(detail)])} disabled={isSaving} className="inline-flex items-center gap-1.5 border border-border px-2 py-1 text-[12px] font-mono uppercase text-foreground hover:bg-muted disabled:opacity-40">
+            <button type="button" onClick={() => setDraftRows((current) => [...current, makeDraftRow(divisionOptions, jobTypeOptions)])} disabled={isSaving} className="inline-flex items-center gap-1.5 border border-border px-2 py-1 text-[12px] font-mono uppercase text-foreground hover:bg-muted disabled:opacity-40">
               <Plus className="h-3.5 w-3.5" strokeWidth={ICON_STROKE_WIDTH} /> Tambah Row
             </button>
             <button type="button" onClick={() => void saveDrafts()} disabled={draftRows.length === 0 || isSaving} className="inline-flex items-center gap-1.5 border border-primary/40 bg-primary/[0.06] px-2 py-1 text-[12px] font-mono uppercase text-app-accent-ink hover:bg-primary/10 disabled:opacity-40">

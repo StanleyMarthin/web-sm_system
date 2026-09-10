@@ -1,10 +1,15 @@
 "use client";
 
-import type { UnitPanelDetail } from "@smsystem/contracts/unit-panel";
+import type { UnitPanelActivityType, UnitPanelDetail } from "@smsystem/contracts/unit-panel";
 import { ArrowLeft } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { MasterPanelActivityGrid } from "./master-panel-activity-grid";
+import { useState } from "react";
+import { MasterPanelActivityMenu } from "./master-panel-activity-menu";
+import { MasterPanelCountdownGrid } from "./master-panel-countdown-grid";
 import { MasterPanelPhotoGallery } from "./master-panel-photo-gallery";
+import { MasterPanelPrGrid } from "./master-panel-pr-grid";
+import { MasterPanelWoGrid } from "./master-panel-wo-grid";
+import { MasterPanelWovGrid } from "./master-panel-wov-grid";
 
 const ICON_STROKE_WIDTH = 2.4;
 
@@ -22,6 +27,8 @@ export function MasterPanelDetailHub({ detail }: { detail: UnitPanelDetail }) {
   const panel = detail.panel;
   const backHref = `/units/${encodeURIComponent(detail.unitId)}?tab=master-panel`;
   const hasExtraInfo = Boolean(panel.location || panel.notes);
+  const [activeActivityType, setActiveActivityType] = useState<Extract<UnitPanelActivityType, "COUNTDOWN" | "PR" | "WO" | "WOV"> | null>(null);
+  const noopRefresh = async () => {};
 
   return (
     <section className="space-y-4">
@@ -54,10 +61,9 @@ export function MasterPanelDetailHub({ detail }: { detail: UnitPanelDetail }) {
       <MasterPanelPhotoGallery detail={detail} />
 
       <section className="border border-border bg-card">
-        <div className="grid grid-cols-2 divide-x divide-y divide-border sm:grid-cols-5 sm:divide-y-0">
+        <div className="grid grid-cols-2 divide-x divide-y divide-border sm:grid-cols-4 sm:divide-y-0">
           {[
             ["Countdown", detail.summary.countdown],
-            ["Job Plan", detail.summary.jobdesc],
             ["PR", detail.summary.pr],
             ["WO", detail.summary.wo],
             ["WOV", detail.summary.wov],
@@ -75,7 +81,31 @@ export function MasterPanelDetailHub({ detail }: { detail: UnitPanelDetail }) {
         </div>
       </section>
 
-      <MasterPanelActivityGrid detail={detail} />
+      <section className="space-y-3">
+        {activeActivityType === null ? (
+          <MasterPanelActivityMenu
+            detail={detail}
+            canCreateCountdown={false}
+            canCreateWo={false}
+            canCreatePr={false}
+            canCreateVendor={false}
+            onSelect={setActiveActivityType}
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={() => setActiveActivityType(null)}
+            className="inline-flex items-center gap-1.5 border border-border px-3 py-2 text-[12px] font-mono uppercase tracking-[0.08em] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" strokeWidth={ICON_STROKE_WIDTH} />
+            Pilih Aktivitas
+          </button>
+        )}
+        {activeActivityType === "COUNTDOWN" ? <MasterPanelCountdownGrid detail={detail} canCreateCountdown={false} onCreated={noopRefresh} /> : null}
+        {activeActivityType === "WO" ? <MasterPanelWoGrid detail={detail} canCreateWo={false} onCreated={noopRefresh} /> : null}
+        {activeActivityType === "PR" ? <MasterPanelPrGrid detail={detail} canCreatePr={false} onCreated={noopRefresh} /> : null}
+        {activeActivityType === "WOV" ? <MasterPanelWovGrid detail={detail} canCreateVendor={false} onCreated={noopRefresh} /> : null}
+      </section>
 
       {hasExtraInfo ? (
         <section className="border border-border bg-card px-4 py-3">

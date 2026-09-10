@@ -27,6 +27,7 @@ interface CountdownBoardRowPacket extends RowDataPacket {
   taskCategory: string;
   prerequisiteCoreId: string | null;
   refWoId: string | null;
+  picPlan: string | null;
   note: string | null;
   temuanAwal: string | null;
   keterangan: string | null;
@@ -64,6 +65,7 @@ interface CountdownDetailRowPacket extends RowDataPacket {
   taskCategory: string;
   prerequisiteCoreId: string | null;
   refWoId: string | null;
+  picPlan: string | null;
   note: string | null;
   temuanAwal: string | null;
   keterangan: string | null;
@@ -481,6 +483,7 @@ function countdownSelectSql(): string {
       cd.task_category AS taskCategory,
       cd.prerequisite_core_id AS prerequisiteCoreId,
       cd.ref_taks_id AS refWoId,
+      cd.pic_plan AS picPlan,
       cd.revision_reason AS note,
       cd.temuan_awal AS temuanAwal,
       cd.keterangan AS keterangan,
@@ -524,6 +527,7 @@ function mapCountdownBoardRow(row: CountdownBoardRowPacket): CountdownBoardRow {
     taskCategory: row.taskCategory,
     prerequisiteCoreId: row.prerequisiteCoreId,
     refWoId: row.refWoId,
+    picPlan: row.picPlan,
     note: row.note,
     temuanAwal: row.temuanAwal,
     keterangan: row.keterangan,
@@ -705,6 +709,7 @@ interface NormalizedCountdownMutationInput {
   deadlineDate: string;
   prerequisiteCoreId: string | null;
   refWoId: string | null;
+  picPlan: string | null;
   note: string | null;
   temuanAwal: string | null;
   keterangan: string | null;
@@ -843,6 +848,7 @@ async function normalizeAndValidateCountdownMutation(
   const deadlineDate = toIsoDate(input.deadlineDate ?? null);
   const prerequisiteCoreId = toNullableString(input.prerequisiteCoreId);
   const refWoId = toNullableString(input.refWoId);
+  const picPlan = toNullableString(input.picPlan);
   const note = toNullableString(input.note);
   const temuanAwal = toNullableString(input.temuanAwal);
   const keterangan = toNullableString(input.keterangan);
@@ -963,6 +969,7 @@ async function normalizeAndValidateCountdownMutation(
     deadlineDate,
     prerequisiteCoreId,
     refWoId,
+    picPlan,
     note,
     temuanAwal,
     keterangan,
@@ -1501,6 +1508,7 @@ export class CountdownRepository {
             remaining_hours,
             actual_progress_percent,
             status,
+            pic_plan,
             qc_last_status,
             created_at,
             start_date,
@@ -1517,7 +1525,7 @@ export class CountdownRepository {
             temuan_awal,
             keterangan,
             last_qc_level
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 0, ?, NULL, ?, ?, ?, NULL, NULL, 0, ?, ?, NULL, 0, NULL, ?, ?, ?, NULL)
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 0, ?, ?, NULL, ?, ?, ?, NULL, NULL, 0, ?, ?, NULL, 0, NULL, ?, ?, ?, NULL)
         `,
         [
           countdownId,
@@ -1535,6 +1543,7 @@ export class CountdownRepository {
           targetHoursRevised,
           remainingHours,
           normalized.status,
+          normalized.picPlan,
           now,
           normalized.startDate,
           normalized.deadlineDate,
@@ -1647,6 +1656,7 @@ export class CountdownRepository {
             remaining_hours = ?,
             actual_progress_percent = ?,
             status = ?,
+            pic_plan = ?,
             start_date = ?,
             deadline_date = ?,
             updated_at = ?,
@@ -1671,6 +1681,7 @@ export class CountdownRepository {
           remainingHours,
           actualProgressPercent,
           normalized.status,
+          normalized.picPlan,
           normalized.startDate,
           normalized.deadlineDate,
           new Date(),
@@ -1687,7 +1698,8 @@ export class CountdownRepository {
         const oldTarget = currentCountdownTarget(locked);
         const targetChanged = oldTarget !== targetHoursRevised;
         const deadlineChanged = locked.deadlineDate !== normalized.deadlineDate;
-        if (targetChanged || deadlineChanged) {
+        const picChanged = locked.picPlan !== normalized.picPlan;
+        if (targetChanged || deadlineChanged || picChanged) {
           await insertCountdownRevision(connection, {
             countdownId,
             oldTargetHours: oldTarget,
@@ -1695,7 +1707,7 @@ export class CountdownRepository {
             oldDeadlineDate: locked.deadlineDate,
             newDeadlineDate: normalized.deadlineDate,
             oldPicPlan: locked.picPlan,
-            newPicPlan: locked.picPlan,
+            newPicPlan: normalized.picPlan,
             oldRequiredGrade: locked.requiredGrade,
             newRequiredGrade: locked.requiredGrade,
             reasonCode: "SYSTEM_CORRECTION",

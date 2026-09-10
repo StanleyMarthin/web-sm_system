@@ -132,15 +132,6 @@ function formatNumber(value: number): string {
 
 const DONE_STATUS_VALUES = new Set(["DONE", "SELESAI", "FINISH", "FINISHED", "COMPLETED", "COMPLETE"]);
 
-type PartFilter = "ALL" | "WAITING" | "RESTORE" | "DONE";
-
-const PART_FILTERS: Array<{ value: PartFilter; label: string }> = [
-  { value: "ALL", label: "Semua" },
-  { value: "WAITING", label: "Belum Progress" },
-  { value: "RESTORE", label: "Restorasi" },
-  { value: "DONE", label: "Selesai" },
-];
-
 function normalizeStatus(value: string | null | undefined): string {
   return (value ?? "").trim().toUpperCase();
 }
@@ -300,14 +291,6 @@ function matchesPart(part: UnitPanelRecord, term: string): boolean {
   );
 }
 
-function matchesPartFilter(part: UnitPanelRecord, filter: PartFilter): boolean {
-  if (filter === "ALL") return true;
-  if (filter === "WAITING") return !isPartComplete(part);
-  if (filter === "RESTORE") return isRestorationPart(part);
-  if (filter === "DONE") return isPartComplete(part);
-  return true;
-}
-
 interface MasterPanelGridContext {
   onOpenComponent: (component: MasterPanelComponentGroup) => void;
   onOpenPanel: (panel: MasterPanelPanelGroup) => void;
@@ -389,7 +372,6 @@ export function MasterPanelManager({ unitId, canManage, canCreateWo, canCreatePr
   const [activeActivityType, setActiveActivityType] = useState<ActiveActivityType>(null);
 
   const [search, setSearch] = useState<string>("");
-  const [partFilter, setPartFilter] = useState<PartFilter>("ALL");
   const [expandedComponentKey, setExpandedComponentKey] = useState<string | null>(null);
   const [expandedPanelKey, setExpandedPanelKey] = useState<string | null>(null);
   const [dirtyPartIds, setDirtyPartIds] = useState<Set<number>>(() => new Set());
@@ -413,38 +395,27 @@ export function MasterPanelManager({ unitId, canManage, canCreateWo, canCreatePr
     [expandedComponent, expandedPanelKey],
   );
   const filteredComponents = useMemo(() => {
-    if (!searchTerm && partFilter === "ALL") return hierarchy;
+    if (!searchTerm) return hierarchy;
     return hierarchy.filter(component =>
-      (
-        !searchTerm ||
-        component.componentName.toLowerCase().includes(searchTerm) ||
-        component.panels.some(panel =>
-          panel.panelName.toLowerCase().includes(searchTerm) ||
-          panel.parts.some(part => matchesPart(part, searchTerm))
-        )
-      ) &&
-      (partFilter === "ALL" || component.panels.some(panel => panel.parts.some(part => matchesPartFilter(part, partFilter))))
-    );
-  }, [hierarchy, searchTerm, partFilter]);
-  const filteredPanels = useMemo(() => {
-    if (!expandedComponent) return [];
-    if (!searchTerm && partFilter === "ALL") return expandedComponent.panels;
-    return expandedComponent.panels.filter(panel =>
-      (
-        !searchTerm ||
+      component.componentName.toLowerCase().includes(searchTerm) ||
+      component.panels.some(panel =>
         panel.panelName.toLowerCase().includes(searchTerm) ||
         panel.parts.some(part => matchesPart(part, searchTerm))
-      ) &&
-      (partFilter === "ALL" || panel.parts.some(part => matchesPartFilter(part, partFilter)))
+      )
     );
-  }, [searchTerm, expandedComponent, partFilter]);
+  }, [hierarchy, searchTerm]);
+  const filteredPanels = useMemo(() => {
+    if (!expandedComponent) return [];
+    if (!searchTerm) return expandedComponent.panels;
+    return expandedComponent.panels.filter(panel =>
+      panel.panelName.toLowerCase().includes(searchTerm) ||
+      panel.parts.some(part => matchesPart(part, searchTerm))
+    );
+  }, [searchTerm, expandedComponent]);
   const filteredParts = useMemo(() => {
     if (!expandedPanel) return [];
-    return expandedPanel.parts.filter(part =>
-      (!searchTerm || matchesPart(part, searchTerm)) &&
-      matchesPartFilter(part, partFilter)
-    );
-  }, [searchTerm, expandedPanel, partFilter]);
+    return expandedPanel.parts.filter(part => !searchTerm || matchesPart(part, searchTerm));
+  }, [searchTerm, expandedPanel]);
   const visibleDraftParts = useMemo(() => {
     if (!expandedPanel) return [];
     return draftParts.filter((part) => part.category === expandedPanel.componentName && part.section === expandedPanel.panelName);
@@ -995,22 +966,6 @@ export function MasterPanelManager({ unitId, canManage, canCreateWo, canCreatePr
             )}
           </div>
         </div>
-        <div className="flex gap-2 overflow-x-auto px-4 pb-3">
-          {PART_FILTERS.map((filter) => (
-            <button
-              key={filter.value}
-              type="button"
-              onClick={() => setPartFilter(filter.value)}
-              className={`shrink-0 border px-2.5 py-1 text-[12px] font-mono uppercase tracking-[0.08em] transition-colors ${
-                partFilter === filter.value
-                  ? "border-primary/40 bg-primary/[0.08] text-app-accent-ink"
-                  : "border-border bg-card text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {filter.label}
-            </button>
-          ))}
-        </div>
       </div>
 
       <div className="min-h-[300px]">
@@ -1032,7 +987,7 @@ export function MasterPanelManager({ unitId, canManage, canCreateWo, canCreatePr
             <div className="px-4 py-6 text-[15px] font-mono text-muted-foreground">Memuat struktur panel unit...</div>
           ) : !expandedComponent && filteredComponents.length === 0 ? (
             <div className="m-4 border border-dashed border-border px-4 py-8 text-center text-[15px] font-mono text-muted-foreground">
-              {search || partFilter !== "ALL" ? "Tidak ada struktur panel yang cocok." : "Belum ada struktur panel unit."}
+              {search ? "Tidak ada struktur panel yang cocok." : "Belum ada struktur panel unit."}
             </div>
           ) : (
             <div className="space-y-4 p-4">

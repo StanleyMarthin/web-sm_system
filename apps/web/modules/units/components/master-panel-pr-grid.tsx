@@ -21,15 +21,10 @@ interface PrGridRow {
   id: string | null;
   isNew: boolean;
   prNumber: string;
-  unitName: string;
-  divisionName: string;
-  requestedByName: string;
-  accTracking: string;
   status: string;
   itemName: string;
   vendorSummary: string;
-  agingDays: number | null;
-  riskScore: number | null;
+  totalItems: number | null;
   qty: number;
   uom: string;
   originType: "LOKAL" | "LN";
@@ -50,6 +45,13 @@ function numberMetadata(activity: UnitPanelActivity, key: string): number | null
   return Number.isFinite(value) ? value : null;
 }
 
+function compactItemSummary(itemSummary: string, totalItems: number | null): string {
+  const names = itemSummary.split(",").map((item) => item.trim()).filter(Boolean);
+  if (names.length === 0) return "-";
+  const rest = Math.max((totalItems ?? names.length) - 1, 0);
+  return rest > 0 ? `${names[0]} +${rest} item` : names[0];
+}
+
 function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
@@ -60,15 +62,10 @@ function makeDraftRow(detail: UnitPanelDetail): PrGridRow {
     id: null,
     isNew: true,
     prNumber: "",
-    unitName: detail.panel.carId,
-    divisionName: "",
-    requestedByName: "",
-    accTracking: "Draft",
     status: "OPEN",
     itemName: detail.panel.name,
     vendorSummary: "-",
-    agingDays: null,
-    riskScore: null,
+    totalItems: null,
     qty: 1,
     uom: "pcs",
     originType: "LOKAL",
@@ -83,29 +80,27 @@ function makeDraftRow(detail: UnitPanelDetail): PrGridRow {
 function toExistingRows(detail: UnitPanelDetail): PrGridRow[] {
   return detail.activities
     .filter((activity) => activity.type === "PR")
-    .map((activity) => ({
-      clientId: `pr-${activity.id}`,
-      id: activity.id,
-      isNew: false,
-      prNumber: textMetadata(activity, "prNumber") || activity.title,
-      unitName: textMetadata(activity, "unitName") || detail.unitId,
-      divisionName: textMetadata(activity, "divisionName") || "-",
-      requestedByName: textMetadata(activity, "requestedByName") || "-",
-      accTracking: textMetadata(activity, "accTracking") || "-",
-      status: activity.status ?? "-",
-      itemName: String(activity.metadata.totalItems ?? "-"),
-      vendorSummary: textMetadata(activity, "vendorSummary") || "-",
-      agingDays: numberMetadata(activity, "agingDays"),
-      riskScore: numberMetadata(activity, "riskScore"),
-      qty: 1,
-      uom: "pcs",
-      originType: "LOKAL",
-      estimatedPrice: null,
-      targetDate: "",
-      priority: "NORMAL",
-      notes: "",
-      error: null,
-    }));
+    .map((activity) => {
+      const totalItems = numberMetadata(activity, "totalItems");
+      return {
+        clientId: `pr-${activity.id}`,
+        id: activity.id,
+        isNew: false,
+        prNumber: textMetadata(activity, "prNumber") || activity.title,
+        status: activity.status ?? "-",
+        itemName: compactItemSummary(textMetadata(activity, "itemSummary"), totalItems),
+        vendorSummary: textMetadata(activity, "vendorSummary") || "-",
+        totalItems,
+        qty: 0,
+        uom: "",
+        originType: "LOKAL",
+        estimatedPrice: null,
+        targetDate: "",
+        priority: "",
+        notes: "",
+        error: null,
+      };
+    });
 }
 
 function validateDraft(row: PrGridRow): string | null {
@@ -150,20 +145,15 @@ export function MasterPanelPrGrid({ detail, canCreatePr, onCreated }: MasterPane
 
   const columnDefs = useMemo<ColDef<PrGridRow>[]>(() => [
     { headerName: "PR", field: "prNumber", editable: false, minWidth: 130 },
-    { headerName: "Unit", field: "unitName", editable: false, minWidth: 130 },
-    { headerName: "Divisi", field: "divisionName", editable: false, minWidth: 130 },
-    { headerName: "Requester", field: "requestedByName", editable: false, minWidth: 150 },
-    { headerName: "Approval", field: "accTracking", editable: false, minWidth: 140 },
-    { headerName: "Status", field: "status", editable: false, minWidth: 120 },
-    { headerName: "Item", field: "itemName", editable: ({ data }) => Boolean(data?.isNew), minWidth: 190 },
-    { headerName: "Vendor", field: "vendorSummary", editable: false, minWidth: 140 },
-    { headerName: "Aging", field: "agingDays", editable: false, minWidth: 95 },
-    { headerName: "Risk", field: "riskScore", editable: false, minWidth: 90 },
-    { headerName: "Qty", field: "qty", editable: ({ data }) => Boolean(data?.isNew), minWidth: 90, valueParser: ({ newValue }) => Number(newValue) },
-    { headerName: "UOM", field: "uom", editable: ({ data }) => Boolean(data?.isNew), minWidth: 90 },
+    { headerName: "Item", field: "itemName", editable: ({ data }) => Boolean(data?.isNew), minWidth: 220, flex: 1.5 },
+    { headerName: "Qty", field: "qty", editable: ({ data }) => Boolean(data?.isNew), minWidth: 80, width: 85, valueParser: ({ newValue }) => Number(newValue), valueFormatter: ({ data, value }) => data?.isNew ? String(value ?? "") : "" },
+    { headerName: "UOM", field: "uom", editable: ({ data }) => Boolean(data?.isNew), minWidth: 85, width: 90, valueFormatter: ({ data, value }) => data?.isNew ? String(value ?? "") : "" },
+    { headerName: "Asal", field: "originType", editable: ({ data }) => Boolean(data?.isNew), cellEditor: "agSelectCellEditor", cellEditorParams: { values: ["LOKAL", "LN"] }, minWidth: 90, width: 95, valueFormatter: ({ data, value }) => data?.isNew ? String(value ?? "") : "" },
     { headerName: "Target", field: "targetDate", editable: ({ data }) => Boolean(data?.isNew), cellEditor: "agDateStringCellEditor", minWidth: 120 },
-    { headerName: "Prioritas", field: "priority", editable: ({ data }) => Boolean(data?.isNew), minWidth: 115 },
-    { headerName: "Action", field: "error", editable: false, cellRenderer: ActionRenderer, minWidth: 145 },
+    { headerName: "Prioritas", field: "priority", editable: ({ data }) => Boolean(data?.isNew), cellEditor: "agSelectCellEditor", cellEditorParams: { values: ["LOW", "NORMAL", "HIGH"] }, minWidth: 110, valueFormatter: ({ data, value }) => data?.isNew ? String(value ?? "") : "" },
+    { headerName: "Status", field: "status", editable: false, minWidth: 115 },
+    { headerName: "Vendor", field: "vendorSummary", editable: false, minWidth: 140 },
+    { headerName: "Tindakan", field: "error", editable: false, cellRenderer: ActionRenderer, minWidth: 130, pinned: "right" },
   ], []);
 
   function updateDraft(event: CellValueChangedEvent<PrGridRow>) {
