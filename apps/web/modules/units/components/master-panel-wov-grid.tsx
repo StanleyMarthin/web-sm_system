@@ -2,16 +2,11 @@
 
 import type { CreateVendorRequest } from "@smsystem/contracts/vendor";
 import type { UnitPanelActivity, UnitPanelDetail } from "@smsystem/contracts/unit-panel";
-import { AllCommunityModule, ModuleRegistry, type CellValueChangedEvent, type ColDef, type ICellRendererParams } from "ag-grid-community";
-import { AgGridReact } from "ag-grid-react";
-import { Plus, Save, X } from "lucide-react";
+import type { CellValueChangedEvent, ColDef, ICellRendererParams } from "ag-grid-community";
 import { useMemo, useState } from "react";
 import { createVendor } from "@/shared/api/vendor";
+import { SmsAgGrid, SmsGridDraftActions } from "@/shared/datagrid/sms-ag-grid";
 import { SmartSelectCellEditor, type SmartSelectOption } from "./master-panel-smart-select-editor";
-
-const ICON_STROKE_WIDTH = 2.4;
-
-ModuleRegistry.registerModules([AllCommunityModule]);
 
 interface MasterPanelWovGridProps {
   detail: UnitPanelDetail;
@@ -176,7 +171,6 @@ export function MasterPanelWovGrid({ detail, canCreateVendor, onCreated }: Maste
     { headerName: "Catatan", field: "remarks", editable: ({ data }) => Boolean(data?.isNew), minWidth: 160, flex: 0.8 },
     { headerName: "Tindakan", field: "error", editable: false, cellRenderer: ActionRenderer, minWidth: 130, pinned: "right" },
   ], [parentChoices]);
-  const popupParent = useMemo(() => typeof document === "undefined" ? undefined : document.body, []);
 
   function updateDraft(event: CellValueChangedEvent<WovGridRow>) {
     const row = event.data;
@@ -217,36 +211,25 @@ export function MasterPanelWovGrid({ detail, canCreateVendor, onCreated }: Maste
           <p className="text-[12px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Vendor WO</p>
           {error ? <p className="mt-1 text-[13px] text-destructive">{error}</p> : null}
         </div>
-        {canCreateVendor ? (
-          <div className="flex items-center gap-2">
-            <button type="button" onClick={() => setDraftRows((current) => [...current, makeDraftRow(detail)])} disabled={isSaving || parentChoices.length === 0} className="inline-flex items-center gap-1.5 border border-border px-2 py-1 text-[12px] font-mono uppercase text-foreground hover:bg-muted disabled:opacity-40">
-              <Plus className="h-3.5 w-3.5" strokeWidth={ICON_STROKE_WIDTH} /> Tambah Row
-            </button>
-            <button type="button" onClick={() => void saveDrafts()} disabled={draftRows.length === 0 || isSaving} className="inline-flex items-center gap-1.5 border border-primary/40 bg-primary/[0.06] px-2 py-1 text-[12px] font-mono uppercase text-app-accent-ink hover:bg-primary/10 disabled:opacity-40">
-              <Save className="h-3.5 w-3.5" strokeWidth={ICON_STROKE_WIDTH} /> {isSaving ? "Menyimpan..." : "Simpan"}
-            </button>
-            <button type="button" onClick={() => { setDraftRows([]); setError(null); }} disabled={draftRows.length === 0 || isSaving} className="inline-flex items-center gap-1.5 border border-border px-2 py-1 text-[12px] font-mono uppercase text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-40">
-              <X className="h-3.5 w-3.5" strokeWidth={ICON_STROKE_WIDTH} /> Batal
-            </button>
-          </div>
-        ) : null}
-      </div>
-      {canCreateVendor && parentChoices.length === 0 ? <p className="text-[13px] text-muted-foreground">WOV membutuhkan parent Countdown atau PR yang sudah terhubung ke Master Panel ini.</p> : null}
-      <div className="ag-theme-alpine sms-ag-grid h-[20rem] w-full">
-        <AgGridReact<WovGridRow>
-          rowData={rows}
-          columnDefs={columnDefs}
-          defaultColDef={{ resizable: true, sortable: true, filter: true, suppressHeaderMenuButton: true }}
-          getRowId={({ data }) => data.clientId}
-          rowHeight={42}
-          singleClickEdit
-          stopEditingWhenCellsLoseFocus
-          popupParent={popupParent}
-          suppressMovableColumns
-          onCellValueChanged={updateDraft}
-          overlayNoRowsTemplate="<span class='text-muted-foreground'>Belum ada WOV untuk part ini.</span>"
+        <SmsGridDraftActions
+          canCreate={canCreateVendor && parentChoices.length > 0}
+          hasDrafts={draftRows.length > 0}
+          isSaving={isSaving}
+          onAdd={() => setDraftRows((current) => [...current, makeDraftRow(detail)])}
+          onSave={() => void saveDrafts()}
+          onCancel={() => { setDraftRows([]); setError(null); }}
         />
       </div>
+      {canCreateVendor && parentChoices.length === 0 ? <p className="text-[13px] text-muted-foreground">WOV membutuhkan parent Countdown atau PR yang sudah terhubung ke Master Panel ini.</p> : null}
+      <SmsAgGrid<WovGridRow>
+        heightClassName="h-[20rem]"
+        rowData={rows}
+        columnDefs={columnDefs}
+        getRowId={({ data }) => data.clientId}
+        singleClickEdit
+        onCellValueChanged={updateDraft}
+        emptyMessage="Belum ada WOV untuk part ini."
+      />
     </div>
   );
 }

@@ -1,17 +1,12 @@
 "use client";
 
 import type { UnitPanelActivity, UnitPanelDetail } from "@smsystem/contracts/unit-panel";
-import { AllCommunityModule, ModuleRegistry, type CellValueChangedEvent, type ColDef, type ICellRendererParams } from "ag-grid-community";
-import { AgGridReact } from "ag-grid-react";
-import { Plus, Save, X } from "lucide-react";
+import type { CellValueChangedEvent, ColDef, ICellRendererParams } from "ag-grid-community";
 import { useMemo, useState } from "react";
 import { createCountdownRecord } from "@/shared/api/countdown";
+import { SmsAgGrid, SmsGridDraftActions } from "@/shared/datagrid/sms-ag-grid";
 import { parseHHMMToDecimal } from "@/shared/format/time";
 import { SmartSelectCellEditor, type SmartSelectOption } from "./master-panel-smart-select-editor";
-
-const ICON_STROKE_WIDTH = 2.4;
-
-ModuleRegistry.registerModules([AllCommunityModule]);
 
 interface MasterPanelCountdownGridProps {
   detail: UnitPanelDetail;
@@ -163,8 +158,6 @@ export function MasterPanelCountdownGrid({ detail, canCreateCountdown, onCreated
     { headerName: "Status", field: "status", editable: false, minWidth: 105 },
     { headerName: "Tindakan", field: "error", editable: false, cellRenderer: ActionRenderer, minWidth: 120, pinned: "right" },
   ], [divisionOptions, jobTypeOptions]);
-  const popupParent = useMemo(() => typeof document === "undefined" ? undefined : document.body, []);
-
   function updateDraft(event: CellValueChangedEvent<CountdownGridRow>) {
     const row = event.data;
     if (!row.isNew) return;
@@ -221,35 +214,24 @@ export function MasterPanelCountdownGrid({ detail, canCreateCountdown, onCreated
           <p className="text-[12px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Countdown</p>
           {error ? <p className="mt-1 text-[13px] text-destructive">{error}</p> : null}
         </div>
-        {canCreateCountdown ? (
-          <div className="flex items-center gap-2">
-            <button type="button" onClick={() => setDraftRows((current) => [...current, makeDraftRow(divisionOptions, jobTypeOptions)])} disabled={isSaving} className="inline-flex items-center gap-1.5 border border-border px-2 py-1 text-[12px] font-mono uppercase text-foreground hover:bg-muted disabled:opacity-40">
-              <Plus className="h-3.5 w-3.5" strokeWidth={ICON_STROKE_WIDTH} /> Tambah Row
-            </button>
-            <button type="button" onClick={() => void saveDrafts()} disabled={draftRows.length === 0 || isSaving} className="inline-flex items-center gap-1.5 border border-primary/40 bg-primary/[0.06] px-2 py-1 text-[12px] font-mono uppercase text-app-accent-ink hover:bg-primary/10 disabled:opacity-40">
-              <Save className="h-3.5 w-3.5" strokeWidth={ICON_STROKE_WIDTH} /> {isSaving ? "Menyimpan..." : "Simpan"}
-            </button>
-            <button type="button" onClick={() => { setDraftRows([]); setError(null); }} disabled={draftRows.length === 0 || isSaving} className="inline-flex items-center gap-1.5 border border-border px-2 py-1 text-[12px] font-mono uppercase text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-40">
-              <X className="h-3.5 w-3.5" strokeWidth={ICON_STROKE_WIDTH} /> Batal
-            </button>
-          </div>
-        ) : null}
-      </div>
-      <div className="ag-theme-alpine sms-ag-grid h-[20rem] w-full">
-        <AgGridReact<CountdownGridRow>
-          rowData={rows}
-          columnDefs={columnDefs}
-          defaultColDef={{ resizable: true, sortable: true, filter: true, suppressHeaderMenuButton: true }}
-          getRowId={({ data }) => data.clientId}
-          rowHeight={42}
-          singleClickEdit
-          stopEditingWhenCellsLoseFocus
-          popupParent={popupParent}
-          suppressMovableColumns
-          onCellValueChanged={updateDraft}
-          overlayNoRowsTemplate="<span class='text-muted-foreground'>Belum ada Countdown untuk part ini.</span>"
+        <SmsGridDraftActions
+          canCreate={canCreateCountdown}
+          hasDrafts={draftRows.length > 0}
+          isSaving={isSaving}
+          onAdd={() => setDraftRows((current) => [...current, makeDraftRow(divisionOptions, jobTypeOptions)])}
+          onSave={() => void saveDrafts()}
+          onCancel={() => { setDraftRows([]); setError(null); }}
         />
       </div>
+      <SmsAgGrid<CountdownGridRow>
+        heightClassName="h-[20rem]"
+        rowData={rows}
+        columnDefs={columnDefs}
+        getRowId={({ data }) => data.clientId}
+        singleClickEdit
+        onCellValueChanged={updateDraft}
+        emptyMessage="Belum ada Countdown untuk part ini."
+      />
     </div>
   );
 }
