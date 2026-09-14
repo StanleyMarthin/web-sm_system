@@ -61,6 +61,7 @@ services:
     environment:
       NODE_ENV: production
       NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-/api}
+      JOB_PLAN_V2_BASE_URL: ${JOB_PLAN_V2_BASE_URL:-http://108.136.189.225:8083}
       SPF_API_INTERNAL_URL: ${SPF_API_INTERNAL_URL:?SPF_API_INTERNAL_URL is required}
     expose:
       - "3000"
@@ -169,4 +170,3 @@ networks:
   smsystem_internal:
     name: smsystem_internal
     driver: bridge
-
