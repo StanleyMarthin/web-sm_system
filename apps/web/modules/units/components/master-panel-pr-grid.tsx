@@ -2,13 +2,25 @@
 
 import type { CreatePrInput } from "@smsystem/contracts/pr";
 import type { UnitPanelActivity, UnitPanelDetail } from "@smsystem/contracts/unit-panel";
-import type { CellValueChangedEvent, ColDef, ICellRendererParams } from "ag-grid-community";
+import { AllCommunityModule, ModuleRegistry, type CellValueChangedEvent, type ColDef, type ICellRendererParams } from "ag-grid-community";
 import { AgGridReact } from "ag-grid-react";
 import { Plus, Save, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { createPr } from "@/shared/api/pr";
+import { SmartSelectCellEditor, type SmartSelectOption } from "./master-panel-smart-select-editor";
 
 const ICON_STROKE_WIDTH = 2.4;
+ModuleRegistry.registerModules([AllCommunityModule]);
+
+const ORIGIN_OPTIONS: SmartSelectOption[] = [
+  { label: "Lokal", value: "LOKAL" },
+  { label: "Luar Negeri", value: "LN" },
+];
+const PRIORITY_OPTIONS: SmartSelectOption[] = [
+  { label: "Rendah", value: "LOW" },
+  { label: "Normal", value: "NORMAL" },
+  { label: "Tinggi", value: "HIGH" },
+];
 
 interface MasterPanelPrGridProps {
   detail: UnitPanelDetail;
@@ -142,15 +154,37 @@ export function MasterPanelPrGrid({ detail, canCreatePr, onCreated }: MasterPane
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const rows = useMemo(() => [...toExistingRows(detail), ...draftRows], [detail, draftRows]);
+  const popupParent = useMemo(() => typeof document === "undefined" ? undefined : document.body, []);
 
   const columnDefs = useMemo<ColDef<PrGridRow>[]>(() => [
     { headerName: "PR", field: "prNumber", editable: false, minWidth: 130 },
     { headerName: "Item", field: "itemName", editable: ({ data }) => Boolean(data?.isNew), minWidth: 220, flex: 1.5 },
     { headerName: "Qty", field: "qty", editable: ({ data }) => Boolean(data?.isNew), minWidth: 80, width: 85, valueParser: ({ newValue }) => Number(newValue), valueFormatter: ({ data, value }) => data?.isNew ? String(value ?? "") : "" },
     { headerName: "UOM", field: "uom", editable: ({ data }) => Boolean(data?.isNew), minWidth: 85, width: 90, valueFormatter: ({ data, value }) => data?.isNew ? String(value ?? "") : "" },
-    { headerName: "Asal", field: "originType", editable: ({ data }) => Boolean(data?.isNew), cellEditor: "agSelectCellEditor", cellEditorParams: { values: ["LOKAL", "LN"] }, minWidth: 90, width: 95, valueFormatter: ({ data, value }) => data?.isNew ? String(value ?? "") : "" },
+    {
+      headerName: "Asal",
+      field: "originType",
+      editable: ({ data }) => Boolean(data?.isNew),
+      cellEditor: SmartSelectCellEditor,
+      cellEditorParams: { values: ORIGIN_OPTIONS },
+      cellEditorPopup: true,
+      cellEditorPopupPosition: "under",
+      minWidth: 110,
+      width: 120,
+      valueFormatter: ({ data, value }) => data?.isNew ? ORIGIN_OPTIONS.find((option) => option.value === String(value ?? ""))?.label ?? "" : "",
+    },
     { headerName: "Target", field: "targetDate", editable: ({ data }) => Boolean(data?.isNew), cellEditor: "agDateStringCellEditor", minWidth: 120 },
-    { headerName: "Prioritas", field: "priority", editable: ({ data }) => Boolean(data?.isNew), cellEditor: "agSelectCellEditor", cellEditorParams: { values: ["LOW", "NORMAL", "HIGH"] }, minWidth: 110, valueFormatter: ({ data, value }) => data?.isNew ? String(value ?? "") : "" },
+    {
+      headerName: "Prioritas",
+      field: "priority",
+      editable: ({ data }) => Boolean(data?.isNew),
+      cellEditor: SmartSelectCellEditor,
+      cellEditorParams: { values: PRIORITY_OPTIONS },
+      cellEditorPopup: true,
+      cellEditorPopupPosition: "under",
+      minWidth: 110,
+      valueFormatter: ({ data, value }) => data?.isNew ? PRIORITY_OPTIONS.find((option) => option.value === String(value ?? ""))?.label ?? "" : "",
+    },
     { headerName: "Status", field: "status", editable: false, minWidth: 115 },
     { headerName: "Vendor", field: "vendorSummary", editable: false, minWidth: 140 },
     { headerName: "Tindakan", field: "error", editable: false, cellRenderer: ActionRenderer, minWidth: 130, pinned: "right" },
@@ -218,6 +252,7 @@ export function MasterPanelPrGrid({ detail, canCreatePr, onCreated }: MasterPane
           rowHeight={42}
           singleClickEdit
           stopEditingWhenCellsLoseFocus
+          popupParent={popupParent}
           suppressMovableColumns
           onCellValueChanged={updateDraft}
           overlayNoRowsTemplate="<span class='text-muted-foreground'>Belum ada PR untuk part ini.</span>"

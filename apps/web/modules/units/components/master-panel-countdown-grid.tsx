@@ -1,7 +1,7 @@
 "use client";
 
 import type { UnitPanelActivity, UnitPanelDetail } from "@smsystem/contracts/unit-panel";
-import type { CellValueChangedEvent, ColDef, ICellRendererParams } from "ag-grid-community";
+import { AllCommunityModule, ModuleRegistry, type CellValueChangedEvent, type ColDef, type ICellRendererParams } from "ag-grid-community";
 import { AgGridReact } from "ag-grid-react";
 import { Plus, Save, X } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -10,6 +10,8 @@ import { parseHHMMToDecimal } from "@/shared/format/time";
 import { SmartSelectCellEditor, type SmartSelectOption } from "./master-panel-smart-select-editor";
 
 const ICON_STROKE_WIDTH = 2.4;
+
+ModuleRegistry.registerModules([AllCommunityModule]);
 
 interface MasterPanelCountdownGridProps {
   detail: UnitPanelDetail;
@@ -134,10 +136,12 @@ export function MasterPanelCountdownGrid({ detail, canCreateCountdown, onCreated
     {
       headerName: "Divisi",
       field: "divisionId",
-      editable: ({ data }) => Boolean(data?.isNew),
+      editable: ({ data }) => Boolean(data?.isNew) && divisionOptions.length > 1,
       cellEditor: SmartSelectCellEditor,
       cellEditorParams: { values: divisionOptions },
-      valueFormatter: ({ data, value }) => data?.isNew ? divisionOptions.find((option) => option.value === String(value ?? ""))?.label ?? "" : data?.divisionName ?? "",
+      cellEditorPopup: true,
+      cellEditorPopupPosition: "under",
+      valueFormatter: ({ data, value }) => data?.isNew ? divisionOptions.find((option) => option.value === String(value ?? ""))?.label ?? (divisionOptions.length === 0 ? "Tidak ada pilihan" : "") : data?.divisionName ?? "",
       minWidth: 140,
       flex: 0.9,
     },
@@ -145,10 +149,12 @@ export function MasterPanelCountdownGrid({ detail, canCreateCountdown, onCreated
     {
       headerName: "Jobdesc",
       field: "jobTypeId",
-      editable: ({ data }) => Boolean(data?.isNew),
+      editable: ({ data }) => Boolean(data?.isNew) && jobTypeOptions.length > 1,
       cellEditor: SmartSelectCellEditor,
       cellEditorParams: { values: jobTypeOptions },
-      valueFormatter: ({ data, value }) => data?.isNew ? jobTypeOptions.find((option) => option.value === String(value ?? ""))?.label ?? "" : data?.jobTypeName ?? "",
+      cellEditorPopup: true,
+      cellEditorPopupPosition: "under",
+      valueFormatter: ({ data, value }) => data?.isNew ? jobTypeOptions.find((option) => option.value === String(value ?? ""))?.label ?? (jobTypeOptions.length === 0 ? "Tidak ada pilihan" : "") : data?.jobTypeName ?? "",
       minWidth: 220,
       flex: 1.4,
     },
@@ -157,6 +163,7 @@ export function MasterPanelCountdownGrid({ detail, canCreateCountdown, onCreated
     { headerName: "Status", field: "status", editable: false, minWidth: 105 },
     { headerName: "Tindakan", field: "error", editable: false, cellRenderer: ActionRenderer, minWidth: 120, pinned: "right" },
   ], [divisionOptions, jobTypeOptions]);
+  const popupParent = useMemo(() => typeof document === "undefined" ? undefined : document.body, []);
 
   function updateDraft(event: CellValueChangedEvent<CountdownGridRow>) {
     const row = event.data;
@@ -237,6 +244,7 @@ export function MasterPanelCountdownGrid({ detail, canCreateCountdown, onCreated
           rowHeight={42}
           singleClickEdit
           stopEditingWhenCellsLoseFocus
+          popupParent={popupParent}
           suppressMovableColumns
           onCellValueChanged={updateDraft}
           overlayNoRowsTemplate="<span class='text-muted-foreground'>Belum ada Countdown untuk part ini.</span>"

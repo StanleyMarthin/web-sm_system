@@ -2,7 +2,7 @@
 
 import type { UnitPanelActivity, UnitPanelDetail } from "@smsystem/contracts/unit-panel";
 import type { WoCreateRequest } from "@smsystem/contracts/wo";
-import type { CellValueChangedEvent, ColDef, ICellRendererParams } from "ag-grid-community";
+import { AllCommunityModule, ModuleRegistry, type CellValueChangedEvent, type ColDef, type ICellRendererParams } from "ag-grid-community";
 import { AgGridReact } from "ag-grid-react";
 import { Plus, Save, X } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -10,6 +10,8 @@ import { createWo } from "@/shared/api/wo";
 import { SmartSelectCellEditor, type SmartSelectOption } from "./master-panel-smart-select-editor";
 
 const ICON_STROKE_WIDTH = 2.4;
+
+ModuleRegistry.registerModules([AllCommunityModule]);
 
 interface MasterPanelWoGridProps {
   detail: UnitPanelDetail;
@@ -154,11 +156,13 @@ export function MasterPanelWoGrid({ detail, canCreateWo, onCreated }: MasterPane
     {
       headerName: "Divisi Tujuan",
       field: "toDivisionId",
-      editable: ({ data }) => Boolean(data?.isNew),
+      editable: ({ data }) => Boolean(data?.isNew) && divisionOptions.length > 1,
       cellEditor: SmartSelectCellEditor,
       cellEditorParams: { values: divisionOptions },
+      cellEditorPopup: true,
+      cellEditorPopupPosition: "under",
       valueFormatter: ({ value, data }) => data?.isNew
-        ? divisionOptions.find((option) => option.value === String(value ?? ""))?.label ?? ""
+        ? divisionOptions.find((option) => option.value === String(value ?? ""))?.label ?? (divisionOptions.length === 0 ? "Tidak ada pilihan" : "")
         : data?.toDivisionName ?? "",
       minWidth: 160,
       flex: 0.9,
@@ -171,6 +175,7 @@ export function MasterPanelWoGrid({ detail, canCreateWo, onCreated }: MasterPane
     { headerName: "Catatan", field: "notes", editable: ({ data }) => Boolean(data?.isNew), minWidth: 160, flex: 0.8 },
     { headerName: "Tindakan", field: "error", editable: false, cellRenderer: ActionRenderer, minWidth: 130, pinned: "right" },
   ], [divisionOptions]);
+  const popupParent = useMemo(() => typeof document === "undefined" ? undefined : document.body, []);
 
   function updateDraft(event: CellValueChangedEvent<WoGridRow>) {
     const row = event.data;
@@ -258,6 +263,7 @@ export function MasterPanelWoGrid({ detail, canCreateWo, onCreated }: MasterPane
           rowHeight={42}
           singleClickEdit
           stopEditingWhenCellsLoseFocus
+          popupParent={popupParent}
           suppressMovableColumns
           onCellValueChanged={updateDraft}
           overlayNoRowsTemplate="<span class='text-muted-foreground'>Belum ada Work Order untuk part ini.</span>"

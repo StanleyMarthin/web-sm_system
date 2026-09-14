@@ -2,7 +2,7 @@
 
 import type { CreateVendorRequest } from "@smsystem/contracts/vendor";
 import type { UnitPanelActivity, UnitPanelDetail } from "@smsystem/contracts/unit-panel";
-import type { CellValueChangedEvent, ColDef, ICellRendererParams } from "ag-grid-community";
+import { AllCommunityModule, ModuleRegistry, type CellValueChangedEvent, type ColDef, type ICellRendererParams } from "ag-grid-community";
 import { AgGridReact } from "ag-grid-react";
 import { Plus, Save, X } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -10,6 +10,8 @@ import { createVendor } from "@/shared/api/vendor";
 import { SmartSelectCellEditor, type SmartSelectOption } from "./master-panel-smart-select-editor";
 
 const ICON_STROKE_WIDTH = 2.4;
+
+ModuleRegistry.registerModules([AllCommunityModule]);
 
 interface MasterPanelWovGridProps {
   detail: UnitPanelDetail;
@@ -155,10 +157,12 @@ export function MasterPanelWovGrid({ detail, canCreateVendor, onCreated }: Maste
     {
       headerName: "Parent",
       field: "parentKey",
-      editable: ({ data }) => Boolean(data?.isNew),
+      editable: ({ data }) => Boolean(data?.isNew) && parentChoices.length > 1,
       cellEditor: SmartSelectCellEditor,
       cellEditorParams: { values: parentChoices },
-      valueFormatter: ({ value }) => parentChoices.find((option) => option.value === String(value ?? ""))?.label ?? "",
+      cellEditorPopup: true,
+      cellEditorPopupPosition: "under",
+      valueFormatter: ({ value }) => parentChoices.find((option) => option.value === String(value ?? ""))?.label ?? (parentChoices.length === 0 ? "Tidak ada pilihan" : ""),
       minWidth: 220,
     },
     { headerName: "Vendor", field: "vendorName", editable: ({ data }) => Boolean(data?.isNew), minWidth: 170, flex: 1 },
@@ -172,6 +176,7 @@ export function MasterPanelWovGrid({ detail, canCreateVendor, onCreated }: Maste
     { headerName: "Catatan", field: "remarks", editable: ({ data }) => Boolean(data?.isNew), minWidth: 160, flex: 0.8 },
     { headerName: "Tindakan", field: "error", editable: false, cellRenderer: ActionRenderer, minWidth: 130, pinned: "right" },
   ], [parentChoices]);
+  const popupParent = useMemo(() => typeof document === "undefined" ? undefined : document.body, []);
 
   function updateDraft(event: CellValueChangedEvent<WovGridRow>) {
     const row = event.data;
@@ -236,6 +241,7 @@ export function MasterPanelWovGrid({ detail, canCreateVendor, onCreated }: Maste
           rowHeight={42}
           singleClickEdit
           stopEditingWhenCellsLoseFocus
+          popupParent={popupParent}
           suppressMovableColumns
           onCellValueChanged={updateDraft}
           overlayNoRowsTemplate="<span class='text-muted-foreground'>Belum ada WOV untuk part ini.</span>"
