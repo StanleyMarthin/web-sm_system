@@ -60,6 +60,7 @@ const approvalLabels: Record<JobPlanV2ApprovalState, string> = {
   MANAGEMENT_REVIEW: "Review Management",
   APPROVED: "Approved",
   REJECTED: "Rejected",
+  CANCELLED: "Cancelled",
 };
 
 const executionLabels: Record<JobPlanV2ExecutionState, string> = {

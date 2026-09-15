@@ -7,6 +7,7 @@ export const jobPlanV2ApprovalStateSchema = z.enum([
   "MANAGEMENT_REVIEW",
   "APPROVED",
   "REJECTED",
+  "CANCELLED",
 ]);
 
 export const jobPlanV2ExecutionStateSchema = z.enum([
@@ -100,7 +101,7 @@ export const createJobPlanV2RequestSchema = z.object({
 });
 
 export const mutateJobPlanV2ApprovalRequestSchema = z.object({
-  action: z.enum(["approve", "correct", "reject"]),
+  action: z.enum(["submit", "cancel", "approve", "correct", "reject"]),
   userId: userIdSchema,
   commandId: commandIdSchema,
   expectedVersion: z.number().int().positive(),
@@ -110,6 +111,7 @@ export const mutateJobPlanV2ApprovalRequestSchema = z.object({
   plannedWorkMinutes: workMinuteSchema.optional(),
   note: z.string().trim().max(1000).nullable().optional(),
   rejectReason: z.string().trim().max(1000).nullable().optional(),
+  reason: z.string().trim().max(1000).nullable().optional(),
 });
 
 export const mutateJobPlanV2ExecutionRequestSchema = z.object({
