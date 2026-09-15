@@ -122,9 +122,8 @@ export function CountdownDetailShell({
   }
   const buildJobPlanHref = (mode: "normal" | "overtime") => {
     const jobPlanParams = new URLSearchParams({
-    countdownId: countdown.countdownId,
-    carId: countdown.carId,
-    autoOpenCreate: "1",
+      v2: "1",
+      coreId: countdown.countdownId,
       mode,
     });
     if (countdown.divisionId !== null) {

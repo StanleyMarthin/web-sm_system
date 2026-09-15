@@ -3,6 +3,8 @@
 import type { UnitBoardRow, UnitWorkspace } from "@smsystem/contracts/unit";
 import type { UnitBomWorkspace } from "@smsystem/contracts/unit-bom";
 import type { UnitPanelCollection } from "@smsystem/contracts/unit-panel";
+import type { CountdownBoardRow } from "@smsystem/contracts/countdown";
+import type { GridQueryState } from "@smsystem/contracts/grid";
 import {
   Activity,
   AlertTriangle,
@@ -19,6 +21,7 @@ import {
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { BomTrackerTab } from "@/modules/units/components/bom-tracker-tab";
+import { CountdownBoardShell } from "@/modules/countdown/components/countdown-board-shell";
 import { MasterPanelManager } from "@/modules/units/components/master-panel-manager";
 import { UnitCatalogTab } from "@/modules/units/components/unit-catalog-tab";
 import { humanizeCodeLabel } from "@/shared/format/humanize";
@@ -36,6 +39,20 @@ interface UnitWorkspaceShellProps {
   canCreateVendor: boolean;
   canUseCatalog: boolean;
   canManageCatalog: boolean;
+  countdownBoard: {
+    rows: CountdownBoardRow[];
+    references: {
+      divisions: Array<{ label: string; value: string; code?: string | null; parentId?: number | null; parentName?: string | null; parentCode?: string | null }>;
+      units: Array<{ label: string; value: string }>;
+      panels: Array<{ label: string; value: string; carId?: string | null; section?: string | null; category?: string | null }>;
+      sections?: Array<{ label: string; value: string }>;
+      jobTypes: Array<{ label: string; value: string; divisionId?: number | null; divisionName?: string | null; divisionParentId?: number | null; divisionParentName?: string | null; divisionParentCode?: string | null }>;
+      taskCategories?: Array<{ label: string; value: string }>;
+    };
+    canManage: boolean;
+    meta: { page: number; limit: number; total: number; totalPages: number; hasNext: boolean; hasPrev: boolean };
+    state: GridQueryState;
+  } | null;
 }
 
 type UnitStatusKey = "TOP_URGENT" | "URGENT" | "NORMAL" | "SLOW" | "HOLD";
@@ -65,7 +82,7 @@ type DivisionStat = {
   progressPercent: number;
 };
 
-type UnitWorkspaceTab = "summary" | "catalog" | "parts-panels" | "master-panel";
+type UnitWorkspaceTab = "summary" | "catalog" | "parts-panels" | "master-panel" | "countdown";
 
 const UNIT_STATUS_CONFIG: Record<UnitStatusKey, { label: string; cls: string }> = {
   TOP_URGENT: {
@@ -109,7 +126,7 @@ function gridHref(
 }
 
 function resolveTab(value: string | null): UnitWorkspaceTab {
-  if (value === "catalog" || value === "parts-panels" || value === "master-panel") return value;
+  if (value === "catalog" || value === "parts-panels" || value === "master-panel" || value === "countdown") return value;
   return "summary";
 }
 
@@ -400,6 +417,7 @@ export function UnitWorkspaceShell({
   canCreateVendor,
   canUseCatalog,
   canManageCatalog,
+  countdownBoard,
 }: UnitWorkspaceShellProps) {
   const searchParams = useSearchParams();
   const requestedTab = resolveTab(searchParams.get("tab"));
@@ -770,6 +788,20 @@ export function UnitWorkspaceShell({
           canDownloadPhotos={canDownloadPhotos}
           canManagePanels={canManagePanels}
         />
+      ) : activeTab === "countdown" ? (
+        countdownBoard ? (
+          <CountdownBoardShell
+            rows={countdownBoard.rows}
+            references={countdownBoard.references}
+            canManage={countdownBoard.canManage}
+            meta={countdownBoard.meta}
+            state={countdownBoard.state}
+          />
+        ) : (
+          <section className="border border-border bg-card px-4 py-4 text-sm text-muted-foreground">
+            Countdown unit belum bisa dimuat.
+          </section>
+        )
       ) : (
         <MasterPanelManager
           key={`${unit.unitId}:master-panel:${masterPanels?.tree.length ?? "client"}`}

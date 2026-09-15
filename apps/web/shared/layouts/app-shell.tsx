@@ -163,6 +163,12 @@ export function AppShell({ user, navigation, children }: AppShellProps) {
             href: `/units/${currentUnitSegment}?tab=master-panel`,
             permission: permissionCodes.viewUnits,
           },
+          {
+            id: "unit-countdown",
+            label: "Countdown",
+            href: `/units/${currentUnitSegment}?tab=countdown`,
+            permission: permissionCodes.viewCountdown,
+          },
         ],
       };
     });

@@ -2,6 +2,7 @@
 
 import type { CountdownBoardRow } from "@smsystem/contracts/countdown";
 import type { GridQueryState } from "@smsystem/contracts/grid";
+import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import {
   createCountdownRecord,
   deleteCountdownRecord,
@@ -10,13 +11,7 @@ import {
   updateCountdownRecord,
   uploadCountdownWorkbook,
 } from "@/shared/api/countdown";
-import { SmartDataGrid } from "@/shared/datagrid/smart-data-grid";
-import type {
-  SmartDataGridCellValue,
-  SmartDataGridColumn,
-  SmartDataGridFilterDefinition,
-  SmartDataGridSortOption,
-} from "@/shared/datagrid/types";
+import { SmsAgGrid } from "@/shared/datagrid/sms-ag-grid";
 import {
   ActionButton, CompactSelect, FieldLabel, PageHeader,
 } from "@/shared/ui/compact";
@@ -24,7 +19,7 @@ import { parseHHMMToDecimal } from "@/shared/format/time";
 import { CountdownBoardForm, type CountdownFormValues } from "./forms/countdown-board-form";
 import { Camera, Download, FileText, FileUp, Pencil, Plus, RefreshCcw, Trash2, Upload, X } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useSweetAlert } from "@/shared/ui/sweet-alert";
 import { formatCountdownImportIssue, formatCountdownStatus } from "../countdown-copy";
@@ -86,10 +81,6 @@ function formatDecimalToHHMM(decimalHours: number): string {
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
 
-function toBoardRow(row: Record<string, SmartDataGridCellValue>): CountdownBoardRow {
-  return row as unknown as CountdownBoardRow;
-}
-
 function formatNumber(value: number): string {
   if (Number.isInteger(value)) return String(value);
   return value.toFixed(2).replace(/\.00$/u, "");
@@ -99,148 +90,133 @@ function formatNumber(value: number): string {
 /*  Grid config                                                         */
 /* ------------------------------------------------------------------ */
 
-const sortOptions: SmartDataGridSortOption[] = [
-  { label: "Deadline", value: "deadlineDate" },
-  { label: "Diperbarui", value: "updatedAt" },
-  { label: "Dibuat", value: "createdAt" },
-  { label: "Unit", value: "unitName" },
-  { label: "Divisi", value: "divisionName" },
-  { label: "Panel", value: "panelName" },
-  { label: "Bagian", value: "sectionName" },
-  { label: "Kategori", value: "taskCategory" },
-  { label: "Status", value: "status" },
-  { label: "Sisa Jam", value: "remainingHours" },
-  { label: "Progress", value: "actualProgressPercent" },
-];
-
 function buildCountdownColumns(
   canManage: boolean,
   onEdit: (row: CountdownBoardRow) => void,
   onDelete: (row: CountdownBoardRow) => void,
-  references: CountdownReferences,
-): SmartDataGridColumn[] {
+): ColDef<CountdownBoardRow>[] {
   return [
     {
-      key: "unitName", label: "Unit", kind: "text", sticky: true,
-      filterKey: "unitId",
-      filterOptions: references.units,
-      renderCell: (value, row) => (
+      headerName: "Unit",
+      field: "unitName",
+      pinned: "left",
+      minWidth: 145,
+      flex: 0.8,
+      cellRenderer: ({ value, data }: ICellRendererParams<CountdownBoardRow>) => (
         <div className="space-y-0.5">
           <Link
-            href={`/countdown/${String(row.countdownId ?? "")}`}
+            href={`/countdown/${String(data?.countdownId ?? "")}`}
             className="text-[12px] font-medium text-foreground hover:text-app-accent-ink"
           >
             {String(value ?? "-")}
           </Link>
-          <p className="text-[10px] text-foreground/30">{String(row.carId ?? "-")}</p>
+          <p className="text-[10px] text-foreground/30">{String(data?.carId ?? "-")}</p>
         </div>
       ),
     },
-    { key: "divisionName", label: "Divisi", kind: "text", filterKey: "divisionId", filterOptions: references.divisions },
-    { key: "sectionName", label: "Bagian", kind: "text", filterKey: "sectionName" },
+    { headerName: "Divisi", field: "divisionName", minWidth: 120 },
+    { headerName: "Bagian", field: "sectionName", minWidth: 120 },
     {
-      key: "panelName", label: "Panel", kind: "text",
-      filterKey: "panelId",
-      filterOptions: references.panels,
-      renderCell: (value) => (
+      headerName: "Panel",
+      field: "panelName",
+      minWidth: 160,
+      flex: 1,
+      cellRenderer: ({ value }: ICellRendererParams<CountdownBoardRow>) => (
         <div className="space-y-0.5">
           <p className="text-[12px] text-foreground">{String(value ?? "-")}</p>
         </div>
       ),
     },
     {
-      key: "jobTypeName",
-      label: "Jobdesc",
-      kind: "text",
-      filterKey: "jobTypeId",
-      filterOptions: references.jobTypes,
-      renderCell: (value, row) => String(value ?? row.sectionName ?? "-"),
+      headerName: "Jobdesc",
+      field: "jobTypeName",
+      minWidth: 190,
+      flex: 1.1,
+      valueFormatter: ({ value, data }) => String(value ?? data?.sectionName ?? "-"),
     },
-    { key: "temuanAwal", label: "Temuan Awal", kind: "text" },
-    { key: "keterangan", label: "Keterangan", kind: "text" },
+    { headerName: "PIC", field: "picPlan", minWidth: 115 },
     { 
-      key: "targetHoursInitial", label: "Target", kind: "text", align: "right",
-      renderCell: (v) => <span className="tabular-nums">{formatDecimalToHHMM(Number(v)) || "00:00"}</span>
-    },
-    { 
-      key: "totalActualHours", label: "Aktual", kind: "text", align: "right",
-      renderCell: (v) => <span className="tabular-nums">{formatDecimalToHHMM(Number(v)) || "00:00"}</span>
+      headerName: "Target",
+      field: "targetHoursInitial",
+      minWidth: 92,
+      valueFormatter: ({ value }) => formatDecimalToHHMM(Number(value)) || "00:00",
+      cellClass: "text-right tabular-nums",
     },
     { 
-      key: "remainingHours", label: "Sisa", kind: "text", align: "right",
-      renderCell: (v) => <span className="tabular-nums">{formatDecimalToHHMM(Number(v)) || "00:00"}</span>
+      headerName: "Aktual",
+      field: "totalActualHours",
+      minWidth: 92,
+      valueFormatter: ({ value }) => formatDecimalToHHMM(Number(value)) || "00:00",
+      cellClass: "text-right tabular-nums",
     },
-    { key: "actualProgressPercent", label: "Progress %", kind: "number", align: "right" },
-    { key: "deadlineDate", label: "Deadline", kind: "mono" },
+    { 
+      headerName: "Sisa",
+      field: "remainingHours",
+      minWidth: 92,
+      valueFormatter: ({ value }) => formatDecimalToHHMM(Number(value)) || "00:00",
+      cellClass: "text-right tabular-nums",
+    },
+    { headerName: "Progress", field: "actualProgressPercent", minWidth: 95, valueFormatter: ({ value }) => `${formatNumber(Number(value ?? 0))}%`, cellClass: "text-right" },
+    { headerName: "Deadline", field: "deadlineDate", minWidth: 115 },
     {
-      key: "status",
-      label: "Status",
-      kind: "status",
-      align: "center",
-      filterKey: "status",
-      filterOptions: [
-        { label: formatCountdownStatus("PLAN"), value: "PLAN" },
-        { label: formatCountdownStatus("PROSES"), value: "PROSES" },
-        { label: formatCountdownStatus("QC_READY"), value: "QC_READY" },
-        { label: formatCountdownStatus("DONE"), value: "DONE" },
-      ],
+      headerName: "Status",
+      field: "status",
+      minWidth: 105,
+      valueFormatter: ({ value }) => formatCountdownStatus(String(value ?? "")),
     },
     {
-      key: "isOverdue", label: "Risiko", kind: "text", align: "center",
-      renderCell: (_v, row) => (
+      headerName: "Risiko",
+      field: "isOverdue",
+      minWidth: 120,
+      cellRenderer: ({ data }: ICellRendererParams<CountdownBoardRow>) => (
         <span className={[
           "inline-flex border px-2 py-0.5 text-[10px] font-mono uppercase tracking-[0.1em]",
-          row.isOverdue
+          data?.isOverdue
             ? "border-destructive/30 bg-destructive/[0.06] text-destructive"
             : "border-success/20 bg-success/[0.06] text-success",
         ].join(" ")}>
-          {row.isOverdue ? "Terlambat" : "Sesuai Jadwal"}
+          {data?.isOverdue ? "Terlambat" : "Sesuai Jadwal"}
         </span>
       ),
     },
     {
-      key: "action", label: "Tindakan", kind: "text", align: "center",
-      renderCell: (_v, row) => (
+      headerName: "Tindakan",
+      colId: "action",
+      minWidth: 265,
+      pinned: "right",
+      sortable: false,
+      filter: false,
+      cellRenderer: ({ data: row }: ICellRendererParams<CountdownBoardRow>) => row ? (
         <div className="flex flex-wrap items-center justify-center gap-1">
           <Link href={`/countdown/${String(row.countdownId ?? "")}`}
             className="border border-primary/30 bg-primary/[0.06] px-2 py-0.5 text-[10px] font-mono uppercase tracking-[0.1em] text-app-accent-ink hover:bg-primary/[0.12] transition-colors">
             Detail
           </Link>
+          {canManage ? (
+            <Link href={`/job-plan?v2=1&coreId=${encodeURIComponent(String(row.countdownId ?? ""))}`}
+              className="border border-success/25 bg-success/[0.06] px-2 py-0.5 text-[10px] font-mono uppercase tracking-[0.1em] text-success hover:bg-success/[0.12] transition-colors">
+              Buat Job Plan
+            </Link>
+          ) : null}
           <Link href={`/countdown/${String(row.countdownId ?? "")}#dokumentasi`}
             className="inline-flex items-center gap-1 border border-border px-2 py-0.5 text-[10px] font-mono uppercase tracking-[0.1em] text-foreground/55 hover:border-primary/30 hover:text-app-accent-ink transition-colors">
             <Camera className="h-3 w-3" />Dokumentasi
           </Link>
           {canManage && (
             <>
-              <button type="button" onClick={() => onEdit(toBoardRow(row))}
+              <button type="button" onClick={() => onEdit(row)}
                 className="inline-flex items-center gap-1 border border-white/[0.07] px-2 py-0.5 text-[10px] font-mono uppercase tracking-[0.1em] text-foreground/55 hover:border-primary/30 hover:text-app-accent-ink transition-colors">
                 <Pencil className="h-3 w-3" />Edit
               </button>
-              <button type="button" onClick={() => onDelete(toBoardRow(row))}
+              <button type="button" onClick={() => onDelete(row)}
                 className="inline-flex items-center gap-1 border border-destructive/20 px-2 py-0.5 text-[10px] font-mono uppercase tracking-[0.1em] text-destructive/80 hover:bg-destructive/[0.06] transition-colors">
                 <Trash2 className="h-3 w-3" />Hapus
               </button>
             </>
           )}
         </div>
-      ),
+      ) : null,
     },
-  ];
-}
-
-function buildCountdownFilters(references: CountdownReferences): SmartDataGridFilterDefinition[] {
-  return [
-    {
-      field: "status", label: "Status", options: [
-        { label: formatCountdownStatus("PLAN"), value: "PLAN" },
-        { label: formatCountdownStatus("PROSES"), value: "PROSES" },
-        { label: formatCountdownStatus("QC_READY"), value: "QC_READY" },
-        { label: formatCountdownStatus("DONE"), value: "DONE" },
-      ]
-    },
-    { field: "divisionId", label: "Divisi", options: references.divisions },
-    { field: "unitId", label: "Unit", options: references.units },
-    { field: "panelId", label: "Panel", options: references.panels },
   ];
 }
 
@@ -250,6 +226,8 @@ function buildCountdownFilters(references: CountdownReferences): SmartDataGridFi
 
 export function CountdownBoardShell({ rows, references, canManage, meta, state }: CountdownBoardShellProps) {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const sweetAlert = useSweetAlert();
   const [isUploading, setIsUploading] = useState(false);
   const [entryMode, setEntryMode] = useState<CountdownEntryMode>("manual");
@@ -444,8 +422,13 @@ export function CountdownBoardShell({ rows, references, canManage, meta, state }
     router.refresh();
   }
 
-  const columns = buildCountdownColumns(canManage, openEditCountdown, handleDeleteCountdown, references);
-  const filters = buildCountdownFilters(references);
+  const columns = buildCountdownColumns(canManage, openEditCountdown, handleDeleteCountdown);
+  function pageHref(page: number) {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("page", String(page));
+    params.set("limit", String(meta.limit));
+    return `${pathname}?${params.toString()}`;
+  }
 
   return (
     <div className="space-y-3">
@@ -619,16 +602,40 @@ export function CountdownBoardShell({ rows, references, canManage, meta, state }
         </div>
       ) : null}
 
-      {/* ── Data grid ── */}
-      <SmartDataGrid
-        viewportClassName="max-h-[calc(100svh-260px)]"
-        title="Daftar Countdown"
-        description="Pantau countdown berdasarkan unit, divisi, panel, bagian, dan status pekerjaan."
-        columns={columns} rows={rows} meta={meta} state={state}
-        searchPlaceholder="Cari unit, panel, bagian, jenis pekerjaan, atau status…"
-        filters={filters} headerFilterFields={["unitId", "divisionId", "status"]} sortOptions={sortOptions}
-        emptyMessage="Belum ada countdown yang sesuai pencarian saat ini."
-      />
+      <section className="border border-border bg-card">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
+          <div>
+            <p className="text-[12px] font-mono uppercase tracking-[0.14em] text-muted-foreground">Daftar Countdown</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {meta.total} data · halaman {meta.page}/{meta.totalPages}
+            </p>
+          </div>
+          <div className="flex items-center gap-2 text-[12px] text-muted-foreground">
+            <span>Gunakan filter kolom AG Grid untuk pencarian cepat di halaman ini.</span>
+            <Link
+              aria-disabled={!meta.hasPrev}
+              href={meta.hasPrev ? pageHref(meta.page - 1) : "#"}
+              className={`border border-border px-2 py-1 ${meta.hasPrev ? "hover:text-foreground" : "pointer-events-none opacity-40"}`}
+            >
+              Prev
+            </Link>
+            <Link
+              aria-disabled={!meta.hasNext}
+              href={meta.hasNext ? pageHref(meta.page + 1) : "#"}
+              className={`border border-border px-2 py-1 ${meta.hasNext ? "hover:text-foreground" : "pointer-events-none opacity-40"}`}
+            >
+              Next
+            </Link>
+          </div>
+        </div>
+        <SmsAgGrid<CountdownBoardRow>
+          heightClassName="h-[calc(100vh-310px)] min-h-[28rem]"
+          rowData={rows}
+          columnDefs={columns}
+          getRowId={(params) => params.data.countdownId}
+          emptyMessage="Belum ada countdown yang sesuai pencarian saat ini."
+        />
+      </section>
     </div>
   );
 }

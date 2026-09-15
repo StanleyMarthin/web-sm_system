@@ -93,7 +93,7 @@ const navigationModules: NavigationItem[] = [
       {
         id: "job-plan",
         label: "Job Plan",
-        href: "/job-plan",
+        href: "/job-plan?v2=1",
         permission: permissionCodes.updatePlan,
       },
       {

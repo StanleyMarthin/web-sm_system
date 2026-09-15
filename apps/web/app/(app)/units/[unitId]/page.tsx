@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { UnitWorkspaceShell } from "@/modules/units/components/unit-workspace-shell";
 import { fetchCurrentUser } from "@/shared/auth/server";
+import { fetchCountdownBoard } from "@/shared/api/countdown";
 import { fetchUnitBom, fetchUnitDetail, fetchUnitPanels, fetchUnitWorkspace } from "@/shared/api/units";
 import { ModuleUnavailableState } from "@/shared/ui/module-unavailable-state";
 
@@ -34,6 +35,7 @@ async function UnitDetailPageContent({ params, searchParams }: UnitDetailPagePro
     { payload: workspacePayload, status: workspaceStatus },
     { payload: bomPayload, status: bomStatus },
     { payload: masterPanelPayload, status: masterPanelStatus },
+    { payload: countdownPayload, status: countdownStatus },
     { user },
   ] =
     await Promise.all([
@@ -43,14 +45,17 @@ async function UnitDetailPageContent({ params, searchParams }: UnitDetailPagePro
       activeTab === "master-panel"
         ? fetchUnitPanels(cookieHeader, unitId)
         : Promise.resolve({ payload: null, status: 200 }),
+      activeTab === "countdown"
+        ? fetchCountdownBoard(cookieHeader, { filter: `unitId:eq:${unitId}` })
+        : Promise.resolve({ payload: null, status: 200 }),
       fetchCurrentUser(cookieHeader),
     ]);
 
-  if (detailStatus === 401 || workspaceStatus === 401 || bomStatus === 401 || masterPanelStatus === 401) {
+  if (detailStatus === 401 || workspaceStatus === 401 || bomStatus === 401 || masterPanelStatus === 401 || countdownStatus === 401) {
     redirect("/login");
   }
 
-  if (detailStatus === 403 || workspaceStatus === 403 || bomStatus === 403 || masterPanelStatus === 403) {
+  if (detailStatus === 403 || workspaceStatus === 403 || bomStatus === 403 || masterPanelStatus === 403 || countdownStatus === 403) {
     redirect("/forbidden");
   }
 
@@ -85,6 +90,20 @@ async function UnitDetailPageContent({ params, searchParams }: UnitDetailPagePro
         canUseCatalog={Boolean(
           user?.permissions.some((permission) => unitCatalogPermissions.has(permission)),
         )}
+        countdownBoard={countdownPayload ? {
+          rows: countdownPayload.data,
+          references: countdownPayload.references ?? {
+            divisions: [],
+            units: [],
+            panels: [],
+            sections: [],
+            jobTypes: [],
+            taskCategories: [],
+          },
+          canManage: countdownPayload.canManage ?? false,
+          meta: countdownPayload.meta,
+          state: countdownPayload.query,
+        } : null}
       />
     </div>
   );

@@ -1,11 +1,14 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import type { JobPlanMode } from "@smsystem/contracts/job-plan";
+import { permissionCodes } from "@smsystem/permissions";
 import {
   buildJobPlanGridQueryString,
   fetchJobPlanGrid,
 } from "@/shared/api/job-plan";
+import { fetchCurrentUser } from "@/shared/auth/server";
 import { JobPlanShell } from "@/modules/job-plan/components/job-plan-shell";
+import { JobPlanV2PlannerShell } from "@/modules/job-plan-v2/components/job-plan-v2-planner-shell";
 import { ModuleUnavailableState } from "@/shared/ui/module-unavailable-state";
 
 interface JobPlanPageProps {
@@ -25,10 +28,52 @@ function resolveRequestedMode(
   return "all";
 }
 
+function resolveSingleSearchParam(value: string | string[] | undefined): string | null {
+  if (typeof value === "string") return value;
+  return value?.[0] ?? null;
+}
+
 async function JobPlanPageContent({ searchParams }: JobPlanPageProps) {
   const resolvedSearchParams = await searchParams;
   const requestHeaders = await headers();
   const cookieHeader = requestHeaders.get("cookie") ?? "";
+  const requestedV2 = resolveSingleSearchParam(resolvedSearchParams.v2) === "1";
+  const coreId = resolveSingleSearchParam(resolvedSearchParams.coreId);
+  const requestedDate = resolveSingleSearchParam(resolvedSearchParams.date);
+  const requestedModeParam = resolveSingleSearchParam(resolvedSearchParams.mode);
+
+  if (requestedV2 || coreId) {
+    const [{ payload, status }, { user, status: userStatus }] = await Promise.all([
+      fetchJobPlanGrid(cookieHeader, resolvedSearchParams, "normal"),
+      fetchCurrentUser(cookieHeader),
+    ]);
+
+    if (status === 401 || userStatus === 401) redirect("/login");
+    if (status === 403 || userStatus === 403) redirect("/forbidden");
+
+    if (!payload || !user) {
+      return (
+        <ModuleUnavailableState
+          module="Job Plan V2"
+          title="Job Plan V2 belum bisa dimuat"
+          message="Referensi planner belum terbaca saat ini. Coba muat ulang beberapa saat lagi."
+        />
+      );
+    }
+
+    return (
+      <JobPlanV2PlannerShell
+        userId={user.employeeId}
+        canCreate={user.permissions.includes(permissionCodes.updatePlan)}
+        initialCoreId={coreId}
+        initialDate={requestedDate}
+        initialMode={requestedModeParam}
+        countdowns={payload.references.countdowns}
+        employees={payload.references.employees}
+      />
+    );
+  }
+
   const requestedMode = resolveRequestedMode(resolvedSearchParams);
 
   if (requestedMode === "all") {
