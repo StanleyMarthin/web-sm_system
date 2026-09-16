@@ -16,7 +16,7 @@ import {
   ActionButton, CompactSelect, FieldLabel, PageHeader,
 } from "@/shared/ui/compact";
 import { parseHHMMToDecimal } from "@/shared/format/time";
-import { CountdownBoardForm, type CountdownFormValues } from "./forms/countdown-board-form";
+import { CountdownBoardForm, emptyCountdownFormValues, type CountdownFormValues } from "./forms/countdown-board-form";
 import { Camera, Download, FileText, FileUp, Pencil, Plus, RefreshCcw, Trash2, Upload, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -193,7 +193,7 @@ function buildCountdownColumns(
             Detail
           </Link>
           {canManage ? (
-            <Link href={`/job-plan?v2=1&coreId=${encodeURIComponent(String(row.countdownId ?? ""))}`}
+            <Link href={`/job-plan?coreId=${encodeURIComponent(String(row.countdownId ?? ""))}`}
               className="border border-success/25 bg-success/[0.06] px-2 py-0.5 text-[10px] font-mono uppercase tracking-[0.1em] text-success hover:bg-success/[0.12] transition-colors">
               Buat Job Plan
             </Link>
@@ -279,7 +279,8 @@ export function CountdownBoardShell({ rows, references, canManage, meta, state }
   function openCreateCountdown() {
     setError(null); setMessage(null); setImportResult(null);
     setEntryMode("manual"); setUploadUnitId(activeUnitId ?? "");
-    setSelectedFile(null); setEditorMode("create"); setInitialFormValues(null);
+    setSelectedFile(null); setEditorMode("create");
+    setInitialFormValues({ ...emptyCountdownFormValues, carId: activeUnitId ?? "" });
   }
 
   function openEditCountdown(row: CountdownBoardRow) {
@@ -422,7 +423,8 @@ export function CountdownBoardShell({ rows, references, canManage, meta, state }
     router.refresh();
   }
 
-  const columns = buildCountdownColumns(canManage, openEditCountdown, handleDeleteCountdown);
+  const columns = buildCountdownColumns(canManage, openEditCountdown, handleDeleteCountdown)
+    .filter((column) => !activeUnitId || column.field !== "unitName");
   function pageHref(page: number) {
     const params = new URLSearchParams(searchParams.toString());
     params.set("page", String(page));

@@ -1,6 +1,7 @@
 import type {
   CreateJobPlanV2Request,
   JobPlanV2View,
+  ManualExecutionJobPlanV2Request,
   MonitorJobPlanV2Request,
   MutateJobPlanV2ApprovalRequest,
   MutateJobPlanV2ExecutionRequest,
@@ -129,6 +130,10 @@ export async function mutateJobPlanV2Approval(planId: string, input: MutateJobPl
 
 export function mutateJobPlanV2Execution(planId: string, input: MutateJobPlanV2ExecutionRequest) {
   return postJson(`/${encodeURIComponent(planId)}/execution`, input);
+}
+
+export function manualExecuteJobPlanV2(planId: string, input: ManualExecutionJobPlanV2Request) {
+  return postJson(`/${encodeURIComponent(planId)}/manual-execution`, input);
 }
 
 export function monitorJobPlanV2(planId: string, input: MonitorJobPlanV2Request) {

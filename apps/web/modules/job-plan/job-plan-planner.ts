@@ -4,6 +4,8 @@ import type {
   JobPlanV2ExecutionState,
   JobPlanV2LedgerState,
   JobPlanV2ReadItem,
+  ManualExecutionJobPlanV2Request,
+  MutateJobPlanV2ApprovalRequest,
 } from "@smsystem/contracts/job-plan-v2";
 import { jobPlanCountdownOptionSchema, jobPlanEmployeeOptionSchema } from "@smsystem/contracts/job-plan";
 import type { z } from "zod";
@@ -28,6 +30,19 @@ export interface JobPlanV2PlannerDraft {
   error: string | null;
 }
 
+export interface JobPlanV2ManualExecutionDraft {
+  clientId: string;
+  planId: string;
+  expectedVersion: number;
+  actualStart: string;
+  actualFinish: string;
+  actualMinutesText: string;
+  result: string;
+  note: string;
+  attachmentRef: string;
+  error: string | null;
+}
+
 export interface JobPlanV2DisplayRow {
   clientId: string;
   isNew: boolean;
@@ -44,23 +59,28 @@ export interface JobPlanV2DisplayRow {
   finishTime: string;
   durationText: string;
   approval: string;
+  approvalState: JobPlanV2ApprovalState;
   execution: string;
+  executionState: JobPlanV2ExecutionState;
   ledger: string;
+  ledgerState: JobPlanV2LedgerState;
   sync: string;
   version: number | null;
   note: string;
   isPriority: boolean;
   error: string | null;
+  editPlanId?: string;
+  editVersion?: number;
 }
 
 const approvalLabels: Record<JobPlanV2ApprovalState, string> = {
   DRAFT: "Draft",
   DIVISION_REVIEW: "Review Divisi",
   UNIT_REVIEW: "Review Unit",
-  MANAGEMENT_REVIEW: "Review Management",
-  APPROVED: "Approved",
-  REJECTED: "Rejected",
-  CANCELLED: "Cancelled",
+  MANAGEMENT_REVIEW: "Review Manajemen",
+  APPROVED: "Disetujui",
+  REJECTED: "Ditolak",
+  CANCELLED: "Dibatalkan",
 };
 
 const executionLabels: Record<JobPlanV2ExecutionState, string> = {
@@ -72,9 +92,9 @@ const executionLabels: Record<JobPlanV2ExecutionState, string> = {
 };
 
 const ledgerLabels: Record<JobPlanV2LedgerState, string> = {
-  UNMATERIALIZED: "Belum Materialized",
-  MATERIALIZED: "Materialized",
-  FINALIZED: "Finalized",
+  UNMATERIALIZED: "Belum Diproses",
+  MATERIALIZED: "Sudah Diproses",
+  FINALIZED: "Ditetapkan",
 };
 
 export function formatJobPlanV2Approval(value: JobPlanV2ApprovalState) {
@@ -103,6 +123,13 @@ export function minutesToDuration(value: number) {
   return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
 }
 
+export function toLocalDateValue(value = new Date()) {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 export function parseTimeToMinutes(value: string) {
   const parsed = parseSmsTime(value, "Mulai");
   if (parsed.error || !parsed.value) return { value: null, error: parsed.error ?? "Jam mulai wajib diisi." };
@@ -122,7 +149,7 @@ export function createJobPlanV2Draft(context: JobPlanCountdownOption | null): Jo
     isNew: true,
     coreId: context?.value ?? "",
     employeeId: "",
-    taskDate: new Date().toISOString().slice(0, 10),
+    taskDate: toLocalDateValue(),
     startTime: "08:00",
     durationText: context?.availablePlanHours
       ? minutesToDuration(Math.round(context.availablePlanHours * 60))
@@ -163,8 +190,11 @@ export function toJobPlanV2DisplayRows(
       finishTime: minutesToTime(item.planned_finish_minute),
       durationText: minutesToDuration(item.planned_work_minutes),
       approval: formatJobPlanV2Approval(item.approval_state),
+      approvalState: item.approval_state,
       execution: formatJobPlanV2Execution(item.execution_state),
+      executionState: item.execution_state,
       ledger: formatJobPlanV2Ledger(item.ledger_state),
+      ledgerState: item.ledger_state,
       sync: resolveJobPlanV2Sync(item),
       version: item.version ?? null,
       note: item.note ?? "",
@@ -213,5 +243,74 @@ export function buildCreateJobPlanV2Payload(
     isOvertime: row.isOvertime,
     isRework: row.isRework,
     isPriority: row.isPriority,
+  };
+}
+
+export function buildEditDraftJobPlanV2Payload(
+  row: JobPlanV2PlannerDraft,
+  userId: string,
+  commandId: string,
+  expectedVersion: number,
+): MutateJobPlanV2ApprovalRequest {
+  const createPayload = buildCreateJobPlanV2Payload(row, userId, commandId);
+  return {
+    action: "edit_draft",
+    userId,
+    commandId,
+    expectedVersion,
+    employeeId: createPayload.employeeId,
+    taskDate: createPayload.taskDate,
+    plannedStartMinute: createPayload.plannedStartMinute,
+    plannedWorkMinutes: createPayload.plannedWorkMinutes,
+    jobDescription: createPayload.jobDescription,
+    note: createPayload.note,
+  };
+}
+
+export function createManualExecutionDraft(plan: JobPlanV2DisplayRow): JobPlanV2ManualExecutionDraft {
+  const today = new Date().toISOString().slice(0, 10);
+  return {
+    clientId: `manual-${plan.planId}`,
+    planId: String(plan.planId),
+    expectedVersion: Number(plan.version ?? 0),
+    actualStart: `${today}T08:00`,
+    actualFinish: `${today}T${plan.finishTime || "09:00"}`,
+    actualMinutesText: plan.durationText,
+    result: "",
+    note: "",
+    attachmentRef: "",
+    error: null,
+  };
+}
+
+export function validateManualExecutionDraft(row: JobPlanV2ManualExecutionDraft) {
+  if (!row.planId) return "Plan wajib dipilih.";
+  if (!row.expectedVersion) return "Version plan tidak tersedia.";
+  if (!row.actualStart.trim()) return "Waktu mulai aktual wajib diisi.";
+  if (!row.actualFinish.trim()) return "Waktu selesai aktual wajib diisi.";
+  const minutes = parseSmsDurationMinutes(row.actualMinutesText, "Durasi aktual");
+  if (minutes.error || minutes.value == null) return minutes.error ?? "Durasi aktual wajib diisi.";
+  return null;
+}
+
+export function buildManualExecutionJobPlanV2Payload(
+  row: JobPlanV2ManualExecutionDraft,
+  userId: string,
+  commandId: string,
+): ManualExecutionJobPlanV2Request {
+  const minutes = parseSmsDurationMinutes(row.actualMinutesText, "Durasi aktual").value;
+  if (minutes == null) {
+    throw new Error(validateManualExecutionDraft(row) ?? "Hasil pekerjaan tidak valid.");
+  }
+  return {
+    userId,
+    commandId,
+    expectedVersion: row.expectedVersion,
+    actualStart: row.actualStart,
+    actualFinish: row.actualFinish,
+    actualMinutes: minutes,
+    result: row.result.trim() || null,
+    note: row.note.trim() || null,
+    attachmentRef: row.attachmentRef.trim() || null,
   };
 }

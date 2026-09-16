@@ -38,7 +38,7 @@ export const jobPlanV2ViewSchema = z.enum([
   "history",
 ]);
 
-export const jobPlanV2ReadItemSchema = z.object({
+const jobPlanV2ReadItemBaseSchema = z.object({
   plan_id: z.string(),
   core_id: z.string(),
   car_id: z.string().nullable(),
@@ -57,7 +57,8 @@ export const jobPlanV2ReadItemSchema = z.object({
   is_rework: z.boolean(),
   is_overtime: z.boolean(),
   is_priority: z.boolean(),
-  jobdescription: z.string().nullable(),
+  jobdescription: z.string().nullable().optional(),
+  job_description: z.string().nullable().optional(),
   note: z.string().nullable(),
   source: jobPlanV2SourceSchema,
   version: z.number().int().nullable().optional(),
@@ -68,6 +69,11 @@ export const jobPlanV2ReadItemSchema = z.object({
   live_state_available: z.boolean().default(true),
   read_only: z.boolean().default(false),
 });
+
+export const jobPlanV2ReadItemSchema = jobPlanV2ReadItemBaseSchema.transform(({ job_description, ...row }) => ({
+  ...row,
+  jobdescription: row.jobdescription ?? job_description ?? null,
+}));
 
 export const jobPlanV2ListEnvelopeSchema = z.object({
   statusCode: z.number().int(),
@@ -101,7 +107,7 @@ export const createJobPlanV2RequestSchema = z.object({
 });
 
 export const mutateJobPlanV2ApprovalRequestSchema = z.object({
-  action: z.enum(["submit", "cancel", "approve", "correct", "reject"]),
+  action: z.enum(["submit", "cancel", "edit_draft", "approve", "correct", "reject"]),
   userId: userIdSchema,
   commandId: commandIdSchema,
   expectedVersion: z.number().int().positive(),
@@ -109,6 +115,7 @@ export const mutateJobPlanV2ApprovalRequestSchema = z.object({
   taskDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u).optional(),
   plannedStartMinute: minuteSchema.optional(),
   plannedWorkMinutes: workMinuteSchema.optional(),
+  jobDescription: z.string().trim().min(1).max(1000).optional(),
   note: z.string().trim().max(1000).nullable().optional(),
   rejectReason: z.string().trim().max(1000).nullable().optional(),
   reason: z.string().trim().max(1000).nullable().optional(),
@@ -136,6 +143,18 @@ export const monitorJobPlanV2RequestSchema = z.object({
 });
 
 export const validateJobPlanV2RequestSchema = monitorJobPlanV2RequestSchema;
+
+export const manualExecutionJobPlanV2RequestSchema = z.object({
+  userId: userIdSchema,
+  commandId: commandIdSchema,
+  expectedVersion: z.number().int().positive(),
+  actualStart: z.string().trim().min(1).max(80),
+  actualFinish: z.string().trim().min(1).max(80),
+  actualMinutes: z.number().int().positive().max(24 * 60),
+  result: z.string().trim().max(1000).nullable().optional(),
+  note: z.string().trim().max(1000).nullable().optional(),
+  attachmentRef: z.string().trim().max(500).nullable().optional(),
+});
 
 export const jobPlanV2MutationEnvelopeSchema = z.object({
   statusCode: z.number().int(),
@@ -173,3 +192,4 @@ export type MutateJobPlanV2ApprovalRequest = z.infer<typeof mutateJobPlanV2Appro
 export type MutateJobPlanV2ExecutionRequest = z.infer<typeof mutateJobPlanV2ExecutionRequestSchema>;
 export type MonitorJobPlanV2Request = z.infer<typeof monitorJobPlanV2RequestSchema>;
 export type ValidateJobPlanV2Request = z.infer<typeof validateJobPlanV2RequestSchema>;
+export type ManualExecutionJobPlanV2Request = z.infer<typeof manualExecutionJobPlanV2RequestSchema>;

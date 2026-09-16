@@ -16,6 +16,84 @@ mock.module("@/services/mobile-notification.service", () => ({
 
 const { DefaultMonitoringService } = await import("./monitoring.service");
 
+function monitoringRow(overrides: Record<string, unknown> = {}) {
+  return {
+    planId: "PLAN-1",
+    coreId: "CORE-1",
+    countdownId: "CORE-1",
+    carId: "CAR-1",
+    unitName: "220S",
+    customerName: null,
+    divisionId: 7,
+    divisionName: "Body",
+    employeeId: "PIC-1",
+    employeeName: "Asep",
+    taskDate: "2026-09-16",
+    panelName: "Door LH",
+    masterJobName: "Repair",
+    jobDescription: "Repair door",
+    instructionText: "Repair door",
+    targetDailyHours: 2,
+    targetTotalHours: 4,
+    planStatus: "PLAN",
+    actualStatus: null,
+    executionStatus: "PLAN",
+    countdownStatus: "PLAN",
+    progressPercent: 0,
+    totalActualHours: 0,
+    remainingHours: 4,
+    latestStartTime: null,
+    latestFinishTime: null,
+    latestBreakDurationMinutes: null,
+    actualStartTime: null,
+    actualBreakMinutes: null,
+    actualFinishTime: null,
+    actualDurationHours: null,
+    actualId: null,
+    submittedToLedger: false,
+    planStartTime: "08:00",
+    planFinishTime: "10:00",
+    qcStatus: "BELUM_QC",
+    qcResult: null,
+    qcNotes: null,
+    monitoringStatus: null,
+    monitoringResult: null,
+    isOvertime: false,
+    isStarted: false,
+    isSubmitted: false,
+    hasDelayRisk: false,
+    masterPanelId: 519,
+    countdownDeadline: "2026-09-20",
+    countdownTargetHours: 4,
+    countdownRemainingHours: 4,
+    ...overrides,
+  };
+}
+
+function monitoringRepository(rows: unknown[]) {
+  return {
+    listTasks: mock(async () => ({ rows, total: rows.length })),
+    listReferences: mock(async () => ({ divisions: [], units: [], employees: [] })),
+    getSummary: mock(async () => ({
+      activeWork: 0,
+      noStart: 0,
+      noSubmit: 0,
+      delayRisk: 0,
+      overtimeCount: 0,
+    })),
+  };
+}
+
+function monitoringSession() {
+  return {
+    user: {
+      employeeId: "USER-1",
+      fullName: "User",
+      scope: { canViewAllUnits: true, canViewAssignedUnits: true, divisionIds: [], unitIds: [] },
+    },
+  };
+}
+
 describe("DefaultMonitoringService mobile notification", () => {
   beforeEach(() => {
     notifications.length = 0;
@@ -76,5 +154,152 @@ describe("DefaultMonitoringService mobile notification", () => {
 
     expect(result).toEqual({ ledgerId: "LEDGER-1", alreadySubmitted: false });
     expect(ledgerCalls.length).toBe(1);
+  });
+});
+
+describe("DefaultMonitoringService V2 monitoring enrichment", () => {
+  it("enriches monitoring rows from Job Plan V2 by planId", async () => {
+    const repository = monitoringRepository([
+      monitoringRow({ planId: "PLAN-1", coreId: "CORE-1" }),
+    ]);
+    const readModel = {
+      listByCoreIds: mock(async () => [
+        {
+          plan_id: "PLAN-1",
+          core_id: "OTHER-CORE",
+          car_id: "CAR-1",
+          panel_id: 519,
+          division_id: 7,
+          employee_id: "PIC-1",
+          task_date: "2026-09-16",
+          planned_start_minute: 480,
+          planned_finish_minute: 600,
+          planned_work_minutes: 120,
+          approval_state: "DIVISION_REVIEW",
+          execution_state: "RUNNING",
+          ledger_state: "UNMATERIALIZED",
+          legacy_status: null,
+          urgent: false,
+          is_rework: false,
+          is_overtime: false,
+          is_priority: false,
+          jobdescription: "Repair door",
+          note: null,
+          source: "V2_REDIS",
+          version: 4,
+          projection_ready: true,
+          accumulated_work_minutes: 75,
+          persisted_work_minutes: 30,
+          unverified_work_minutes: 45,
+          live_state_available: true,
+          read_only: false,
+        },
+      ]),
+    };
+
+    const service = new DefaultMonitoringService(repository as never, readModel as never);
+    const result = await service.listToday(monitoringSession() as never, {
+      page: 1,
+      limit: 20,
+      search: "",
+      sortBy: "taskDate",
+      sortDirection: "desc",
+      view: null,
+      filters: [],
+    });
+
+    expect(result.data[0]).toMatchObject({
+      planId: "PLAN-1",
+      coreId: "CORE-1",
+      approvalState: "DIVISION_REVIEW",
+      executionState: "RUNNING",
+      ledgerState: "UNMATERIALIZED",
+      version: 4,
+      syncStatus: "SYNCED",
+      dataSource: "V2_REDIS",
+      actualMinutes: 75,
+    });
+  });
+
+  it("falls back to legacy rows when Job Plan V2 is unavailable", async () => {
+    const repository = monitoringRepository([monitoringRow()]);
+    const readModel = {
+      listByCoreIds: mock(async () => {
+        throw new Error("V2_DOWN");
+      }),
+    };
+
+    const service = new DefaultMonitoringService(repository as never, readModel as never);
+    const result = await service.listToday(monitoringSession() as never, {
+      page: 1,
+      limit: 20,
+      search: "",
+      sortBy: "taskDate",
+      sortDirection: "desc",
+      view: null,
+      filters: [],
+    });
+
+    expect(result.data[0]).toMatchObject({
+      planId: "PLAN-1",
+      syncStatus: "UNAVAILABLE",
+      dataSource: "LEGACY_ONLY",
+    });
+  });
+
+  it("does not merge V2 data by coreId when planId differs", async () => {
+    const repository = monitoringRepository([monitoringRow({ planId: "PLAN-1", coreId: "CORE-1" })]);
+    const readModel = {
+      listByCoreIds: mock(async () => [
+        {
+          plan_id: "PLAN-OTHER",
+          core_id: "CORE-1",
+          car_id: "CAR-1",
+          panel_id: 519,
+          division_id: 7,
+          employee_id: "PIC-1",
+          task_date: "2026-09-16",
+          planned_start_minute: 480,
+          planned_finish_minute: 600,
+          planned_work_minutes: 120,
+          approval_state: "APPROVED",
+          execution_state: "VALIDATED",
+          ledger_state: "FINALIZED",
+          legacy_status: null,
+          urgent: false,
+          is_rework: false,
+          is_overtime: false,
+          is_priority: false,
+          jobdescription: "Wrong row",
+          note: null,
+          source: "V2_REDIS",
+          version: 9,
+          projection_ready: true,
+          accumulated_work_minutes: 120,
+          persisted_work_minutes: 120,
+          unverified_work_minutes: 0,
+          live_state_available: true,
+          read_only: false,
+        },
+      ]),
+    };
+
+    const service = new DefaultMonitoringService(repository as never, readModel as never);
+    const result = await service.listToday(monitoringSession() as never, {
+      page: 1,
+      limit: 20,
+      search: "",
+      sortBy: "taskDate",
+      sortDirection: "desc",
+      view: null,
+      filters: [],
+    });
+
+    expect(result.data[0]).toMatchObject({
+      planId: "PLAN-1",
+      syncStatus: "UNAVAILABLE",
+      dataSource: "LEGACY_ONLY",
+    });
+    expect(result.data[0]?.approvalState).toBe(null);
   });
 });

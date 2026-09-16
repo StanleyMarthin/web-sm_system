@@ -117,6 +117,7 @@ import {
   handleJobPlanUpdateRoute,
   handleJobPlanWorkspaceCreateRoute,
 } from "@/routes/job-plan.routes";
+import { handleJobPlanV2ProxyRoute } from "@/routes/job-plan-v2.routes";
 import {
   handleWorkflowLayoutGetRoute,
   handleWorkflowLayoutSaveRoute,
@@ -538,6 +539,8 @@ export function createApiFetchHandler(dependencies: AppDependencies = {}) {
     { method: "PUT", pattern: /^\/api\/countdown\/([^/]+)\/revision\/approval$/, handler: (request, match) => handleCountdownRevisionApprovalRoute(request, match![1], getAuthService(), getCountdownService()) },
     { method: "POST", pattern: "/api/countdown", handler: (request) => handleCountdownCreateRoute(request, getAuthService(), getCountdownService()) },
     { method: "GET", pattern: "/api/job-plan", handler: (request) => handleJobPlanListRoute(request, getAuthService(), getJobPlanService()) },
+    { method: "GET", pattern: "/api/job-plan-v2", handler: (request) => handleJobPlanV2ProxyRoute(request, "", getAuthService()) },
+    { method: "POST", pattern: "/api/job-plan-v2", handler: (request) => handleJobPlanV2ProxyRoute(request, "", getAuthService()) },
     { method: "GET", pattern: "/api/monitoring/today", handler: (request) => handleMonitoringTodayRoute(request, getAuthService(), getMonitoringService()) },
     { method: "GET", pattern: "/api/monitoring/division", handler: (request) => handleMonitoringDivisionRoute(request, getAuthService(), getMonitoringService()) },
     { method: "GET", pattern: "/api/monitoring/unit", handler: (request) => handleMonitoringUnitRoute(request, getAuthService(), getMonitoringService()) },
@@ -662,6 +665,9 @@ export function createApiFetchHandler(dependencies: AppDependencies = {}) {
     { method: "GET", pattern: "/api/qa/inspections", handler: (request) => handleQaPortalRoute(request, getAuthService(), getQaService()) },
     { method: "GET", pattern: "/api/countdown/template", handler: (request) => handleCountdownTemplateRoute(request, getAuthService(), getCountdownService()) },
     { method: "PATCH", pattern: /^\/api\/job-plan\/([^/]+)\/status$/, handler: (request, match) => handleJobPlanStatusRoute(request, match![1], getAuthService(), getJobPlanService()) },
+    { method: "GET", pattern: /^\/api\/job-plan-v2\/(.+)$/, handler: (request, match) => handleJobPlanV2ProxyRoute(request, match![1], getAuthService()) },
+    { method: "POST", pattern: /^\/api\/job-plan-v2\/(.+)$/, handler: (request, match) => handleJobPlanV2ProxyRoute(request, match![1], getAuthService()) },
+    { method: "PUT", pattern: /^\/api\/job-plan-v2\/(.+)$/, handler: (request, match) => handleJobPlanV2ProxyRoute(request, match![1], getAuthService()) },
     { method: "PUT", pattern: /^\/api\/job-plan\/([^/]+)$/, handler: (request, match) => handleJobPlanUpdateRoute(request, match![1], getAuthService(), getJobPlanService()) },
     { method: "DELETE", pattern: /^\/api\/job-plan\/([^/]+)$/, handler: (request, match) => handleJobPlanDeleteRoute(request, match![1], getAuthService(), getJobPlanService()) },
     { method: "PATCH", pattern: /^\/api\/spk\/([^/]+)\/item\/([^/]+)$/, handler: (request, match) => handleSpkItemApprovalRoute(request, match![1], match![2], getAuthService(), getSpkService()) },

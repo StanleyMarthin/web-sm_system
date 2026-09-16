@@ -3,6 +3,12 @@ import {
   gridMetaSchema,
   gridQueryStateSchema,
 } from "./grid";
+import {
+  jobPlanV2ApprovalStateSchema,
+  jobPlanV2ExecutionStateSchema,
+  jobPlanV2LedgerStateSchema,
+  jobPlanV2SourceSchema,
+} from "./job-plan-v2";
 
 const optionSchema = z.object({
   label: z.string(),
@@ -26,6 +32,23 @@ export const monitoringQcStatusSchema = z.enum([
   "BELUM_QC",
   "LOLOS",
   "TIDAK_LOLOS",
+]);
+
+export const monitoringSyncStatusSchema = z.enum([
+  "SYNCED",
+  "SYNCING",
+  "UNAVAILABLE",
+]);
+
+export const monitoringDataSourceSchema = z.union([
+  jobPlanV2SourceSchema,
+  z.literal("LEGACY_ONLY"),
+]);
+
+export const monitoringInputSourceSchema = z.enum([
+  "MOBILE_TIMER",
+  "WEB_MANUAL",
+  "LEGACY_ACTUAL",
 ]);
 
 function normalizeExecutionStatus(input: {
@@ -76,9 +99,20 @@ const monitoringTaskRecordBaseSchema = z.object({
   targetDailyHours: z.number().nullable().catch(null),
   targetTotalHours: z.number().nullable().catch(null),
   planStatus: z.string(),
+  approvalState: jobPlanV2ApprovalStateSchema.nullable().optional().default(null),
+  ledgerState: jobPlanV2LedgerStateSchema.nullable().optional().default(null),
+  version: z.number().int().nullable().optional().default(null),
+  syncStatus: monitoringSyncStatusSchema.optional().default("UNAVAILABLE"),
+  dataSource: monitoringDataSourceSchema.optional().default("LEGACY_ONLY"),
   actualStatus: z.string().nullable(),
   executionStatus: z.string().nullable().catch(null),
+  executionState: jobPlanV2ExecutionStateSchema.nullable().optional().default(null),
   countdownStatus: z.string().nullable(),
+  countdownId: z.string().optional(),
+  masterPanelId: z.number().int().nullable().optional().default(null),
+  countdownDeadline: z.string().nullable().optional().default(null),
+  countdownTargetHours: z.number().nullable().optional().default(null),
+  countdownRemainingHours: z.number().nullable().optional().default(null),
   progressPercent: z.number(),
   totalActualHours: z.number(),
   remainingHours: z.number(),
@@ -89,6 +123,13 @@ const monitoringTaskRecordBaseSchema = z.object({
   actualBreakMinutes: z.number().nullable().catch(null),
   actualFinishTime: z.string().nullable().catch(null),
   actualDurationHours: z.number().nullable().catch(null),
+  actualMinutes: z.number().int().nullable().optional().default(null),
+  inputSource: monitoringInputSourceSchema.nullable().optional().default(null),
+  manualExecution: z.object({
+    result: z.string().nullable().optional().default(null),
+    note: z.string().nullable().optional().default(null),
+    attachmentRef: z.string().nullable().optional().default(null),
+  }).nullable().optional().default(null),
   actualId: z.string().nullable().catch(null),
   submittedToLedger: z.boolean().default(false),
   planStartTime: z.string().nullable().optional(),
@@ -106,6 +147,7 @@ const monitoringTaskRecordBaseSchema = z.object({
 
 export const monitoringTaskRecordSchema = monitoringTaskRecordBaseSchema.transform((row) => ({
   ...row,
+  countdownId: row.countdownId ?? row.coreId,
   masterJobName: row.masterJobName ?? row.jobDescription ?? row.panelName,
   instructionText: row.instructionText || row.jobDescription,
   executionStatus: normalizeExecutionStatus(row),

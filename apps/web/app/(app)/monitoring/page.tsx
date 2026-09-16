@@ -1,6 +1,8 @@
 import { headers } from "next/headers";
 import dynamic from "next/dynamic";
 import { redirect } from "next/navigation";
+import type { AuthUser } from "@smsystem/contracts/auth";
+import { encodeGridFilterToken, type GridFilter } from "@smsystem/contracts/grid";
 import { fetchCurrentUser } from "@/shared/auth/server";
 import {
   fetchMonitoringNoStart,
@@ -36,6 +38,46 @@ function resolveMode(searchParams: Record<string, string | string[] | undefined>
   return "normal";
 }
 
+function filterToken(filter: GridFilter) {
+  return encodeGridFilterToken(filter);
+}
+
+function roleDefaultFilters(user: AuthUser): GridFilter[] {
+  if (user.scope.canViewAllUnits) return [];
+  const role = user.roleName.toUpperCase();
+  if (role.includes("KP") && user.scope.unitIds[0]) {
+    return [{ field: "carId", operator: "eq", value: user.scope.unitIds[0] }];
+  }
+  const divisionId = user.scope.divisionIds[0] ?? user.divisionId;
+  if ((role.includes("KD") || role.includes("QA")) && divisionId !== null && divisionId !== undefined) {
+    return [{ field: "divisionId", operator: "eq", value: String(divisionId) }];
+  }
+  return [];
+}
+
+function hasExplicitSmartFilter(searchParams: Record<string, string | string[] | undefined>) {
+  return Boolean(searchParams.smartView || searchParams.filter);
+}
+
+function applyDefaultScopeRedirect(
+  searchParams: Record<string, string | string[] | undefined>,
+  user: AuthUser,
+) {
+  if (hasExplicitSmartFilter(searchParams)) return null;
+  const defaults = roleDefaultFilters(user);
+  if (defaults.length === 0) return null;
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(searchParams)) {
+    if (typeof value === "string") params.set(key, value);
+    else for (const item of value ?? []) params.append(key, item);
+  }
+  params.set("smartView", "scope");
+  params.delete("filter");
+  for (const filter of defaults) params.append("filter", filterToken(filter));
+  params.set("page", "1");
+  return `/monitoring?${params.toString()}`;
+}
+
 export default async function MonitoringPage({
   searchParams,
 }: MonitoringPageProps) {
@@ -44,13 +86,19 @@ export default async function MonitoringPage({
   const requestHeaders = await headers();
   const cookieHeader = requestHeaders.get("cookie") ?? "";
 
-  const [{ payload, status }, noStartResponse, noSubmitResponse, { user }] =
-    await Promise.all([
-      fetchMonitoringToday(cookieHeader, resolvedSearchParams),
-      fetchMonitoringNoStart(cookieHeader, resolvedSearchParams),
-      fetchMonitoringNoSubmit(cookieHeader, resolvedSearchParams),
-      fetchCurrentUser(cookieHeader),
-    ]);
+  const { user, status: userStatus } = await fetchCurrentUser(cookieHeader);
+  if (userStatus === 401) redirect("/login");
+  if (userStatus === 403) redirect("/forbidden");
+  if (!user) redirect("/login");
+
+  const defaultRedirect = applyDefaultScopeRedirect(resolvedSearchParams, user);
+  if (defaultRedirect) redirect(defaultRedirect);
+
+  const [{ payload, status }, noStartResponse, noSubmitResponse] = await Promise.all([
+    fetchMonitoringToday(cookieHeader, resolvedSearchParams),
+    fetchMonitoringNoStart(cookieHeader, resolvedSearchParams),
+    fetchMonitoringNoSubmit(cookieHeader, resolvedSearchParams),
+  ]);
 
   if (status === 401) {
     redirect("/login");
@@ -82,6 +130,7 @@ export default async function MonitoringPage({
       summary={payload.summary}
       noStartRows={noStartResponse.payload?.data ?? []}
       noSubmitRows={noSubmitResponse.payload?.data ?? []}
+      user={user}
     />
   );
 }

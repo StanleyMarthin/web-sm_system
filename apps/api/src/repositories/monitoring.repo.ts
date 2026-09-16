@@ -55,6 +55,10 @@ interface MonitoringTaskRow extends RowDataPacket {
   targetDailyHours: number | null;
   targetTotalHours: number | null;
   planStatus: string;
+  masterPanelId: number | null;
+  countdownDeadline: string | null;
+  countdownTargetHours: number | null;
+  countdownRemainingHours: number | null;
   actualStatus: string | null;
   executionStatus: MonitoringTaskRecord["executionStatus"];
   countdownStatus: string | null;
@@ -281,6 +285,10 @@ function buildMonitoringBaseSql(): string {
       ) AS instructionText,
       ROUND(TIME_TO_SEC(p.dailyTargetHours) / 3600, 2) AS targetDailyHours,
       ROUND(COALESCE(cd.target_hours_revised, cd.target_hours_initial, 0), 2) AS targetTotalHours,
+      cd.panel_id AS masterPanelId,
+      DATE_FORMAT(cd.deadline_date, '%Y-%m-%d') AS countdownDeadline,
+      ROUND(COALESCE(cd.target_hours_revised, cd.target_hours_initial, 0), 2) AS countdownTargetHours,
+      ROUND(COALESCE(cd.remaining_hours, 0), 2) AS countdownRemainingHours,
       COALESCE(p.status, 'PLAN') AS planStatus,
       actual.actualStatus AS actualStatus,
       ${executionStatusSql()} AS executionStatus,
@@ -548,7 +556,24 @@ function mapTaskRow(row: MonitoringTaskRow): MonitoringTaskRecord {
       row.targetTotalHours === null || row.targetTotalHours === undefined
         ? null
         : Number(row.targetTotalHours),
+    countdownId: row.coreId,
+    masterPanelId: row.masterPanelId,
+    countdownDeadline: row.countdownDeadline,
+    countdownTargetHours:
+      row.countdownTargetHours === null || row.countdownTargetHours === undefined
+        ? null
+        : Number(row.countdownTargetHours),
+    countdownRemainingHours:
+      row.countdownRemainingHours === null || row.countdownRemainingHours === undefined
+        ? null
+        : Number(row.countdownRemainingHours),
     planStatus: row.planStatus,
+    approvalState: null,
+    executionState: null,
+    ledgerState: null,
+    version: null,
+    syncStatus: "UNAVAILABLE",
+    dataSource: "LEGACY_ONLY",
     actualStatus: row.actualStatus,
     executionStatus: row.executionStatus,
     countdownStatus: row.countdownStatus,
@@ -571,6 +596,12 @@ function mapTaskRow(row: MonitoringTaskRow): MonitoringTaskRecord {
       row.actualDurationHours === null || row.actualDurationHours === undefined
         ? null
         : Number(row.actualDurationHours),
+    actualMinutes:
+      row.actualDurationHours === null || row.actualDurationHours === undefined
+        ? null
+        : Math.round(Number(row.actualDurationHours) * 60),
+    inputSource: row.actualId ? "LEGACY_ACTUAL" : null,
+    manualExecution: null,
     actualId: row.actualId,
     submittedToLedger: Boolean(row.submittedToLedger),
     qcStatus: row.qcStatus,

@@ -1,23 +1,24 @@
-const DEFAULT_JOB_PLAN_V2_BASE_URL = "http://108.136.189.225:8083";
+import { getApiBaseUrl } from "@/shared/api/config";
 
 interface RouteProps {
   params: Promise<{ path?: string[] }>;
 }
 
 function baseUrl() {
-  return (process.env.JOB_PLAN_V2_BASE_URL?.trim() || DEFAULT_JOB_PLAN_V2_BASE_URL).replace(/\/$/u, "");
+  return (process.env.JOB_PLAN_V2_BASE_URL?.trim() || `${getApiBaseUrl()}/api/job-plan-v2`).replace(/\/$/u, "");
 }
 
 async function proxy(request: Request, props: RouteProps) {
   const { path = [] } = await props.params;
   const url = new URL(request.url);
   const suffix = path.length > 0 ? `/${path.map(encodeURIComponent).join("/")}` : "";
-  const upstream = `${baseUrl()}/sm/job-plans/v2${suffix}${url.search}`;
+  const upstream = `${baseUrl()}${suffix}${url.search}`;
 
   return fetch(upstream, {
     method: request.method,
     headers: {
       "Content-Type": request.headers.get("Content-Type") ?? "application/json",
+      cookie: request.headers.get("cookie") ?? "",
     },
     body: request.method === "GET" || request.method === "HEAD" ? undefined : await request.text(),
     cache: "no-store",

@@ -792,7 +792,10 @@ export function UnitWorkspaceShell({
         countdownBoard ? (
           <CountdownBoardShell
             rows={countdownBoard.rows}
-            references={countdownBoard.references}
+            references={{
+              ...countdownBoard.references,
+              units: [{ value: unit.unitId, label: unit.unitName }],
+            }}
             canManage={countdownBoard.canManage}
             meta={countdownBoard.meta}
             state={countdownBoard.state}

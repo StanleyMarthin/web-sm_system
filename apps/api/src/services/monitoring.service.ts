@@ -15,6 +15,10 @@ import {
   MySqlMonitoringRepository,
   type MonitoringRepository,
 } from "@/repositories/monitoring.repo";
+import {
+  HttpJobPlanV2ReadModel,
+  type JobPlanV2ReadModel,
+} from "@/services/job-plan-v2-read-model";
 import type { WebSession } from "@/services/auth/session.service";
 import { applyDefaultDivisionIdFilter } from "@/services/grid/division-default";
 import { TtlCache } from "@/lib/ttl-cache";
@@ -118,6 +122,7 @@ function monitoringScopeCacheKey(session: WebSession): string {
 export class DefaultMonitoringService implements MonitoringService {
   constructor(
     private readonly repository: MonitoringRepository = new MySqlMonitoringRepository(),
+    private readonly jobPlanV2ReadModel: JobPlanV2ReadModel = new HttpJobPlanV2ReadModel(),
   ) {}
 
   async listToday(
@@ -164,7 +169,7 @@ export class DefaultMonitoringService implements MonitoringService {
       mode: "no-start",
     });
 
-    return payload.rows;
+    return this.enrichRows(session, payload.rows);
   }
 
   async listNoSubmit(session: WebSession, date?: string, dateTo?: string): Promise<MonitoringTaskRecord[]> {
@@ -192,7 +197,7 @@ export class DefaultMonitoringService implements MonitoringService {
       mode: "no-submit",
     });
 
-    return payload.rows;
+    return this.enrichRows(session, payload.rows);
   }
 
   async listDivisionLoad(
@@ -340,11 +345,66 @@ export class DefaultMonitoringService implements MonitoringService {
     ]);
 
     return {
-      data: payload.rows,
+      data: await this.enrichRows(session, payload.rows),
       meta: buildGridMeta(payload.total, normalized.page, normalized.limit),
       query: normalized,
       references,
       summary,
     };
+  }
+
+  private legacyOnlyRows(rows: MonitoringTaskRecord[]): MonitoringTaskRecord[] {
+    return rows.map((row) => ({
+      ...row,
+      countdownId: row.countdownId ?? row.coreId,
+      syncStatus: "UNAVAILABLE",
+      dataSource: "LEGACY_ONLY",
+      approvalState: row.approvalState ?? null,
+      executionState: row.executionState ?? null,
+      ledgerState: row.ledgerState ?? null,
+      version: row.version ?? null,
+      actualMinutes: row.actualMinutes ?? null,
+      inputSource: row.inputSource ?? (row.actualId ? "LEGACY_ACTUAL" : null),
+      manualExecution: row.manualExecution ?? null,
+    }));
+  }
+
+  private async enrichRows(session: WebSession, rows: MonitoringTaskRecord[]): Promise<MonitoringTaskRecord[]> {
+    if (rows.length === 0) return rows;
+
+    try {
+      const v2Items = await this.jobPlanV2ReadModel.listByCoreIds(
+        session.user.employeeId,
+        rows.map((row) => row.coreId),
+      );
+      const byPlanId = new Map(v2Items.map((item) => [item.plan_id, item]));
+
+      return rows.map((row) => {
+        const item = byPlanId.get(row.planId);
+        if (!item) return this.legacyOnlyRows([row])[0]!;
+
+        const syncStatus = item.live_state_available === false || item.read_only
+          ? "UNAVAILABLE"
+          : item.projection_ready === false
+            ? "SYNCING"
+            : "SYNCED";
+
+        return {
+          ...row,
+          countdownId: row.countdownId ?? row.coreId,
+          approvalState: item.approval_state,
+          executionState: item.execution_state,
+          ledgerState: item.ledger_state,
+          version: item.version ?? null,
+          syncStatus,
+          dataSource: item.source,
+          actualMinutes: item.accumulated_work_minutes,
+          inputSource: row.actualId ? "LEGACY_ACTUAL" : row.inputSource ?? null,
+          manualExecution: row.manualExecution ?? null,
+        };
+      });
+    } catch {
+      return this.legacyOnlyRows(rows);
+    }
   }
 }

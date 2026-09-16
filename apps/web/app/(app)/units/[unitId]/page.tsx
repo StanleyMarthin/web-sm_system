@@ -1,4 +1,5 @@
 import { permissionCodes } from "@smsystem/permissions";
+import { encodeGridFilterToken, parseGridFilterToken } from "@smsystem/contracts/grid";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { UnitWorkspaceShell } from "@/modules/units/components/unit-workspace-shell";
@@ -28,6 +29,9 @@ async function UnitDetailPageContent({ params, searchParams }: UnitDetailPagePro
   const { unitId } = await params;
   const resolvedSearchParams = await searchParams;
   const activeTab = resolveSingleSearchParam(resolvedSearchParams?.tab);
+  const requestedFilters = resolvedSearchParams?.filter;
+  const countdownFilters = (Array.isArray(requestedFilters) ? requestedFilters : requestedFilters ? [requestedFilters] : [])
+    .filter((token) => parseGridFilterToken(token)?.field !== "unitId");
   const requestHeaders = await headers();
   const cookieHeader = requestHeaders.get("cookie") ?? "";
   const [
@@ -46,7 +50,10 @@ async function UnitDetailPageContent({ params, searchParams }: UnitDetailPagePro
         ? fetchUnitPanels(cookieHeader, unitId)
         : Promise.resolve({ payload: null, status: 200 }),
       activeTab === "countdown"
-        ? fetchCountdownBoard(cookieHeader, { filter: `unitId:eq:${unitId}` })
+        ? fetchCountdownBoard(cookieHeader, {
+            ...resolvedSearchParams,
+            filter: [encodeGridFilterToken({ field: "unitId", operator: "eq", value: unitId }), ...countdownFilters],
+          })
         : Promise.resolve({ payload: null, status: 200 }),
       fetchCurrentUser(cookieHeader),
     ]);

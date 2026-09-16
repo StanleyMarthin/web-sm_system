@@ -64,7 +64,7 @@ interface CountdownBoardFormProps {
   onSubmit: (data: CountdownFormValues) => void;
 }
 
-const emptyCountdownFormValues: CountdownFormValues = {
+export const emptyCountdownFormValues: CountdownFormValues = {
   countdownId: "",
   carId: "",
   divisionId: "",

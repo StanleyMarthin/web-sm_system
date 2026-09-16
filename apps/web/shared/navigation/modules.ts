@@ -85,15 +85,9 @@ const navigationModules: NavigationItem[] = [
     group: "Operations",
     subItems: [
       {
-        id: "countdown",
-        label: "Countdown",
-        href: "/countdown",
-        permission: permissionCodes.viewCountdown,
-      },
-      {
         id: "job-plan",
         label: "Job Plan",
-        href: "/job-plan?v2=1",
+        href: "/job-plan",
         permission: permissionCodes.updatePlan,
       },
       {
