@@ -50,8 +50,9 @@ export function buildJobPlanV2QueryString(input: JobPlanV2ListParams): string {
 }
 
 async function parseFailure(response: Response): Promise<ApiFailure> {
+  const body = await response.json().catch(() => ({}));
   try {
-    const payload = jobPlanV2FailureSchema.parse(await response.json());
+    const payload = jobPlanV2FailureSchema.parse(body);
     return {
       success: false,
       message: payload.message,
@@ -59,6 +60,19 @@ async function parseFailure(response: Response): Promise<ApiFailure> {
       data: payload.data,
     };
   } catch {
+    if (body && typeof body === "object") {
+      const record = body as Record<string, unknown>;
+      const detail = Array.isArray(record.detail) ? record.detail[0] : record.detail;
+      const message = typeof record.message === "string" ? record.message : typeof detail === "string" ? detail : null;
+      if (message) {
+        return {
+          success: false,
+          message,
+          errorCode: typeof record.errorCode === "string" ? record.errorCode : "JOB_PLAN_V2_ERROR",
+          data: {},
+        };
+      }
+    }
     return {
       success: false,
       message: "Response Job Plan V2 tidak valid.",
