@@ -2,6 +2,9 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { CountdownDetailShell } from "@/modules/countdown/components/countdown-detail-shell";
 import { fetchCountdownDetail } from "@/shared/api/countdown";
+import { fetchJobPlanGrid } from "@/shared/api/job-plan";
+import { fetchJobPlanV2History } from "@/shared/api/job-plan-v2";
+import { fetchQcDetail } from "@/shared/api/qc";
 import { ModuleUnavailableState } from "@/shared/ui/module-unavailable-state";
 
 interface CountdownDetailPageProps {
@@ -12,7 +15,12 @@ async function CountdownDetailPageContent({ params }: CountdownDetailPageProps) 
   const { countdownId } = await params;
   const requestHeaders = await headers();
   const cookieHeader = requestHeaders.get("cookie") ?? "";
-  const { payload, status } = await fetchCountdownDetail(cookieHeader, countdownId);
+  const [{ payload, status }, historyResult, jobPlanGrid, qcDetail] = await Promise.all([
+    fetchCountdownDetail(cookieHeader, countdownId),
+    fetchJobPlanV2History(cookieHeader, countdownId),
+    fetchJobPlanGrid(cookieHeader, {}, "normal"),
+    fetchQcDetail(cookieHeader, countdownId),
+  ]);
 
   if (status === 401) {
     redirect("/login");
@@ -36,12 +44,28 @@ async function CountdownDetailPageContent({ params }: CountdownDetailPageProps) 
     );
   }
 
+  const employeeNames: Record<string, string> = {};
+  for (const employee of jobPlanGrid.payload?.references.employees ?? []) {
+    employeeNames[employee.value] = employee.label;
+  }
+
   return (
     <CountdownDetailShell
       countdown={payload.data.countdown}
       canRequestRevision={payload.canRequestRevision}
       canApproveRevision={payload.canApproveRevision}
       canApproveMoRevision={payload.canApproveMoRevision}
+      canManage={payload.canManage}
+      jobHistory={{
+        items: historyResult.success ? historyResult.result.items : [],
+        employeeNames,
+        error: historyResult.success ? null : historyResult.message,
+      }}
+      qcSummary={qcDetail.payload?.data.item ? {
+        resultStatus: qcDetail.payload.data.item.qcLastStatus,
+        level: qcDetail.payload.data.item.qcLevel,
+        inspectedAt: qcDetail.payload.data.item.latestInspectionDate,
+      } : null}
     />
   );
 }

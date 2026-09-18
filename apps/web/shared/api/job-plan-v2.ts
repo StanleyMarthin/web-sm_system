@@ -12,6 +12,7 @@ import {
   jobPlanV2ListEnvelopeSchema,
   jobPlanV2MutationEnvelopeSchema,
 } from "@smsystem/contracts/job-plan-v2";
+import { getApiBaseUrl } from "@/shared/api/config";
 
 interface ApiFailure {
   success: false;
@@ -119,6 +120,36 @@ export async function fetchJobPlanV2List(input: JobPlanV2ListParams) {
     success: true as const,
     result: payload.data,
   };
+}
+
+export async function fetchJobPlanV2History(cookieHeader: string, coreId: string) {
+  const params = new URLSearchParams({ view: "browse", coreId });
+
+  try {
+    const response = await fetch(`${getApiBaseUrl()}/api/job-plan-v2?${params.toString()}`, {
+      headers: cookieHeader
+        ? {
+            cookie: cookieHeader,
+          }
+        : undefined,
+      cache: "no-store",
+    });
+
+    if (!response.ok) return parseFailure(response);
+
+    const payload = jobPlanV2ListEnvelopeSchema.parse(await response.json());
+    return {
+      success: true as const,
+      result: payload.data,
+    };
+  } catch {
+    return {
+      success: false as const,
+      message: "Riwayat Job Plan tidak dapat dihubungi.",
+      errorCode: "JOB_PLAN_V2_UNAVAILABLE",
+      data: {},
+    };
+  }
 }
 
 export function createJobPlanV2(input: CreateJobPlanV2Request) {

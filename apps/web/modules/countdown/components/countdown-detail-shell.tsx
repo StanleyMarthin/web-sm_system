@@ -3,26 +3,42 @@
 // Hallmark · pre-emit critique: P5 H5 E4 S5 R5 V4 · Workbench utilitarian · design.md
 
 import type { CountdownDetail } from "@smsystem/contracts/countdown";
+import type { JobPlanV2ReadItem } from "@smsystem/contracts/job-plan-v2";
 import { encodeGridFilterToken } from "@smsystem/contracts/grid";
-import type { ColDef, ICellRendererParams } from "ag-grid-community";
-import { ArrowLeft, Camera, Check, ChevronDown, ChevronLeft, ChevronRight, Moon, Plus, RotateCcw, X } from "lucide-react";
+import { ArrowLeft, Camera, Check, ChevronLeft, ChevronRight, RotateCcw, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { humanizeCodeLabel, fmtTime, fmtDateTime } from "@/shared/format/humanize";
+import { humanizeCodeLabel } from "@/shared/format/humanize";
+import { getProxiedImageUrl } from "@/shared/api/config";
 import { DataGridStatusBadge } from "@/shared/datagrid/status-badge";
-import { SmsAgGrid } from "@/shared/datagrid/sms-ag-grid";
 import { approveCountdownRevision, requestCountdownRevision } from "@/shared/api/countdown";
 import { ActionButton, CompactInput, CompactTextarea, FieldLabel, MetricBar, SectionCard } from "@/shared/ui/compact";
 import { useSweetAlert } from "@/shared/ui/sweet-alert";
 import { resolveCountdownPhotoUrl, resolveCountdownRevisionActions } from "../countdown-dialog";
 import { formatCountdownRevisionStatus } from "../countdown-revision";
+import { CountdownJobHistory } from "./countdown-job-history";
+
+interface CountdownJobHistoryData {
+  items: JobPlanV2ReadItem[];
+  employeeNames: Record<string, string>;
+  error: string | null;
+}
+
+interface CountdownQcSummary {
+  resultStatus: "LOLOS" | "TIDAK_LOLOS" | null;
+  level: string | null;
+  inspectedAt: string | null;
+}
 
 interface CountdownDetailShellProps {
   countdown: CountdownDetail;
   canRequestRevision?: boolean;
   canApproveRevision?: boolean;
   canApproveMoRevision?: boolean;
+  canManage?: boolean;
+  jobHistory: CountdownJobHistoryData;
+  qcSummary: CountdownQcSummary | null;
 }
 
 function DetailField({ label, value }: { label: string; value: string }) {
@@ -34,15 +50,6 @@ function DetailField({ label, value }: { label: string; value: string }) {
   );
 }
 
-function ActivityUnavailable({ label }: { label: string }) {
-  return (
-    <div className="border border-border px-3 py-2 text-[12px] text-muted-foreground">
-      <span className="block">{label}</span>
-      <span className="mt-1 block text-[11px]">Belum ada relasi</span>
-    </div>
-  );
-}
-
 const photoLabels = {
   BEFORE: "Sebelum",
   PROCESS: "Pengerjaan",
@@ -50,18 +57,17 @@ const photoLabels = {
   DEFECT: "Temuan",
 } as const;
 
-type CountdownActualEntry = CountdownDetail["details"][number];
+function countdownImageSrc(value: string): string | null {
+  const url = resolveCountdownPhotoUrl(value);
+  if (!url) return null;
 
-const actualColumnDefs: ColDef<CountdownActualEntry>[] = [
-  { headerName: "Tanggal", field: "workDate", minWidth: 110 },
-  { headerName: "PIC", field: "employeeName", minWidth: 150, flex: 0.8 },
-  { headerName: "Mulai", field: "startTime", minWidth: 85, valueFormatter: ({ value }) => fmtTime(String(value ?? "")) },
-  { headerName: "Selesai", field: "finishTime", minWidth: 85, valueFormatter: ({ value }) => fmtTime(String(value ?? "")) },
-  { headerName: "Durasi", field: "billedHours", minWidth: 90, valueFormatter: ({ value }) => `${Number(value ?? 0).toFixed(2)} jam` },
-  { headerName: "Progress", field: "progressPercent", minWidth: 90, valueFormatter: ({ value }) => `${Number(value ?? 0).toFixed(0)}%` },
-  { headerName: "Status", field: "taskStatus", minWidth: 130, cellRenderer: ({ value }: ICellRendererParams<CountdownActualEntry>) => <DataGridStatusBadge value={humanizeCodeLabel(value)} /> },
-  { headerName: "Catatan", field: "dailyNotes", minWidth: 220, flex: 1 },
-];
+  const driveFile = url.match(/^https:\/\/drive\.google\.com\/file\/d\/([^/]+)\/view(?:\?|$)/u);
+  if (driveFile) {
+    return `https://drive.google.com/thumbnail?id=${encodeURIComponent(driveFile[1])}&sz=w2000`;
+  }
+
+  return getProxiedImageUrl(url) ?? url;
+}
 
 function CountdownGallery({ countdown }: { countdown: CountdownDetail }) {
   const photos = countdown.details.flatMap((detail) => detail.photos.map((photo) => ({
@@ -70,8 +76,19 @@ function CountdownGallery({ countdown }: { countdown: CountdownDetail }) {
     employeeName: detail.employeeName,
   }))).filter((photo) => resolveCountdownPhotoUrl(photo.url));
   const [activeIndex, setActiveIndex] = useState(0);
-  const activePhoto = photos[activeIndex];
-  const activeUrl = activePhoto ? resolveCountdownPhotoUrl(activePhoto.url) : null;
+  const [failedPhotoIds, setFailedPhotoIds] = useState<Set<string>>(() => new Set());
+  const availablePhotos = photos.filter((photo) => !failedPhotoIds.has(photo.photoId));
+  const safeActiveIndex = availablePhotos.length > 0 ? Math.min(activeIndex, availablePhotos.length - 1) : 0;
+  const activePhoto = availablePhotos[safeActiveIndex];
+  const activeUrl = activePhoto ? countdownImageSrc(activePhoto.url) : null;
+
+  function markPhotoFailed(photoId: string) {
+    setFailedPhotoIds((current) => {
+      const next = new Set(current);
+      next.add(photoId);
+      return next;
+    });
+  }
 
   if (!activePhoto || !activeUrl) {
     return (
@@ -80,13 +97,13 @@ function CountdownGallery({ countdown }: { countdown: CountdownDetail }) {
           <Camera className="h-4 w-4 text-app-accent-ink" />
           <h2 className="text-sm font-semibold text-foreground">Dokumentasi</h2>
         </div>
-        <p className="px-3 py-5 text-sm text-muted-foreground">Belum ada foto.</p>
+        <p className="px-3 py-5 text-sm text-muted-foreground">{photos.length > 0 ? "Foto tidak dapat dimuat." : "Belum ada foto."}</p>
       </section>
     );
   }
 
   function move(delta: number) {
-    setActiveIndex((current) => (current + delta + photos.length) % photos.length);
+    setActiveIndex((current) => (current + delta + availablePhotos.length) % availablePhotos.length);
   }
 
   return (
@@ -98,30 +115,32 @@ function CountdownGallery({ countdown }: { countdown: CountdownDetail }) {
         </div>
         <span className="font-mono text-[10px] uppercase text-muted-foreground">{photos.length} foto</span>
       </div>
-      <div className="grid gap-3 p-3 lg:grid-cols-[minmax(0,1fr)_10rem]">
-        <div className="relative flex min-h-[18rem] items-center justify-center overflow-hidden bg-muted">
+      <div className="space-y-3 p-3">
+        <div className="relative flex aspect-[16/9] min-h-[14rem] max-h-[24rem] items-center justify-center overflow-hidden border border-border bg-muted">
           {/* eslint-disable-next-line @next/next/no-img-element -- URL dokumentasi berasal dari storage dinamis. */}
-          <img src={activeUrl} alt={activePhoto.caption || `Dokumentasi ${photoLabels[activePhoto.type]}`} className="max-h-[32rem] w-full object-contain" />
-          {photos.length > 1 ? (
+          <img src={activeUrl} alt={activePhoto.caption || `Dokumentasi ${photoLabels[activePhoto.type]}`} className="h-full w-full object-contain" onError={() => markPhotoFailed(activePhoto.photoId)} />
+          {availablePhotos.length > 1 ? (
             <>
               <button type="button" onClick={() => move(-1)} className="absolute left-2 inline-flex h-8 w-8 items-center justify-center border border-white/30 bg-black/45 text-white hover:bg-black/65" aria-label="Foto sebelumnya"><ChevronLeft className="h-4 w-4" /></button>
               <button type="button" onClick={() => move(1)} className="absolute right-2 inline-flex h-8 w-8 items-center justify-center border border-white/30 bg-black/45 text-white hover:bg-black/65" aria-label="Foto berikutnya"><ChevronRight className="h-4 w-4" /></button>
             </>
           ) : null}
         </div>
-        <div className="flex gap-2 overflow-x-auto lg:block lg:space-y-2 lg:overflow-y-auto">
-          {photos.map((photo, index) => {
-            const url = resolveCountdownPhotoUrl(photo.url);
-            if (!url) return null;
-            return (
-              <button key={photo.photoId} type="button" onClick={() => setActiveIndex(index)} className={`block shrink-0 overflow-hidden border text-left ${index === activeIndex ? "border-primary" : "border-border hover:border-primary/50"}`} aria-label={`Pilih foto ${index + 1}`}>
-                {/* eslint-disable-next-line @next/next/no-img-element -- URL dokumentasi berasal dari storage dinamis. */}
-                <img src={url} alt="" className="h-16 w-20 object-cover lg:h-20 lg:w-full" />
-                <span className="hidden px-2 py-1 font-mono text-[10px] uppercase text-muted-foreground lg:block">{photoLabels[photo.type]}</span>
-              </button>
-            );
-          })}
-        </div>
+        {availablePhotos.length > 1 ? (
+          <div className="grid max-h-32 grid-cols-4 gap-2 overflow-y-auto pr-1 sm:grid-cols-6 md:grid-cols-8">
+            {availablePhotos.map((photo, index) => {
+              const url = countdownImageSrc(photo.url);
+              if (!url) return null;
+              return (
+                <button key={photo.photoId} type="button" onClick={() => setActiveIndex(index)} className={`relative h-14 min-w-0 overflow-hidden border bg-background ${index === safeActiveIndex ? "border-primary" : "border-border hover:border-primary/50"}`} aria-label={`Pilih foto ${index + 1}`}>
+                  {/* eslint-disable-next-line @next/next/no-img-element -- URL dokumentasi berasal dari storage dinamis. */}
+                  <img src={url} alt="" className="h-full w-full object-cover" onError={() => markPhotoFailed(photo.photoId)} />
+                  <span className="absolute inset-x-0 bottom-0 bg-black/65 px-1 py-0.5 text-left font-mono text-[9px] uppercase text-white">{photoLabels[photo.type]}</span>
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
       </div>
       <div className="border-t border-border px-3 py-2 text-[12px] text-muted-foreground dark:border-white/[0.06]">
         <span className="font-medium text-foreground">{photoLabels[activePhoto.type]}</span>
@@ -132,11 +151,35 @@ function CountdownGallery({ countdown }: { countdown: CountdownDetail }) {
   );
 }
 
+function QcStatusLine({ countdown, qcSummary }: { countdown: CountdownDetail; qcSummary: CountdownQcSummary | null }) {
+  const passed = qcSummary?.resultStatus === "LOLOS";
+  const failed = qcSummary?.resultStatus === "TIDAK_LOLOS";
+  const label = passed ? "Lolos" : failed ? "Tidak Lolos" : "Menunggu";
+
+  return (
+    <section className="flex flex-wrap items-center justify-between gap-3 border border-border bg-card px-3 py-2.5 dark:border-white/[0.06]">
+      <div className="flex items-center gap-2">
+        <p className="text-sm text-foreground"><span className="font-semibold">QC Status:</span></p>
+        <DataGridStatusBadge value={label} />
+        {qcSummary?.inspectedAt ? (
+          <span className="text-xs text-muted-foreground">Inspeksi {qcSummary.inspectedAt}</span>
+        ) : null}
+      </div>
+      <Link href="/qc" className="inline-flex h-9 items-center gap-1.5 border border-primary/35 px-3 font-mono text-[12px] font-medium uppercase tracking-[0.08em] text-app-accent-ink transition-colors hover:bg-primary/10">
+        Lihat QC
+      </Link>
+    </section>
+  );
+}
+
 export function CountdownDetailShell({
   countdown,
   canRequestRevision = false,
   canApproveRevision = false,
   canApproveMoRevision = false,
+  canManage = false,
+  jobHistory,
+  qcSummary,
 }: CountdownDetailShellProps) {
   const router = useRouter();
   const revisionDialogRef = useRef<HTMLDialogElement>(null);
@@ -242,6 +285,7 @@ export function CountdownDetailShell({
             </div>
             <p className="mt-1 truncate pl-6 text-xs text-muted-foreground">
               {countdown.panelName ?? "Panel belum ditentukan"}
+              {countdown.divisionName ? ` · ${countdown.divisionName}` : ""}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-1.5">
@@ -260,49 +304,19 @@ export function CountdownDetailShell({
                 </ActionButton>
               </>
             ) : null}
-            <details className="group relative">
-              <summary className="inline-flex h-9 cursor-pointer list-none items-center gap-1.5 border border-success/30 bg-success/10 px-3 font-mono text-[12px] font-medium uppercase tracking-[0.08em] text-success transition-colors hover:bg-success/20">
-                <Plus className="h-3.5 w-3.5" />
-                Job Plan
-                <ChevronDown className="h-3.5 w-3.5 transition-transform group-open:rotate-180" />
-              </summary>
-              <div className="absolute right-0 z-20 mt-1 min-w-44 border border-border bg-card p-1 shadow-xl">
-                <Link
-                  href={buildJobPlanHref("normal")}
-                  className="flex items-center gap-2 px-3 py-2 text-sm text-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
-                >
-                  <Plus className="h-4 w-4 text-success" />
-                  Buat rencana normal
-                </Link>
-                <Link
-                  href={buildJobPlanHref("overtime")}
-                  className="flex items-center gap-2 px-3 py-2 text-sm text-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
-                >
-                  <Moon className="h-4 w-4 text-info" />
-                  Buat rencana lembur
-                </Link>
-                {countdown.details.length > 0 ? (
-                  <Link href="#hasil-pekerjaan" className="flex items-center gap-2 px-3 py-2 text-sm text-foreground/70 transition-colors hover:bg-muted hover:text-foreground">
-                    <Camera className="h-4 w-4 text-info" />
-                    Lihat hasil aktual
-                  </Link>
-                ) : null}
-              </div>
-            </details>
           </div>
         </div>
       </header>
 
       {sweetAlert.alertElement}
 
-      <MetricBar items={[
-        { label: "Target Jam", value: `${countdown.targetHoursRevised.toFixed(2)} jam` },
-        { label: "Jam Aktual", value: `${countdown.totalActualHours.toFixed(2)} jam` },
-        { label: "Jam Tersisa", value: `${countdown.remainingHours.toFixed(2)} jam`, tone: countdown.remainingHours <= 0 ? "down" : "warn" },
-        { label: "Progress", value: `${countdown.actualProgressPercent.toFixed(0)}%`, tone: countdown.isOverdue ? "warn" : "up" },
-      ]} />
-
-      <section className="border border-border bg-card p-3 dark:border-white/[0.06]">
+      <SectionCard label="Countdown Progress Summary">
+        <MetricBar items={[
+          { label: "Target", value: `${countdown.targetHoursRevised.toFixed(2)} Jam` },
+          { label: "Aktual", value: `${countdown.totalActualHours.toFixed(2)} Jam` },
+          { label: "Sisa", value: `${countdown.remainingHours.toFixed(2)} Jam`, tone: countdown.remainingHours <= 0 ? "down" : "warn" },
+          { label: "Progress", value: `${countdown.actualProgressPercent.toFixed(0)}%`, tone: countdown.isOverdue ? "warn" : "up" },
+        ]} />
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0 flex-1">
             <div className="mb-1 flex items-center justify-between text-xs">
@@ -315,9 +329,27 @@ export function CountdownDetailShell({
           </div>
           <span className="shrink-0 text-xs text-muted-foreground">{countdown.isOverdue ? "Terlambat" : "Sesuai jadwal"}</span>
         </div>
-      </section>
+        {countdown.picPlan ? (
+          <p className="border-t border-border pt-2 text-xs text-muted-foreground">
+            <span className="font-medium text-foreground">PIC Plan:</span> {countdown.picPlan}
+          </p>
+        ) : null}
+      </SectionCard>
 
-      <CountdownGallery countdown={countdown} />
+      <SectionCard label="Informasi Countdown">
+        <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <DetailField label="Panel" value={countdown.panelName ?? "Panel belum ditentukan"} />
+          <DetailField label="Divisi" value={countdown.divisionName ?? "Tanpa divisi"} />
+          <DetailField label="Jenis Pekerjaan" value={countdown.jobTypeName ?? humanizeCodeLabel(countdown.taskCategory)} />
+          <DetailField label="Bagian" value={countdown.sectionName ?? "Bagian belum ditentukan"} />
+          <DetailField label="Temuan Awal" value={countdown.temuanAwal ?? "-"} />
+          <DetailField label="Target Awal" value={`${countdown.targetHoursInitial.toFixed(2)} Jam`} />
+          <DetailField label="Target Jam" value={`${countdown.targetHoursRevised.toFixed(2)} Jam`} />
+          <DetailField label="Mulai" value={countdown.startDate ?? "-"} />
+          <DetailField label="Deadline" value={countdown.deadlineDate ?? "-"} />
+          <DetailField label="Keterangan" value={countdown.keterangan ?? "-"} />
+        </dl>
+      </SectionCard>
 
       {countdown.extensionRequestStatus || countdown.countRevision > 0 ? (
         <section className="border border-border bg-card px-3 py-2.5 dark:border-white/[0.06]">
@@ -335,91 +367,20 @@ export function CountdownDetailShell({
         </section>
       ) : null}
 
-      <div className="grid gap-3 lg:grid-cols-[minmax(0,1.25fr)_minmax(18rem,0.75fr)]">
-        <SectionCard label="Informasi pekerjaan">
-          <dl className="grid gap-3 sm:grid-cols-2">
-            <DetailField label="Divisi" value={countdown.divisionName ?? "Tanpa divisi"} />
-            <DetailField label="Panel" value={countdown.panelName ?? "Panel belum ditentukan"} />
-            <DetailField label="Jenis pekerjaan" value={countdown.jobTypeName ?? humanizeCodeLabel(countdown.taskCategory)} />
-            <DetailField label="Bagian" value={countdown.sectionName ?? "Bagian belum ditentukan"} />
-            <DetailField label="Instruksi" value={countdown.keterangan ?? countdown.note ?? countdown.temuanAwal ?? "Belum ada instruksi."} />
-            <DetailField label="Pelanggan" value={countdown.customerName ?? "-"} />
-          </dl>
-        </SectionCard>
+      <CountdownJobHistory
+        carId={countdown.carId}
+        divisionId={countdown.divisionId}
+        divisionName={countdown.divisionName}
+        items={jobHistory.items}
+        employeeNames={jobHistory.employeeNames}
+        error={jobHistory.error}
+        canCreate={canManage}
+        jobPlanHref={buildJobPlanHref}
+      />
 
-        <SectionCard label="Linimasa pekerjaan">
-          <ol className="space-y-3 border-l border-border pl-4 dark:border-white/[0.08]">
-            {countdown.createdAt ? (
-              <li className="relative text-[12px] text-foreground before:absolute before:-left-[21px] before:top-1.5 before:h-2 before:w-2 before:bg-primary">
-                <p className="font-medium">Countdown dibuat</p>
-                <p className="mt-0.5 text-muted-foreground">{fmtDateTime(countdown.createdAt)}</p>
-              </li>
-            ) : null}
-            <li className="relative text-[12px] text-foreground before:absolute before:-left-[21px] before:top-1.5 before:h-2 before:w-2 before:bg-muted-foreground">
-              <p className="font-medium">Job Plan</p>
-              <p className="mt-0.5 text-muted-foreground">Status belum tersedia dari detail Countdown.</p>
-            </li>
-            {countdown.details.length > 0 ? (
-              <li className="relative text-[12px] text-foreground before:absolute before:-left-[21px] before:top-1.5 before:h-2 before:w-2 before:bg-success">
-                <p className="font-medium">Aktual tercatat</p>
-                <p className="mt-0.5 text-muted-foreground">{countdown.details.length} catatan aktual terakhir pada {countdown.details[0]?.workDate}</p>
-              </li>
-            ) : null}
-            {(countdown.status === "QC_READY" || countdown.status === "DONE") ? (
-              <li className="relative text-[12px] text-foreground before:absolute before:-left-[21px] before:top-1.5 before:h-2 before:w-2 before:bg-info">
-                <p className="font-medium">Pemeriksaan kualitas</p>
-                <p className="mt-0.5 text-muted-foreground"><DataGridStatusBadge value={humanizeCodeLabel(countdown.status)} /></p>
-              </li>
-            ) : null}
-          </ol>
-        </SectionCard>
-      </div>
+      <QcStatusLine countdown={countdown} qcSummary={qcSummary} />
 
-      <div id="hasil-pekerjaan">
-        <SectionCard label="Hasil pekerjaan" count={countdown.details.length}>
-        {countdown.details.length > 0 ? (
-          <SmsAgGrid<CountdownActualEntry>
-            heightClassName="h-72"
-            rowData={countdown.details}
-            columnDefs={actualColumnDefs}
-            getRowId={(params) => params.data.detailId}
-            emptyMessage="Belum ada hasil pekerjaan."
-          />
-        ) : <p className="text-sm text-muted-foreground">Belum ada hasil pekerjaan.</p>}
-        </SectionCard>
-      </div>
-
-      <SectionCard label="Aktivitas terkait">
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
-          <Link href={buildJobPlanHref("normal")} className="border border-border px-3 py-2 text-[12px] text-foreground transition-colors hover:border-primary hover:bg-muted">
-            <span className="block text-muted-foreground">Job Plan</span>
-            <span className="mt-1 block font-medium">Buka rencana kerja</span>
-          </Link>
-          {countdown.refWoId ? (
-            <Link href={`/wo/${encodeURIComponent(countdown.refWoId)}`} className="border border-border px-3 py-2 text-[12px] text-foreground transition-colors hover:border-primary hover:bg-muted">
-              <span className="block text-muted-foreground">Work Order</span>
-              <span className="mt-1 block font-medium">Buka WO</span>
-            </Link>
-          ) : <ActivityUnavailable label="Work Order" />}
-          <ActivityUnavailable label="Purchase Request" />
-          <ActivityUnavailable label="Vendor WO" />
-          <div className="border border-border px-3 py-2 text-[12px] text-foreground">
-            <span className="block text-muted-foreground">QC</span>
-            <span className="mt-1 block font-medium">{countdown.status === "QC_READY" || countdown.status === "DONE" ? humanizeCodeLabel(countdown.status) : "Belum ada data"}</span>
-          </div>
-        </div>
-      </SectionCard>
-
-      <SectionCard label="Informasi tambahan">
-        <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <DetailField label="Kategori" value={humanizeCodeLabel(countdown.taskCategory)} />
-          <DetailField label="Mulai" value={countdown.startDate ?? "-"} />
-          <DetailField label="Deadline" value={countdown.deadlineDate ?? "-"} />
-          <DetailField label="Diperbarui" value={countdown.updatedAt ? fmtDateTime(countdown.updatedAt) : "-"} />
-          <DetailField label="Temuan awal" value={countdown.temuanAwal ?? "-"} />
-          <DetailField label="Keterangan" value={countdown.keterangan ?? "-"} />
-        </dl>
-      </SectionCard>
+      <CountdownGallery countdown={countdown} />
 
       <dialog
         ref={revisionDialogRef}
