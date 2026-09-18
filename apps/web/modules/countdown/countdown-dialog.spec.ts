@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import {
   buildCountdownExportParams,
+  mergeCountdownGradeOptions,
   resolveCountdownPhotoUrl,
   resolveCountdownEntryMode,
   resolveCountdownRevisionActions,
@@ -67,5 +68,18 @@ describe("countdown documentation URL", () => {
     expect(resolveCountdownPhotoUrl("/uploads/work.jpg")).toBe("/uploads/work.jpg");
     expect(resolveCountdownPhotoUrl("//evil.example/work.jpg")).toBeNull();
     expect(resolveCountdownPhotoUrl("javascript:alert(1)")).toBeNull();
+  });
+});
+
+describe("countdown grade options", () => {
+  it("uses the employee reference list and keeps a value that is not listed", () => {
+    expect(mergeCountdownGradeOptions(undefined, "")).toEqual([]);
+    expect(mergeCountdownGradeOptions([{ label: "TK. I", value: "TK. I" }], "TK. I")).toEqual([
+      { label: "TK. I", value: "TK. I" },
+    ]);
+    expect(mergeCountdownGradeOptions([{ label: "TK. I", value: "TK. I" }], "TK. IX")).toEqual([
+      { label: "TK. IX", value: "TK. IX" },
+      { label: "TK. I", value: "TK. I" },
+    ]);
   });
 });

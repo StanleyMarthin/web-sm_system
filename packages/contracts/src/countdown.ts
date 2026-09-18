@@ -36,6 +36,10 @@ export const countdownBoardRowSchema = z.object({
   prerequisiteCoreId: z.string().nullable().optional(),
   refWoId: z.string().nullable().optional(),
   picPlan: z.string().nullable().optional(),
+  picName: z.string().nullable().optional(),
+  requiredGrade: z.string().nullable().optional(),
+  kpName: z.string().nullable().optional(),
+  kdName: z.string().nullable().optional(),
   note: z.string().nullable().optional(),
   temuanAwal: z.string().nullable().optional(),
   keterangan: z.string().nullable().optional(),
@@ -106,6 +110,20 @@ export const countdownBoardEnvelopeSchema = z.object({
         divisionParentCode: z.string().nullable().optional(),
       }),
     ),
+    employees: z.array(
+      z.object({
+        label: z.string(),
+        value: z.string(),
+        divisionId: z.number().int().nullable().optional(),
+        grade: z.string().nullable().optional(),
+      }),
+    ).optional(),
+    grades: z.array(
+      z.object({
+        label: z.string(),
+        value: z.string(),
+      }),
+    ).optional(),
     taskCategories: z.array(
       z.object({
         label: z.string(),
@@ -226,12 +244,18 @@ export const countdownCreateRequestSchema = z.object({
   prerequisiteCoreId: z.string().trim().min(1).max(100).nullable().optional(),
   refWoId: z.string().trim().min(1).max(100).nullable().optional(),
   picPlan: z.string().trim().max(100).nullable().optional(),
+  requiredGrade: z.string().trim().max(50).nullable().optional(),
   note: z.string().trim().max(500).nullable().optional(),
   temuanAwal: z.string().trim().max(1000).nullable().optional(),
   keterangan: z.string().trim().max(1000).nullable().optional(),
   status: countdownStatusSchema.optional(),
 });
 
+/**
+ * Update countdown mengikuti aturan seragam: `null` mengosongkan nilai, `undefined` mempertahankan
+ * nilai lama. Field wajib (carId, divisionId, sectionName, targetHoursInitial, deadlineDate,
+ * taskCategory, status) menolak `null` karena tidak punya arti "kosong".
+ */
 export const countdownUpdateRequestSchema = countdownCreateRequestSchema
   .partial()
   .refine((value) => Object.keys(value).length > 0, {

@@ -42,6 +42,15 @@ interface EmployeeOption {
   value: string;
 }
 
+function ResponsibleField({ label, value }: { label: string; value: string }) {
+  return (
+    <p className="min-w-0 text-[12px] text-muted-foreground">
+      <span className="font-mono text-[10px] uppercase tracking-[0.08em]">{label}</span>{" "}
+      <span className="font-medium text-foreground">{value}</span>
+    </p>
+  );
+}
+
 function toLocalDateValue(value = new Date()) {
   const month = String(value.getMonth() + 1).padStart(2, "0");
   const day = String(value.getDate()).padStart(2, "0");
@@ -185,38 +194,49 @@ export function CountdownDetailShell({
     }
   }
 
+  // Ringkasan status per rencana ada di section Rencana pekerjaan; linimasa hanya mencatat jumlahnya.
   const planStatusSummary = plansLoading
     ? "Memuat rencana…"
     : plans.length > 0
-      ? `${plans.length} rencana · ${humanizeCodeLabel(plans[0]?.execution_state ?? "")}`
+      ? `${plans.length} rencana tercatat.`
       : "Belum ada rencana pekerjaan.";
 
   return (
     <div className="flex flex-col gap-3">
       <header className="border border-border bg-card dark:border-white/[0.06]">
-        <div className="flex flex-col gap-3 p-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-col gap-3 p-3 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
-            <div className="flex min-w-0 items-center gap-2">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
               <Link href={`/units/${encodeURIComponent(countdown.carId)}?tab=countdown`} title="Kembali ke Countdown Unit" aria-label="Kembali ke Countdown Unit" className="shrink-0 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                 <ArrowLeft className="h-4 w-4" />
               </Link>
               <h1 className="truncate text-lg font-semibold text-foreground">{countdown.unitName}</h1>
               <span className="shrink-0"><DataGridStatusBadge value={humanizeCodeLabel(countdown.status)} /></span>
+              <span className={`shrink-0 border px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.1em] ${countdown.isOverdue ? "border-destructive/30 bg-destructive/[0.06] text-destructive" : "border-success/25 bg-success/[0.06] text-success"}`}>
+                {countdown.isOverdue ? "Terlambat" : "Sesuai jadwal"}
+              </span>
             </div>
-            <p className="mt-1 truncate pl-6 text-xs text-muted-foreground">
-              {countdown.panelName ?? "Panel belum ditentukan"}
-              {countdown.divisionName ? ` · ${countdown.divisionName}` : ""}
-            </p>
+            <div className="mt-1 flex flex-col gap-0.5 pl-6">
+              <p className="truncate text-[13px] font-medium text-foreground">
+                {countdown.panelName ?? "Panel belum ditentukan"}
+              </p>
+              <p className="truncate font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
+                {countdown.divisionName ?? "Tanpa divisi"}
+                {countdown.jobTypeName ? ` · ${countdown.jobTypeName}` : ""}
+              </p>
+            </div>
           </div>
           <div className="flex flex-wrap items-center gap-1.5">
             <a
               href="#job-plan"
+              onClick={() => document.getElementById("job-plan")?.setAttribute("open", "")}
               className="inline-flex h-9 items-center gap-1.5 border border-success/25 bg-success/[0.06] px-3 font-mono text-[12px] font-medium uppercase tracking-[0.08em] text-success transition-colors hover:bg-success/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               Rencana pekerjaan
             </a>
             <a
               href="#actual"
+              onClick={() => document.getElementById("actual")?.setAttribute("open", "")}
               className="inline-flex h-9 items-center gap-1.5 border border-border px-3 font-mono text-[12px] font-medium uppercase tracking-[0.08em] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:border-white/[0.08]"
             >
               Aktual
@@ -249,20 +269,18 @@ export function CountdownDetailShell({
         { label: "Progress", value: `${countdown.actualProgressPercent.toFixed(0)}%`, tone: countdown.isOverdue ? "warn" : "up" },
       ]} />
 
-      <section className="border border-border bg-card p-3 dark:border-white/[0.06]">
-        <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <div className="mb-1 flex items-center justify-between text-xs">
-              <span className="font-medium text-foreground">Progress pekerjaan</span>
-              <span className="font-mono text-muted-foreground">{countdown.actualProgressPercent.toFixed(0)}%</span>
-            </div>
-            <div className="h-1.5 overflow-hidden bg-muted" role="progressbar" aria-label="Progress pekerjaan" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(countdown.actualProgressPercent)}>
-              <div className="h-full bg-primary" style={{ width: `${Math.min(100, Math.max(0, countdown.actualProgressPercent))}%` }} />
-            </div>
-          </div>
-          <span className="shrink-0 text-xs text-muted-foreground">{countdown.isOverdue ? "Terlambat" : "Sesuai jadwal"}</span>
+      <div className="flex items-center gap-3 border border-t-0 border-border bg-card px-3 py-1.5 dark:border-white/[0.06]">
+        <div className="h-1.5 min-w-0 flex-1 overflow-hidden bg-muted" role="progressbar" aria-label="Progress pekerjaan" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(countdown.actualProgressPercent)}>
+          <div className="h-full bg-primary" style={{ width: `${Math.min(100, Math.max(0, countdown.actualProgressPercent))}%` }} />
         </div>
-      </section>
+        <span className="shrink-0 font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground">Progress pekerjaan</span>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-1 border border-border bg-card px-3 py-2 dark:border-white/[0.06]">
+        <ResponsibleField label="KP" value={countdown.kpName ?? "-"} />
+        <ResponsibleField label="KD" value={countdown.kdName ?? "-"} />
+        <ResponsibleField label="PIC rencana" value={countdown.picName ?? countdown.picPlan ?? "Belum ditentukan"} />
+      </div>
 
       {countdown.extensionRequestStatus || countdown.countRevision > 0 ? (
         <section className="border border-border bg-card px-3 py-2.5 dark:border-white/[0.06]">
@@ -308,7 +326,7 @@ export function CountdownDetailShell({
         <CountdownQcSection qc={qc} canViewQc={canViewQc} />
       </div>
 
-      <SectionCard label="Linimasa & ledger">
+      <SectionCard label="Linimasa & ledger" collapsible defaultOpen={false}>
         <ol className="space-y-3 border-l border-border pl-4 dark:border-white/[0.08]">
           {countdown.createdAt ? (
             <li className="relative text-[12px] text-foreground before:absolute before:-left-[21px] before:top-1.5 before:h-2 before:w-2 before:bg-primary">

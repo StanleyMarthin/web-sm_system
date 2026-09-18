@@ -18,7 +18,7 @@ function QcField({ label, value }: { label: string; value: string }) {
 export function CountdownQcSection({ qc, canViewQc }: { qc: QcQueueRecord | null; canViewQc: boolean }) {
   if (!canViewQc) {
     return (
-      <SectionCard label="Pemeriksaan QC">
+      <SectionCard label="Pemeriksaan QC" collapsible defaultOpen={false}>
         <div className="flex items-start gap-2">
           <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
           <p className="text-[12px] text-muted-foreground">Status QC perlu akses modul QC.</p>
@@ -29,7 +29,7 @@ export function CountdownQcSection({ qc, canViewQc }: { qc: QcQueueRecord | null
 
   if (!qc || (!qc.qcLastStatus && !qc.latestQcId)) {
     return (
-      <SectionCard label="Pemeriksaan QC">
+      <SectionCard label="Pemeriksaan QC" collapsible defaultOpen={false}>
         <div className="flex items-start gap-2">
           <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
           <div className="min-w-0">
@@ -44,7 +44,7 @@ export function CountdownQcSection({ qc, canViewQc }: { qc: QcQueueRecord | null
   }
 
   return (
-    <SectionCard label="Pemeriksaan QC">
+    <SectionCard label="Pemeriksaan QC" collapsible defaultOpen={false}>
       <dl className="grid gap-3 sm:grid-cols-2">
         <QcField label="Status" value={humanizeCodeLabel(qc.qcLastStatus ?? qc.countdownStatus)} />
         <QcField label="Level" value={qc.qcLevel ? humanizeCodeLabel(qc.qcLevel) : "-"} />

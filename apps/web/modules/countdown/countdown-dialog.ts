@@ -47,3 +47,16 @@ export function buildCountdownExportParams(unitId: string, divisionId: string, s
     ...(status ? { status } : {}),
   };
 }
+
+/**
+ * Grade tidak punya tabel master; pilihan diambil dari grade karyawan yang sudah dipakai.
+ * Nilai lama yang tidak ada di daftar tetap dipertahankan agar edit tidak menghapus data.
+ */
+export function mergeCountdownGradeOptions(
+  grades: Array<{ label: string; value: string }> | undefined,
+  currentValue: string,
+) {
+  const options = grades ?? [];
+  if (!currentValue || options.some((option) => option.value === currentValue)) return options;
+  return [{ label: currentValue, value: currentValue }, ...options];
+}

@@ -2,7 +2,6 @@
 
 import type { CountdownDetail } from "@smsystem/contracts/countdown";
 import Link from "next/link";
-import { fmtDateTime, humanizeCodeLabel } from "@/shared/format/humanize";
 import { SectionCard } from "@/shared/ui/compact";
 
 function DetailField({ label, value }: { label: string; value: string }) {
@@ -16,20 +15,14 @@ function DetailField({ label, value }: { label: string; value: string }) {
 
 export function CountdownMasterPanel({ countdown }: { countdown: CountdownDetail }) {
   return (
-    <SectionCard label="Unit & master panel">
+    <SectionCard label="Informasi panel" collapsible defaultOpen>
       <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <DetailField label="Unit" value={`${countdown.unitName} · ${countdown.carId}`} />
-        <DetailField label="Pelanggan" value={countdown.customerName ?? "-"} />
-        <DetailField label="Divisi" value={countdown.divisionName ?? "Tanpa divisi"} />
         <DetailField label="Panel" value={countdown.panelName ?? "Panel belum ditentukan"} />
-        <DetailField label="Bagian" value={countdown.sectionName ?? "Bagian belum ditentukan"} />
-        <DetailField label="Jobdesc" value={countdown.jobTypeName ?? humanizeCodeLabel(countdown.taskCategory)} />
-        <DetailField label="Kategori" value={humanizeCodeLabel(countdown.taskCategory)} />
-        <DetailField label="Mulai" value={countdown.startDate ?? "-"} />
+        <DetailField label="Grade" value={countdown.requiredGrade ?? "-"} />
+        <DetailField label="Target awal" value={`${countdown.targetHoursInitial.toFixed(2)} jam`} />
         <DetailField label="Deadline" value={countdown.deadlineDate ?? "-"} />
-        <DetailField label="Diperbarui" value={countdown.updatedAt ? fmtDateTime(countdown.updatedAt) : "-"} />
         <DetailField label="Temuan awal" value={countdown.temuanAwal ?? "-"} />
-        <DetailField label="Keterangan" value={countdown.keterangan ?? countdown.note ?? "-"} />
+        <DetailField label="Instruksi" value={countdown.keterangan ?? countdown.note ?? countdown.jobTypeName ?? "-"} />
       </dl>
 
       {countdown.refWoId ? (

@@ -24,12 +24,11 @@ const photoLabels = {
 } as const;
 
 const actualColumnDefs: ColDef<CountdownActualEntry>[] = [
-  { headerName: "Tanggal", field: "workDate", minWidth: 110 },
-  { headerName: "Operator", field: "employeeName", minWidth: 150, flex: 0.8 },
+  { headerName: "Tanggal", field: "workDate", minWidth: 120, valueFormatter: ({ value }) => formatLogDate(String(value ?? "")) },
+  { headerName: "PIC", field: "employeeName", minWidth: 150, flex: 0.8 },
   { headerName: "Mulai", field: "startTime", minWidth: 85, valueFormatter: ({ value }) => fmtTime(String(value ?? "")) },
   { headerName: "Selesai", field: "finishTime", minWidth: 85, valueFormatter: ({ value }) => fmtTime(String(value ?? "")) },
-  { headerName: "Jam", field: "billedHours", minWidth: 90, valueFormatter: ({ value }) => `${Number(value ?? 0).toFixed(2)} jam` },
-  { headerName: "Progress", field: "progressPercent", minWidth: 90, valueFormatter: ({ value }) => `${Number(value ?? 0).toFixed(0)}%` },
+  { headerName: "Durasi", field: "billedHours", minWidth: 95, valueFormatter: ({ value }) => `${Number(value ?? 0).toFixed(2)} jam` },
   {
     headerName: "Status",
     field: "taskStatus",
@@ -39,7 +38,14 @@ const actualColumnDefs: ColDef<CountdownActualEntry>[] = [
   { headerName: "Catatan", field: "dailyNotes", minWidth: 220, flex: 1 },
 ];
 
-function CountdownGallery({ countdown }: { countdown: CountdownDetail }) {
+function formatLogDate(value: string) {
+  if (!value) return "-";
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("id-ID", { day: "2-digit", month: "short", year: "numeric" }).format(date);
+}
+
+function CountdownDocumentation({ countdown }: { countdown: CountdownDetail }) {
   const photos = countdown.details.flatMap((detail) => detail.photos.map((photo) => ({
     ...photo,
     workDate: detail.workDate,
@@ -51,13 +57,13 @@ function CountdownGallery({ countdown }: { countdown: CountdownDetail }) {
 
   if (!activePhoto || !activeUrl) {
     return (
-      <section id="dokumentasi" className="border border-border bg-card dark:border-white/[0.06]">
-        <div className="flex items-center gap-2 border-b border-border px-3 py-2.5 dark:border-white/[0.06]">
-          <Camera className="h-4 w-4 text-app-accent-ink" />
-          <h2 className="text-sm font-semibold text-foreground">Dokumentasi</h2>
+      <div id="dokumentasi" className="border-t border-border pt-2 dark:border-white/[0.06]">
+        <div className="flex items-center gap-2">
+          <Camera className="h-3.5 w-3.5 text-app-accent-ink" />
+          <h3 className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground">Dokumentasi</h3>
         </div>
-        <p className="px-3 py-5 text-sm text-muted-foreground">Belum ada foto.</p>
-      </section>
+        <p className="mt-1 text-[12px] text-muted-foreground">Belum ada foto pengerjaan.</p>
+      </div>
     );
   }
 
@@ -66,15 +72,15 @@ function CountdownGallery({ countdown }: { countdown: CountdownDetail }) {
   }
 
   return (
-    <section id="dokumentasi" className="border border-border bg-card dark:border-white/[0.06]">
-      <div className="flex items-center justify-between gap-3 border-b border-border px-3 py-2.5 dark:border-white/[0.06]">
+    <div id="dokumentasi" className="border-t border-border pt-2 dark:border-white/[0.06]">
+      <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <Camera className="h-4 w-4 text-app-accent-ink" />
-          <h2 className="text-sm font-semibold text-foreground">Dokumentasi</h2>
+          <Camera className="h-3.5 w-3.5 text-app-accent-ink" />
+          <h3 className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground">Dokumentasi</h3>
         </div>
         <span className="font-mono text-[10px] uppercase text-muted-foreground">{photos.length} foto</span>
       </div>
-      <div className="grid gap-3 p-3 lg:grid-cols-[minmax(0,1fr)_10rem]">
+      <div className="mt-2 grid gap-3 lg:grid-cols-[minmax(0,1fr)_10rem]">
         <div className="relative flex min-h-[18rem] items-center justify-center overflow-hidden bg-muted">
           {/* eslint-disable-next-line @next/next/no-img-element -- URL dokumentasi berasal dari storage dinamis. */}
           <img src={activeUrl} alt={activePhoto.caption || `Dokumentasi ${photoLabels[activePhoto.type]}`} className="max-h-[32rem] w-full object-contain" />
@@ -99,12 +105,12 @@ function CountdownGallery({ countdown }: { countdown: CountdownDetail }) {
           })}
         </div>
       </div>
-      <div className="border-t border-border px-3 py-2 text-[12px] text-muted-foreground dark:border-white/[0.06]">
+      <div className="mt-2 border-t border-border pt-2 text-[12px] text-muted-foreground dark:border-white/[0.06]">
         <span className="font-medium text-foreground">{photoLabels[activePhoto.type]}</span>
         {activePhoto.caption ? ` · ${activePhoto.caption}` : ""}
-        {activePhoto.workDate ? ` · ${activePhoto.workDate}` : ""}
+        {activePhoto.workDate ? ` · ${formatLogDate(activePhoto.workDate)}` : ""}
       </div>
-    </section>
+    </div>
   );
 }
 
@@ -235,9 +241,15 @@ export function CountdownActualSection({
   }
 
   return (
-    <div id="actual" className="space-y-2">
+    <div>
       {sweetAlert.alertElement}
-      <SectionCard label="Aktual pekerjaan" count={countdown.details.length}>
+      <SectionCard
+        id="actual"
+        label="Log actual"
+        count={countdown.details.length}
+        collapsible
+        defaultOpen={false}
+      >
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-[12px] text-muted-foreground">
             {countdown.details.length > 0
@@ -261,7 +273,7 @@ export function CountdownActualSection({
 
         {countdown.details.length > 0 ? (
           <SmsAgGrid<CountdownActualEntry>
-            heightClassName="h-72"
+            heightClassName="h-64"
             rowData={countdown.details}
             columnDefs={actualColumnDefs}
             getRowId={(params) => params.data.detailId}
@@ -401,9 +413,9 @@ export function CountdownActualSection({
             </div>
           </div>
         ) : null}
-      </SectionCard>
 
-      <CountdownGallery countdown={countdown} />
+        <CountdownDocumentation countdown={countdown} />
+      </SectionCard>
     </div>
   );
 }

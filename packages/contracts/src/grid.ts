@@ -3,7 +3,7 @@ import { z } from "zod";
 export const GRID_LIMIT_OPTIONS = [10, 25, 50, 100] as const;
 
 export const gridSortDirectionSchema = z.enum(["asc", "desc"]);
-export const gridFilterOperatorSchema = z.enum(["eq", "contains"]);
+export const gridFilterOperatorSchema = z.enum(["eq", "contains", "gt", "gte", "lt", "lte"]);
 
 export const gridFilterSchema = z.object({
   field: z.string().trim().min(1).max(50),

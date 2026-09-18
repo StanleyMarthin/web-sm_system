@@ -6,7 +6,7 @@ import { SectionCard } from "@/shared/ui/compact";
 
 export function CountdownPrSection({ refWoId }: { refWoId: string | null }) {
   return (
-    <SectionCard label="Purchase Request">
+    <SectionCard label="Purchase Request" collapsible defaultOpen={false}>
       <div className="flex items-start gap-2">
         <FileText className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
         <div className="min-w-0">

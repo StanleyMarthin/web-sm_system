@@ -2,6 +2,8 @@ import { headers } from "next/headers";
 import dynamic from "next/dynamic";
 import { redirect } from "next/navigation";
 import { fetchCountdownBoard } from "@/shared/api/countdown";
+import { buildCountdownScopeRedirect, countdownScopeFilters } from "@/modules/countdown/countdown-board";
+import { fetchCurrentUser } from "@/shared/auth/server";
 import { ModuleUnavailableState } from "@/shared/ui/module-unavailable-state";
 import { PageDataSkeleton } from "@/shared/ui/page-data-skeleton";
 
@@ -23,6 +25,13 @@ async function CountdownPageContent({ searchParams }: CountdownPageProps) {
   const resolvedSearchParams = await searchParams;
   const requestHeaders = await headers();
   const cookieHeader = requestHeaders.get("cookie") ?? "";
+  const { user } = await fetchCurrentUser(cookieHeader);
+
+  if (user) {
+    const scopeRedirect = buildCountdownScopeRedirect(resolvedSearchParams, countdownScopeFilters(user));
+    if (scopeRedirect) redirect(`/countdown?${scopeRedirect}`);
+  }
+
   const { payload, status } = await fetchCountdownBoard(cookieHeader, resolvedSearchParams);
 
   if (status === 401) {
@@ -59,6 +68,7 @@ async function CountdownPageContent({ searchParams }: CountdownPageProps) {
       canManage={payload.canManage ?? false}
       meta={payload.meta}
       state={payload.query}
+      user={user}
     />
   );
 }

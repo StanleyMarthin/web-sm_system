@@ -31,7 +31,10 @@ export function useDataGridState(initialState: GridQueryState) {
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
 
-  function replaceGridState(input: ReplaceGridStateInput) {
+  function replaceGridState(
+    input: ReplaceGridStateInput,
+    extraParams: Record<string, string | null> = {},
+  ) {
     const params = new URLSearchParams(searchParams.toString());
     const nextState: GridQueryState = {
       ...initialState,
@@ -63,6 +66,14 @@ export function useDataGridState(initialState: GridQueryState) {
       params.append("filter", encodeGridFilterToken(filter));
     }
 
+    for (const [key, value] of Object.entries(extraParams)) {
+      if (value) {
+        params.set(key, value);
+      } else {
+        params.delete(key);
+      }
+    }
+
     const nextUrl = params.toString() ? `${pathname}?${params}` : pathname;
     startTransition(() => {
       router.replace(nextUrl, { scroll: false });
@@ -77,8 +88,8 @@ export function useDataGridState(initialState: GridQueryState) {
     setLimit(limit: number) {
       replaceGridState({ page: 1, limit });
     },
-    setSearch(search: string) {
-      replaceGridState({ page: 1, search, view: null });
+    setSearch(search: string, extraParams?: Record<string, string | null>) {
+      replaceGridState({ page: 1, search, view: null }, extraParams);
     },
     setSort(sortBy: string, sortDirection: GridQueryState["sortDirection"]) {
       replaceGridState({ page: 1, sortBy, sortDirection, view: null });
@@ -89,6 +100,9 @@ export function useDataGridState(initialState: GridQueryState) {
         view: null,
         filters: upsertFilter(initialState.filters, field, value),
       });
+    },
+    setFilters(filters: GridFilter[], extraParams?: Record<string, string | null>) {
+      replaceGridState({ page: 1, view: null, filters }, extraParams);
     },
     applySavedView(view: SmartDataGridSavedView) {
       replaceGridState({
