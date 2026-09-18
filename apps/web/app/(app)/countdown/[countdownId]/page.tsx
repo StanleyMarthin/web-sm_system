@@ -3,7 +3,6 @@ import { redirect } from "next/navigation";
 import { permissionCodes } from "@smsystem/permissions";
 import { CountdownDetailShell } from "@/modules/countdown/components/countdown-detail-shell";
 import { fetchCountdownDetail } from "@/shared/api/countdown";
-import { fetchQcDetail } from "@/shared/api/qc";
 import { fetchCurrentUser } from "@/shared/auth/server";
 import { ModuleUnavailableState } from "@/shared/ui/module-unavailable-state";
 
@@ -18,11 +17,7 @@ async function CountdownDetailPageContent({ params }: CountdownDetailPageProps) 
   const { user } = await fetchCurrentUser(cookieHeader);
   const canManagePlan = user?.permissions.includes(permissionCodes.updatePlan) ?? false;
   const canInputActual = user?.permissions.includes(permissionCodes.listCarProgress) ?? false;
-  const canViewQc = user?.permissions.includes(permissionCodes.qcView) ?? false;
-  const [{ payload, status }, qcResult] = await Promise.all([
-    fetchCountdownDetail(cookieHeader, countdownId),
-    canViewQc ? fetchQcDetail(cookieHeader, countdownId) : Promise.resolve({ payload: null }),
-  ]);
+  const { payload, status } = await fetchCountdownDetail(cookieHeader, countdownId);
 
   if (status === 401) {
     redirect("/login");
@@ -55,8 +50,6 @@ async function CountdownDetailPageContent({ params }: CountdownDetailPageProps) 
       canApproveMoRevision={payload.canApproveMoRevision}
       canManagePlan={canManagePlan}
       canInputActual={canInputActual}
-      canViewQc={canViewQc}
-      qc={qcResult.payload?.data.item ?? null}
     />
   );
 }

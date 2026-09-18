@@ -1,5 +1,10 @@
 import { describe, expect, it } from "bun:test";
-import { formatCountdownImportIssue, formatCountdownStatus } from "../countdown-copy";
+import {
+  formatCountdownImportIssue,
+  formatCountdownStatus,
+  formatCountdownStatusLabel,
+  hasCountdownTargetRevision,
+} from "../countdown-copy";
 
 const componentDir = import.meta.dir;
 const sourceFiles = [
@@ -8,8 +13,7 @@ const sourceFiles = [
   "countdown-job-plan-section.tsx",
   "countdown-actual-section.tsx",
   "countdown-master-panel.tsx",
-  "countdown-pr-section.tsx",
-  "countdown-qc-section.tsx",
+  "countdown-documentation-section.tsx",
   "forms/countdown-board-form.tsx",
 ];
 
@@ -24,6 +28,20 @@ describe("countdown UI copy", () => {
       "Target awal",
       "Target awal tidak valid.",
     ]);
+  });
+
+  it("renders one status label with lateness folded in", () => {
+    expect(formatCountdownStatusLabel({ status: "PLAN", isOverdue: false, progressPercent: 0 })).toBe("Menunggu");
+    expect(formatCountdownStatusLabel({ status: "PROSES", isOverdue: false, progressPercent: 40 })).toBe("On Progress");
+    expect(formatCountdownStatusLabel({ status: "QC_READY", isOverdue: false, progressPercent: 90 })).toBe("Siap QC");
+    expect(formatCountdownStatusLabel({ status: "DONE", isOverdue: false, progressPercent: 100 })).toBe("Selesai");
+    expect(formatCountdownStatusLabel({ status: "PROSES", isOverdue: true, progressPercent: 40 })).toBe("Terlambat");
+    expect(formatCountdownStatusLabel({ status: "DONE", isOverdue: true, progressPercent: 100 })).toBe("Selesai");
+  });
+
+  it("flags a target revision only when active target differs from initial", () => {
+    expect(hasCountdownTargetRevision({ targetHoursInitial: 10, targetHoursRevised: 12 })).toBe(true);
+    expect(hasCountdownTargetRevision({ targetHoursInitial: 10, targetHoursRevised: 10 })).toBe(false);
   });
 
   it("uses human Indonesian labels instead of raw system wording", async () => {

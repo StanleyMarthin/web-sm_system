@@ -2,29 +2,19 @@
 
 import type { CountdownDetail } from "@smsystem/contracts/countdown";
 import type { JobPlanV2ReadItem } from "@smsystem/contracts/job-plan-v2";
-import { ChevronDown, Plus, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { Plus, X } from "lucide-react";
+import { useState } from "react";
 import { createJobPlanV2, createJobPlanV2CommandId } from "@/shared/api/job-plan-v2";
-import { DataGridStatusBadge } from "@/shared/datagrid/status-badge";
 import { ActionButton, CompactInput, CompactSelect, CompactTextarea, FieldLabel, SectionCard } from "@/shared/ui/compact";
 import { useSweetAlert } from "@/shared/ui/sweet-alert";
 import {
   buildCreateJobPlanV2Payload,
-  formatJobPlanV2Approval,
-  formatJobPlanV2Execution,
-  formatJobPlanV2Ledger,
   minutesToDuration,
-  minutesToTime,
-  resolveJobPlanV2Sync,
   toLocalDateValue,
   validateJobPlanV2Draft,
   type JobPlanV2PlannerDraft,
 } from "@/modules/job-plan/job-plan-planner";
-import {
-  createCountdownPlanDraft,
-  resolveCountdownPlanProgress,
-  summarizeCountdownPlans,
-} from "../countdown-job-plan";
+import { createCountdownPlanDraft, resolveCountdownPlanProgress } from "../countdown-job-plan";
 
 interface EmployeeOption {
   label: string;
@@ -43,6 +33,11 @@ interface CountdownJobPlanSectionProps {
   onRequestEmployeeOptions: () => void;
 }
 
+// Label modul disamakan dengan CTA lama (rencana normal / lembur).
+function formatPlanMode(isOvertime: boolean) {
+  return isOvertime ? "Lembur" : "Normal";
+}
+
 function buildDraft(countdown: CountdownDetail, isOvertime: boolean): JobPlanV2PlannerDraft {
   return createCountdownPlanDraft(
     {
@@ -55,11 +50,6 @@ function buildDraft(countdown: CountdownDetail, isOvertime: boolean): JobPlanV2P
   );
 }
 
-// ponytail: label modul disamakan dengan CTA lama (rencana normal / lembur) supaya istilah tidak bercabang.
-function formatPlanMode(isOvertime: boolean) {
-  return isOvertime ? "Lembur" : "Normal";
-}
-
 function PlanStat({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0">
@@ -67,22 +57,6 @@ function PlanStat({ label, value }: { label: string; value: string }) {
       <p className="mt-0.5 font-mono text-[13px] tabular-nums text-foreground">{value}</p>
     </div>
   );
-}
-
-function PlanField({ label, value }: { label: string; value: string }) {
-  return (
-    <p className="min-w-0 text-[12px] text-muted-foreground">
-      <span className="font-mono text-[10px] uppercase tracking-[0.08em]">{label}</span>{" "}
-      <span className="text-foreground">{value}</span>
-    </p>
-  );
-}
-
-function approvalTone(state: string) {
-  if (state === "APPROVED") return "border-success/25 bg-success/15 text-success dark:border-success/30 dark:bg-success/18";
-  if (state === "REJECTED" || state === "CANCELLED") return "border-destructive/25 bg-destructive/15 text-destructive dark:border-destructive/30 dark:bg-destructive/18";
-  if (state === "DRAFT") return "border-border bg-muted/40 text-muted-foreground dark:border-white/[0.08] dark:bg-white/[0.04]";
-  return "border-warning/25 bg-warning/15 text-warning dark:border-warning/30 dark:bg-warning/18";
 }
 
 export function CountdownJobPlanSection({
@@ -100,10 +74,8 @@ export function CountdownJobPlanSection({
   const [draft, setDraft] = useState<JobPlanV2PlannerDraft | null>(null);
   const [draftError, setDraftError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [expandedPlanId, setExpandedPlanId] = useState<string | null>(null);
 
   const employeeNameById = new Map(employeeOptions.map((option) => [option.value, option.label]));
-  const planSummary = useMemo(() => summarizeCountdownPlans(plans), [plans]);
   const actualEmployeeNameById = new Map(
     countdown.details
       .filter((detail) => detail.employeeId)
@@ -150,7 +122,7 @@ export function CountdownJobPlanSection({
       }
       setDraft(null);
       onReload();
-      sweetAlert.notifySuccess("Rencana tersimpan", "Job plan baru tercatat untuk countdown ini.");
+      sweetAlert.notifySuccess("Rencana tersimpan", "Job plan baru tercatat sebagai DRAFT.");
     } catch {
       setDraftError("Job plan tidak bisa disimpan. Coba lagi sebentar.");
     } finally {
@@ -161,7 +133,7 @@ export function CountdownJobPlanSection({
   return (
     <div>
       {sweetAlert.alertElement}
-      <SectionCard id="job-plan" label="Rencana pekerjaan" count={plans.length} collapsible defaultOpen>
+      <SectionCard id="job-plan" label="Job plan" count={plans.length} collapsible defaultOpen>
         {isLoading ? (
           <p className="text-sm text-muted-foreground">Memuat rencana pekerjaan…</p>
         ) : error ? (
@@ -170,79 +142,41 @@ export function CountdownJobPlanSection({
             <ActionButton onClick={onReload}>Muat ulang</ActionButton>
           </div>
         ) : plans.length === 0 ? (
-          <div className="min-w-0">
-            <p className="text-[13px] text-foreground">{countdown.panelName ?? countdown.sectionName ?? countdown.unitName}</p>
-            <p className="mt-0.5 text-sm text-muted-foreground">
-              Belum ada rencana pekerjaan. Buat rencana normal atau lembur untuk memulai eksekusi.
-            </p>
-          </div>
+          <p className="text-sm text-muted-foreground">
+            Belum ada rencana pekerjaan untuk countdown ini.
+          </p>
         ) : (
           <div className="space-y-2">
-            <div className="flex flex-wrap items-center gap-1.5 border border-border bg-muted/20 px-3 py-2 dark:border-white/[0.06]">
-              <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
-                Total rencana
-              </span>
-              <span className="font-mono text-[13px] font-semibold tabular-nums text-foreground">{planSummary.total}</span>
-              <span className="text-muted-foreground/50">·</span>
-              {planSummary.breakdown.map((entry) => (
-                <span
-                  key={entry.state}
-                  className={`inline-flex items-center gap-1 border px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.08em] ${approvalTone(entry.state)}`}
-                >
-                  {formatJobPlanV2Approval(entry.state)}
-                  <span className="tabular-nums">{entry.count}</span>
-                </span>
-              ))}
-            </div>
             {plans.map((plan) => {
               const numbers = resolveCountdownPlanProgress(plan);
-              const isExpanded = expandedPlanId === plan.plan_id;
-              const sync = resolveJobPlanV2Sync(plan);
               return (
-                <div key={plan.plan_id} className="border border-border dark:border-white/[0.06]">
-                  <div className="flex flex-wrap items-start justify-between gap-2 px-3 py-2">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <span
-                          className={`border px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.08em] ${
-                            plan.is_overtime
-                              ? "border-info/30 bg-info/[0.08] text-info"
-                              : "border-border bg-muted/40 text-muted-foreground dark:border-white/[0.08] dark:bg-white/[0.04]"
-                          }`}
-                        >
-                          {formatPlanMode(plan.is_overtime)}
-                        </span>
-                        <p className="truncate text-[13px] font-medium text-foreground">
-                          {plan.jobdescription ?? countdown.jobTypeName ?? countdown.sectionName ?? "-"}
-                        </p>
-                      </div>
-                      <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
-                        <PlanField label="PIC" value={resolveEmployeeName(plan.employee_id)} />
-                        <PlanField label="Tanggal" value={plan.task_date} />
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <DataGridStatusBadge value={plan.approval_state} />
-                      <DataGridStatusBadge value={plan.execution_state} />
-                      <button
-                        type="button"
-                        aria-expanded={isExpanded}
-                        onClick={() => setExpandedPlanId(isExpanded ? null : plan.plan_id)}
-                        className="inline-flex h-9 items-center gap-1.5 border border-border px-3 font-mono text-[12px] font-medium uppercase tracking-[0.08em] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:border-white/[0.08] dark:text-foreground/60"
-                      >
-                        <ChevronDown className={`h-3.5 w-3.5 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
-                        Detail
-                      </button>
-                    </div>
+                <div key={plan.plan_id} className="border border-border px-3 py-2 dark:border-white/[0.06]">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span
+                      className={`border px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.08em] ${
+                        plan.is_overtime
+                          ? "border-info/30 bg-info/[0.08] text-info"
+                          : "border-border bg-muted/40 text-muted-foreground dark:border-white/[0.08] dark:bg-white/[0.04]"
+                      }`}
+                    >
+                      {formatPlanMode(plan.is_overtime)}
+                    </span>
+                    <p className="truncate text-[13px] font-medium text-foreground">
+                      {plan.jobdescription ?? countdown.jobTypeName ?? countdown.sectionName ?? "-"}
+                    </p>
                   </div>
-
-                  <div className="grid gap-2 border-t border-border px-3 py-2 sm:grid-cols-4 dark:border-white/[0.06]">
+                  <p className="mt-1 text-[12px] text-muted-foreground">
+                    <span className="font-mono text-[10px] uppercase tracking-[0.08em]">PIC</span>{" "}
+                    <span className="text-foreground">{resolveEmployeeName(plan.employee_id)}</span>
+                    <span className="mx-2 text-muted-foreground/50">·</span>
+                    {plan.task_date}
+                  </p>
+                  <div className="mt-2 grid gap-2 sm:grid-cols-3">
                     <PlanStat label="Target" value={minutesToDuration(numbers.plannedMinutes)} />
                     <PlanStat label="Aktual" value={minutesToDuration(numbers.workedMinutes)} />
                     <PlanStat label="Progress" value={`${numbers.percent}%`} />
-                    <PlanStat label="Sisa" value={minutesToDuration(numbers.remainingMinutes)} />
                   </div>
-                  <div className="h-1 overflow-hidden bg-muted">
+                  <div className="mt-2 h-1 overflow-hidden bg-muted">
                     <div
                       className="h-full bg-primary"
                       style={{ width: `${numbers.percent}%` }}
@@ -253,18 +187,6 @@ export function CountdownJobPlanSection({
                       aria-valuenow={numbers.percent}
                     />
                   </div>
-
-                  {isExpanded ? (
-                    <div className="grid gap-2 border-t border-border px-3 py-2 sm:grid-cols-3 dark:border-white/[0.06]">
-                      <PlanStat label="Jadwal" value={`${minutesToTime(plan.planned_start_minute)} - ${minutesToTime(plan.planned_finish_minute)}`} />
-                      <PlanStat label="Persetujuan" value={formatJobPlanV2Approval(plan.approval_state)} />
-                      <PlanStat label="Pelaksanaan" value={formatJobPlanV2Execution(plan.execution_state)} />
-                      <PlanStat label="Ledger" value={formatJobPlanV2Ledger(plan.ledger_state)} />
-                      <PlanStat label="Sinkronisasi" value={sync} />
-                      <PlanStat label="Nomor rencana" value={plan.plan_id} />
-                      {plan.note ? <PlanStat label="Catatan" value={plan.note} /> : null}
-                    </div>
-                  ) : null}
                 </div>
               );
             })}
@@ -274,7 +196,7 @@ export function CountdownJobPlanSection({
         {canManagePlan && !draft ? (
           <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-2 dark:border-white/[0.06]">
             <p className="text-[12px] text-muted-foreground">
-              Rencana baru tersimpan sebagai DRAFT, lalu diproses lewat alur persetujuan Job Plan.
+              Rencana baru tersimpan sebagai DRAFT dan diproses di modul Job Plan.
             </p>
             <ActionButton variant="primary" onClick={() => openDraft(false)}>
               <Plus className="h-3 w-3" />Buat Job Plan
@@ -335,9 +257,9 @@ export function CountdownJobPlanSection({
                 <CompactInput aria-label="Divisi" value={countdown.divisionName ?? "Tanpa divisi"} disabled />
               </div>
               <div>
-                <FieldLabel required>Estimasi jam</FieldLabel>
+                <FieldLabel required>Target jam</FieldLabel>
                 <CompactInput
-                  aria-label="Estimasi jam"
+                  aria-label="Target jam"
                   placeholder="08:00"
                   value={draft.durationText}
                   onChange={(event) => setDraft({ ...draft, durationText: event.target.value })}
@@ -346,7 +268,6 @@ export function CountdownJobPlanSection({
               <div className="sm:col-span-2">
                 <FieldLabel required>PIC</FieldLabel>
                 <CompactSelect
-                  aria-label="PIC"
                   value={draft.employeeId}
                   disabled={employeeOptions.length === 0}
                   onChange={(event) => setDraft({ ...draft, employeeId: event.target.value })}
@@ -391,7 +312,7 @@ export function CountdownJobPlanSection({
             <div className="mt-3 flex justify-end gap-1.5 border-t border-border pt-3 dark:border-white/[0.06]">
               <ActionButton onClick={closeDraft} disabled={isSaving}>Batal</ActionButton>
               <ActionButton variant="primary" onClick={() => void submitDraft()} disabled={isSaving}>
-                <Plus className="h-3 w-3" />{isSaving ? "Menyimpan…" : `Simpan ${formatPlanMode(draft.isOvertime)}`}
+                <Plus className="h-3 w-3" />{isSaving ? "Menyimpan…" : "Simpan"}
               </ActionButton>
             </div>
           </div>
