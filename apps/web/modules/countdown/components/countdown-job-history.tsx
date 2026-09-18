@@ -166,7 +166,7 @@ function JobHistoryDetailDrawer({ row, onClose, carId, divisionId, employeeNames
                 <dd className="mt-1 text-[13px] text-foreground">{fmtClockMinutes(row.planned_finish_minute)}</dd>
               </div>
               <div className="min-w-0">
-                <dt className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground">Durasi Aktual</dt>
+                <dt className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground">Aktual Jam Kerja</dt>
                 <dd className="mt-1 text-[13px] text-foreground">{fmtMinutes(actualMinutes(row))}</dd>
               </div>
               <div className="min-w-0">
@@ -183,6 +183,48 @@ function JobHistoryDetailDrawer({ row, onClose, carId, divisionId, employeeNames
           </div>
         </div>
       </aside>
+    </div>
+  );
+}
+
+function CreateJobPlanMenu({ jobPlanHref }: { jobPlanHref: (mode: "normal" | "overtime") => string }) {
+  return (
+    <details className="group relative">
+      <summary className="inline-flex h-9 cursor-pointer list-none items-center gap-1.5 border border-success/30 bg-success/10 px-3 font-mono text-[12px] font-medium uppercase tracking-[0.08em] text-success transition-colors hover:bg-success/20">
+        <Plus className="h-3.5 w-3.5" />
+        Buat Job Plan
+        <ChevronDown className="h-3.5 w-3.5 transition-transform group-open:rotate-180" />
+      </summary>
+      <div className="absolute right-0 z-20 mt-1 min-w-44 border border-border bg-card p-1 shadow-xl">
+        <Link
+          href={jobPlanHref("normal")}
+          className="flex items-center gap-2 px-3 py-2 text-sm text-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
+        >
+          <Plus className="h-4 w-4 text-success" />
+          Normal
+        </Link>
+        <Link
+          href={jobPlanHref("overtime")}
+          className="flex items-center gap-2 px-3 py-2 text-sm text-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
+        >
+          <Moon className="h-4 w-4 text-info" />
+          Lembur
+        </Link>
+      </div>
+    </details>
+  );
+}
+
+function HistoryEmptyState({ canCreate, jobPlanHref }: { canCreate: boolean; jobPlanHref: (mode: "normal" | "overtime") => string }) {
+  return (
+    <div className="flex flex-col items-center gap-2 px-3 py-10 text-center">
+      <p className="text-sm font-medium text-foreground">Belum ada pekerjaan untuk panel ini.</p>
+      <p className="text-xs text-muted-foreground">Buat Job Plan pertama dari countdown ini.</p>
+      {canCreate ? (
+        <div className="mt-2">
+          <CreateJobPlanMenu jobPlanHref={jobPlanHref} />
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -209,7 +251,7 @@ export function CountdownJobHistory({
       valueGetter: ({ data }) => (data ? picLabel(data, employeeNames) : "-"),
     },
     { headerName: "Target", field: "planned_work_minutes", minWidth: 90, valueFormatter: ({ value }) => fmtMinutes(Number(value ?? 0)) },
-    { headerName: "Aktual", minWidth: 90, valueGetter: ({ data }) => (data ? fmtMinutes(actualMinutes(data)) : "-") },
+    { headerName: "Aktual Jam Kerja", minWidth: 110, valueGetter: ({ data }) => (data ? fmtMinutes(actualMinutes(data)) : "-") },
     {
       headerName: "Progress",
       minWidth: 90,
@@ -234,30 +276,8 @@ export function CountdownJobHistory({
           <h2 className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground">Riwayat Pekerjaan</h2>
           <span className="border border-border px-2 py-0.5 font-mono text-[11px] text-muted-foreground">{items.length}</span>
         </div>
-        {canCreate ? (
-          <details className="group relative">
-            <summary className="inline-flex h-9 cursor-pointer list-none items-center gap-1.5 border border-success/30 bg-success/10 px-3 font-mono text-[12px] font-medium uppercase tracking-[0.08em] text-success transition-colors hover:bg-success/20">
-              <Plus className="h-3.5 w-3.5" />
-              Buat Job Plan
-              <ChevronDown className="h-3.5 w-3.5 transition-transform group-open:rotate-180" />
-            </summary>
-            <div className="absolute right-0 z-20 mt-1 min-w-44 border border-border bg-card p-1 shadow-xl">
-              <Link
-                href={jobPlanHref("normal")}
-                className="flex items-center gap-2 px-3 py-2 text-sm text-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
-              >
-                <Plus className="h-4 w-4 text-success" />
-                Normal
-              </Link>
-              <Link
-                href={jobPlanHref("overtime")}
-                className="flex items-center gap-2 px-3 py-2 text-sm text-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
-              >
-                <Moon className="h-4 w-4 text-info" />
-                Lembur
-              </Link>
-            </div>
-          </details>
+        {canCreate && items.length > 0 ? (
+          <CreateJobPlanMenu jobPlanHref={jobPlanHref} />
         ) : null}
       </div>
 
@@ -265,6 +285,8 @@ export function CountdownJobHistory({
         <p className="px-3 py-5 text-sm text-muted-foreground">
           Riwayat pekerjaan tidak dapat dimuat: {error}
         </p>
+      ) : items.length === 0 ? (
+        <HistoryEmptyState canCreate={canCreate} jobPlanHref={jobPlanHref} />
       ) : (
         <SmsAgGrid<HistoryRow>
           heightClassName="h-80"
