@@ -71,66 +71,15 @@ export function SectionCard({
   label,
   count,
   children,
-  id,
   className = "",
-  collapsible = false,
-  defaultOpen = true,
 }: {
   label: string;
   count?: number;
   children: ReactNode;
-  id?: string;
   className?: string;
-  /** Bungkus isi kartu dengan <details> supaya halaman panjang bisa diringkas. */
-  collapsible?: boolean;
-  defaultOpen?: boolean;
 }) {
-  const detailsRef = useRef<HTMLDetailsElement>(null);
-
-  // Deep link seperti /countdown/x#actual harus membuka section yang tertutup.
-  useEffect(() => {
-    const element = detailsRef.current;
-    if (!collapsible || !element) return;
-
-    function openForHash() {
-      const hash = window.location.hash.replace(/^#/u, "");
-      const target = hash ? document.getElementById(hash) : null;
-      if (target && element?.contains(target)) element.open = true;
-    }
-
-    openForHash();
-    window.addEventListener("hashchange", openForHash);
-    return () => window.removeEventListener("hashchange", openForHash);
-  }, [collapsible]);
-
-  if (collapsible) {
-    return (
-      <details
-        id={id}
-        ref={detailsRef}
-        open={defaultOpen}
-        className={`group border border-border bg-card shadow-sm dark:border-white/[0.05] dark:bg-card dark:shadow-none ${className}`}
-      >
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 border-b border-border px-3 py-2 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:border-white/[0.05] [&::-webkit-details-marker]:hidden">
-          <span className="flex items-center gap-2">
-            <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform group-open:rotate-180 dark:text-foreground/45" />
-            <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground dark:text-foreground/45">{label}</span>
-          </span>
-          {count !== undefined && (
-            <span className="border border-border px-2 py-0.5 font-mono text-[11px] text-muted-foreground dark:border-white/[0.08] dark:text-foreground/45">
-              {count}
-            </span>
-          )}
-        </summary>
-        <div className="space-y-2 px-3 py-3">
-          {children}
-        </div>
-      </details>
-    );
-  }
-
   return (
-    <section id={id} className={`border border-border bg-card shadow-sm dark:border-white/[0.05] dark:bg-card dark:shadow-none ${className}`}>
+    <section className={`border border-border bg-card shadow-sm dark:border-white/[0.05] dark:bg-card dark:shadow-none ${className}`}>
       <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2 dark:border-white/[0.05]">
         <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground dark:text-foreground/45">{label}</p>
         {count !== undefined && (
@@ -434,7 +383,6 @@ export function CompactDateRangeInput({
   to,
   onChange,
   selectionBehavior = "range-only",
-  displayLabel,
   className = "",
   panelClassName = "",
 }: {
@@ -442,8 +390,6 @@ export function CompactDateRangeInput({
   to: string;
   onChange: (range: { from: string; to: string }) => void;
   selectionBehavior?: "range-only" | "single-or-range";
-  /** Teks pemicu saat belum ada rentang aktif; kalender tetap memakai `from` sebagai jangkar. */
-  displayLabel?: string;
   className?: string;
   panelClassName?: string;
 }) {
@@ -524,7 +470,7 @@ export function CompactDateRangeInput({
         className={`${inputBase} flex items-center justify-between gap-2 pl-8 text-left`}
       >
         <CalendarDays className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground dark:text-foreground/30" />
-        <span className="truncate">{displayLabel ?? rangeLabel}</span>
+        <span className="truncate">{rangeLabel}</span>
         <ChevronDown className={`h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform dark:text-foreground/30 ${open ? "rotate-180" : ""}`} />
       </button>
 

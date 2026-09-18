@@ -1,8 +1,7 @@
 "use client";
 
-import type { AuthUser } from "@smsystem/contracts/auth";
 import type { CountdownBoardRow } from "@smsystem/contracts/countdown";
-import type { GridFilter, GridQueryState } from "@smsystem/contracts/grid";
+import type { GridQueryState } from "@smsystem/contracts/grid";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import {
   createCountdownRecord,
@@ -13,17 +12,15 @@ import {
   uploadCountdownWorkbook,
 } from "@/shared/api/countdown";
 import { SmsAgGrid } from "@/shared/datagrid/sms-ag-grid";
-import { copySelectedGridRows } from "@/shared/datagrid/clipboard";
-import { useDataGridState } from "@/shared/datagrid/use-data-grid-state";
 import {
-  ActionButton, CompactDateRangeInput, CompactInput, CompactSelect, FieldLabel, PageHeader,
+  ActionButton, CompactSelect, FieldLabel, PageHeader,
 } from "@/shared/ui/compact";
 import { parseHHMMToDecimal } from "@/shared/format/time";
 import { CountdownBoardForm, emptyCountdownFormValues, type CountdownFormValues } from "./forms/countdown-board-form";
 import { Camera, Download, FileText, FileUp, Pencil, Plus, RefreshCcw, Trash2, Upload, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useRef, useState, type ClipboardEvent } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSweetAlert } from "@/shared/ui/sweet-alert";
 import { formatCountdownImportIssue, formatCountdownStatus } from "../countdown-copy";
 import {
@@ -31,25 +28,6 @@ import {
   resolveCountdownEntryMode,
   type CountdownEntryMode,
 } from "../countdown-dialog";
-import {
-  buildCountdownDeadlineFilters,
-  buildCountdownProgressFilters,
-  countdownPriorityLabels,
-  countdownPriorityRank,
-  countdownProgressOptions,
-  countdownScopeFilters,
-  countdownSmartViewOptions,
-  countdownStatusOptions,
-  readCountdownDeadlineRange,
-  readCountdownProgressSelection,
-  resolveCountdownFilterValue,
-  resolveCountdownDefaultSmartView,
-  resolveCountdownPriority,
-  resolveCountdownSmartView,
-  shouldHideUnitColumn,
-  todayIso,
-  type CountdownSmartView,
-} from "../countdown-board";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                               */
@@ -59,7 +37,6 @@ interface ReferenceOption {
   label: string;
   value: string;
   code?: string | null;
-  grade?: string | null;
   parentId?: number | null;
   parentName?: string | null;
   parentCode?: string | null;
@@ -76,8 +53,6 @@ interface CountdownReferences {
   panels: ReferenceOption[];
   sections?: ReferenceOption[];
   jobTypes: ReferenceOption[];
-  employees?: ReferenceOption[];
-  grades?: ReferenceOption[];
   taskCategories?: ReferenceOption[];
 }
 
@@ -85,20 +60,12 @@ interface CountdownBoardShellProps {
   rows: CountdownBoardRow[];
   references: CountdownReferences;
   canManage: boolean;
-  user?: AuthUser | null;
-  /** Board yang dirender di dalam satu unit (tab Countdown Unit Workspace). */
-  singleUnitContext?: boolean;
   meta: {
     page: number; limit: number; total: number;
     totalPages: number; hasNext: boolean; hasPrev: boolean;
   };
   state: GridQueryState;
 }
-
-type CountdownBoardViewRow = CountdownBoardRow & {
-  priorityRank: number;
-  priorityLabel: string;
-};
 
 
 function normalizeTextInput(value: string): string | null {
@@ -127,7 +94,7 @@ function buildCountdownColumns(
   canManage: boolean,
   onEdit: (row: CountdownBoardRow) => void,
   onDelete: (row: CountdownBoardRow) => void,
-): ColDef<CountdownBoardViewRow>[] {
+): ColDef<CountdownBoardRow>[] {
   return [
     {
       headerName: "Unit",
@@ -135,55 +102,39 @@ function buildCountdownColumns(
       pinned: "left",
       minWidth: 145,
       flex: 0.8,
-      cellRenderer: ({ value, data }: ICellRendererParams<CountdownBoardViewRow>) => (
-        <Link
-          href={`/countdown/${String(data?.countdownId ?? "")}`}
-          className="text-[12px] font-medium text-foreground hover:text-app-accent-ink"
-        >
-          {String(value ?? "-")}
-        </Link>
+      cellRenderer: ({ value, data }: ICellRendererParams<CountdownBoardRow>) => (
+        <div className="space-y-0.5">
+          <Link
+            href={`/countdown/${String(data?.countdownId ?? "")}`}
+            className="text-[12px] font-medium text-foreground hover:text-app-accent-ink"
+          >
+            {String(value ?? "-")}
+          </Link>
+          <p className="text-[10px] text-foreground/30">{String(data?.carId ?? "-")}</p>
+        </div>
+      ),
+    },
+    { headerName: "Divisi", field: "divisionName", minWidth: 120 },
+    { headerName: "Bagian", field: "sectionName", minWidth: 120 },
+    {
+      headerName: "Panel",
+      field: "panelName",
+      minWidth: 160,
+      flex: 1,
+      cellRenderer: ({ value }: ICellRendererParams<CountdownBoardRow>) => (
+        <div className="space-y-0.5">
+          <p className="text-[12px] text-foreground">{String(value ?? "-")}</p>
+        </div>
       ),
     },
     {
-      headerName: "Status",
-      field: "status",
-      minWidth: 110,
-      valueFormatter: ({ value }) => formatCountdownStatus(String(value ?? "")),
-    },
-    {
-      headerName: "Prioritas",
-      field: "priorityRank",
-      minWidth: 120,
-      cellRenderer: ({ data }: ICellRendererParams<CountdownBoardViewRow>) => {
-        const priority = data?.priorityLabel ?? "Normal";
-        const tone = data?.priorityRank === 0
-          ? "border-destructive/30 bg-destructive/[0.06] text-destructive"
-          : data?.priorityRank === 1
-            ? "border-warning/30 bg-warning/[0.08] text-warning"
-            : "border-border bg-muted/40 text-muted-foreground dark:border-white/[0.08] dark:bg-white/[0.04]";
-        return (
-          <span className={`inline-flex border px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.1em] ${tone}`}>
-            {priority}
-          </span>
-        );
-      },
-    },
-    { headerName: "Divisi", field: "divisionName", minWidth: 120 },
-    { headerName: "Temuan", field: "temuanAwal", minWidth: 200, flex: 1 },
-    {
-      headerName: "Job Description",
+      headerName: "Jobdesc",
       field: "jobTypeName",
       minWidth: 190,
       flex: 1.1,
       valueFormatter: ({ value, data }) => String(value ?? data?.sectionName ?? "-"),
     },
-    { headerName: "Grade", field: "requiredGrade", minWidth: 90, valueFormatter: ({ value }) => String(value ?? "-") },
-    {
-      headerName: "PIC",
-      field: "picPlan",
-      minWidth: 140,
-      valueFormatter: ({ value, data }) => data?.picName ?? (value ? String(value) : "-"),
-    },
+    { headerName: "PIC", field: "picPlan", minWidth: 115 },
     { 
       headerName: "Target",
       field: "targetHoursInitial",
@@ -206,8 +157,28 @@ function buildCountdownColumns(
       cellClass: "text-right tabular-nums",
     },
     { headerName: "Progress", field: "actualProgressPercent", minWidth: 95, valueFormatter: ({ value }) => `${formatNumber(Number(value ?? 0))}%`, cellClass: "text-right" },
-    { headerName: "Mulai", field: "startDate", minWidth: 110 },
     { headerName: "Deadline", field: "deadlineDate", minWidth: 115 },
+    {
+      headerName: "Status",
+      field: "status",
+      minWidth: 105,
+      valueFormatter: ({ value }) => formatCountdownStatus(String(value ?? "")),
+    },
+    {
+      headerName: "Risiko",
+      field: "isOverdue",
+      minWidth: 120,
+      cellRenderer: ({ data }: ICellRendererParams<CountdownBoardRow>) => (
+        <span className={[
+          "inline-flex border px-2 py-0.5 text-[10px] font-mono uppercase tracking-[0.1em]",
+          data?.isOverdue
+            ? "border-destructive/30 bg-destructive/[0.06] text-destructive"
+            : "border-success/20 bg-success/[0.06] text-success",
+        ].join(" ")}>
+          {data?.isOverdue ? "Terlambat" : "Sesuai Jadwal"}
+        </span>
+      ),
+    },
     {
       headerName: "Tindakan",
       colId: "action",
@@ -215,14 +186,14 @@ function buildCountdownColumns(
       pinned: "right",
       sortable: false,
       filter: false,
-      cellRenderer: ({ data: row }: ICellRendererParams<CountdownBoardViewRow>) => row ? (
+      cellRenderer: ({ data: row }: ICellRendererParams<CountdownBoardRow>) => row ? (
         <div className="flex flex-wrap items-center justify-center gap-1">
           <Link href={`/countdown/${String(row.countdownId ?? "")}`}
             className="border border-primary/30 bg-primary/[0.06] px-2 py-0.5 text-[10px] font-mono uppercase tracking-[0.1em] text-app-accent-ink hover:bg-primary/[0.12] transition-colors">
             Detail
           </Link>
           {canManage ? (
-            <Link href={`/countdown/${String(row.countdownId ?? "")}#job-plan`}
+            <Link href={`/job-plan?coreId=${encodeURIComponent(String(row.countdownId ?? ""))}`}
               className="border border-success/25 bg-success/[0.06] px-2 py-0.5 text-[10px] font-mono uppercase tracking-[0.1em] text-success hover:bg-success/[0.12] transition-colors">
               Buat Job Plan
             </Link>
@@ -253,20 +224,11 @@ function buildCountdownColumns(
 /*  Main export                                                         */
 /* ------------------------------------------------------------------ */
 
-export function CountdownBoardShell({
-  rows,
-  references,
-  canManage,
-  meta,
-  state,
-  user,
-  singleUnitContext = false,
-}: CountdownBoardShellProps) {
+export function CountdownBoardShell({ rows, references, canManage, meta, state }: CountdownBoardShellProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const sweetAlert = useSweetAlert();
-  const gridState = useDataGridState(state);
   const [isUploading, setIsUploading] = useState(false);
   const [entryMode, setEntryMode] = useState<CountdownEntryMode>("manual");
   const [uploadUnitId, setUploadUnitId] = useState("");
@@ -284,20 +246,10 @@ export function CountdownBoardShell({
   const [exportStatus, setExportStatus] = useState("");
   const [initialFormValues, setInitialFormValues] = useState<CountdownFormValues | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [searchInput, setSearchInput] = useState(state.search);
-  const [selectedRows, setSelectedRows] = useState<CountdownBoardViewRow[]>([]);
   const saveInFlightRef = useRef(false);
 
-  const activeFilters = state.filters ?? [];
-  const scopeFilters = useMemo(() => countdownScopeFilters(user), [user]);
-  const smartView = resolveCountdownSmartView(
-    searchParams.get("smartView") ?? resolveCountdownDefaultSmartView(scopeFilters),
-  );
-  const hideUnitColumn = shouldHideUnitColumn({ singleUnitContext, smartView, scopeFilters });
-  const deadlineRange = readCountdownDeadlineRange(activeFilters);
-  const progressSelection = readCountdownProgressSelection(activeFilters);
-  const activeUnitFilter = activeFilters.find((filter) => filter.field === "unitId");
-  const activeDivisionFilter = activeFilters.find((filter) => filter.field === "divisionId");
+  const activeUnitFilter = state.filters?.find((f) => f.field === "unitId");
+  const activeDivisionFilter = state.filters?.find((f) => f.field === "divisionId");
 
   const activeUnitId = activeUnitFilter?.value as string | undefined;
   const activeDivisionId = activeDivisionFilter?.value as string | undefined;
@@ -305,18 +257,6 @@ export function CountdownBoardShell({
   // Resolve label untuk display di UI
   const activeUnitLabel = references.units.find((u) => u.value === activeUnitId)?.label ?? null;
   const activeDivisionLabel = references.divisions.find((d) => d.value === activeDivisionId)?.label ?? null;
-  const viewRows = useMemo<CountdownBoardViewRow[]>(() => rows.map((row) => {
-    const priority = resolveCountdownPriority(row);
-    return {
-      ...row,
-      priorityRank: countdownPriorityRank(priority),
-      priorityLabel: countdownPriorityLabels[priority],
-    };
-  }), [rows]);
-
-  useEffect(() => {
-    setSearchInput(state.search);
-  }, [state.search]);
 
   useEffect(() => {
     if (!message) {
@@ -358,8 +298,6 @@ export function CountdownBoardShell({
       deadlineDate: row.deadlineDate ?? "",
       prerequisiteCoreId: row.prerequisiteCoreId ?? "",
       refWoId: row.refWoId ?? "",
-      picPlan: row.picPlan ?? "",
-      requiredGrade: row.requiredGrade ?? "",
       note: row.note ?? "",
       temuanAwal: row.temuanAwal ?? "",
       keterangan: row.keterangan ?? "",
@@ -432,8 +370,6 @@ export function CountdownBoardShell({
       deadlineDate: data.deadlineDate.trim(),
       prerequisiteCoreId: normalizeTextInput(data.prerequisiteCoreId ?? ""),
       refWoId: normalizeTextInput(data.refWoId ?? ""),
-      picPlan: normalizeTextInput(data.picPlan ?? ""),
-      requiredGrade: normalizeTextInput(data.requiredGrade ?? ""),
       note: normalizeTextInput(data.note ?? ""),
       temuanAwal: normalizeTextInput(data.temuanAwal ?? ""),
       keterangan: normalizeTextInput(data.keterangan ?? ""),
@@ -487,63 +423,8 @@ export function CountdownBoardShell({
     router.refresh();
   }
 
-  function applyFilters(nextFilters: GridFilter[], nextSmartView: CountdownSmartView) {
-    gridState.setFilters(nextFilters, { smartView: nextSmartView });
-  }
-
-  function replaceFilterField(field: string, value: string) {
-    const remaining = activeFilters.filter((filter) => filter.field !== field);
-    applyFilters(value ? [...remaining, { field, operator: "eq", value }] : remaining, "custom");
-  }
-
-  // Progress dan deadline memakai beberapa filter sekaligus, jadi satu field dibersihkan lalu diisi ulang.
-  function updateProgress(value: string) {
-    const remaining = activeFilters.filter((filter) => filter.field !== "actualProgressPercent");
-    applyFilters([...remaining, ...buildCountdownProgressFilters(value)], "custom");
-  }
-
-  function updateDeadline(range: { from: string; to: string }) {
-    const remaining = activeFilters.filter((filter) => filter.field !== "deadlineDate");
-    applyFilters([...remaining, ...buildCountdownDeadlineFilters(range.from, range.to)], "custom");
-  }
-
-  function applySmartView(value: CountdownSmartView) {
-    if (value === "custom") {
-      applyFilters(activeFilters, "custom");
-      return;
-    }
-    applyFilters(value === "all" ? [] : scopeFilters, value);
-  }
-
-  function resetFilters() {
-    applyFilters(scopeFilters, scopeFilters.length > 0 ? "scope" : "all");
-  }
-
-  function handleGridCopy(event: ClipboardEvent<HTMLDivElement>) {
-    if (selectedRows.length === 0) return;
-    const text = copySelectedGridRows(selectedRows, [
-      { key: "unitName", header: "Unit" },
-      { key: "status", header: "Status" },
-      { key: "priorityLabel", header: "Prioritas" },
-      { key: "divisionName", header: "Divisi" },
-      { key: "temuanAwal", header: "Temuan" },
-      { key: "jobTypeName", header: "Job Description" },
-      { key: "requiredGrade", header: "Grade" },
-      { key: "picName", header: "PIC" },
-      { key: "targetHoursInitial", header: "Target" },
-      { key: "totalActualHours", header: "Aktual" },
-      { key: "remainingHours", header: "Sisa" },
-      { key: "actualProgressPercent", header: "Progress" },
-      { key: "startDate", header: "Mulai" },
-      { key: "deadlineDate", header: "Deadline" },
-    ]);
-    if (!text) return;
-    event.preventDefault();
-    event.clipboardData.setData("text/plain", text);
-  }
-
   const columns = buildCountdownColumns(canManage, openEditCountdown, handleDeleteCountdown)
-    .filter((column) => !hideUnitColumn || column.field !== "unitName");
+    .filter((column) => !activeUnitId || column.field !== "unitName");
   function pageHref(page: number) {
     const params = new URLSearchParams(searchParams.toString());
     params.set("page", String(page));
@@ -586,185 +467,35 @@ export function CountdownBoardShell({
         }
       />
 
-      {/* ── Smart View + Filter Bar ── */}
-      <section className="border border-border bg-card" aria-label="Filter countdown">
-        <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2">
-          <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">View</span>
-          <CompactSelect
-            aria-label="Smart view"
-            value={smartView}
-            onChange={(event) => applySmartView(event.target.value as CountdownSmartView)}
-            className="w-40"
-          >
-            {countdownSmartViewOptions.map((option) => (
-              <option key={option.value} value={option.value}>{option.label}</option>
-            ))}
-          </CompactSelect>
-          <span className="text-[11px] text-muted-foreground">
-            {smartView === "all"
-              ? "Semua data dalam wewenang akses Anda."
-              : smartView === "custom"
-                ? "Filter manual aktif."
-                : scopeFilters.length > 0
-                  ? `Scope bawaan peran: ${[
-                    ...scopeFilters
-                      .filter((filter) => filter.field === "unitId")
-                      .map((filter) => references.units.find((unit) => unit.value === filter.value)?.label ?? filter.value),
-                    ...scopeFilters
-                      .filter((filter) => filter.field === "divisionId")
-                      .map((filter) => references.divisions.find((division) => division.value === filter.value)?.label ?? filter.value),
-                  ].join(", ")}.`
-                  : "Semua data dalam wewenang akses Anda."}
+      {/* ── Active Filter Indicator ── */}
+      {(activeUnitId || activeDivisionId) ? (
+        <div className="flex flex-wrap items-center gap-2 border border-primary/15 bg-primary/[0.04] px-3 py-2">
+          <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-app-accent-ink/60">
+            Filter aktif:
           </span>
-          <div className="ml-auto flex items-center gap-1.5">
-            <ActionButton onClick={resetFilters}>Reset Filter</ActionButton>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-end gap-2 px-3 py-2">
-          <div className="flex flex-col gap-1">
-            <FieldLabel>Cari</FieldLabel>
-            <CompactInput
-              type="search"
-              value={searchInput}
-              placeholder="Unit, job desc, PIC, temuan"
-              aria-label="Cari countdown"
-              className="w-56"
-              onChange={(event) => setSearchInput(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") gridState.setSearch(searchInput.trim(), { smartView: "custom" });
-              }}
-              onBlur={() => {
-                if (searchInput.trim() !== state.search) gridState.setSearch(searchInput.trim(), { smartView: "custom" });
-              }}
-            />
-          </div>
-
-          <div className="flex flex-col gap-1">
-            <FieldLabel>Status</FieldLabel>
-            <CompactSelect
-              value={resolveCountdownFilterValue(activeFilters, "status")}
-              className="w-36"
-              onChange={(event) => replaceFilterField("status", event.target.value)}
-            >
-              <option value="">Semua status</option>
-              {countdownStatusOptions.map((option) => (
-                <option key={option.value} value={option.value}>{option.label}</option>
-              ))}
-            </CompactSelect>
-          </div>
-
-          <div className="flex flex-col gap-1">
-            <FieldLabel>Divisi</FieldLabel>
-            <CompactSelect
-              value={resolveCountdownFilterValue(activeFilters, "divisionId")}
-              className="w-44"
-              onChange={(event) => replaceFilterField("divisionId", event.target.value)}
-            >
-              <option value="">Semua divisi</option>
-              {references.divisions.map((division) => (
-                <option key={division.value} value={division.value}>{division.label}</option>
-              ))}
-            </CompactSelect>
-          </div>
-
-          <div className="flex flex-col gap-1">
-            <FieldLabel>Unit</FieldLabel>
-            <CompactSelect
-              value={resolveCountdownFilterValue(activeFilters, "unitId")}
-              className="w-44"
-              onChange={(event) => replaceFilterField("unitId", event.target.value)}
-            >
-              <option value="">Semua unit</option>
-              {references.units.map((unit) => (
-                <option key={unit.value} value={unit.value}>{unit.label}</option>
-              ))}
-            </CompactSelect>
-          </div>
-
-          <div className="flex flex-col gap-1">
-            <FieldLabel>PIC</FieldLabel>
-            <CompactSelect
-              value={resolveCountdownFilterValue(activeFilters, "picPlan")}
-              className="w-44"
-              onChange={(event) => replaceFilterField("picPlan", event.target.value)}
-            >
-              <option value="">Semua PIC</option>
-              {(references.employees ?? []).map((employee) => (
-                <option key={employee.value} value={employee.value}>{employee.label}</option>
-              ))}
-            </CompactSelect>
-          </div>
-
-          <div className="flex flex-col gap-1">
-            <FieldLabel>Grade</FieldLabel>
-            <CompactSelect
-              value={resolveCountdownFilterValue(activeFilters, "requiredGrade")}
-              className="w-36"
-              onChange={(event) => replaceFilterField("requiredGrade", event.target.value)}
-            >
-              <option value="">Semua grade</option>
-              {(references.grades ?? []).map((grade) => (
-                <option key={grade.value} value={grade.value}>{grade.label}</option>
-              ))}
-            </CompactSelect>
-          </div>
-
-          <div className="flex flex-col gap-1">
-            <FieldLabel>Deadline</FieldLabel>
-            <div className="flex items-center gap-1">
-              <CompactDateRangeInput
-                from={deadlineRange.from || todayIso()}
-                to={deadlineRange.to}
-                onChange={updateDeadline}
-                selectionBehavior="single-or-range"
-                displayLabel={deadlineRange.from || deadlineRange.to ? undefined : "Semua deadline"}
-                className="w-56"
-              />
-              {deadlineRange.from || deadlineRange.to ? (
-                <button
-                  type="button"
-                  onClick={() => applyFilters(
-                    activeFilters.filter((filter) => filter.field !== "deadlineDate"),
-                    "custom",
-                  )}
-                  className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  Hapus
-                </button>
-              ) : null}
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-1">
-            <FieldLabel>Progress</FieldLabel>
-            <CompactSelect
-              value={progressSelection}
-              className="w-40"
-              onChange={(event) => updateProgress(event.target.value)}
-            >
-              {countdownProgressOptions.map((option) => (
-                <option key={option.value || "all"} value={option.value}>{option.label}</option>
-              ))}
-            </CompactSelect>
-          </div>
-        </div>
-
-        {activeFilters.length > 0 ? (
-          <div className="flex flex-wrap items-center gap-2 border-t border-border px-3 py-2">
-            <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-app-accent-ink/70">Filter aktif:</span>
-            {activeUnitLabel ? (
-              <span className="border border-border bg-muted/40 px-2 py-0.5 font-mono text-[10px] text-foreground/70">Unit: {activeUnitLabel}</span>
-            ) : null}
-            {activeDivisionLabel ? (
-              <span className="border border-border bg-muted/40 px-2 py-0.5 font-mono text-[10px] text-foreground/70">Divisi: {activeDivisionLabel}</span>
-            ) : null}
-            <span className="border border-border bg-muted/40 px-2 py-0.5 font-mono text-[10px] text-foreground/70">
-              {activeFilters.length} filter aktif
+          {activeUnitLabel ? (
+            <span className="border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[10px] font-mono text-foreground/70">
+              Unit: {activeUnitLabel}
             </span>
-          </div>
-        ) : null}
-      </section>
+          ) : null}
+          {activeDivisionLabel ? (
+            <span className="border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[10px] font-mono text-foreground/70">
+              Divisi: {activeDivisionLabel}
+            </span>
+          ) : null}
+          {!activeUnitId ? (
+            <span className="border border-primary/20 bg-primary/[0.06] px-2 py-0.5 text-[10px] font-mono text-app-accent-ink">
+              Filter unit belum dipilih
+            </span>
+          ) : null}
+        </div>
+      ) : (
+        <div className="flex items-center gap-2 border border-white/[0.04] bg-white/[0.02] px-3 py-2">
+          <span className="text-[10px] font-mono text-foreground/25">
+            Belum ada filter tabel aktif
+          </span>
+        </div>
+      )}
 
       {sweetAlert.alertElement}
 
@@ -882,7 +613,7 @@ export function CountdownBoardShell({
             </p>
           </div>
           <div className="flex items-center gap-2 text-[12px] text-muted-foreground">
-            <span>Pilih baris untuk menyalin (Ctrl/Cmd+C), klik dua kali untuk membuka detail.</span>
+            <span>Gunakan filter kolom AG Grid untuk pencarian cepat di halaman ini.</span>
             <Link
               aria-disabled={!meta.hasPrev}
               href={meta.hasPrev ? pageHref(meta.page - 1) : "#"}
@@ -899,23 +630,13 @@ export function CountdownBoardShell({
             </Link>
           </div>
         </div>
-        <div onCopyCapture={handleGridCopy}>
-        <SmsAgGrid<CountdownBoardViewRow>
-          heightClassName="h-[calc(100svh-360px)] min-h-[26rem]"
-          rowData={viewRows}
+        <SmsAgGrid<CountdownBoardRow>
+          heightClassName="h-[calc(100vh-310px)] min-h-[28rem]"
+          rowData={rows}
           columnDefs={columns}
-          rowSelection="multiple"
-          enableCellTextSelection
-          onSelectionChanged={(event) => {
-            setSelectedRows(event.api.getSelectedRows());
-          }}
-          onRowDoubleClicked={(event) => {
-            if (event.data) router.push(`/countdown/${encodeURIComponent(String(event.data.countdownId))}`);
-          }}
           getRowId={(params) => params.data.countdownId}
           emptyMessage="Belum ada countdown yang sesuai pencarian saat ini."
         />
-        </div>
       </section>
     </div>
   );

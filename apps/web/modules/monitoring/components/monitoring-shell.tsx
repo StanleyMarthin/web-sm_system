@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { AuthUser } from "@smsystem/contracts/auth";
-import type { JobPlanV2ApprovalState } from "@smsystem/contracts/job-plan-v2";
 import { permissionCodes } from "@smsystem/permissions";
 import type {
   MonitoringQuery,
@@ -20,20 +19,6 @@ import { SmsAgGrid } from "@/shared/datagrid/sms-ag-grid";
 import { DataGridStatusBadge } from "@/shared/datagrid/status-badge";
 import { ActionButton, CompactDateInput, CompactDateRangeInput, EmptyRow, MetricBar, PageHeader, SectionCard } from "@/shared/ui/compact";
 import { useSweetAlert } from "@/shared/ui/sweet-alert";
-import {
-  addIsoDays,
-  approvalStageOptions,
-  filterApprovalQueueRows,
-  filterExecutionRows,
-  isReviewState,
-  monitoringBoardViewOptions,
-  resolveApprovalDateWindow,
-  resolveDefaultApprovalStage,
-  resolveMonitoringBoardView,
-  summarizeExecutionSelection,
-  type MonitoringBoardView,
-} from "../monitoring-views";
-import { parseTimeToMinutes } from "@/modules/job-plan/job-plan-planner";
 
 interface MonitoringShellProps {
   activeMode: "all" | "normal" | "overtime";
@@ -54,6 +39,16 @@ interface MonitoringShellProps {
   noStartRows: MonitoringTaskRecord[];
   noSubmitRows: MonitoringTaskRecord[];
   user: AuthUser;
+}
+
+function addDaysIso(baseDate: string, days: number): string {
+  const [year, month, day] = baseDate.split("-").map((value) => Number.parseInt(value, 10));
+  const nextDate = new Date(Date.UTC(year, (month || 1) - 1, day || 1));
+  nextDate.setUTCDate(nextDate.getUTCDate() + days);
+  const nextYear = nextDate.getUTCFullYear();
+  const nextMonth = String(nextDate.getUTCMonth() + 1).padStart(2, "0");
+  const nextDay = String(nextDate.getUTCDate()).padStart(2, "0");
+  return `${nextYear}-${nextMonth}-${nextDay}`;
 }
 
 /* ------------------------------------------------------------------ */
@@ -219,6 +214,10 @@ function riskLabel(row: MonitoringTaskRecord) {
   return "Normal";
 }
 
+function isReviewState(value: string | null | undefined) {
+  return value === "DIVISION_REVIEW" || value === "UNIT_REVIEW" || value === "MANAGEMENT_REVIEW";
+}
+
 function sameApprovalStage(rows: MonitoringTaskRecord[]) {
   const first = rows[0]?.approvalState;
   return Boolean(first) && rows.every((row) => row.approvalState === first);
@@ -258,18 +257,7 @@ function RelatedActivityField({ label, value, status }: { label: string; value?:
   );
 }
 
-function MonitoringDetailDrawer({
-  row,
-  onClose,
-  actions,
-  variant = "default",
-}: {
-  row: MonitoringTaskRecord;
-  onClose: () => void;
-  actions?: React.ReactNode;
-  /** Execution Monitoring memakai ringkasan kerja/eksekusi/kualitas/validasi. */
-  variant?: "default" | "execution";
-}) {
+function MonitoringDetailDrawer({ row, onClose }: { row: MonitoringTaskRecord; onClose: () => void }) {
   const approval = optionValue(approvalStateOptions, row.approvalState);
   const execution = optionValue(executionStateOptions, row.executionState);
   const visibleStatus = humanMonitoringStatus(row);
@@ -292,57 +280,11 @@ function MonitoringDetailDrawer({
           </button>
         </div>
 
-        {actions ? (
-          <div className="flex flex-wrap items-center justify-end gap-1.5 border-b border-border bg-muted/20 px-4 py-2 dark:border-white/[0.08]">
-            {actions}
-          </div>
-        ) : null}
-
         <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
-          {variant === "execution" ? (
-            <>
-              <DetailSection title="Work Summary">
-                <DetailField label="Unit" value={row.unitName} />
-                <DetailField label="Panel" value={textValue(row.panelName)} />
-                <DetailField label="Job Description" value={textValue(row.jobDescription || row.masterJobName)} />
-                <DetailField label="PIC" value={textValue(row.employeeName ?? row.employeeId)} />
-                <DetailField label="Target" value={hoursValue(row.targetTotalHours ?? row.countdownTargetHours)} />
-                <DetailField label="Deadline" value={row.countdownDeadline ? formatMonitoringDate(row.countdownDeadline) : "-"} />
-              </DetailSection>
-
-              <DetailSection title="Execution">
-                <DetailField label="Actual Start" value={timeValue(row.actualStartTime ?? row.latestStartTime)} />
-                <DetailField label="Actual Finish" value={timeValue(row.actualFinishTime ?? row.latestFinishTime)} />
-                <DetailField label="Actual Minutes" value={minutesValue(row.actualMinutes)} />
-                <DetailField label="Progress" value={`${row.progressPercent.toFixed(0)}%`} />
-              </DetailSection>
-
-              <DetailSection title="Quality">
-                <DetailField label="QC Status" value={<DataGridStatusBadge value={optionValue(qcStatusOptions, row.qcStatus)} />} />
-              </DetailSection>
-
-              <DetailSection title="Validation">
-                <DetailField label="Ledger" value={<DataGridStatusBadge value={optionValue(ledgerStateOptions, row.ledgerState)} />} />
-                <DetailField label="Validation Status" value={optionValue(executionStateOptions, row.executionState)} />
-              </DetailSection>
-
-              <DetailSection title="Technical">
-                <DetailField label="Plan ID" value={textValue(row.planId)} />
-                <DetailField label="Countdown ID" value={textValue(row.countdownId)} />
-                <DetailField label="Version" value={textValue(row.version)} />
-                <DetailField label="Sync" value={<DataGridStatusBadge value={optionValue(syncStatusOptions, row.syncStatus)} />} />
-                <DetailField label="Current Approval" value={<DataGridStatusBadge value={optionValue(approvalStateOptions, row.approvalState)} />} />
-              </DetailSection>
-            </>
-          ) : null}
-
-          {variant === "default" ? (
-            <>
           <DetailSection title="Unit Information">
             <DetailField label="Unit" value={row.unitName} />
             <DetailField label="Customer" value={textValue(row.customerName)} />
             <DetailField label="Division" value={textValue(row.divisionName)} />
-            <DetailField label="PIC" value={textValue(row.employeeName ?? row.employeeId)} />
             <DetailField label="Master Panel ID" value={textValue(row.masterPanelId)} />
           </DetailSection>
 
@@ -411,8 +353,6 @@ function MonitoringDetailDrawer({
             <RelatedActivityField label="WO" value="Belum tersedia di snapshot monitoring" />
             <RelatedActivityField label="WOV" value="Belum tersedia di snapshot monitoring" />
           </section>
-            </>
-          ) : null}
         </div>
       </aside>
     </div>
@@ -459,142 +399,6 @@ function RejectReasonDialog({
   );
 }
 
-interface CorrectionDraft {
-  jobDescription: string;
-  employeeId: string;
-  taskDate: string;
-  startTime: string;
-  durationMinutes: string;
-  note: string;
-  reason: string;
-}
-
-function createCorrectionDraft(row: MonitoringTaskRecord): CorrectionDraft {
-  const plannedHours = row.targetDailyHours ?? row.targetTotalHours ?? null;
-  return {
-    jobDescription: row.jobDescription ?? "",
-    employeeId: row.employeeId ?? "",
-    taskDate: row.taskDate ?? "",
-    startTime: row.planStartTime ?? "",
-    durationMinutes: plannedHours === null ? "" : String(Math.round(plannedHours * 60)),
-    note: "",
-    reason: "",
-  };
-}
-
-function CorrectionDialog({
-  row,
-  references,
-  isSaving,
-  error,
-  onCancel,
-  onSubmit,
-}: {
-  row: MonitoringTaskRecord;
-  references: MonitoringReferences;
-  isSaving: boolean;
-  error: string | null;
-  onCancel: () => void;
-  onSubmit: (draft: CorrectionDraft) => void;
-}) {
-  const [draft, setDraft] = useState<CorrectionDraft>(() => createCorrectionDraft(row));
-  const stageLabel = optionValue(approvalStateOptions, row.approvalState);
-  const canSubmit = Boolean(draft.reason.trim()) && Boolean(draft.jobDescription.trim()) && !isSaving;
-
-  return (
-    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/70 p-4 backdrop-blur-[1px]">
-      <div role="dialog" aria-modal="true" aria-labelledby="monitoring-correct-title" className="max-h-[calc(100svh-2rem)] w-full max-w-lg overflow-y-auto border border-border bg-card p-4 shadow-2xl dark:border-white/[0.08]">
-        <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground">Correct Job Plan</p>
-        <h2 id="monitoring-correct-title" className="mt-1 text-[16px] font-semibold text-foreground">
-          Koreksi {row.unitName} · {row.jobDescription}
-        </h2>
-        <p className="mt-1 text-[12px] text-muted-foreground">Stage: {stageLabel}. Perbaikan tetap lewat alur approval Job Plan.</p>
-
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          <div className="sm:col-span-2">
-            <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground">Jobdesc</p>
-            <input
-              value={draft.jobDescription}
-              onChange={(event) => setDraft({ ...draft, jobDescription: event.target.value })}
-              className="mt-1 h-9 w-full border border-border bg-background px-3 text-[13px] text-foreground outline-none focus:border-primary/50"
-            />
-          </div>
-          <div>
-            <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground">PIC</p>
-            <select
-              value={draft.employeeId}
-              onChange={(event) => setDraft({ ...draft, employeeId: event.target.value })}
-              className="mt-1 h-9 w-full border border-border bg-background px-2 text-[13px] text-foreground outline-none"
-            >
-              <option value="">Belum ditentukan</option>
-              {references.employees.map((option) => (
-                <option key={option.value} value={String(option.value)}>{option.label}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground">Tanggal</p>
-            <input
-              type="date"
-              value={draft.taskDate}
-              onChange={(event) => setDraft({ ...draft, taskDate: event.target.value })}
-              className="mt-1 h-9 w-full border border-border bg-background px-3 text-[13px] text-foreground outline-none focus:border-primary/50"
-            />
-          </div>
-          <div>
-            <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground">Jam mulai</p>
-            <input
-              type="time"
-              value={draft.startTime}
-              onChange={(event) => setDraft({ ...draft, startTime: event.target.value })}
-              className="mt-1 h-9 w-full border border-border bg-background px-3 text-[13px] text-foreground outline-none focus:border-primary/50"
-            />
-          </div>
-          <div>
-            <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground">Durasi (menit)</p>
-            <input
-              type="number"
-              min={1}
-              max={1440}
-              value={draft.durationMinutes}
-              onChange={(event) => setDraft({ ...draft, durationMinutes: event.target.value })}
-              className="mt-1 h-9 w-full border border-border bg-background px-3 text-[13px] text-foreground outline-none focus:border-primary/50"
-            />
-          </div>
-          <div className="sm:col-span-2">
-            <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground">Catatan</p>
-            <textarea
-              value={draft.note}
-              onChange={(event) => setDraft({ ...draft, note: event.target.value })}
-              rows={2}
-              className="mt-1 w-full border border-border bg-background p-3 text-[13px] text-foreground outline-none focus:border-primary/50"
-            />
-          </div>
-          <div className="sm:col-span-2">
-            <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground">Alasan koreksi (wajib)</p>
-            <textarea
-              value={draft.reason}
-              onChange={(event) => setDraft({ ...draft, reason: event.target.value })}
-              rows={2}
-              className="mt-1 w-full border border-border bg-background p-3 text-[13px] text-foreground outline-none focus:border-primary/50"
-              placeholder="Contoh: durasi tertukar dengan plan lembur"
-            />
-          </div>
-        </div>
-
-        {error ? <p className="mt-2 text-[12px] text-destructive">{error}</p> : null}
-
-        <div className="mt-4 flex justify-end gap-2 border-t border-border pt-3">
-          <ActionButton onClick={onCancel} disabled={isSaving}>Batal</ActionButton>
-          <ActionButton variant="primary" onClick={() => onSubmit(draft)} disabled={!canSubmit}>
-            {isSaving ? "Menyimpan..." : "Simpan Koreksi"}
-          </ActionButton>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function parseUrlFilters(searchParams: URLSearchParams) {
   return searchParams
     .getAll("filter")
@@ -624,16 +428,7 @@ export function MonitoringShell({
   const [selectedRows, setSelectedRows] = useState<MonitoringTaskRecord[]>([]);
   const [isBulkApproving, setIsBulkApproving] = useState(false);
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
-  const [rejectTargets, setRejectTargets] = useState<MonitoringTaskRecord[]>([]);
-  const [correctionRow, setCorrectionRow] = useState<MonitoringTaskRecord | null>(null);
   const canApprove = user.permissions.includes(permissionCodes.reviewTask);
-  const boardView = resolveMonitoringBoardView(searchParams.get("board"));
-  const defaultApprovalStage = useMemo(
-    () => resolveDefaultApprovalStage(user.roleName, user.scope.canViewAllUnits),
-    [user.roleName, user.scope.canViewAllUnits],
-  );
-  const [stageFilter, setStageFilter] = useState<string>(defaultApprovalStage ?? "");
-  const [correctionError, setCorrectionError] = useState<string | null>(null);
   const activeDateTo = state.dateTo ?? state.date;
   const isRangeMode = Boolean(state.dateTo && state.dateTo !== state.date);
   const defaultFilters = useMemo(() => roleDefaultFilters(user), [user]);
@@ -650,7 +445,7 @@ export function MonitoringShell({
       ? optionLabel(references.divisions, filter.value)
       : optionLabel(references.units, filter.value)).join(", ");
 
-  const operationalColumns = useMemo<ColDef<MonitoringTaskRecord>[]>(
+  const columns = useMemo<ColDef<MonitoringTaskRecord>[]>(
     () => [
       {
         headerName: "",
@@ -723,213 +518,6 @@ export function MonitoringShell({
     [],
   );
 
-  // Fungsi aksi dideklarasikan (hoisted) sehingga kolom bisa merujuk handler yang sama.
-  const approvalColumns: ColDef<MonitoringTaskRecord>[] = [
-    {
-      headerName: "",
-      width: 44,
-      pinned: "left",
-      sortable: false,
-      filter: false,
-      checkboxSelection: true,
-      headerCheckboxSelection: true,
-    },
-    { headerName: "Unit", field: "unitName", pinned: "left", minWidth: 140, flex: 0.8 },
-    { headerName: "Panel", field: "panelName", minWidth: 160, flex: 1 },
-    { headerName: "Job Description", field: "jobDescription", minWidth: 200, flex: 1.2 },
-    { headerName: "Divisi", field: "divisionName", minWidth: 120 },
-    { headerName: "PIC", field: "employeeName", minWidth: 150 },
-    {
-      headerName: "Target Jam",
-      field: "targetTotalHours",
-      minWidth: 100,
-      cellClass: "text-right tabular-nums",
-      valueFormatter: ({ value, data }) => {
-        const planned = value ?? data?.targetDailyHours ?? null;
-        return planned === null ? "-" : `${Number(planned).toFixed(1)} jam`;
-      },
-    },
-    {
-      headerName: "Stage",
-      field: "approvalState",
-      minWidth: 150,
-      cellRenderer: ({ value }: ICellRendererParams<MonitoringTaskRecord>) => {
-        const state = String(value ?? "");
-        const tone = state === "MANAGEMENT_REVIEW"
-          ? "border-warning/25 bg-warning/15 text-warning"
-          : state === "UNIT_REVIEW"
-            ? "border-info/25 bg-info/15 text-info"
-            : "border-primary/25 bg-primary/10 text-app-accent-ink";
-        return (
-          <span className={`inline-flex border px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.08em] ${tone}`}>
-            {optionValue(approvalStateOptions, state)}
-          </span>
-        );
-      },
-    },
-    {
-      headerName: "Tanggal",
-      field: "taskDate",
-      minWidth: 135,
-      valueFormatter: ({ value }) => formatMonitoringDate(String(value ?? "")),
-    },
-    {
-      headerName: "Tindakan",
-      colId: "action",
-      pinned: "right",
-      minWidth: 235,
-      sortable: false,
-      filter: false,
-      cellRenderer: ({ data }: ICellRendererParams<MonitoringTaskRecord>) => {
-        if (!data) return null;
-        const disabled = !canApprove || !data.version || isBulkApproving;
-        return (
-          <div className="flex flex-wrap items-center justify-center gap-1">
-            <button
-              type="button"
-              onClick={() => setSelectedRow(data)}
-              className="border border-border px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground hover:bg-muted hover:text-foreground"
-            >
-              Review
-            </button>
-            <button
-              type="button"
-              disabled={disabled}
-              onClick={() => void approveRow(data)}
-              className="border border-success/30 px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.08em] text-success hover:bg-success/10 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              Approve
-            </button>
-            <button
-              type="button"
-              disabled={disabled}
-              onClick={() => openRejectDialog([data])}
-              className="border border-destructive/30 px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.08em] text-destructive hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              Reject
-            </button>
-            <button
-              type="button"
-              disabled={disabled}
-              onClick={() => openCorrection(data)}
-              className="border border-border px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.08em] text-foreground/70 hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              Correct
-            </button>
-          </div>
-        );
-      },
-    },
-  ];
-
-  const viewRows = useMemo(() => {
-    if (boardView === "approval") {
-      return filterApprovalQueueRows(filteredRows, (stageFilter || null) as JobPlanV2ApprovalState | null);
-    }
-    if (boardView === "execution") return filterExecutionRows(filteredRows);
-    return filteredRows;
-  }, [boardView, filteredRows, stageFilter]);
-
-  // Execution Monitoring: kolom operasional tanpa field teknis (planId/coreId/version/ledger/sync).
-  const executionColumns = useMemo<ColDef<MonitoringTaskRecord>[]>(() => [
-    {
-      headerName: "",
-      width: 44,
-      pinned: "left",
-      sortable: false,
-      filter: false,
-      checkboxSelection: true,
-      headerCheckboxSelection: true,
-    },
-    {
-      headerName: "Unit",
-      field: "unitName",
-      pinned: "left",
-      minWidth: 140,
-      cellRenderer: ({ value, data }: ICellRendererParams<MonitoringTaskRecord>) => (
-        data ? <Link href={`/units/${String(data.carId)}`} className="text-app-accent-ink hover:text-app-accent-ink">{String(value ?? "-")}</Link> : "-"
-      ),
-    },
-    { headerName: "Divisi", field: "divisionName", minWidth: 120 },
-    { headerName: "Panel", field: "panelName", minWidth: 150, flex: 0.7 },
-    { headerName: "Job Description", field: "jobDescription", minWidth: 190, flex: 1, valueFormatter: ({ data }) => String(data?.jobDescription || data?.masterJobName || "-") },
-    { headerName: "PIC", field: "employeeName", minWidth: 135 },
-    {
-      headerName: "Target Jam",
-      field: "targetTotalHours",
-      minWidth: 105,
-      type: "rightAligned",
-      valueFormatter: ({ data }) => hoursValue(data?.targetTotalHours ?? data?.countdownTargetHours),
-    },
-    {
-      headerName: "Aktual",
-      field: "totalActualHours",
-      minWidth: 95,
-      type: "rightAligned",
-      valueFormatter: ({ value }) => hoursValue(value == null ? null : Number(value)),
-    },
-    {
-      headerName: "Sisa",
-      field: "remainingHours",
-      minWidth: 95,
-      type: "rightAligned",
-      valueFormatter: ({ data }) => hoursValue(data?.remainingHours ?? data?.countdownRemainingHours),
-    },
-    {
-      headerName: "Progress %",
-      field: "progressPercent",
-      minWidth: 110,
-      type: "rightAligned",
-      valueFormatter: ({ value }) => `${Number(value ?? 0).toFixed(0)}%`,
-    },
-    {
-      headerName: "Status Eksekusi",
-      field: "executionStatus",
-      minWidth: 140,
-      cellRenderer: ({ data }: ICellRendererParams<MonitoringTaskRecord>) => (
-        data ? <DataGridStatusBadge value={humanMonitoringStatus(data)} /> : null
-      ),
-    },
-    {
-      headerName: "Deadline",
-      field: "countdownDeadline",
-      minWidth: 125,
-      valueFormatter: ({ value }) => (value ? formatMonitoringDate(String(value)) : "-"),
-    },
-    {
-      headerName: "Risiko",
-      colId: "risk",
-      minWidth: 115,
-      valueGetter: ({ data }) => (data ? riskLabel(data) : ""),
-      cellRenderer: ({ value }: ICellRendererParams<MonitoringTaskRecord>) => <DataGridStatusBadge value={String(value ?? "Normal")} />,
-    },
-    {
-      headerName: "Tindakan",
-      pinned: "right",
-      width: 105,
-      sortable: false,
-      filter: false,
-      cellRenderer: ({ data }: ICellRendererParams<MonitoringTaskRecord>) => data ? (
-        <button
-          type="button"
-          onClick={(event) => {
-            event.stopPropagation();
-            setSelectedRow(data);
-          }}
-          className="h-7 border border-border px-2 text-[12px] text-muted-foreground hover:bg-muted hover:text-foreground"
-        >
-          Detail
-        </button>
-      ) : null,
-    },
-  ], []);
-
-  const columns = boardView === "approval"
-    ? approvalColumns
-    : boardView === "execution"
-      ? executionColumns
-      : operationalColumns;
-
   function pushDate(value: string) {
     const p = new URLSearchParams(searchParams.toString());
     p.set("date", value);
@@ -941,33 +529,6 @@ export function MonitoringShell({
     p.set("page", "1");
     router.push(`${pathname}?${p.toString()}`);
   }
-
-  function pushBoard(value: MonitoringBoardView) {
-    const p = new URLSearchParams(searchParams.toString());
-    if (value === "operational") {
-      p.delete("board");
-    } else {
-      p.set("board", value);
-    }
-    p.set("page", "1");
-    router.push(`${pathname}?${p.toString()}`);
-  }
-
-  // Approval Queue tidak terikat "hari ini": tanpa filter tanggal eksplisit,
-  // rentang dilebarkan otomatis sekali (API monitoring berbasis rentang).
-  useEffect(() => {
-    if (boardView !== "approval") return;
-    const window = resolveApprovalDateWindow(
-      state.date,
-      Boolean(searchParams.get("date") || searchParams.get("dateTo")),
-    );
-    if (!window) return;
-
-    const p = new URLSearchParams(searchParams.toString());
-    p.set("date", window.from);
-    p.set("dateTo", window.to);
-    router.replace(`${pathname}?${p.toString()}`);
-  }, [boardView, pathname, router, searchParams, state.date]);
 
   function pushDateRange(range: { from: string; to: string }) {
     const p = new URLSearchParams(searchParams.toString());
@@ -995,7 +556,7 @@ export function MonitoringShell({
   function pushDateMode(value: "daily" | "range") {
     const p = new URLSearchParams(searchParams.toString());
     if (value === "range") {
-      p.set("dateTo", state.dateTo && state.dateTo !== state.date ? state.dateTo : addIsoDays(state.date, 1));
+      p.set("dateTo", state.dateTo && state.dateTo !== state.date ? state.dateTo : addDaysIso(state.date, 1));
     } else {
       p.delete("dateTo");
     }
@@ -1047,23 +608,16 @@ export function MonitoringShell({
   }
 
   const approvableSelectedRows = selectedRows.filter((row) => row.planId && row.version && isReviewState(row.approvalState));
-  const executionSelection = summarizeExecutionSelection(selectedRows);
   const selectedApprovalStage = approvableSelectedRows[0]?.approvalState ?? null;
   const selectedStageLabel = optionValue(approvalStateOptions, selectedApprovalStage);
   const canBulkReviewSelected = approvableSelectedRows.length > 0 && sameApprovalStage(approvableSelectedRows);
 
-  // Dipakai aksi per baris maupun bulk; mutation tetap Job Plan V2, bukan tulis DB langsung.
-  async function runReviewRows(
-    targets: MonitoringTaskRecord[],
-    action: "approve" | "reject",
-    rejectReason?: string,
-  ) {
-    const reviewable = targets.filter((row) => row.planId && row.version && isReviewState(row.approvalState));
-    if (!canApprove || reviewable.length === 0 || isBulkApproving) return;
+  async function runBulkReview(action: "approve" | "reject", rejectReason?: string) {
+    if (!canApprove || !canBulkReviewSelected || isBulkApproving) return;
 
     setIsBulkApproving(true);
     const failures: string[] = [];
-    for (const row of reviewable) {
+    for (const row of approvableSelectedRows) {
       const result = await mutateJobPlanV2Approval(row.planId, {
         action,
         userId: user.employeeId,
@@ -1075,78 +629,13 @@ export function MonitoringShell({
     }
     setIsBulkApproving(false);
     setRejectDialogOpen(false);
-    setRejectTargets([]);
     setSelectedRows([]);
     router.refresh();
-
     if (failures.length > 0) {
       sweetAlert.notifyError("Sebagian approval gagal", failures.join("\n"));
       return;
     }
-    sweetAlert.notifySuccess("Approval tersimpan", `${reviewable.length} job plan berhasil diproses.`);
-  }
-
-  async function approveRow(row: MonitoringTaskRecord) {
-    const confirmed = await sweetAlert.confirm({
-      title: "Approve job plan ini?",
-      description: `${row.unitName} · ${row.jobDescription} (${optionValue(approvalStateOptions, row.approvalState)})`,
-      tone: "info",
-      confirmLabel: "Approve",
-    });
-    if (!confirmed) return;
-    await runReviewRows([row], "approve");
-  }
-
-  function openRejectDialog(targets: MonitoringTaskRecord[]) {
-    setRejectTargets(targets);
-    setRejectDialogOpen(true);
-  }
-
-  function openCorrection(row: MonitoringTaskRecord) {
-    setCorrectionError(null);
-    setCorrectionRow(row);
-  }
-
-  async function submitCorrection(draft: CorrectionDraft) {
-    if (!correctionRow?.planId || !correctionRow.version) return;
-
-    const start = draft.startTime ? parseTimeToMinutes(draft.startTime) : { value: null, error: null };
-    if (start.error) {
-      setCorrectionError(start.error);
-      return;
-    }
-    const durationMinutes = draft.durationMinutes ? Number(draft.durationMinutes) : null;
-    if (durationMinutes !== null && (!Number.isFinite(durationMinutes) || durationMinutes <= 0)) {
-      setCorrectionError("Durasi harus lebih dari 0 menit.");
-      return;
-    }
-
-    setIsBulkApproving(true);
-    setCorrectionError(null);
-    const result = await mutateJobPlanV2Approval(correctionRow.planId, {
-      action: "correct",
-      userId: user.employeeId,
-      commandId: createJobPlanV2CommandId("monitoring-correct"),
-      expectedVersion: correctionRow.version,
-      employeeId: draft.employeeId || undefined,
-      taskDate: draft.taskDate || undefined,
-      plannedStartMinute: start.value ?? undefined,
-      plannedWorkMinutes: durationMinutes ?? undefined,
-      jobDescription: draft.jobDescription.trim() || undefined,
-      note: draft.note.trim() || undefined,
-      reason: draft.reason.trim() || undefined,
-    });
-    setIsBulkApproving(false);
-
-    if (!result.success) {
-      setCorrectionError(result.message);
-      return;
-    }
-
-    const corrected = correctionRow;
-    setCorrectionRow(null);
-    sweetAlert.notifySuccess("Koreksi tersimpan", `${corrected.unitName} · ${corrected.jobDescription} diperbarui.`);
-    router.refresh();
+    sweetAlert.notifySuccess("Approval tersimpan", `${approvableSelectedRows.length} job plan berhasil diproses.`);
   }
 
   async function bulkApprove() {
@@ -1158,7 +647,7 @@ export function MonitoringShell({
       confirmLabel: "Approve",
     });
     if (!confirmed) return;
-    await runReviewRows(approvableSelectedRows, "approve");
+    await runBulkReview("approve");
   }
 
   return (
@@ -1263,32 +752,12 @@ export function MonitoringShell({
 
       <div className="flex flex-wrap items-center gap-2 border border-border bg-card px-3 py-2">
         <label className="flex items-center gap-2 text-[12px] text-muted-foreground">
-          <span className="font-mono text-[10px] uppercase tracking-[0.12em]">Smart View</span>
-          <select value={boardView} onChange={(event) => pushBoard(event.target.value as MonitoringBoardView)} className="h-8 border border-border bg-background px-2 text-[12px] text-foreground outline-none">
-            {monitoringBoardViewOptions.map((option) => (
-              <option key={option.value} value={option.value}>{option.label}</option>
-            ))}
-          </select>
-        </label>
-        {boardView === "approval" ? (
-          <label className="flex items-center gap-2 text-[12px] text-muted-foreground">
-            Stage
-            <select value={stageFilter} onChange={(event) => setStageFilter(event.target.value)} className="h-8 border border-border bg-background px-2 text-[12px] text-foreground outline-none">
-              <option value="">Semua stage</option>
-              {approvalStageOptions.map((option) => (
-                <option key={option.value} value={option.value}>{option.label}</option>
-              ))}
-            </select>
-          </label>
-        ) : null}
-        <label className="flex items-center gap-2 text-[12px] text-muted-foreground">
-          Scope
+          Smart View
           <select value={smartView} onChange={(event) => setSmartView(event.target.value as "scope" | "custom")} className="h-8 border border-border bg-background px-2 text-[12px] text-foreground outline-none">
             <option value="scope">Default My Scope</option>
             <option value="custom">Custom</option>
           </select>
         </label>
-        <span className="mx-1 h-5 w-px bg-border" />
         <select value={filterValue(activeFilters, "divisionId")} onChange={(event) => updateFilter("divisionId", event.target.value)} className="h-8 border border-border bg-background px-2 text-[12px] text-foreground outline-none">
           <option value="">Semua Divisi</option>
           {references.divisions.map((option) => <option key={option.value} value={String(option.value)}>{option.label}</option>)}
@@ -1308,17 +777,17 @@ export function MonitoringShell({
         <button type="button" onClick={resetFilters} className="inline-flex h-8 items-center gap-1 border border-border px-2 text-[12px] text-muted-foreground hover:bg-muted hover:text-foreground">
           <RefreshCcw className="h-3 w-3" /> Reset Filter
         </button>
-        {canApprove && boardView !== "execution" ? (
+        {canApprove ? (
           <>
             <span className="mx-1 h-5 w-px bg-border" />
             <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground">
               Selected: {selectedRows.length}
             </span>
             <button type="button" disabled={!canBulkReviewSelected || isBulkApproving} onClick={() => void bulkApprove()} className="inline-flex h-8 items-center gap-1 border border-success/30 px-2 text-[12px] text-success hover:bg-success/10 disabled:cursor-not-allowed disabled:opacity-40">
-              Approve Selected {approvableSelectedRows.length > 0 ? `(${approvableSelectedRows.length})` : ""}
+              Approve {approvableSelectedRows.length > 0 ? `(${approvableSelectedRows.length})` : ""}
             </button>
-            <button type="button" disabled={!canBulkReviewSelected || isBulkApproving} onClick={() => openRejectDialog(approvableSelectedRows)} className="inline-flex h-8 items-center gap-1 border border-destructive/30 px-2 text-[12px] text-destructive hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-40">
-              Reject Selected
+            <button type="button" disabled={!canBulkReviewSelected || isBulkApproving} onClick={() => setRejectDialogOpen(true)} className="inline-flex h-8 items-center gap-1 border border-destructive/30 px-2 text-[12px] text-destructive hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-40">
+              Reject
             </button>
             {approvableSelectedRows.length > 1 && !sameApprovalStage(approvableSelectedRows) ? (
               <span className="text-[11px] text-destructive">Pilih stage approval yang sama.</span>
@@ -1336,40 +805,9 @@ export function MonitoringShell({
       </div>
 
       {/* ── Grid ── */}
-      {boardView === "approval" ? (
-        <div className="flex flex-wrap items-center gap-2 border border-border bg-card px-3 py-2 text-[12px] text-muted-foreground">
-          <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-app-accent-ink/70">Rentang approval</span>
-          <span className="text-foreground">
-            {formatMonitoringDate(state.date)}
-            {activeDateTo !== state.date ? ` – ${formatMonitoringDate(activeDateTo)}` : ""}
-          </span>
-          <span>· {viewRows.length} plan menunggu di stage ini</span>
-          <span className="text-muted-foreground/70">Ubah lewat filter tanggal (Harian / Rentang) di atas.</span>
-        </div>
-      ) : null}
-
-      {boardView === "execution" && selectedRows.length > 0 ? (
-        <div className="flex flex-wrap items-center gap-3 border border-border bg-card px-3 py-2 text-[12px] dark:border-white/[0.06]">
-          <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-app-accent-ink/70">
-            {executionSelection.count} plan dipilih
-          </span>
-          <span className="text-muted-foreground">Target: <span className="font-mono text-foreground">{executionSelection.targetHours} jam</span></span>
-          <span className="text-muted-foreground">Aktual: <span className="font-mono text-foreground">{executionSelection.actualHours} jam</span></span>
-          <span className="text-muted-foreground">Sisa: <span className="font-mono text-foreground">{executionSelection.remainingHours} jam</span></span>
-          <span className="text-muted-foreground">Rata-rata progress: <span className="font-mono text-foreground">{executionSelection.averageProgressPercent}%</span></span>
-          <button
-            type="button"
-            onClick={() => setSelectedRows([])}
-            className="ml-auto inline-flex h-7 items-center gap-1 border border-border px-2 text-[12px] text-muted-foreground hover:bg-muted hover:text-foreground"
-          >
-            <X className="h-3 w-3" /> Bersihkan pilihan
-          </button>
-        </div>
-      ) : null}
-
       <SmsAgGrid<MonitoringTaskRecord>
         heightClassName="h-[calc(100svh-340px)] min-h-[28rem]"
-        rowData={viewRows}
+        rowData={filteredRows}
         columnDefs={columns}
         rowSelection="multiple"
         pagination
@@ -1381,86 +819,26 @@ export function MonitoringShell({
         onRowDoubleClicked={(event) => {
           if (event.data) setSelectedRow(event.data);
         }}
-        emptyMessage={boardView === "approval"
-          ? "Tidak ada job plan yang menunggu approval pada stage ini."
-          : boardView === "execution"
-            ? "Belum ada job plan yang berjalan pada rentang ini."
-            : "Belum ada data monitoring."}
+        emptyMessage="Belum ada data monitoring."
       />
 
       {/* ── Board lists ── */}
-      {boardView === "operational" ? (
-        <div className="grid gap-3 xl:grid-cols-2">
-          <BoardList title="No Start"  rows={noStartRows}  emptyMessage="Semua plan sudah mulai." />
-          <BoardList title="No Submit" rows={noSubmitRows} emptyMessage="Tidak ada task tertahan." />
-        </div>
-      ) : null}
+      <div className="grid gap-3 xl:grid-cols-2">
+        <BoardList title="No Start"  rows={noStartRows}  emptyMessage="Semua plan sudah mulai." />
+        <BoardList title="No Submit" rows={noSubmitRows} emptyMessage="Tidak ada task tertahan." />
+      </div>
 
       {selectedRow ? (
-        <MonitoringDetailDrawer
-          row={selectedRow}
-          onClose={() => setSelectedRow(null)}
-          variant={boardView === "execution" ? "execution" : "default"}
-          actions={canApprove && isReviewState(selectedRow.approvalState) && selectedRow.version ? (
-            <>
-              <span className="mr-1 font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
-                Stage: {optionValue(approvalStateOptions, selectedRow.approvalState)}
-              </span>
-              <ActionButton
-                variant="success"
-                disabled={isBulkApproving}
-                onClick={() => {
-                  const row = selectedRow;
-                  setSelectedRow(null);
-                  void approveRow(row);
-                }}
-              >
-                Approve
-              </ActionButton>
-              <ActionButton
-                variant="danger"
-                disabled={isBulkApproving}
-                onClick={() => {
-                  const row = selectedRow;
-                  setSelectedRow(null);
-                  openRejectDialog([row]);
-                }}
-              >
-                Reject
-              </ActionButton>
-              <ActionButton
-                disabled={isBulkApproving}
-                onClick={() => {
-                  const row = selectedRow;
-                  setSelectedRow(null);
-                  openCorrection(row);
-                }}
-              >
-                Correct
-              </ActionButton>
-            </>
-          ) : null}
-        />
+        <MonitoringDetailDrawer row={selectedRow} onClose={() => setSelectedRow(null)} />
       ) : null}
 
       {rejectDialogOpen ? (
         <RejectReasonDialog
-          count={rejectTargets.length}
-          stage={optionValue(approvalStateOptions, rejectTargets[0]?.approvalState)}
+          count={approvableSelectedRows.length}
+          stage={selectedStageLabel}
           isSaving={isBulkApproving}
           onCancel={() => setRejectDialogOpen(false)}
-          onSubmit={(reason) => void runReviewRows(rejectTargets, "reject", reason)}
-        />
-      ) : null}
-
-      {correctionRow ? (
-        <CorrectionDialog
-          row={correctionRow}
-          references={references}
-          isSaving={isBulkApproving}
-          error={correctionError}
-          onCancel={() => setCorrectionRow(null)}
-          onSubmit={(draft) => void submitCorrection(draft)}
+          onSubmit={(reason) => void runBulkReview("reject", reason)}
         />
       ) : null}
     </div>

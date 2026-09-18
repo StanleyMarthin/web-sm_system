@@ -799,7 +799,6 @@ export function UnitWorkspaceShell({
             canManage={countdownBoard.canManage}
             meta={countdownBoard.meta}
             state={countdownBoard.state}
-            singleUnitContext
           />
         ) : (
           <section className="border border-border bg-card px-4 py-4 text-sm text-muted-foreground">
