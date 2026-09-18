@@ -5,6 +5,11 @@ const componentDir = import.meta.dir;
 const sourceFiles = [
   "countdown-board-shell.tsx",
   "countdown-detail-shell.tsx",
+  "countdown-job-plan-section.tsx",
+  "countdown-actual-section.tsx",
+  "countdown-master-panel.tsx",
+  "countdown-pr-section.tsx",
+  "countdown-qc-section.tsx",
   "forms/countdown-board-form.tsx",
 ];
 

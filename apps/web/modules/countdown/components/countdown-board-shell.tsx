@@ -193,7 +193,7 @@ function buildCountdownColumns(
             Detail
           </Link>
           {canManage ? (
-            <Link href={`/job-plan?coreId=${encodeURIComponent(String(row.countdownId ?? ""))}`}
+            <Link href={`/countdown/${String(row.countdownId ?? "")}#job-plan`}
               className="border border-success/25 bg-success/[0.06] px-2 py-0.5 text-[10px] font-mono uppercase tracking-[0.1em] text-success hover:bg-success/[0.12] transition-colors">
               Buat Job Plan
             </Link>
