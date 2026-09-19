@@ -227,26 +227,46 @@ export function CountdownDetailShell({
     }
     return `/job-plan?${jobPlanParams.toString()}`;
   };
+  const showRevisionActions = revisionActions.canRequest || approvalRole !== null;
 
   return (
     <div className="flex flex-col gap-3">
-      <header className="border border-border bg-card dark:border-white/[0.06]">
-        <div className="flex flex-col gap-3 p-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="min-w-0">
-            <div className="flex min-w-0 items-center gap-2">
-              <Link href={`/units/${encodeURIComponent(countdown.carId)}?tab=countdown`} title="Kembali ke Countdown Unit" aria-label="Kembali ke Countdown Unit" className="shrink-0 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                <ArrowLeft className="h-4 w-4" />
-              </Link>
-              <h1 className="truncate text-lg font-semibold text-foreground">{countdown.unitName}</h1>
-              <span className="shrink-0"><DataGridStatusBadge value={humanizeCodeLabel(countdown.status)} /></span>
+      <section className="border border-border bg-card px-4 py-4 dark:border-white/[0.06]">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+          <div className="space-y-2">
+            <div className="space-y-1">
+              <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                Ringkasan Unit
+              </p>
+              <h1 className="text-2xl font-semibold tracking-tight text-foreground">{countdown.unitName}</h1>
+              <p className="text-sm text-muted-foreground">
+                {countdown.customerName || "-"} · {countdown.panelName ?? "Panel belum ditentukan"}
+              </p>
             </div>
-            <p className="mt-1 truncate pl-6 text-xs text-muted-foreground">
-              {countdown.panelName ?? "Panel belum ditentukan"}
-            </p>
-            <p className="mt-1 truncate pl-6 text-xs text-muted-foreground">KP : {countdown.kpName || "-"}</p>
-            <p className="truncate pl-6 text-xs text-muted-foreground">KD : {countdown.kdName || "-"}</p>
+            <div className="flex flex-wrap gap-2 text-xs">
+              <span className="border border-border px-2.5 py-1 text-muted-foreground">
+                Kepala project: {countdown.kpName || "-"}
+              </span>
+              <span className="border border-border px-2.5 py-1 text-muted-foreground">
+                Kepala divisi: {countdown.kdName || "-"}
+              </span>
+              <DataGridStatusBadge value={humanizeCodeLabel(countdown.status)} />
+            </div>
           </div>
-          <div className="flex flex-wrap items-center gap-1.5">
+          <Link
+            href={`/units/${encodeURIComponent(countdown.carId)}?tab=countdown`}
+            title="Kembali ke Countdown Unit"
+            className="inline-flex h-10 items-center gap-2 border border-border px-3 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Kembali ke countdown unit
+          </Link>
+        </div>
+      </section>
+
+      <header className="border border-border bg-card dark:border-white/[0.06]">
+        {showRevisionActions ? (
+          <div className="flex flex-wrap items-center justify-end gap-1.5 p-3">
             {revisionActions.canRequest ? (
               <ActionButton variant="primary" onClick={() => setRevisionOpen(true)}>
                 <RotateCcw className="h-3.5 w-3.5" />Ajukan Revisi
@@ -263,9 +283,9 @@ export function CountdownDetailShell({
               </>
             ) : null}
           </div>
-        </div>
+        ) : null}
 
-        <div className="flex flex-wrap items-stretch border-t border-border dark:border-white/[0.06]">
+        <div className={`flex flex-wrap items-stretch ${showRevisionActions ? "border-t border-border dark:border-white/[0.06]" : ""}`}>
           <div className="flex min-w-[88px] flex-1 flex-col gap-0.5 border-r border-border px-3 py-2 last:border-r-0 dark:border-white/[0.05]">
             <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground">Target Jam</p>
             <p className="font-mono text-[16px] font-semibold leading-none tabular-nums text-foreground">{countdown.targetHoursRevised.toFixed(2)} jam</p>
