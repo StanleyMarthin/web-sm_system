@@ -52,6 +52,9 @@ const photoLabels = {
 
 type CountdownActualEntry = CountdownDetail["details"][number];
 
+// componentName belum dikirim API countdown; kolom disiapkan agar tinggal terisi saat payload menambahkannya.
+type CountdownDetailRow = CountdownDetail & { componentName?: string | null };
+
 const actualColumnDefs: ColDef<CountdownActualEntry>[] = [
   { headerName: "Tanggal", field: "workDate", minWidth: 110 },
   { headerName: "PIC", field: "employeeName", minWidth: 150, flex: 0.8 },
@@ -63,8 +66,10 @@ const actualColumnDefs: ColDef<CountdownActualEntry>[] = [
   { headerName: "Catatan", field: "dailyNotes", minWidth: 220, flex: 1 },
 ];
 
-const detailColumnDefs: ColDef<CountdownDetail>[] = [
+const detailColumnDefs: ColDef<CountdownDetailRow>[] = [
   { headerName: "Divisi", field: "divisionName", minWidth: 110, valueFormatter: ({ value }) => String(value ?? "Tanpa divisi") },
+  { headerName: "Component", field: "componentName", minWidth: 140, valueFormatter: ({ value }) => String(value ?? "-") },
+  { headerName: "Panel", field: "panelName", minWidth: 180, flex: 1, valueFormatter: ({ value }) => String(value ?? "Panel belum ditentukan") },
   { headerName: "Temuan Awal", field: "temuanAwal", minWidth: 160, flex: 1, valueFormatter: ({ value }) => String(value ?? "-") },
   { headerName: "Jobdesc", field: "jobTypeName", minWidth: 160, flex: 1, valueFormatter: ({ data, value }) => String(value ?? (data ? humanizeCodeLabel(data.taskCategory) : "-")) },
   { headerName: "Grade", field: "requiredGrade", minWidth: 90, valueFormatter: ({ value }) => String(value ?? "-") },
@@ -76,7 +81,7 @@ const detailColumnDefs: ColDef<CountdownDetail>[] = [
   { headerName: "Keterangan", field: "keterangan", minWidth: 170, flex: 1, valueFormatter: ({ data, value }) => String(value ?? data?.note ?? "-") },
   { headerName: "Mulai", field: "startDate", minWidth: 100, valueFormatter: ({ value }) => String(value ?? "-") },
   { headerName: "Deadline", field: "deadlineDate", minWidth: 100, valueFormatter: ({ value }) => String(value ?? "-") },
-  { headerName: "Status", field: "status", minWidth: 120, cellRenderer: ({ value }: ICellRendererParams<CountdownDetail>) => <DataGridStatusBadge value={humanizeCodeLabel(value)} /> },
+  { headerName: "Status", field: "status", minWidth: 120, cellRenderer: ({ value }: ICellRendererParams<CountdownDetailRow>) => <DataGridStatusBadge value={humanizeCodeLabel(value)} /> },
 ];
 
 function CountdownGallery({ countdown }: { countdown: CountdownDetail }) {
@@ -258,6 +263,9 @@ export function CountdownDetailShell({
             <p className="mt-1 truncate pl-6 text-xs text-muted-foreground">
               {countdown.panelName ?? "Panel belum ditentukan"}
             </p>
+            <p className="truncate pl-6 text-xs text-muted-foreground">{countdown.customerName || "-"}</p>
+            <p className="mt-1 truncate pl-6 text-xs text-muted-foreground">KP: {countdown.kpName || "-"}</p>
+            <p className="truncate pl-6 text-xs text-muted-foreground">KD: {countdown.kdName || "-"}</p>
           </div>
           <div className="flex flex-wrap items-center gap-1.5">
             {revisionActions.canRequest ? (
@@ -330,12 +338,13 @@ export function CountdownDetailShell({
       ) : null}
 
       <SectionCard label="Detail pekerjaan">
-        <SmsAgGrid<CountdownDetail>
+        <SmsAgGrid<CountdownDetailRow>
           heightClassName="h-28"
           className="[&_.ag-row]:cursor-pointer"
           rowData={[countdown]}
           columnDefs={detailColumnDefs}
           enableCellTextSelection
+          ensureDomOrder
           onRowClicked={() => router.push(`/countdown/${encodeURIComponent(countdown.countdownId)}`)}
         />
       </SectionCard>

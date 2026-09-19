@@ -17,7 +17,7 @@ import {
 } from "@/shared/ui/compact";
 import { parseHHMMToDecimal } from "@/shared/format/time";
 import { CountdownBoardForm, emptyCountdownFormValues, type CountdownFormValues } from "./forms/countdown-board-form";
-import { Camera, Download, FileText, FileUp, Pencil, Plus, RefreshCcw, Trash2, Upload, X } from "lucide-react";
+import { Download, FileText, FileUp, Pencil, Plus, RefreshCcw, Trash2, Upload, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -67,6 +67,9 @@ interface CountdownBoardShellProps {
   state: GridQueryState;
 }
 
+// componentName belum dikirim API countdown; kolom disiapkan agar tinggal terisi saat payload menambahkannya.
+type CountdownBoardGridRow = CountdownBoardRow & { componentName?: string | null };
+
 
 function normalizeTextInput(value: string): string | null {
   const v = value.trim();
@@ -94,15 +97,15 @@ function buildCountdownColumns(
   canManage: boolean,
   onEdit: (row: CountdownBoardRow) => void,
   onDelete: (row: CountdownBoardRow) => void,
-): ColDef<CountdownBoardRow>[] {
+): ColDef<CountdownBoardGridRow>[] {
   return [
     {
       headerName: "Unit",
       field: "unitName",
       pinned: "left",
-      minWidth: 145,
+      minWidth: 175,
       flex: 0.8,
-      cellRenderer: ({ value, data }: ICellRendererParams<CountdownBoardRow>) => (
+      cellRenderer: ({ value, data }: ICellRendererParams<CountdownBoardGridRow>) => (
         <div className="space-y-0.5">
           <Link
             href={`/countdown/${String(data?.countdownId ?? "")}`}
@@ -110,35 +113,48 @@ function buildCountdownColumns(
           >
             {String(value ?? "-")}
           </Link>
-          <p className="text-[10px] text-foreground/30">{String(data?.carId ?? "-")}</p>
+          <div className="flex items-center gap-1.5">
+            <p className="text-[10px] text-foreground/30">{String(data?.carId ?? "-")}</p>
+            {canManage && data ? (
+              <>
+                <button type="button" onClick={(event) => { event.stopPropagation(); onEdit(data); }} title="Edit Jobdesc" aria-label="Edit Jobdesc" className="text-foreground/35 transition-colors hover:text-app-accent-ink">
+                  <Pencil className="h-3 w-3" />
+                </button>
+                <button type="button" onClick={(event) => { event.stopPropagation(); onDelete(data); }} title="Hapus Jobdesc" aria-label="Hapus Jobdesc" className="text-foreground/35 transition-colors hover:text-destructive">
+                  <Trash2 className="h-3 w-3" />
+                </button>
+              </>
+            ) : null}
+          </div>
         </div>
       ),
     },
-    { headerName: "Divisi", field: "divisionName", minWidth: 120 },
-    { headerName: "Bagian", field: "sectionName", minWidth: 120 },
+    { headerName: "Component", field: "componentName", minWidth: 140 },
     {
       headerName: "Panel",
       field: "panelName",
       minWidth: 160,
       flex: 1,
-      cellRenderer: ({ value }: ICellRendererParams<CountdownBoardRow>) => (
+      cellRenderer: ({ value }: ICellRendererParams<CountdownBoardGridRow>) => (
         <div className="space-y-0.5">
           <p className="text-[12px] text-foreground">{String(value ?? "-")}</p>
         </div>
       ),
     },
+    { headerName: "Divisi", field: "divisionName", minWidth: 120 },
     {
       headerName: "Jobdesc",
       field: "jobTypeName",
       minWidth: 190,
       flex: 1.1,
-      valueFormatter: ({ value, data }) => String(value ?? data?.sectionName ?? "-"),
+      valueFormatter: ({ value }) => String(value ?? "-"),
     },
-    { headerName: "PIC", field: "picPlan", minWidth: 115 },
+    { headerName: "Grade", field: "requiredGrade", minWidth: 90, valueFormatter: ({ value }) => String(value ?? "-") },
+    { headerName: "PIC", field: "picName", minWidth: 140, valueFormatter: ({ data, value }) => String(value ?? data?.picPlan ?? "-") },
     { 
-      headerName: "Target",
-      field: "targetHoursInitial",
-      minWidth: 92,
+      headerName: "Target Hours",
+      field: "targetHoursRevised",
+      minWidth: 105,
       valueFormatter: ({ value }) => formatDecimalToHHMM(Number(value)) || "00:00",
       cellClass: "text-right tabular-nums",
     },
@@ -157,65 +173,25 @@ function buildCountdownColumns(
       cellClass: "text-right tabular-nums",
     },
     { headerName: "Progress", field: "actualProgressPercent", minWidth: 95, valueFormatter: ({ value }) => `${formatNumber(Number(value ?? 0))}%`, cellClass: "text-right" },
-    { headerName: "Deadline", field: "deadlineDate", minWidth: 115 },
+    { headerName: "Mulai", field: "startDate", minWidth: 105 },
+    {
+      headerName: "Deadline",
+      field: "deadlineDate",
+      minWidth: 130,
+      cellRenderer: ({ value, data }: ICellRendererParams<CountdownBoardGridRow>) => (
+        <div className="space-y-0.5">
+          <p className="text-[12px] text-foreground">{String(value ?? "-")}</p>
+          {data?.isOverdue ? (
+            <p className="font-mono text-[10px] uppercase tracking-[0.1em] text-destructive">Terlambat</p>
+          ) : null}
+        </div>
+      ),
+    },
     {
       headerName: "Status",
       field: "status",
       minWidth: 105,
       valueFormatter: ({ value }) => formatCountdownStatus(String(value ?? "")),
-    },
-    {
-      headerName: "Risiko",
-      field: "isOverdue",
-      minWidth: 120,
-      cellRenderer: ({ data }: ICellRendererParams<CountdownBoardRow>) => (
-        <span className={[
-          "inline-flex border px-2 py-0.5 text-[10px] font-mono uppercase tracking-[0.1em]",
-          data?.isOverdue
-            ? "border-destructive/30 bg-destructive/[0.06] text-destructive"
-            : "border-success/20 bg-success/[0.06] text-success",
-        ].join(" ")}>
-          {data?.isOverdue ? "Terlambat" : "Sesuai Jadwal"}
-        </span>
-      ),
-    },
-    {
-      headerName: "Tindakan",
-      colId: "action",
-      minWidth: 265,
-      pinned: "right",
-      sortable: false,
-      filter: false,
-      cellRenderer: ({ data: row }: ICellRendererParams<CountdownBoardRow>) => row ? (
-        <div className="flex flex-wrap items-center justify-center gap-1">
-          <Link href={`/countdown/${String(row.countdownId ?? "")}`}
-            className="border border-primary/30 bg-primary/[0.06] px-2 py-0.5 text-[10px] font-mono uppercase tracking-[0.1em] text-app-accent-ink hover:bg-primary/[0.12] transition-colors">
-            Detail
-          </Link>
-          {canManage ? (
-            <Link href={`/job-plan?coreId=${encodeURIComponent(String(row.countdownId ?? ""))}`}
-              className="border border-success/25 bg-success/[0.06] px-2 py-0.5 text-[10px] font-mono uppercase tracking-[0.1em] text-success hover:bg-success/[0.12] transition-colors">
-              Buat Job Plan
-            </Link>
-          ) : null}
-          <Link href={`/countdown/${String(row.countdownId ?? "")}#dokumentasi`}
-            className="inline-flex items-center gap-1 border border-border px-2 py-0.5 text-[10px] font-mono uppercase tracking-[0.1em] text-foreground/55 hover:border-primary/30 hover:text-app-accent-ink transition-colors">
-            <Camera className="h-3 w-3" />Dokumentasi
-          </Link>
-          {canManage && (
-            <>
-              <button type="button" onClick={() => onEdit(row)}
-                className="inline-flex items-center gap-1 border border-white/[0.07] px-2 py-0.5 text-[10px] font-mono uppercase tracking-[0.1em] text-foreground/55 hover:border-primary/30 hover:text-app-accent-ink transition-colors">
-                <Pencil className="h-3 w-3" />Edit
-              </button>
-              <button type="button" onClick={() => onDelete(row)}
-                className="inline-flex items-center gap-1 border border-destructive/20 px-2 py-0.5 text-[10px] font-mono uppercase tracking-[0.1em] text-destructive/80 hover:bg-destructive/[0.06] transition-colors">
-                <Trash2 className="h-3 w-3" />Hapus
-              </button>
-            </>
-          )}
-        </div>
-      ) : null,
     },
   ];
 }
@@ -630,11 +606,15 @@ export function CountdownBoardShell({ rows, references, canManage, meta, state }
             </Link>
           </div>
         </div>
-        <SmsAgGrid<CountdownBoardRow>
+        <SmsAgGrid<CountdownBoardGridRow>
           heightClassName="h-[calc(100vh-310px)] min-h-[28rem]"
+          className="[&_.ag-row]:cursor-pointer"
           rowData={rows}
           columnDefs={columns}
           getRowId={(params) => params.data.countdownId}
+          onRowClicked={({ data }) => {
+            if (data) router.push(`/countdown/${encodeURIComponent(data.countdownId)}`);
+          }}
           emptyMessage="Belum ada countdown yang sesuai pencarian saat ini."
         />
       </section>
