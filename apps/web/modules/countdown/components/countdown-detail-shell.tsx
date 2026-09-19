@@ -5,7 +5,7 @@
 import type { CountdownDetail } from "@smsystem/contracts/countdown";
 import { encodeGridFilterToken } from "@smsystem/contracts/grid";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
-import { ArrowLeft, Camera, Check, ChevronDown, ChevronLeft, ChevronRight, Moon, Plus, RotateCcw, X } from "lucide-react";
+import { ArrowLeft, Camera, Check, ChevronLeft, ChevronRight, RotateCcw, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -13,7 +13,7 @@ import { humanizeCodeLabel, fmtTime, fmtDateTime } from "@/shared/format/humaniz
 import { DataGridStatusBadge } from "@/shared/datagrid/status-badge";
 import { SmsAgGrid } from "@/shared/datagrid/sms-ag-grid";
 import { approveCountdownRevision, requestCountdownRevision } from "@/shared/api/countdown";
-import { ActionButton, CompactInput, CompactTextarea, FieldLabel, MetricBar, SectionCard } from "@/shared/ui/compact";
+import { ActionButton, CompactInput, CompactTextarea, FieldLabel, SectionCard } from "@/shared/ui/compact";
 import { useSweetAlert } from "@/shared/ui/sweet-alert";
 import { resolveCountdownPhotoUrl, resolveCountdownRevisionActions } from "../countdown-dialog";
 import { formatCountdownRevisionStatus } from "../countdown-revision";
@@ -243,6 +243,8 @@ export function CountdownDetailShell({
             <p className="mt-1 truncate pl-6 text-xs text-muted-foreground">
               {countdown.panelName ?? "Panel belum ditentukan"}
             </p>
+            <p className="mt-1 truncate pl-6 text-xs text-muted-foreground">KP : {countdown.kpName || "-"}</p>
+            <p className="truncate pl-6 text-xs text-muted-foreground">KD : {countdown.kdName || "-"}</p>
           </div>
           <div className="flex flex-wrap items-center gap-1.5">
             {revisionActions.canRequest ? (
@@ -260,62 +262,41 @@ export function CountdownDetailShell({
                 </ActionButton>
               </>
             ) : null}
-            <details className="group relative">
-              <summary className="inline-flex h-9 cursor-pointer list-none items-center gap-1.5 border border-success/30 bg-success/10 px-3 font-mono text-[12px] font-medium uppercase tracking-[0.08em] text-success transition-colors hover:bg-success/20">
-                <Plus className="h-3.5 w-3.5" />
-                Job Plan
-                <ChevronDown className="h-3.5 w-3.5 transition-transform group-open:rotate-180" />
-              </summary>
-              <div className="absolute right-0 z-20 mt-1 min-w-44 border border-border bg-card p-1 shadow-xl">
-                <Link
-                  href={buildJobPlanHref("normal")}
-                  className="flex items-center gap-2 px-3 py-2 text-sm text-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
-                >
-                  <Plus className="h-4 w-4 text-success" />
-                  Buat rencana normal
-                </Link>
-                <Link
-                  href={buildJobPlanHref("overtime")}
-                  className="flex items-center gap-2 px-3 py-2 text-sm text-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
-                >
-                  <Moon className="h-4 w-4 text-info" />
-                  Buat rencana lembur
-                </Link>
-                {countdown.details.length > 0 ? (
-                  <Link href="#hasil-pekerjaan" className="flex items-center gap-2 px-3 py-2 text-sm text-foreground/70 transition-colors hover:bg-muted hover:text-foreground">
-                    <Camera className="h-4 w-4 text-info" />
-                    Lihat hasil aktual
-                  </Link>
-                ) : null}
-              </div>
-            </details>
           </div>
+        </div>
+
+        <div className="flex flex-wrap items-stretch border-t border-border dark:border-white/[0.06]">
+          <div className="flex min-w-[88px] flex-1 flex-col gap-0.5 border-r border-border px-3 py-2 last:border-r-0 dark:border-white/[0.05]">
+            <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground">Target Jam</p>
+            <p className="font-mono text-[16px] font-semibold leading-none tabular-nums text-foreground">{countdown.targetHoursRevised.toFixed(2)} jam</p>
+          </div>
+          <div className="flex min-w-[88px] flex-1 flex-col gap-0.5 border-r border-border px-3 py-2 last:border-r-0 dark:border-white/[0.05]">
+            <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground">Jam Aktual</p>
+            <p className="font-mono text-[16px] font-semibold leading-none tabular-nums text-foreground">{countdown.totalActualHours.toFixed(2)} jam</p>
+          </div>
+          <div className="flex min-w-[88px] flex-1 flex-col gap-0.5 border-r border-border px-3 py-2 last:border-r-0 dark:border-white/[0.05]">
+            <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground">Jam Tersisa</p>
+            <p className={`font-mono text-[16px] font-semibold leading-none tabular-nums ${countdown.remainingHours <= 0 ? "text-destructive" : "text-app-accent-ink"}`}>{countdown.remainingHours.toFixed(2)} jam</p>
+          </div>
+          <div className="flex min-w-[88px] flex-1 flex-col gap-0.5 border-r border-border px-3 py-2 last:border-r-0 dark:border-white/[0.05]">
+            <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground">Progress</p>
+            <p className={`font-mono text-[16px] font-semibold leading-none tabular-nums ${countdown.isOverdue ? "text-app-accent-ink" : "text-success"}`}>{countdown.actualProgressPercent.toFixed(0)}%</p>
+          </div>
+        </div>
+
+        <div className="border-t border-border px-3 py-2.5 dark:border-white/[0.06]">
+          <div className="mb-1 flex items-center justify-between text-xs">
+            <span className="font-medium text-foreground">Progress pekerjaan</span>
+            <span className="font-mono text-muted-foreground">{countdown.actualProgressPercent.toFixed(0)}%</span>
+          </div>
+          <div className="h-1.5 overflow-hidden bg-muted" role="progressbar" aria-label="Progress pekerjaan" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(countdown.actualProgressPercent)}>
+            <div className="h-full bg-primary" style={{ width: `${Math.min(100, Math.max(0, countdown.actualProgressPercent))}%` }} />
+          </div>
+          <p className="mt-1.5 text-xs text-muted-foreground">{countdown.isOverdue ? "Terlambat" : "Sesuai jadwal"}</p>
         </div>
       </header>
 
       {sweetAlert.alertElement}
-
-      <MetricBar items={[
-        { label: "Target Jam", value: `${countdown.targetHoursRevised.toFixed(2)} jam` },
-        { label: "Jam Aktual", value: `${countdown.totalActualHours.toFixed(2)} jam` },
-        { label: "Jam Tersisa", value: `${countdown.remainingHours.toFixed(2)} jam`, tone: countdown.remainingHours <= 0 ? "down" : "warn" },
-        { label: "Progress", value: `${countdown.actualProgressPercent.toFixed(0)}%`, tone: countdown.isOverdue ? "warn" : "up" },
-      ]} />
-
-      <section className="border border-border bg-card p-3 dark:border-white/[0.06]">
-        <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <div className="mb-1 flex items-center justify-between text-xs">
-              <span className="font-medium text-foreground">Progress pekerjaan</span>
-              <span className="font-mono text-muted-foreground">{countdown.actualProgressPercent.toFixed(0)}%</span>
-            </div>
-            <div className="h-1.5 overflow-hidden bg-muted" role="progressbar" aria-label="Progress pekerjaan" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(countdown.actualProgressPercent)}>
-              <div className="h-full bg-primary" style={{ width: `${Math.min(100, Math.max(0, countdown.actualProgressPercent))}%` }} />
-            </div>
-          </div>
-          <span className="shrink-0 text-xs text-muted-foreground">{countdown.isOverdue ? "Terlambat" : "Sesuai jadwal"}</span>
-        </div>
-      </section>
 
       <CountdownGallery countdown={countdown} />
 
