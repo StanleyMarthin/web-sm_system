@@ -3,12 +3,14 @@
 // Hallmark · pre-emit critique: P5 H5 E4 S5 R5 V4 · Workbench utilitarian · design.md
 
 import type { CountdownDetail } from "@smsystem/contracts/countdown";
+import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { ArrowLeft, Camera, Check, ChevronLeft, ChevronRight, RotateCcw, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { humanizeCodeLabel, fmtTime } from "@/shared/format/humanize";
 import { DataGridStatusBadge } from "@/shared/datagrid/status-badge";
+import { SmsAgGrid } from "@/shared/datagrid/sms-ag-grid";
 import { approveCountdownRevision, requestCountdownRevision } from "@/shared/api/countdown";
 import { ActionButton, CompactInput, CompactTextarea, FieldLabel, SectionCard } from "@/shared/ui/compact";
 import { useSweetAlert } from "@/shared/ui/sweet-alert";
@@ -39,6 +41,19 @@ const photoLabels = {
 } as const;
 
 type CountdownActualEntry = CountdownDetail["details"][number];
+type CountdownActualRow = CountdownActualEntry & { divisionName: string | null };
+
+const actualColumnDefs: ColDef<CountdownActualRow>[] = [
+  { headerName: "Divisi", field: "divisionName", minWidth: 120, valueFormatter: ({ value }) => String(value ?? "Tanpa divisi") },
+  { headerName: "Tanggal", field: "workDate", minWidth: 110 },
+  { headerName: "PIC", field: "employeeName", minWidth: 150, flex: 0.8 },
+  { headerName: "Mulai", field: "startTime", minWidth: 85, valueFormatter: ({ value }) => fmtTime(String(value ?? "")) },
+  { headerName: "Selesai", field: "finishTime", minWidth: 85, valueFormatter: ({ value }) => fmtTime(String(value ?? "")) },
+  { headerName: "Durasi", field: "billedHours", minWidth: 90, valueFormatter: ({ value }) => `${Number(value ?? 0).toFixed(2)} jam` },
+  { headerName: "Progress", field: "progressPercent", minWidth: 90, valueFormatter: ({ value }) => `${Number(value ?? 0).toFixed(0)}%` },
+  { headerName: "Status", field: "taskStatus", minWidth: 130, cellRenderer: ({ value }: ICellRendererParams<CountdownActualRow>) => <DataGridStatusBadge value={humanizeCodeLabel(value)} /> },
+  { headerName: "Catatan", field: "dailyNotes", minWidth: 220, flex: 1 },
+];
 
 function formatHours(value: number | null | undefined) {
   return `${Number(value ?? 0).toFixed(2)} jam`;
@@ -77,23 +92,6 @@ function CountdownWorkCard({ countdown }: { countdown: CountdownDetail }) {
       <div className="border-t border-border px-3 py-2 dark:border-white/[0.06]">
         <DataGridStatusBadge value={humanizeCodeLabel(countdown.status)} />
       </div>
-    </article>
-  );
-}
-
-function ResultCard({ entry, divisionName }: { entry: CountdownActualEntry; divisionName: string | null }) {
-  return (
-    <article className="border border-border bg-background px-3 py-2 dark:border-white/[0.06]">
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm font-semibold text-foreground">{divisionName || "Tanpa divisi"}</p>
-      </div>
-      <dl className="grid gap-2 text-[12px] sm:grid-cols-2">
-        <DetailField label="Tanggal selesai" value={`${entry.workDate || "-"} ${fmtTime(entry.finishTime)}`} />
-        <DetailField label="Durasi" value={formatHours(entry.billedHours)} />
-        <DetailField label="Progress" value={`${Number(entry.progressPercent ?? 0).toFixed(0)}%`} />
-        <DetailField label="Status" value={humanizeCodeLabel(entry.taskStatus)} />
-        <DetailField label="Catatan" value={entry.dailyNotes ?? "-"} />
-      </dl>
     </article>
   );
 }
@@ -354,11 +352,13 @@ export function CountdownDetailShell({
         <div id="hasil-pekerjaan">
           <SectionCard label="Hasil pekerjaan" count={countdown.details.length}>
             {countdown.details.length > 0 ? (
-              <div className="grid gap-2">
-                {countdown.details.map((entry) => (
-                  <ResultCard key={entry.detailId} entry={entry} divisionName={countdown.divisionName} />
-                ))}
-              </div>
+              <SmsAgGrid<CountdownActualRow>
+                heightClassName="h-72"
+                rowData={countdown.details.map((entry) => ({ ...entry, divisionName: countdown.divisionName }))}
+                columnDefs={actualColumnDefs}
+                getRowId={(params) => params.data.detailId}
+                emptyMessage="Belum ada hasil pekerjaan."
+              />
             ) : <p className="text-sm text-muted-foreground">Belum ada hasil pekerjaan.</p>}
           </SectionCard>
         </div>
