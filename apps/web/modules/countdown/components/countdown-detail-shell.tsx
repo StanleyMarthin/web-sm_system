@@ -86,13 +86,12 @@ function ResultCard({ entry, divisionName }: { entry: CountdownActualEntry; divi
     <article className="border border-border bg-background px-3 py-2 dark:border-white/[0.06]">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm font-semibold text-foreground">{divisionName || "Tanpa divisi"}</p>
-        <DataGridStatusBadge value={humanizeCodeLabel(entry.taskStatus)} />
       </div>
       <dl className="grid gap-2 text-[12px] sm:grid-cols-2">
-        <DetailField label="PIC" value={entry.employeeName || "-"} />
         <DetailField label="Tanggal selesai" value={`${entry.workDate || "-"} ${fmtTime(entry.finishTime)}`} />
         <DetailField label="Durasi" value={formatHours(entry.billedHours)} />
         <DetailField label="Progress" value={`${Number(entry.progressPercent ?? 0).toFixed(0)}%`} />
+        <DetailField label="Status" value={humanizeCodeLabel(entry.taskStatus)} />
         <DetailField label="Catatan" value={entry.dailyNotes ?? "-"} />
       </dl>
     </article>
@@ -111,13 +110,13 @@ function CountdownGallery({ countdown }: { countdown: CountdownDetail }) {
 
   if (!activePhoto || !activeUrl) {
     return (
-      <section className="border border-border bg-card dark:border-white/[0.06]">
+      <div className="border border-border bg-card dark:border-white/[0.06]">
         <div className="flex items-center gap-2 border-b border-border px-3 py-2.5 dark:border-white/[0.06]">
           <Camera className="h-4 w-4 text-app-accent-ink" />
-          <h2 className="text-sm font-semibold text-foreground">Dokumentasi</h2>
+          <h2 className="text-sm font-semibold text-foreground">Kamera Dokumentasi</h2>
         </div>
         <p className="px-3 py-5 text-sm text-muted-foreground">Belum ada foto.</p>
-      </section>
+      </div>
     );
   }
 
@@ -126,11 +125,11 @@ function CountdownGallery({ countdown }: { countdown: CountdownDetail }) {
   }
 
   return (
-    <section className="border border-border bg-card dark:border-white/[0.06]">
+    <div className="border border-border bg-card dark:border-white/[0.06]">
       <div className="flex items-center justify-between gap-3 border-b border-border px-3 py-2.5 dark:border-white/[0.06]">
         <div className="flex items-center gap-2">
           <Camera className="h-4 w-4 text-app-accent-ink" />
-          <h2 className="text-sm font-semibold text-foreground">Dokumentasi</h2>
+          <h2 className="text-sm font-semibold text-foreground">Kamera Dokumentasi</h2>
         </div>
         <span className="font-mono text-[10px] uppercase text-muted-foreground">{photos.length} foto</span>
       </div>
@@ -145,7 +144,8 @@ function CountdownGallery({ countdown }: { countdown: CountdownDetail }) {
             </>
           ) : null}
         </div>
-        <div className="grid max-h-32 grid-cols-4 gap-2 overflow-y-auto pr-1 sm:grid-cols-6 md:grid-cols-8">
+        <p className="text-[12px] font-medium text-foreground">Foto lainnya</p>
+        <div className="grid max-h-32 grid-cols-4 gap-2 overflow-y-auto pr-1">
           {photos.map((photo, index) => {
             const url = resolveCountdownPhotoUrl(photo.url);
             if (!url) return null;
@@ -164,7 +164,7 @@ function CountdownGallery({ countdown }: { countdown: CountdownDetail }) {
         {activePhoto.caption ? ` · ${activePhoto.caption}` : ""}
         {activePhoto.workDate ? ` · ${activePhoto.workDate}` : ""}
       </div>
-    </section>
+    </div>
   );
 }
 
@@ -343,63 +343,51 @@ export function CountdownDetailShell({
         </section>
       ) : null}
 
-      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_26rem]">
-        <main className="min-w-0 space-y-3">
-          <SectionCard label="Informasi Countdown">
-            <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <DetailField label="Unit" value={countdown.unitName} />
-              <DetailField label="Customer" value={countdown.customerName ?? "-"} />
-              <DetailField label="KP" value={countdown.kpName ?? "-"} />
-              <DetailField label="KD" value={countdown.kdName ?? "-"} />
-            </dl>
-          </SectionCard>
-
-          <SectionCard label="Detail pekerjaan">
+      <main className="min-w-0 space-y-3">
+        <SectionCard label="Detail pekerjaan">
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_24rem]">
             <CountdownWorkCard countdown={countdown} />
-          </SectionCard>
-
-          <div id="hasil-pekerjaan">
-            <SectionCard label="Hasil pekerjaan" count={countdown.details.length}>
-              {countdown.details.length > 0 ? (
-                <div className="grid gap-2">
-                  {countdown.details.map((entry) => (
-                    <ResultCard key={entry.detailId} entry={entry} divisionName={countdown.divisionName} />
-                  ))}
-                </div>
-              ) : <p className="text-sm text-muted-foreground">Belum ada hasil pekerjaan.</p>}
-            </SectionCard>
+            <CountdownGallery countdown={countdown} />
           </div>
+        </SectionCard>
 
-          <SectionCard label="Aktivitas terkait">
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-              <Link href={buildDraftHref("job-plan")} className="border border-border px-3 py-2 text-[12px] text-foreground transition-colors hover:border-primary hover:bg-muted">
-                <span className="block text-muted-foreground">Job Plan</span>
-                <span className="mt-1 block font-medium">Buat Draft</span>
-                <span className="mt-1 inline-flex border border-warning/30 px-1.5 py-0.5 font-mono text-[10px] uppercase text-warning">Draft</span>
-              </Link>
-              <Link href={buildDraftHref("wo")} className="border border-border px-3 py-2 text-[12px] text-foreground transition-colors hover:border-primary hover:bg-muted">
-                <span className="block text-muted-foreground">Work Order</span>
-                <span className="mt-1 block font-medium">Buat Draft</span>
-                <span className="mt-1 inline-flex border border-warning/30 px-1.5 py-0.5 font-mono text-[10px] uppercase text-warning">Draft</span>
-              </Link>
-              <Link href={buildDraftHref("pr")} className="border border-border px-3 py-2 text-[12px] text-foreground transition-colors hover:border-primary hover:bg-muted">
-                <span className="block text-muted-foreground">Purchase Request</span>
-                <span className="mt-1 block font-medium">Buat Draft</span>
-                <span className="mt-1 inline-flex border border-warning/30 px-1.5 py-0.5 font-mono text-[10px] uppercase text-warning">Draft</span>
-              </Link>
-              <Link href={buildDraftHref("wov")} className="border border-border px-3 py-2 text-[12px] text-foreground transition-colors hover:border-primary hover:bg-muted">
-                <span className="block text-muted-foreground">Vendor WO</span>
-                <span className="mt-1 block font-medium">Buat Draft</span>
-                <span className="mt-1 inline-flex border border-warning/30 px-1.5 py-0.5 font-mono text-[10px] uppercase text-warning">Draft</span>
-              </Link>
-            </div>
+        <div id="hasil-pekerjaan">
+          <SectionCard label="Hasil pekerjaan" count={countdown.details.length}>
+            {countdown.details.length > 0 ? (
+              <div className="grid gap-2">
+                {countdown.details.map((entry) => (
+                  <ResultCard key={entry.detailId} entry={entry} divisionName={countdown.divisionName} />
+                ))}
+              </div>
+            ) : <p className="text-sm text-muted-foreground">Belum ada hasil pekerjaan.</p>}
           </SectionCard>
-        </main>
+        </div>
 
-        <aside className="min-w-0">
-          <CountdownGallery countdown={countdown} />
-        </aside>
-      </div>
+        <SectionCard label="Aktivitas terkait">
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            <Link href={buildDraftHref("job-plan")} className="border border-border px-3 py-2 text-[12px] text-foreground transition-colors hover:border-primary hover:bg-muted">
+              <span className="block text-muted-foreground">Job Plan</span>
+              <span className="mt-1 block font-medium">Buat Draft</span>
+              <span className="mt-1 inline-flex border border-warning/30 px-1.5 py-0.5 font-mono text-[10px] uppercase text-warning">Draft</span>
+            </Link>
+            <Link href={buildDraftHref("wo")} className="border border-border px-3 py-2 text-[12px] text-foreground transition-colors hover:border-primary hover:bg-muted">
+              <span className="block text-muted-foreground">Work Order</span>
+              <span className="mt-1 block font-medium">Buat Draft</span>
+              <span className="mt-1 inline-flex border border-warning/30 px-1.5 py-0.5 font-mono text-[10px] uppercase text-warning">Draft</span>
+            </Link>
+            <Link href={buildDraftHref("pr")} className="border border-border px-3 py-2 text-[12px] text-foreground transition-colors hover:border-primary hover:bg-muted">
+              <span className="block text-muted-foreground">Purchase Request</span>
+              <span className="mt-1 block font-medium">Buat Draft</span>
+              <span className="mt-1 inline-flex border border-warning/30 px-1.5 py-0.5 font-mono text-[10px] uppercase text-warning">Draft</span>
+            </Link>
+            <Link href={buildDraftHref("wov")} className="border border-border px-3 py-2 text-[12px] text-foreground transition-colors hover:border-primary hover:bg-muted">
+              <span className="block text-muted-foreground">Vendor WO</span>
+              <span className="mt-1 block font-medium">Buat Draft</span>
+              <span className="mt-1 inline-flex border border-warning/30 px-1.5 py-0.5 font-mono text-[10px] uppercase text-warning">Draft</span>
+            </Link>
+          </div>
+        </SectionCard>
+      </main>
 
       <dialog
         ref={revisionDialogRef}
