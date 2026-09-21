@@ -3,15 +3,12 @@
 // Hallmark · pre-emit critique: P5 H5 E4 S5 R5 V4 · Workbench utilitarian · design.md
 
 import type { CountdownDetail } from "@smsystem/contracts/countdown";
-import { encodeGridFilterToken } from "@smsystem/contracts/grid";
-import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { ArrowLeft, Camera, Check, ChevronLeft, ChevronRight, RotateCcw, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { humanizeCodeLabel, fmtTime, fmtDateTime } from "@/shared/format/humanize";
+import { humanizeCodeLabel, fmtTime } from "@/shared/format/humanize";
 import { DataGridStatusBadge } from "@/shared/datagrid/status-badge";
-import { SmsAgGrid } from "@/shared/datagrid/sms-ag-grid";
 import { approveCountdownRevision, requestCountdownRevision } from "@/shared/api/countdown";
 import { ActionButton, CompactInput, CompactTextarea, FieldLabel, SectionCard } from "@/shared/ui/compact";
 import { useSweetAlert } from "@/shared/ui/sweet-alert";
@@ -34,15 +31,6 @@ function DetailField({ label, value }: { label: string; value: string }) {
   );
 }
 
-function ActivityUnavailable({ label }: { label: string }) {
-  return (
-    <div className="border border-border px-3 py-2 text-[12px] text-muted-foreground">
-      <span className="block">{label}</span>
-      <span className="mt-1 block text-[11px]">Belum ada relasi</span>
-    </div>
-  );
-}
-
 const photoLabels = {
   BEFORE: "Sebelum",
   PROCESS: "Pengerjaan",
@@ -52,37 +40,64 @@ const photoLabels = {
 
 type CountdownActualEntry = CountdownDetail["details"][number];
 
-// componentName belum dikirim API countdown; kolom disiapkan agar tinggal terisi saat payload menambahkannya.
-type CountdownDetailRow = CountdownDetail & { componentName?: string | null };
+function formatHours(value: number | null | undefined) {
+  return `${Number(value ?? 0).toFixed(2)} jam`;
+}
 
-const actualColumnDefs: ColDef<CountdownActualEntry>[] = [
-  { headerName: "Tanggal", field: "workDate", minWidth: 110 },
-  { headerName: "PIC", field: "employeeName", minWidth: 150, flex: 0.8 },
-  { headerName: "Mulai", field: "startTime", minWidth: 85, valueFormatter: ({ value }) => fmtTime(String(value ?? "")) },
-  { headerName: "Selesai", field: "finishTime", minWidth: 85, valueFormatter: ({ value }) => fmtTime(String(value ?? "")) },
-  { headerName: "Durasi", field: "billedHours", minWidth: 90, valueFormatter: ({ value }) => `${Number(value ?? 0).toFixed(2)} jam` },
-  { headerName: "Progress", field: "progressPercent", minWidth: 90, valueFormatter: ({ value }) => `${Number(value ?? 0).toFixed(0)}%` },
-  { headerName: "Status", field: "taskStatus", minWidth: 130, cellRenderer: ({ value }: ICellRendererParams<CountdownActualEntry>) => <DataGridStatusBadge value={humanizeCodeLabel(value)} /> },
-  { headerName: "Catatan", field: "dailyNotes", minWidth: 220, flex: 1 },
-];
+function MetricField({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="grid grid-cols-[8.5rem_minmax(0,1fr)] gap-3 border-t border-border py-2 first:border-t-0 dark:border-white/[0.06]">
+      <dt className="text-[12px] text-muted-foreground">{label}</dt>
+      <dd className="min-w-0 break-words text-[13px] text-foreground">{value || "-"}</dd>
+    </div>
+  );
+}
 
-const detailColumnDefs: ColDef<CountdownDetailRow>[] = [
-  { headerName: "Divisi", field: "divisionName", minWidth: 110, valueFormatter: ({ value }) => String(value ?? "Tanpa divisi") },
-  { headerName: "Component", field: "componentName", minWidth: 140, valueFormatter: ({ value }) => String(value ?? "-") },
-  { headerName: "Panel", field: "panelName", minWidth: 180, flex: 1, valueFormatter: ({ value }) => String(value ?? "Panel belum ditentukan") },
-  { headerName: "Temuan Awal", field: "temuanAwal", minWidth: 160, flex: 1, valueFormatter: ({ value }) => String(value ?? "-") },
-  { headerName: "Jobdesc", field: "jobTypeName", minWidth: 160, flex: 1, valueFormatter: ({ data, value }) => String(value ?? (data ? humanizeCodeLabel(data.taskCategory) : "-")) },
-  { headerName: "Grade", field: "requiredGrade", minWidth: 90, valueFormatter: ({ value }) => String(value ?? "-") },
-  { headerName: "Target Awal", field: "targetHoursInitial", minWidth: 105, valueFormatter: ({ value }) => `${Number(value ?? 0).toFixed(2)} jam` },
-  { headerName: "Target Hours", field: "targetHoursRevised", minWidth: 105, valueFormatter: ({ value }) => `${Number(value ?? 0).toFixed(2)} jam` },
-  { headerName: "Aktual", field: "totalActualHours", minWidth: 95, valueFormatter: ({ value }) => `${Number(value ?? 0).toFixed(2)} jam` },
-  { headerName: "Sisa Jam Kerja", field: "remainingHours", minWidth: 115, valueFormatter: ({ value }) => `${Number(value ?? 0).toFixed(2)} jam` },
-  { headerName: "PIC", field: "picName", minWidth: 140, valueFormatter: ({ data, value }) => String(value ?? data?.picPlan ?? "-") },
-  { headerName: "Keterangan", field: "keterangan", minWidth: 170, flex: 1, valueFormatter: ({ data, value }) => String(value ?? data?.note ?? "-") },
-  { headerName: "Mulai", field: "startDate", minWidth: 100, valueFormatter: ({ value }) => String(value ?? "-") },
-  { headerName: "Deadline", field: "deadlineDate", minWidth: 100, valueFormatter: ({ value }) => String(value ?? "-") },
-  { headerName: "Status", field: "status", minWidth: 120, cellRenderer: ({ value }: ICellRendererParams<CountdownDetailRow>) => <DataGridStatusBadge value={humanizeCodeLabel(value)} /> },
-];
+function CountdownWorkCard({ countdown }: { countdown: CountdownDetail }) {
+  return (
+    <article className="border border-border bg-background dark:border-white/[0.06]">
+      <div className="border-b border-border px-3 py-2 dark:border-white/[0.06]">
+        <p className="text-sm font-semibold text-foreground">{countdown.sectionName || "Component belum ditentukan"}</p>
+        <p className="mt-0.5 text-[12px] text-muted-foreground">{countdown.panelName || "Panel belum ditentukan"}</p>
+      </div>
+      <dl className="px-3 py-1">
+        <MetricField label="Divisi" value={countdown.divisionName ?? "Tanpa divisi"} />
+        <MetricField label="Jobdesc" value={countdown.jobTypeName ?? humanizeCodeLabel(countdown.taskCategory)} />
+        <MetricField label="Temuan Awal" value={countdown.temuanAwal ?? "-"} />
+        <MetricField label="Grade" value={countdown.requiredGrade ?? "-"} />
+        <MetricField label="Target Awal" value={formatHours(countdown.targetHoursInitial)} />
+        <MetricField label="Target Hours" value={formatHours(countdown.targetHoursRevised)} />
+        <MetricField label="Aktual" value={formatHours(countdown.totalActualHours)} />
+        <MetricField label="Sisa Jam Kerja" value={formatHours(countdown.remainingHours)} />
+        <MetricField label="PIC" value={countdown.picName ?? countdown.picPlan ?? "-"} />
+        <MetricField label="Keterangan" value={countdown.keterangan ?? countdown.note ?? "-"} />
+        <MetricField label="Mulai" value={countdown.startDate ?? "-"} />
+        <MetricField label="Deadline" value={countdown.deadlineDate ?? "-"} />
+      </dl>
+      <div className="border-t border-border px-3 py-2 dark:border-white/[0.06]">
+        <DataGridStatusBadge value={humanizeCodeLabel(countdown.status)} />
+      </div>
+    </article>
+  );
+}
+
+function ResultCard({ entry, divisionName }: { entry: CountdownActualEntry; divisionName: string | null }) {
+  return (
+    <article className="border border-border bg-background px-3 py-2 dark:border-white/[0.06]">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm font-semibold text-foreground">{divisionName || "Tanpa divisi"}</p>
+        <DataGridStatusBadge value={humanizeCodeLabel(entry.taskStatus)} />
+      </div>
+      <dl className="grid gap-2 text-[12px] sm:grid-cols-2">
+        <DetailField label="PIC" value={entry.employeeName || "-"} />
+        <DetailField label="Tanggal selesai" value={`${entry.workDate || "-"} ${fmtTime(entry.finishTime)}`} />
+        <DetailField label="Durasi" value={formatHours(entry.billedHours)} />
+        <DetailField label="Progress" value={`${Number(entry.progressPercent ?? 0).toFixed(0)}%`} />
+        <DetailField label="Catatan" value={entry.dailyNotes ?? "-"} />
+      </dl>
+    </article>
+  );
+}
 
 function CountdownGallery({ countdown }: { countdown: CountdownDetail }) {
   const photos = countdown.details.flatMap((detail) => detail.photos.map((photo) => ({
@@ -119,10 +134,10 @@ function CountdownGallery({ countdown }: { countdown: CountdownDetail }) {
         </div>
         <span className="font-mono text-[10px] uppercase text-muted-foreground">{photos.length} foto</span>
       </div>
-      <div className="grid gap-3 p-3 lg:grid-cols-[minmax(0,1fr)_10rem]">
-        <div className="relative flex min-h-[18rem] items-center justify-center overflow-hidden bg-muted">
+      <div className="space-y-3 p-3">
+        <div className="relative flex aspect-[16/9] min-h-[14rem] max-h-[24rem] items-center justify-center overflow-hidden border border-border bg-muted">
           {/* eslint-disable-next-line @next/next/no-img-element -- URL dokumentasi berasal dari storage dinamis. */}
-          <img src={activeUrl} alt={activePhoto.caption || `Dokumentasi ${photoLabels[activePhoto.type]}`} className="max-h-[32rem] w-full object-contain" />
+          <img src={activeUrl} alt={activePhoto.caption || `Dokumentasi ${photoLabels[activePhoto.type]}`} className="h-full w-full object-contain" />
           {photos.length > 1 ? (
             <>
               <button type="button" onClick={() => move(-1)} className="absolute left-2 inline-flex h-8 w-8 items-center justify-center border border-white/30 bg-black/45 text-white hover:bg-black/65" aria-label="Foto sebelumnya"><ChevronLeft className="h-4 w-4" /></button>
@@ -130,15 +145,15 @@ function CountdownGallery({ countdown }: { countdown: CountdownDetail }) {
             </>
           ) : null}
         </div>
-        <div className="flex gap-2 overflow-x-auto lg:block lg:space-y-2 lg:overflow-y-auto">
+        <div className="grid max-h-32 grid-cols-4 gap-2 overflow-y-auto pr-1 sm:grid-cols-6 md:grid-cols-8">
           {photos.map((photo, index) => {
             const url = resolveCountdownPhotoUrl(photo.url);
             if (!url) return null;
             return (
-              <button key={photo.photoId} type="button" onClick={() => setActiveIndex(index)} className={`block shrink-0 overflow-hidden border text-left ${index === activeIndex ? "border-primary" : "border-border hover:border-primary/50"}`} aria-label={`Pilih foto ${index + 1}`}>
+              <button key={photo.photoId} type="button" onClick={() => setActiveIndex(index)} className={`relative h-14 min-w-0 overflow-hidden border bg-background text-left ${index === activeIndex ? "border-primary" : "border-border hover:border-primary/50"}`} aria-label={`Pilih foto ${index + 1}`}>
                 {/* eslint-disable-next-line @next/next/no-img-element -- URL dokumentasi berasal dari storage dinamis. */}
-                <img src={url} alt="" className="h-16 w-20 object-cover lg:h-20 lg:w-full" />
-                <span className="hidden px-2 py-1 font-mono text-[10px] uppercase text-muted-foreground lg:block">{photoLabels[photo.type]}</span>
+                <img src={url} alt="" className="h-full w-full object-cover" />
+                <span className="absolute bottom-0 left-0 right-0 bg-black/55 px-1 py-0.5 text-center font-mono text-[9px] uppercase text-white">{photoLabels[photo.type]}</span>
               </button>
             );
           })}
@@ -233,20 +248,13 @@ export function CountdownDetailShell({
       setIsDecidingRevision(false);
     }
   }
-  const buildJobPlanHref = (mode: "normal" | "overtime") => {
-    const jobPlanParams = new URLSearchParams({ coreId: countdown.countdownId, mode });
-    if (countdown.divisionId !== null) {
-      jobPlanParams.set("divisionId", String(countdown.divisionId));
-      jobPlanParams.append(
-        "filter",
-        encodeGridFilterToken({
-          field: "divisionId",
-          operator: "eq",
-          value: String(countdown.divisionId),
-        }),
-      );
-    }
-    return `/job-plan?${jobPlanParams.toString()}`;
+  const buildDraftHref = (type: "job-plan" | "wo" | "pr" | "wov") => {
+    const params = new URLSearchParams({ countdownId: countdown.countdownId, draft: "1", type });
+    if (type === "job-plan") params.set("coreId", countdown.countdownId);
+    if (type === "job-plan") return `/job-plan?${params.toString()}`;
+    if (type === "wo") return `/wo?${params.toString()}`;
+    if (type === "pr") return `/pr?${params.toString()}`;
+    return `/vendor?${params.toString()}`;
   };
   return (
     <div className="flex flex-col gap-3">
@@ -319,8 +327,6 @@ export function CountdownDetailShell({
 
       {sweetAlert.alertElement}
 
-      <CountdownGallery countdown={countdown} />
-
       {countdown.extensionRequestStatus || countdown.countRevision > 0 ? (
         <section className="border border-border bg-card px-3 py-2.5 dark:border-white/[0.06]">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -337,90 +343,63 @@ export function CountdownDetailShell({
         </section>
       ) : null}
 
-      <SectionCard label="Detail pekerjaan">
-        <SmsAgGrid<CountdownDetailRow>
-          heightClassName="h-28"
-          className="[&_.ag-row]:cursor-pointer"
-          rowData={[countdown]}
-          columnDefs={detailColumnDefs}
-          enableCellTextSelection
-          ensureDomOrder
-          onRowClicked={() => router.push(`/countdown/${encodeURIComponent(countdown.countdownId)}`)}
-        />
-      </SectionCard>
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_26rem]">
+        <main className="min-w-0 space-y-3">
+          <SectionCard label="Informasi Countdown">
+            <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <DetailField label="Unit" value={countdown.unitName} />
+              <DetailField label="Customer" value={countdown.customerName ?? "-"} />
+              <DetailField label="KP" value={countdown.kpName ?? "-"} />
+              <DetailField label="KD" value={countdown.kdName ?? "-"} />
+            </dl>
+          </SectionCard>
 
-      <SectionCard label="Linimasa pekerjaan">
-        <ol className="space-y-3 border-l border-border pl-4 dark:border-white/[0.08]">
-          {countdown.createdAt ? (
-            <li className="relative text-[12px] text-foreground before:absolute before:-left-[21px] before:top-1.5 before:h-2 before:w-2 before:bg-primary">
-              <p className="font-medium">Countdown dibuat</p>
-              <p className="mt-0.5 text-muted-foreground">{fmtDateTime(countdown.createdAt)}</p>
-            </li>
-          ) : null}
-          <li className="relative text-[12px] text-foreground before:absolute before:-left-[21px] before:top-1.5 before:h-2 before:w-2 before:bg-muted-foreground">
-            <p className="font-medium">Job Plan</p>
-            <p className="mt-0.5 text-muted-foreground">Status belum tersedia dari detail Countdown.</p>
-          </li>
-          {countdown.details.length > 0 ? (
-            <li className="relative text-[12px] text-foreground before:absolute before:-left-[21px] before:top-1.5 before:h-2 before:w-2 before:bg-success">
-              <p className="font-medium">Aktual tercatat</p>
-              <p className="mt-0.5 text-muted-foreground">{countdown.details.length} catatan aktual terakhir pada {countdown.details[0]?.workDate}</p>
-            </li>
-          ) : null}
-          {(countdown.status === "QC_READY" || countdown.status === "DONE") ? (
-            <li className="relative text-[12px] text-foreground before:absolute before:-left-[21px] before:top-1.5 before:h-2 before:w-2 before:bg-info">
-              <p className="font-medium">Pemeriksaan kualitas</p>
-              <p className="mt-0.5 text-muted-foreground"><DataGridStatusBadge value={humanizeCodeLabel(countdown.status)} /></p>
-            </li>
-          ) : null}
-        </ol>
-      </SectionCard>
+          <SectionCard label="Detail pekerjaan">
+            <CountdownWorkCard countdown={countdown} />
+          </SectionCard>
 
-      <div id="hasil-pekerjaan">
-        <SectionCard label="Hasil pekerjaan" count={countdown.details.length}>
-        {countdown.details.length > 0 ? (
-          <SmsAgGrid<CountdownActualEntry>
-            heightClassName="h-72"
-            rowData={countdown.details}
-            columnDefs={actualColumnDefs}
-            getRowId={(params) => params.data.detailId}
-            emptyMessage="Belum ada hasil pekerjaan."
-          />
-        ) : <p className="text-sm text-muted-foreground">Belum ada hasil pekerjaan.</p>}
-        </SectionCard>
-      </div>
-
-      <SectionCard label="Aktivitas terkait">
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
-          <Link href={buildJobPlanHref("normal")} className="border border-border px-3 py-2 text-[12px] text-foreground transition-colors hover:border-primary hover:bg-muted">
-            <span className="block text-muted-foreground">Job Plan</span>
-            <span className="mt-1 block font-medium">Buka rencana kerja</span>
-          </Link>
-          {countdown.refWoId ? (
-            <Link href={`/wo/${encodeURIComponent(countdown.refWoId)}`} className="border border-border px-3 py-2 text-[12px] text-foreground transition-colors hover:border-primary hover:bg-muted">
-              <span className="block text-muted-foreground">Work Order</span>
-              <span className="mt-1 block font-medium">Buka WO</span>
-            </Link>
-          ) : <ActivityUnavailable label="Work Order" />}
-          <ActivityUnavailable label="Purchase Request" />
-          <ActivityUnavailable label="Vendor WO" />
-          <div className="border border-border px-3 py-2 text-[12px] text-foreground">
-            <span className="block text-muted-foreground">QC</span>
-            <span className="mt-1 block font-medium">{countdown.status === "QC_READY" || countdown.status === "DONE" ? humanizeCodeLabel(countdown.status) : "Belum ada data"}</span>
+          <div id="hasil-pekerjaan">
+            <SectionCard label="Hasil pekerjaan" count={countdown.details.length}>
+              {countdown.details.length > 0 ? (
+                <div className="grid gap-2">
+                  {countdown.details.map((entry) => (
+                    <ResultCard key={entry.detailId} entry={entry} divisionName={countdown.divisionName} />
+                  ))}
+                </div>
+              ) : <p className="text-sm text-muted-foreground">Belum ada hasil pekerjaan.</p>}
+            </SectionCard>
           </div>
-        </div>
-      </SectionCard>
 
-      <SectionCard label="Informasi tambahan">
-        <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <DetailField label="Kategori" value={humanizeCodeLabel(countdown.taskCategory)} />
-          <DetailField label="Mulai" value={countdown.startDate ?? "-"} />
-          <DetailField label="Deadline" value={countdown.deadlineDate ?? "-"} />
-          <DetailField label="Diperbarui" value={countdown.updatedAt ? fmtDateTime(countdown.updatedAt) : "-"} />
-          <DetailField label="Temuan awal" value={countdown.temuanAwal ?? "-"} />
-          <DetailField label="Keterangan" value={countdown.keterangan ?? "-"} />
-        </dl>
-      </SectionCard>
+          <SectionCard label="Aktivitas terkait">
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+              <Link href={buildDraftHref("job-plan")} className="border border-border px-3 py-2 text-[12px] text-foreground transition-colors hover:border-primary hover:bg-muted">
+                <span className="block text-muted-foreground">Job Plan</span>
+                <span className="mt-1 block font-medium">Buat Draft</span>
+                <span className="mt-1 inline-flex border border-warning/30 px-1.5 py-0.5 font-mono text-[10px] uppercase text-warning">Draft</span>
+              </Link>
+              <Link href={buildDraftHref("wo")} className="border border-border px-3 py-2 text-[12px] text-foreground transition-colors hover:border-primary hover:bg-muted">
+                <span className="block text-muted-foreground">Work Order</span>
+                <span className="mt-1 block font-medium">Buat Draft</span>
+                <span className="mt-1 inline-flex border border-warning/30 px-1.5 py-0.5 font-mono text-[10px] uppercase text-warning">Draft</span>
+              </Link>
+              <Link href={buildDraftHref("pr")} className="border border-border px-3 py-2 text-[12px] text-foreground transition-colors hover:border-primary hover:bg-muted">
+                <span className="block text-muted-foreground">Purchase Request</span>
+                <span className="mt-1 block font-medium">Buat Draft</span>
+                <span className="mt-1 inline-flex border border-warning/30 px-1.5 py-0.5 font-mono text-[10px] uppercase text-warning">Draft</span>
+              </Link>
+              <Link href={buildDraftHref("wov")} className="border border-border px-3 py-2 text-[12px] text-foreground transition-colors hover:border-primary hover:bg-muted">
+                <span className="block text-muted-foreground">Vendor WO</span>
+                <span className="mt-1 block font-medium">Buat Draft</span>
+                <span className="mt-1 inline-flex border border-warning/30 px-1.5 py-0.5 font-mono text-[10px] uppercase text-warning">Draft</span>
+              </Link>
+            </div>
+          </SectionCard>
+        </main>
+
+        <aside className="min-w-0">
+          <CountdownGallery countdown={countdown} />
+        </aside>
+      </div>
 
       <dialog
         ref={revisionDialogRef}
