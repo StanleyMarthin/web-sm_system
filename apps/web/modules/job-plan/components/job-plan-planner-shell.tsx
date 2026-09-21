@@ -1,7 +1,7 @@
 "use client";
 
 import type { JobPlanV2ReadItem } from "@smsystem/contracts/job-plan-v2";
-import type { CellKeyDownEvent, CellValueChangedEvent, ColDef, ICellRendererParams, SelectionChangedEvent } from "ag-grid-community";
+import type { CellKeyDownEvent, CellValueChangedEvent, ColDef, GridApi, GridReadyEvent, ICellRendererParams, SelectionChangedEvent } from "ag-grid-community";
 import { X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -13,7 +13,7 @@ import {
 } from "@/shared/api/job-plan-v2";
 import { SmsAgGrid, SmsGridDraftActions } from "@/shared/datagrid/sms-ag-grid";
 import { DataGridStatusBadge } from "@/shared/datagrid/status-badge";
-import { ActionButton, CompactDateInput, MetricBar, PageHeader } from "@/shared/ui/compact";
+import { ActionButton, CompactDateInput, PageHeader } from "@/shared/ui/compact";
 import { useSweetAlert } from "@/shared/ui/sweet-alert";
 import { SmartSelectCellEditor, type SmartSelectOption } from "@/modules/units/components/master-panel-smart-select-editor";
 import {
@@ -24,6 +24,7 @@ import {
   createJobPlanV2Draft,
   minutesToDuration,
   minutesToTime,
+  toLocalDateValue,
   toJobPlanV2DisplayRows,
   validateManualExecutionDraft,
   validateJobPlanV2Draft,
@@ -38,7 +39,6 @@ import { parseSmsDate, parseSmsDurationMinutes, parseSmsReference, parseSmsTime 
 
 type PlannerMode = "planner" | "approval" | "execution";
 type PlannerRow = JobPlanV2DisplayRow | (JobPlanV2DisplayRow & JobPlanV2PlannerDraft & { editPlanId?: string; editVersion?: number });
-type SmartView = "default" | "draft" | "approval" | "execution";
 
 interface JobPlanPlannerShellProps {
   userId: string;
@@ -81,12 +81,19 @@ function draftToDisplay(
   return {
     ...draft,
     planId: null,
+    kpId: countdown?.kpId ?? null,
+    kpName: countdown?.kpName ?? null,
+    qaIds: countdown?.qaIds ?? [],
+    qaNames: countdown?.qaNames ?? [],
     unitName: countdown?.unitName ?? "-",
     panelName: countdown?.panelName ?? "-",
+    instructionText: draft.note,
     employeeName: employee?.label ?? "",
     divisionName: countdown?.divisionName ?? "-",
     finishTime: minutesToTime(startMinute + duration),
     durationText: draft.durationText,
+    targetTotalText: minutesToDuration(Math.round((countdown?.targetTotalHours ?? duration / 60) * 60)),
+    remainingText: minutesToDuration(Math.round((countdown?.remainingHours ?? 0) * 60)),
     approval: "Draft",
     approvalState: "DRAFT",
     execution: "Belum Mulai",
@@ -124,6 +131,100 @@ function initialPlannerMode(value: string | null): PlannerMode {
 
 function isReviewState(value: string) {
   return value === "DIVISION_REVIEW" || value === "UNIT_REVIEW" || value === "MANAGEMENT_REVIEW";
+}
+
+function formatReportDate(value: string) {
+  if (!value) return "-";
+  return new Intl.DateTimeFormat("id-ID", {
+    weekday: "short",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(new Date(`${value}T00:00:00`));
+}
+
+function uniqueByValue(options: Array<{ value: string; label: string }>) {
+  const seen = new Set<string>();
+  return options.filter((option) => {
+    if (!option.value || seen.has(option.value)) return false;
+    seen.add(option.value);
+    return true;
+  }).sort((left, right) => left.label.localeCompare(right.label));
+}
+
+function statusLabel(row: PlannerRow) {
+  if (row.executionState === "RUNNING") return "Berjalan";
+  if (row.executionState === "HOLD") return "Hold";
+  if (row.executionState === "FINISHED_PENDING_VALIDATION") return "Selesai";
+  if (row.executionState === "VALIDATED") return "Tervalidasi";
+  return row.approval;
+}
+
+function joinDistinct(values: Array<string | null | undefined>) {
+  return [...new Set(values.map((value) => value?.trim()).filter(Boolean) as string[])].join(" · ");
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+function buildReportTableHtml(rows: PlannerRow[], meta: { date: string; kp: string; qa: string }) {
+  const body = rows.map((row) => `
+    <tr>
+      <td>${escapeHtml(row.divisionName)}</td>
+      <td>${escapeHtml(row.employeeName)}</td>
+      <td>${escapeHtml(row.unitName)}</td>
+      <td>${escapeHtml(row.panelName)}</td>
+      <td>${escapeHtml(row.jobDescription)}</td>
+      <td>${escapeHtml(row.instructionText || row.note || "")}</td>
+      <td>${escapeHtml(row.targetTotalText)}</td>
+      <td>${escapeHtml(row.remainingText)}</td>
+      <td>${escapeHtml(`${row.taskDate} ${row.startTime}`)}</td>
+      <td>${escapeHtml(`${row.taskDate} ${row.finishTime}`)}</td>
+      <td>${escapeHtml(row.durationText)}</td>
+      <td>${escapeHtml(joinDistinct([row.note, row.instructionText]))}</td>
+      <td><span class="badge">${escapeHtml(statusLabel(row))}</span></td>
+    </tr>
+  `).join("");
+
+  return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Laporan Job Plan</title>
+  <style>
+    @page { size: A4 landscape; margin: 10mm; }
+    body { font-family: Arial, sans-serif; color: #1f2933; font-size: 9px; }
+    h1 { margin: 0 0 8px; font-size: 16px; letter-spacing: .04em; }
+    .meta { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 10px; font-size: 10px; }
+    table { width: 100%; border-collapse: collapse; }
+    th { background: #2b2b2b; color: #fff; padding: 5px; text-align: left; }
+    td { border: 1px solid #d7d7d7; padding: 4px; vertical-align: top; }
+    tr:nth-child(even) td { background: #f6f6f6; }
+    .badge { display: inline-block; border-radius: 3px; background: #e9b872; color: #1f2933; padding: 2px 5px; font-weight: 700; }
+  </style>
+</head>
+<body>
+  <h1>LAPORAN JOB PLAN</h1>
+  <div class="meta">
+    <div><strong>Tanggal:</strong> ${escapeHtml(formatReportDate(meta.date))}</div>
+    <div><strong>KP:</strong> ${escapeHtml(meta.kp || "Semua KP")}</div>
+    <div><strong>QA:</strong> ${escapeHtml(meta.qa || "Semua QA")}</div>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>TEAM</th><th>PERSONIL</th><th>UNIT</th><th>PANEL / PART</th><th>JOB DESCRIPTION</th><th>INTRUKSI</th><th>TOTAL TARGET</th><th>SISA TARGET</th><th>START</th><th>FINISH</th><th>TARGET HARI INI</th><th>CATATAN</th><th>STATUS</th>
+      </tr>
+    </thead>
+    <tbody>${body || `<tr><td colspan="13">Belum ada data.</td></tr>`}</tbody>
+  </table>
+</body>
+</html>`;
 }
 
 function sameApprovalStage(rows: PlannerRow[]) {
@@ -227,7 +328,6 @@ export function JobPlanPlannerShell({
   userId,
   canCreate,
   canApprove,
-  canExecute,
   initialCoreId,
   initialDate,
   initialMode,
@@ -239,15 +339,16 @@ export function JobPlanPlannerShell({
   const [editDrafts, setEditDrafts] = useState<Array<JobPlanV2PlannerDraft & { editPlanId: string; editVersion: number }>>([]);
   const [manualDraft, setManualDraft] = useState<JobPlanV2ManualExecutionDraft | null>(null);
   const [selectedRow, setSelectedRow] = useState<PlannerRow | null>(null);
+  const [gridApi, setGridApi] = useState<GridApi<PlannerRow> | null>(null);
   const [mode, setMode] = useState<PlannerMode>(() => initialPlannerMode(initialMode));
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedRows, setSelectedRows] = useState<PlannerRow[]>([]);
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
-  const [smartView, setSmartView] = useState<SmartView>("default");
-  const [dateFilter, setDateFilter] = useState(initialDate ?? "");
-  const [divisionFilter, setDivisionFilter] = useState("");
+  const [dateFilter, setDateFilter] = useState(initialDate ?? toLocalDateValue());
+  const [kpFilter, setKpFilter] = useState("");
+  const [qaFilter, setQaFilter] = useState("");
   const [employeeFilter, setEmployeeFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const sweetAlert = useSweetAlert();
@@ -259,7 +360,7 @@ export function JobPlanPlannerShell({
     const result = await fetchJobPlanV2List({
       userId,
       view: viewForMode(mode),
-      date: initialDate ?? undefined,
+      date: dateFilter,
       coreId: initialCoreId ?? undefined,
     });
     if (!result.success) {
@@ -274,7 +375,7 @@ export function JobPlanPlannerShell({
 
   useEffect(() => {
     void load();
-  }, [userId, initialCoreId, initialDate, mode]);
+  }, [userId, initialCoreId, dateFilter, mode]);
 
   useEffect(() => {
     function beforeUnload(event: BeforeUnloadEvent) {
@@ -296,18 +397,22 @@ export function JobPlanPlannerShell({
 
   const filteredRows = useMemo(() => rows.filter((row) => {
     if (dateFilter && row.taskDate !== dateFilter) return false;
-    if (divisionFilter && row.divisionName !== divisionFilter) return false;
+    if (kpFilter && row.kpId !== kpFilter) return false;
+    if (qaFilter && !row.qaIds.includes(qaFilter)) return false;
     if (employeeFilter && row.employeeId !== employeeFilter) return false;
     if (statusFilter && row.approvalState !== statusFilter && row.executionState !== statusFilter) return false;
-    if (smartView === "draft" && row.approvalState !== "DRAFT") return false;
-    if (smartView === "approval" && !isReviewState(row.approvalState)) return false;
-    if (smartView === "execution" && row.approvalState !== "APPROVED") return false;
     return true;
-  }), [dateFilter, divisionFilter, employeeFilter, rows, smartView, statusFilter]);
+  }), [dateFilter, employeeFilter, kpFilter, qaFilter, rows, statusFilter]);
 
-  const divisionOptions = useMemo(() => [...new Set(rows
-    .map((row) => row.divisionName)
-    .filter((value) => value && value !== "-"))].sort((a, b) => a.localeCompare(b)), [rows]);
+  const kpOptions = useMemo(() => uniqueByValue(countdowns.map((item) => ({
+    value: item.kpId ?? "",
+    label: item.kpName ?? item.kpId ?? "",
+  }))), [countdowns]);
+
+  const qaOptions = useMemo(() => uniqueByValue(countdowns.flatMap((item) => (item.qaIds ?? []).map((value, index) => ({
+    value,
+    label: item.qaNames?.[index] ?? value,
+  })))), [countdowns]);
 
   const statusOptions = [
     ["DRAFT", "Draft"],
@@ -315,12 +420,9 @@ export function JobPlanPlannerShell({
     ["UNIT_REVIEW", "Review Unit"],
     ["MANAGEMENT_REVIEW", "Review Manajemen"],
     ["APPROVED", "Disetujui"],
-    ["REJECTED", "Ditolak"],
-    ["CANCELLED", "Dibatalkan"],
-    ["NOT_STARTED", "Belum Mulai"],
     ["RUNNING", "Berjalan"],
     ["HOLD", "Ditahan"],
-    ["FINISHED_PENDING_VALIDATION", "Menunggu Validasi"],
+    ["FINISHED_PENDING_VALIDATION", "Selesai"],
     ["VALIDATED", "Tervalidasi"],
   ] as const;
 
@@ -352,84 +454,80 @@ export function JobPlanPlannerShell({
       checkboxSelection: true,
       headerCheckboxSelection: true,
     },
-    { headerName: "Unit", field: "unitName", editable: false, minWidth: 125, pinned: "left" },
-    { headerName: "Panel", field: "panelName", editable: false, minWidth: 150, flex: 0.9 },
+    { headerName: "TEAM", field: "divisionName", editable: false, minWidth: 125, pinned: "left" },
     {
-      headerName: "Pekerjaan",
+      headerName: "PERSONIL",
+      field: "employeeId",
+      filterValueGetter: ({ data }) => data?.employeeName ?? "",
+      editable: ({ data }) => Boolean(data?.isNew || data?.editPlanId) && employeeOptions.length > 1,
+      cellEditor: SmartSelectCellEditor,
+      cellEditorParams: { values: employeeOptions },
+      cellEditorPopup: true,
+      cellEditorPopupPosition: "under",
+      valueFormatter: ({ value, data }) => data?.isNew || data?.editPlanId
+        ? employeeOptions.find((option) => option.value === String(value ?? ""))?.label ?? ""
+        : data?.employeeName ?? "",
+      minWidth: 155,
+      flex: 0.8,
+    },
+    { headerName: "NAMA UNIT", field: "unitName", editable: false, minWidth: 120 },
+    { headerName: "NAMA PANEL / PART", field: "panelName", editable: false, minWidth: 160, flex: 0.9 },
+    {
+      headerName: "JOB DESCRIPTION",
       field: "jobDescription",
       editable: ({ data }) => Boolean(data?.isNew || data?.editPlanId),
       minWidth: 220,
       flex: 1.15,
     },
     {
-      headerName: "Instruksi",
+      headerName: "INTRUKSI",
       field: "note",
       editable: ({ data }) => Boolean(data?.isNew || data?.editPlanId),
       minWidth: 180,
       flex: 0.9,
+      filterValueGetter: ({ data }) => data ? joinDistinct([data.instructionText, data.note]) : "",
+      valueFormatter: ({ data }) => data ? joinDistinct([data.instructionText, data.note]) : "",
     },
-    { headerName: "Divisi", field: "divisionName", editable: false, minWidth: 115 },
+    { headerName: "TOTAL TARGET", field: "targetTotalText", editable: false, minWidth: 115 },
+    { headerName: "SISA TARGET", field: "remainingText", editable: false, minWidth: 110 },
     {
-      headerName: "PIC",
-      field: "employeeId",
-      editable: ({ data }) => Boolean(data?.isNew || data?.editPlanId) && employeeOptions.length > 1,
-      cellEditor: SmartSelectCellEditor,
-      cellEditorParams: { values: employeeOptions },
-      cellEditorPopup: true,
-      cellEditorPopupPosition: "under",
-      valueFormatter: ({ value, data }) => data?.isNew
-        ? employeeOptions.find((option) => option.value === String(value ?? ""))?.label ?? ""
-        : data?.employeeName ?? "",
-      minWidth: 140,
-      flex: 0.8,
+      headerName: "START",
+      field: "startTime",
+      editable: ({ data }) => Boolean(data?.isNew || data?.editPlanId),
+      minWidth: 135,
+      filterValueGetter: ({ data }) => data ? `${formatReportDate(data.taskDate)} ${data.startTime}` : "",
+      valueFormatter: ({ data }) => data ? `${formatReportDate(data.taskDate)} ${data.startTime}` : "",
     },
-    { headerName: "Tanggal", field: "taskDate", editable: ({ data }) => Boolean(data?.isNew || data?.editPlanId), cellEditor: "agDateStringCellEditor", minWidth: 115 },
-    { headerName: "Mulai", field: "startTime", editable: ({ data }) => Boolean(data?.isNew || data?.editPlanId), minWidth: 85 },
-    { headerName: "Target Jam", field: "durationText", editable: ({ data }) => Boolean(data?.isNew || data?.editPlanId), minWidth: 105 },
-    { headerName: "Estimasi Selesai", field: "finishTime", editable: false, minWidth: 125 },
     {
-      headerName: "Status",
+      headerName: "FINISH",
+      field: "finishTime",
+      editable: false,
+      minWidth: 135,
+      filterValueGetter: ({ data }) => data ? `${formatReportDate(data.taskDate)} ${data.finishTime}` : "",
+      valueFormatter: ({ data }) => data ? `${formatReportDate(data.taskDate)} ${data.finishTime}` : "",
+    },
+    { headerName: "TOTAL TARGET HARI INI", field: "durationText", editable: ({ data }) => Boolean(data?.isNew || data?.editPlanId), minWidth: 150 },
+    {
+      headerName: "CATATAN / KETERANGAN",
+      field: "note",
+      editable: ({ data }) => Boolean(data?.isNew || data?.editPlanId),
+      minWidth: 190,
+      flex: 0.9,
+      filterValueGetter: ({ data }) => data ? joinDistinct([data.note, data.instructionText]) : "",
+      valueFormatter: ({ data }) => data ? joinDistinct([data.note, data.instructionText]) : "",
+    },
+    {
+      headerName: "STATUS",
       field: "approval",
       editable: false,
       minWidth: 140,
+      filterValueGetter: ({ data }) => data ? statusLabel(data) : "",
       cellRenderer: ({ data }: ICellRendererParams<PlannerRow>) => data ? (
-        <DataGridStatusBadge value={mode === "execution" ? data.execution : data.approval} />
+        <DataGridStatusBadge value={statusLabel(data)} />
       ) : null,
-    },
-    {
-      headerName: "Tindakan",
-      field: "error",
-      editable: false,
-      minWidth: 230,
       pinned: "right",
-      cellRenderer: ({ data }: ICellRendererParams<PlannerRow>) => {
-        if (!data) return null;
-        if (data.isNew || data.editPlanId) {
-          return data.error ? <span className="text-[12px] text-destructive">{data.error}</span> : <span className="text-[12px] text-muted-foreground">Belum disimpan</span>;
-        }
-        return (
-          <div className="flex h-full items-center gap-1">
-            <button type="button" className="border border-border px-2 py-1 text-[11px] text-foreground hover:bg-muted" onClick={() => setSelectedRow(data)}>Detail</button>
-            {canCreate && data.approvalState === "DRAFT" ? (
-              <>
-                <button type="button" className="border border-border px-2 py-1 text-[11px] text-foreground hover:bg-muted" onClick={() => startEditDraft(data)}>Ubah</button>
-                <button type="button" className="border border-border px-2 py-1 text-[11px] text-foreground hover:bg-muted" onClick={() => void submitDraft(data)}>Ajukan</button>
-              </>
-            ) : null}
-            {canApprove && ["DIVISION_REVIEW", "UNIT_REVIEW", "MANAGEMENT_REVIEW"].includes(data.approvalState) ? (
-              <>
-                <button type="button" className="border border-border px-2 py-1 text-[11px] text-foreground hover:bg-muted" onClick={() => void reviewDraft(data, "approve")}>Setujui</button>
-                <button type="button" className="border border-border px-2 py-1 text-[11px] text-destructive hover:bg-muted" onClick={() => void reviewDraft(data, "reject")}>Tolak</button>
-              </>
-            ) : null}
-            {canExecute && data.approvalState === "APPROVED" && data.executionState === "NOT_STARTED" ? (
-              <button type="button" className="border border-border px-2 py-1 text-[11px] text-foreground hover:bg-muted" onClick={() => setManualDraft(createManualExecutionDraft(data))}>Input Hasil</button>
-            ) : null}
-          </div>
-        );
-      },
     },
-  ], [canApprove, canCreate, canExecute, employeeOptions, mode]);
+  ], [employeeOptions]);
 
   const manualColumnDefs = useMemo<ColDef<JobPlanV2ManualExecutionDraft>[]>(() => [
     { headerName: "Mulai Aktual", field: "actualStart", editable: true, minWidth: 160, flex: 0.8 },
@@ -590,61 +688,6 @@ export function JobPlanPlannerShell({
     if (failed.length + failedEdits.length > 0) setError(`${failed.length + failedEdits.length} rencana belum tersimpan.`);
   }
 
-  function startEditDraft(row: PlannerRow) {
-    if (!row.planId || !row.version) return;
-    const planId = row.planId;
-    const version = row.version;
-    if (editDrafts.some((draft) => draft.editPlanId === planId)) return;
-    setEditDrafts((current) => [...current, {
-      clientId: `edit-${planId}`,
-      isNew: true,
-      editPlanId: planId,
-      editVersion: version,
-      coreId: row.coreId,
-      employeeId: row.employeeId,
-      taskDate: row.taskDate,
-      startTime: row.startTime,
-      durationText: row.durationText,
-      jobDescription: row.jobDescription,
-      note: row.note,
-      isOvertime: false,
-      isRework: false,
-      isPriority: row.isPriority,
-      error: null,
-    }]);
-  }
-
-  async function submitDraft(row: PlannerRow) {
-    if (!row.planId || !row.version || isSaving) return;
-    setIsSaving(true);
-    const result = await mutateJobPlanV2Approval(row.planId, {
-      action: "submit",
-      userId,
-      commandId: createJobPlanV2CommandId("web-submit"),
-      expectedVersion: row.version,
-    });
-    if (!result.success) setError(result.message);
-    await load();
-    setIsSaving(false);
-  }
-
-  async function cancelDraft(row: PlannerRow) {
-    if (!row.planId || !row.version || isSaving) return;
-    const reason = window.prompt("Alasan cancel draft");
-    if (!reason?.trim()) return;
-    setIsSaving(true);
-    const result = await mutateJobPlanV2Approval(row.planId, {
-      action: "cancel",
-      userId,
-      commandId: createJobPlanV2CommandId("web-cancel"),
-      expectedVersion: row.version,
-      reason,
-    });
-    if (!result.success) setError(result.message);
-    await load();
-    setIsSaving(false);
-  }
-
   async function reviewRows(rowsToReview: PlannerRow[], action: "approve" | "reject", rejectReason?: string) {
     if (rowsToReview.length === 0 || isSaving) return;
     const validRows = rowsToReview.filter((row) => row.planId && row.version && isReviewState(row.approvalState));
@@ -685,16 +728,6 @@ export function JobPlanPlannerShell({
     }
   }
 
-  async function reviewDraft(row: PlannerRow, action: "approve" | "reject") {
-    if (!row.planId || !row.version || isSaving) return;
-    if (action === "reject") {
-      setSelectedRows([row]);
-      setRejectDialogOpen(true);
-      return;
-    }
-    await reviewRows([row], action);
-  }
-
   async function submitRejectReason(reason: string) {
     setRejectDialogOpen(false);
     await reviewRows(selectedRows, "reject", reason);
@@ -722,11 +755,29 @@ export function JobPlanPlannerShell({
     setIsSaving(false);
   }
 
+  function openReportPrint() {
+    const popup = window.open("", "_blank", "noopener,noreferrer");
+    if (!popup) {
+      setError("Popup browser ditahan. Izinkan popup untuk mencetak laporan.");
+      return;
+    }
+    const visibleRows: PlannerRow[] = [];
+    gridApi?.forEachNodeAfterFilterAndSort((node) => {
+      if (node.data) visibleRows.push(node.data);
+    });
+    const kpLabel = kpOptions.find((option) => option.value === kpFilter)?.label ?? "";
+    const qaLabel = qaOptions.find((option) => option.value === qaFilter)?.label ?? "";
+    popup.document.write(buildReportTableHtml(gridApi ? visibleRows : filteredRows, { date: dateFilter, kp: kpLabel, qa: qaLabel }));
+    popup.document.close();
+    popup.focus();
+    popup.print();
+  }
+
   return (
     <div className="space-y-3">
-      <div className="border border-border bg-card px-4 py-3">
+      <div className="border border-border bg-card px-4 py-3 shadow-sm">
         <PageHeader
-          eyebrow="Perencanaan Kerja"
+          eyebrow="PERENCANAAN KERJA"
           title="Rencana Pekerjaan"
           actions={(
             <div className="flex items-center gap-1">
@@ -738,7 +789,7 @@ export function JobPlanPlannerShell({
             </div>
           )}
         />
-        <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
           <div className="min-w-0">
           {selectedContext ? (
             <p className="text-[13px] text-muted-foreground">
@@ -748,27 +799,32 @@ export function JobPlanPlannerShell({
           </div>
           <p className="text-[11px] text-muted-foreground">{filteredRows.length} dari {rows.length} baris</p>
         </div>
+        <div className="mt-3 grid gap-2 sm:grid-cols-3">
+          {summaryItems.slice(0, 3).map((item) => (
+            <div key={item.label} className="border border-border bg-background px-3 py-2">
+              <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground">{item.label}</p>
+              <p className="mt-1 font-mono text-[18px] font-semibold tabular-nums text-foreground">{item.value}</p>
+            </div>
+          ))}
+        </div>
       </div>
-      <MetricBar items={summaryItems} />
       <div className="flex flex-wrap items-end gap-2 border border-border bg-card px-3 py-3">
-        <label className="min-w-[10rem] flex-1 text-[11px] text-muted-foreground">
-          Tampilan
-          <select value={smartView} onChange={(event) => setSmartView(event.target.value as SmartView)} className="mt-1 h-9 w-full border border-border bg-background px-2 text-[12px] text-foreground">
-            <option value="default">Semua rencana</option>
-            <option value="draft">Draft saya</option>
-            <option value="approval">Menunggu persetujuan</option>
-            <option value="execution">Siap dikerjakan</option>
-          </select>
-        </label>
         <div className="min-w-[10rem] flex-1">
           <span className="text-[11px] text-muted-foreground">Tanggal</span>
           <CompactDateInput value={dateFilter} onChange={setDateFilter} className="mt-1" />
         </div>
         <label className="min-w-[10rem] flex-1 text-[11px] text-muted-foreground">
-          Divisi
-          <select value={divisionFilter} onChange={(event) => setDivisionFilter(event.target.value)} className="mt-1 h-9 w-full border border-border bg-background px-2 text-[12px] text-foreground">
-            <option value="">Semua divisi</option>
-            {divisionOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+          KP
+          <select value={kpFilter} onChange={(event) => setKpFilter(event.target.value)} className="mt-1 h-9 w-full border border-border bg-background px-2 text-[12px] text-foreground">
+            <option value="">Semua KP</option>
+            {kpOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
+        </label>
+        <label className="min-w-[10rem] flex-1 text-[11px] text-muted-foreground">
+          QA
+          <select value={qaFilter} onChange={(event) => setQaFilter(event.target.value)} className="mt-1 h-9 w-full border border-border bg-background px-2 text-[12px] text-foreground">
+            <option value="">Semua QA</option>
+            {qaOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
           </select>
         </label>
         <label className="min-w-[10rem] flex-1 text-[11px] text-muted-foreground">
@@ -786,12 +842,14 @@ export function JobPlanPlannerShell({
           </select>
         </label>
         <ActionButton onClick={() => {
-          setSmartView("default");
-          setDateFilter(initialDate ?? "");
-          setDivisionFilter("");
+          setDateFilter(initialDate ?? toLocalDateValue());
+          setKpFilter("");
+          setQaFilter("");
           setEmployeeFilter("");
           setStatusFilter("");
         }}>Reset</ActionButton>
+        <ActionButton onClick={openReportPrint}>Download PDF</ActionButton>
+        <ActionButton onClick={openReportPrint}>Print</ActionButton>
       </div>
       {error ? <p className="border border-destructive/25 bg-destructive/5 px-3 py-2 text-sm text-destructive">{error}</p> : null}
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -828,6 +886,15 @@ export function JobPlanPlannerShell({
         getRowId={(params) => params.data.clientId}
         loading={isLoading}
         rowSelection="multiple"
+        defaultColDef={{
+          floatingFilter: true,
+          filter: "agTextColumnFilter",
+          filterParams: {
+            trimInput: true,
+            debounceMs: 150,
+          },
+        }}
+        onGridReady={(event: GridReadyEvent<PlannerRow>) => setGridApi(event.api)}
         onSelectionChanged={(event: SelectionChangedEvent<PlannerRow>) => setSelectedRows(event.api.getSelectedRows())}
         onCellValueChanged={updateDraft}
         onCellKeyDown={(event) => {

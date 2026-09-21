@@ -24,6 +24,11 @@ const countdown = {
   divisionName: "BODY",
   panelName: "Front Bumper",
   jobName: "Repair bumper",
+  kpId: "KP-1",
+  kpName: "Iqbal",
+  qaIds: ["QA-1"],
+  qaNames: ["Hardian"],
+  targetTotalHours: 8,
   remainingHours: 3,
 };
 

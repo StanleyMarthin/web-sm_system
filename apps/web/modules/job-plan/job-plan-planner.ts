@@ -48,9 +48,14 @@ export interface JobPlanV2DisplayRow {
   isNew: boolean;
   planId: string | null;
   coreId: string;
+  kpId: string | null;
+  kpName: string | null;
+  qaIds: string[];
+  qaNames: string[];
   unitName: string;
   panelName: string;
   jobDescription: string;
+  instructionText: string;
   employeeId: string;
   employeeName: string;
   divisionName: string;
@@ -58,6 +63,8 @@ export interface JobPlanV2DisplayRow {
   startTime: string;
   finishTime: string;
   durationText: string;
+  targetTotalText: string;
+  remainingText: string;
   approval: string;
   approvalState: JobPlanV2ApprovalState;
   execution: string;
@@ -179,9 +186,14 @@ export function toJobPlanV2DisplayRows(
       isNew: false,
       planId: item.plan_id,
       coreId: item.core_id,
+      kpId: countdown?.kpId ?? null,
+      kpName: countdown?.kpName ?? null,
+      qaIds: countdown?.qaIds ?? [],
+      qaNames: countdown?.qaNames ?? [],
       unitName: countdown?.unitName ?? item.car_id ?? "-",
       panelName: countdown?.panelName ?? "-",
       jobDescription: item.jobdescription ?? countdown?.jobName ?? countdown?.label ?? "-",
+      instructionText: item.note ?? "",
       employeeId: item.employee_id ?? "",
       employeeName: employee?.label ?? item.employee_id ?? "-",
       divisionName: countdown?.divisionName ?? String(item.division_id ?? "-"),
@@ -189,6 +201,8 @@ export function toJobPlanV2DisplayRows(
       startTime: minutesToTime(item.planned_start_minute),
       finishTime: minutesToTime(item.planned_finish_minute),
       durationText: minutesToDuration(item.planned_work_minutes),
+      targetTotalText: minutesToDuration(Math.round((countdown?.targetTotalHours ?? item.planned_work_minutes / 60) * 60)),
+      remainingText: minutesToDuration(Math.round((countdown?.remainingHours ?? 0) * 60)),
       approval: formatJobPlanV2Approval(item.approval_state),
       approvalState: item.approval_state,
       execution: formatJobPlanV2Execution(item.execution_state),

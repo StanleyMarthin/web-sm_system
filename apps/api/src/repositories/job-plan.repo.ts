@@ -112,6 +112,10 @@ interface CountdownReferenceRow extends RowDataPacket {
   divisionName: string;
   panelName?: string | null;
   jobName?: string | null;
+  kpId?: string | null;
+  kpName?: string | null;
+  qaIds?: string | null;
+  qaNames?: string | null;
   targetTotalHours: number | null;
   remainingHours: number | null;
   availablePlanHours: number | null;
@@ -1504,6 +1508,10 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
             ROUND(COALESCE(jc.actual_progress_percent, 0), 2) AS progressPercent
           FROM sm_jobdesc_countdown jc
           LEFT JOIN cars c ON c.id = jc.car_id
+          LEFT JOIN car_project_assignment cpa ON cpa.car_id = jc.car_id AND cpa.ended_at IS NULL
+          LEFT JOIN sm_employee kp ON kp.employee_id = cpa.kp_id
+          LEFT JOIN employee_managed_divisions emd ON emd.division_id = jc.division_id
+          LEFT JOIN sm_employee qa ON qa.employee_id = emd.employee_id AND qa.is_active = 1
           LEFT JOIN master_panels mp ON mp.id = jc.panel_id
           LEFT JOIN sm_divisi d ON d.id = jc.division_id
           LEFT JOIN master_job_types mjt ON mjt.id = jc.job_type_id
@@ -1546,6 +1554,8 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
             jc.panel_id,
             jc.division_id,
             c.unit_name,
+            cpa.kp_id,
+            kp.full_name,
             mp.panel_name,
             mp.name_part,
             jc.section_name,
@@ -1679,6 +1689,10 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
         divisionName: row.divisionName,
         panelName: row.panelName,
         jobName: row.jobName,
+        kpId: row.kpId ?? null,
+        kpName: row.kpName ?? null,
+        qaIds: row.qaIds ? row.qaIds.split("||").filter(Boolean) : [],
+        qaNames: row.qaNames ? row.qaNames.split("||").filter(Boolean) : [],
         targetTotalHours:
           row.targetTotalHours === null ? null : Number(row.targetTotalHours),
         remainingHours: Number(row.remainingHours ?? 0),
