@@ -3,7 +3,7 @@
 // Hallmark · pre-emit critique: P5 H5 E4 S5 R5 V4 · Workbench utilitarian · design.md
 
 import type { CountdownDetail } from "@smsystem/contracts/countdown";
-import type { CellValueChangedEvent, ColDef, ICellEditorParams, ICellRendererParams } from "ag-grid-community";
+import type { CellKeyDownEvent, CellValueChangedEvent, ColDef, ICellEditorParams, ICellRendererParams } from "ag-grid-community";
 import { ArrowLeft, Camera, Check, ChevronLeft, ChevronRight, RotateCcw, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -11,6 +11,7 @@ import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, use
 import { humanizeCodeLabel, fmtTime } from "@/shared/format/humanize";
 import { DataGridStatusBadge } from "@/shared/datagrid/status-badge";
 import { SmsAgGrid } from "@/shared/datagrid/sms-ag-grid";
+import { parseClipboardTsv } from "@/shared/datagrid/clipboard";
 import { approveCountdownRevision, requestCountdownRevision } from "@/shared/api/countdown";
 import { fetchJobPlanGrid } from "@/shared/api/job-plan";
 import { createJobPlanV2, createJobPlanV2CommandId } from "@/shared/api/job-plan-v2";
@@ -161,6 +162,54 @@ function filterEmployeesByDivision(employees: JobPlanEmployeeOption[], divisionI
 function defaultEmployeeId(employees: JobPlanEmployeeOption[], currentEmployeeId = "") {
   if (currentEmployeeId && employees.some((employee) => employee.value === currentEmployeeId)) return currentEmployeeId;
   return employees.length === 1 ? employees[0].value : "";
+}
+
+function makeJobPlanDraftRow(countdown: CountdownDetail, seed: Partial<JobPlanDraftRow> = {}): JobPlanDraftRow {
+  return {
+    clientId: `job-plan-draft-${crypto.randomUUID()}`,
+    divisionId: countdown.divisionId ? String(countdown.divisionId) : "",
+    employeeId: "",
+    taskDate: todayDate(),
+    startTime: "08:00",
+    durationText: hoursToDuration(Math.min(Math.max(countdown.remainingHours || countdown.targetHoursRevised || 1, 1), 12)),
+    jobDescription: countdown.jobTypeName ?? humanizeCodeLabel(countdown.taskCategory),
+    note: countdown.keterangan ?? countdown.note ?? "",
+    isPriority: false,
+    error: null,
+    ...seed,
+  };
+}
+
+function makeOperationalDraftRow(countdown: CountdownDetail, type: OperationalDraftType, seed: Partial<OperationalDraftRow> = {}): OperationalDraftRow {
+  return {
+    clientId: `activity-draft-${crypto.randomUUID()}`,
+    type,
+    divisionId: countdown.divisionId ? String(countdown.divisionId) : "",
+    itemName: countdown.panelName ?? countdown.jobTypeName ?? "",
+    jobDetail: countdown.jobTypeName ?? humanizeCodeLabel(countdown.taskCategory),
+    qty: 1,
+    uom: "PCS",
+    estimate: type === "pr" ? "LOKAL" : hoursToDuration(Math.min(Math.max(countdown.remainingHours || 1, 1), 12)),
+    targetDate: todayDate(),
+    priority: "NORMAL",
+    vendorName: "",
+    picVendor: "",
+    note: countdown.keterangan ?? countdown.note ?? "",
+    error: null,
+    ...seed,
+  };
+}
+
+function resolveOptionValue(options: SmartSelectOption[], raw: string) {
+  const value = raw.trim();
+  return options.find((option) => [option.value, option.label, option.code].filter(Boolean).some((item) => String(item).toLowerCase() === value.toLowerCase()))?.value ?? value;
+}
+
+function copyCells<TRow extends { error: string | null }>(rows: TRow[], fields: Array<keyof TRow>) {
+  return rows.map((row) => fields.map((field) => {
+    const value = row[field];
+    return value == null ? "" : String(value);
+  }).join("\t")).join("\n");
 }
 
 const FreeTextSuggestCellEditor = forwardRef(function FreeTextSuggestCellEditor<TData>(
@@ -373,32 +422,8 @@ export function CountdownDetailShell({
   const [isSavingOperationalDraft, setIsSavingOperationalDraft] = useState(false);
   const [jobPlanDraftError, setJobPlanDraftError] = useState<string | null>(null);
   const [operationalDraftError, setOperationalDraftError] = useState<string | null>(null);
-  const [jobPlanDraftForm, setJobPlanDraftForm] = useState<JobPlanDraftForm>(() => ({
-    divisionId: countdown.divisionId ? String(countdown.divisionId) : "",
-    employeeId: "",
-    taskDate: todayDate(),
-    startTime: "08:00",
-    durationText: hoursToDuration(Math.min(Math.max(countdown.remainingHours || countdown.targetHoursRevised || 1, 1), 12)),
-    jobDescription: countdown.jobTypeName ?? humanizeCodeLabel(countdown.taskCategory),
-    note: countdown.keterangan ?? countdown.note ?? "",
-    isPriority: false,
-  }));
-  const [operationalDraftForm, setOperationalDraftForm] = useState<OperationalDraftRow>(() => ({
-    clientId: "operational-draft",
-    type: "wo",
-    divisionId: countdown.divisionId ? String(countdown.divisionId) : "",
-    itemName: countdown.panelName ?? countdown.jobTypeName ?? "",
-    jobDetail: countdown.jobTypeName ?? humanizeCodeLabel(countdown.taskCategory),
-    qty: 1,
-    uom: "PCS",
-    estimate: hoursToDuration(Math.min(Math.max(countdown.remainingHours || 1, 1), 12)),
-    targetDate: todayDate(),
-    priority: "NORMAL",
-    vendorName: "",
-    picVendor: "",
-    note: countdown.keterangan ?? countdown.note ?? "",
-    error: null,
-  }));
+  const [jobPlanDraftRows, setJobPlanDraftRows] = useState<JobPlanDraftRow[]>([]);
+  const [operationalDraftRows, setOperationalDraftRows] = useState<OperationalDraftRow[]>([]);
   const revisionActions = resolveCountdownRevisionActions({
     status: countdown.status,
     extensionRequestStatus: countdown.extensionRequestStatus ?? null,
@@ -407,16 +432,6 @@ export function CountdownDetailShell({
     canApproveMoRevision,
   });
   const approvalRole = revisionActions.canApprove ? "KP" : revisionActions.canApproveMo ? "MO" : null;
-  const jobPlanDraftRows = useMemo<JobPlanDraftRow[]>(() => jobPlanDraftOpen ? [{
-    clientId: "job-plan-draft",
-    ...jobPlanDraftForm,
-    error: jobPlanDraftError,
-  }] : [], [jobPlanDraftError, jobPlanDraftForm, jobPlanDraftOpen]);
-  const operationalDraftRows = useMemo<OperationalDraftRow[]>(() => operationalDraftType ? [{
-    ...operationalDraftForm,
-    type: operationalDraftType,
-    error: operationalDraftError,
-  }] : [], [operationalDraftError, operationalDraftForm, operationalDraftType]);
   const jobPlanColumnDefs = useMemo<ColDef<JobPlanDraftRow>[]>(() => [
     {
       headerName: "Divisi",
@@ -590,6 +605,7 @@ export function CountdownDetailShell({
     setJobPlanDraftOpen(true);
     setOperationalDraftType(null);
     setJobPlanDraftError(null);
+    setJobPlanDraftRows((current) => current.length > 0 ? current : [makeJobPlanDraftRow(countdown)]);
     if (jobPlanEmployees.length > 0 || isLoadingJobPlanRefs) return;
 
     setIsLoadingJobPlanRefs(true);
@@ -610,11 +626,11 @@ export function CountdownDetailShell({
     const filteredEmployees = filterEmployeesByDivision(employees, divisionId);
     setJobPlanDivisions(divisions);
     setJobPlanEmployees(employees);
-    setJobPlanDraftForm((current) => ({
-      ...current,
-      divisionId: current.divisionId || divisionId,
-      employeeId: defaultEmployeeId(filteredEmployees, current.employeeId),
-    }));
+    setJobPlanDraftRows((current) => (current.length > 0 ? current : [makeJobPlanDraftRow(countdown)]).map((row) => ({
+      ...row,
+      divisionId: row.divisionId || divisionId,
+      employeeId: defaultEmployeeId(filteredEmployees, row.employeeId),
+    })));
   }
 
   async function loadActivityReferences() {
@@ -637,21 +653,7 @@ export function CountdownDetailShell({
     setJobPlanDraftOpen(false);
     setOperationalDraftType(type);
     setOperationalDraftError(null);
-    setOperationalDraftForm((current) => ({
-      ...current,
-      type,
-      divisionId: current.divisionId || (countdown.divisionId ? String(countdown.divisionId) : ""),
-      itemName: current.itemName || countdown.panelName || countdown.jobTypeName || "",
-      jobDetail: current.jobDetail || countdown.jobTypeName || humanizeCodeLabel(countdown.taskCategory),
-      estimate: type === "pr"
-        ? "LOKAL"
-        : parseDurationMinutes(current.estimate)
-          ? current.estimate
-          : hoursToDuration(Math.min(Math.max(countdown.remainingHours || 1, 1), 12)),
-      priority: current.priority || "NORMAL",
-      targetDate: current.targetDate || todayDate(),
-      error: null,
-    }));
+    setOperationalDraftRows((current) => current.some((row) => row.type === type) ? current.filter((row) => row.type === type) : [makeOperationalDraftRow(countdown, type)]);
     await loadActivityReferences();
   }
 
@@ -660,144 +662,296 @@ export function CountdownDetailShell({
     const divisionId = String(row.divisionId ?? "");
     const employees = filterEmployeesByDivision(jobPlanEmployees, divisionId);
     const employeeId = event.colDef.field === "divisionId" ? defaultEmployeeId(employees, row.employeeId) : String(row.employeeId ?? "");
-    setJobPlanDraftForm({
+    setJobPlanDraftRows((current) => current.map((draft) => draft.clientId === row.clientId ? {
+      ...row,
       divisionId,
       employeeId,
-      taskDate: String(row.taskDate ?? ""),
-      startTime: String(row.startTime ?? ""),
-      durationText: String(row.durationText ?? ""),
-      jobDescription: String(row.jobDescription ?? ""),
-      note: String(row.note ?? ""),
-      isPriority: Boolean(row.isPriority),
-    });
+      error: null,
+    } : draft));
     setJobPlanDraftError(null);
   }
 
   function updateOperationalDraft(event: CellValueChangedEvent<OperationalDraftRow>) {
-    setOperationalDraftForm({
+    setOperationalDraftRows((current) => current.map((draft) => draft.clientId === event.data.clientId ? {
       ...event.data,
       type: operationalDraftType ?? event.data.type,
       error: null,
-    });
+    } : draft));
     setOperationalDraftError(null);
   }
 
   async function saveJobPlanDraft() {
-    const durationMinutes = parseDurationMinutes(jobPlanDraftForm.durationText);
-    const startMinutes = parseTimeMinutes(jobPlanDraftForm.startTime);
     if (!userId) return setJobPlanDraftError("Session user tidak terbaca.");
-    if (!jobPlanDraftForm.employeeId) return setJobPlanDraftError("PIC wajib dipilih.");
-    if (!jobPlanDraftForm.taskDate) return setJobPlanDraftError("Tanggal wajib diisi.");
-    if (startMinutes == null) return setJobPlanDraftError("Jam mulai harus format HH:MM.");
-    if (!durationMinutes || durationMinutes <= 0) return setJobPlanDraftError("Estimasi harus format HH:MM.");
-    if (!jobPlanDraftForm.jobDescription.trim()) return setJobPlanDraftError("Detail pekerjaan wajib diisi.");
+    const validated = jobPlanDraftRows.map((row) => {
+      const durationMinutes = parseDurationMinutes(row.durationText);
+      const startMinutes = parseTimeMinutes(row.startTime);
+      const error = !row.employeeId
+        ? "PIC wajib dipilih."
+        : !row.taskDate
+          ? "Tanggal wajib diisi."
+          : startMinutes == null
+            ? "Jam mulai harus format HH:MM."
+            : !durationMinutes || durationMinutes <= 0
+              ? "Estimasi harus format HH:MM."
+              : !row.jobDescription.trim()
+                ? "Detail pekerjaan wajib diisi."
+                : null;
+      return { ...row, error };
+    });
+    const firstError = validated.find((row) => row.error)?.error;
+    if (firstError) {
+      setJobPlanDraftRows(validated);
+      setJobPlanDraftError(firstError);
+      return;
+    }
 
     setIsSavingJobPlanDraft(true);
     setJobPlanDraftError(null);
-    const result = await createJobPlanV2({
-      userId,
-      coreId: countdown.countdownId,
-      employeeId: jobPlanDraftForm.employeeId,
-      taskDate: jobPlanDraftForm.taskDate,
-      plannedStartMinute: startMinutes,
-      plannedWorkMinutes: durationMinutes,
-      jobDescription: jobPlanDraftForm.jobDescription.trim(),
-      commandId: createJobPlanV2CommandId("countdown-job-plan"),
-      note: jobPlanDraftForm.note.trim() || null,
-      isOvertime: false,
-      isRework: false,
-      isPriority: jobPlanDraftForm.isPriority,
-    });
+    const failed: JobPlanDraftRow[] = [];
+    for (const row of validated) {
+      const result = await createJobPlanV2({
+        userId,
+        coreId: countdown.countdownId,
+        employeeId: row.employeeId,
+        taskDate: row.taskDate,
+        plannedStartMinute: parseTimeMinutes(row.startTime) ?? 0,
+        plannedWorkMinutes: parseDurationMinutes(row.durationText) ?? 1,
+        jobDescription: row.jobDescription.trim(),
+        commandId: createJobPlanV2CommandId("countdown-job-plan"),
+        note: row.note.trim() || null,
+        isOvertime: false,
+        isRework: false,
+        isPriority: row.isPriority,
+      });
+      if (!result.success) failed.push({ ...row, error: result.message });
+    }
     setIsSavingJobPlanDraft(false);
-    if (!result.success) {
-      setJobPlanDraftError(result.message);
+    if (failed.length > 0) {
+      setJobPlanDraftRows(failed);
+      setJobPlanDraftError(`${failed.length} draft belum tersimpan.`);
       return;
     }
     sweetAlert.notifySuccess("Draft tersimpan", "Job Plan dibuat sebagai Draft.");
+    setJobPlanDraftRows([]);
     setJobPlanDraftOpen(false);
     router.refresh();
   }
 
   async function saveOperationalDraft() {
     if (!operationalDraftType) return;
-    const row = operationalDraftForm;
-    const estimateMinutes = parseDurationMinutes(row.estimate);
-    const estimatedHours = estimateMinutes ? estimateMinutes / 60 : null;
-    const qty = Number(row.qty ?? 0);
-    if (operationalDraftType === "wo" && (!row.divisionId || !Number.isFinite(Number(row.divisionId)))) return setOperationalDraftError("Divisi tujuan wajib dipilih.");
-    if (operationalDraftType === "wo" && !row.jobDetail.trim()) return setOperationalDraftError("Pekerjaan wajib diisi.");
-    if (operationalDraftType === "pr" && !row.itemName.trim()) return setOperationalDraftError("Item wajib diisi.");
-    if (operationalDraftType === "pr" && (!Number.isFinite(qty) || qty <= 0)) return setOperationalDraftError("Qty wajib lebih dari 0.");
-    if (operationalDraftType === "pr" && !row.uom.trim()) return setOperationalDraftError("UOM wajib diisi.");
-    if (operationalDraftType === "wov" && !row.vendorName.trim()) return setOperationalDraftError("Vendor wajib diisi.");
-    if (operationalDraftType === "wov" && !row.itemName.trim()) return setOperationalDraftError("Item wajib diisi.");
+    const rows = operationalDraftRows.filter((row) => row.type === operationalDraftType);
+    const validated = rows.map((row) => {
+      const qty = Number(row.qty ?? 0);
+      const error = operationalDraftType === "wo" && (!row.divisionId || !Number.isFinite(Number(row.divisionId)))
+        ? "Divisi tujuan wajib dipilih."
+        : operationalDraftType === "wo" && !row.jobDetail.trim()
+          ? "Pekerjaan wajib diisi."
+          : operationalDraftType === "pr" && !row.itemName.trim()
+            ? "Item wajib diisi."
+            : operationalDraftType === "pr" && (!Number.isFinite(qty) || qty <= 0)
+              ? "Qty wajib lebih dari 0."
+              : operationalDraftType === "pr" && !row.uom.trim()
+                ? "UOM wajib diisi."
+                : operationalDraftType === "wov" && !row.vendorName.trim()
+                  ? "Vendor wajib diisi."
+                  : operationalDraftType === "wov" && !row.itemName.trim()
+                    ? "Item wajib diisi."
+                    : null;
+      return { ...row, error };
+    });
+    const firstError = validated.find((row) => row.error)?.error;
+    if (firstError) {
+      setOperationalDraftRows(validated);
+      setOperationalDraftError(firstError);
+      return;
+    }
 
     setIsSavingOperationalDraft(true);
     setOperationalDraftError(null);
-    const result = operationalDraftType === "wo"
-      ? await createWo({
-        carId: countdown.carId,
-        masterPanelId: countdown.panelId ?? undefined,
-        panelName: countdown.panelName ?? null,
-        toDivisionId: Number(row.divisionId),
-        requestDate: row.targetDate,
-        isPriority: row.priority === "HIGH",
-        jobDetail: null,
-        estimatedHours: null,
-        notes: null,
-        items: [{
-          jobDetail: row.jobDetail.trim(),
-          panelName: countdown.panelName ?? null,
-          sectionName: countdown.sectionName ?? null,
-          panelCategory: null,
-          addPanelToMaster: false,
-          estimatedHours,
-          notes: row.note.trim() || null,
-        }],
-      })
-      : operationalDraftType === "pr"
-        ? await createPr({
+    const failed: OperationalDraftRow[] = [];
+    for (const row of validated) {
+      const estimateMinutes = parseDurationMinutes(row.estimate);
+      const estimatedHours = estimateMinutes ? estimateMinutes / 60 : null;
+      const qty = Number(row.qty ?? 0);
+      const result = operationalDraftType === "wo"
+        ? await createWo({
           carId: countdown.carId,
-          panelId: countdown.panelId ?? null,
-          divisionName: countdown.divisionName ?? null,
-          targetDate: row.targetDate || null,
-          priority: row.priority || "NORMAL",
-          notes: row.note.trim() || null,
+          masterPanelId: countdown.panelId ?? undefined,
+          panelName: countdown.panelName ?? null,
+          toDivisionId: Number(row.divisionId),
+          requestDate: row.targetDate,
+          isPriority: row.priority === "HIGH",
+          jobDetail: null,
+          estimatedHours: null,
+          notes: null,
           items: [{
-            itemName: row.itemName.trim(),
-            description: row.jobDetail.trim() || null,
-            originType: row.estimate === "LN" ? "LN" : "LOKAL",
-            qty: Number(row.qty ?? 0),
-            uom: row.uom.trim(),
-            estimatedPrice: null,
-            photoUrl: null,
+            jobDetail: row.jobDetail.trim(),
+            panelName: countdown.panelName ?? null,
+            sectionName: countdown.sectionName ?? null,
+            panelCategory: null,
+            addPanelToMaster: false,
+            estimatedHours,
+            notes: row.note.trim() || null,
           }],
         })
-        : await createVendor({
-          carId: countdown.carId,
-          coreId: countdown.countdownId,
-          prId: null,
-          vendorId: null,
-          vendorName: row.vendorName.trim(),
-          picVendor: row.picVendor.trim() || null,
-          itemName: row.itemName.trim(),
-          quantity: Number.isFinite(qty) && qty > 0 ? qty : null,
-          uom: row.uom.trim() || null,
-          goodsConditionOut: null,
-          targetDateReturn: row.targetDate || null,
-          estimatedCost: null,
-          remarks: row.note.trim() || null,
-          items: [],
-        });
+        : operationalDraftType === "pr"
+          ? await createPr({
+            carId: countdown.carId,
+            panelId: countdown.panelId ?? null,
+            divisionName: countdown.divisionName ?? null,
+            targetDate: row.targetDate || null,
+            priority: row.priority || "NORMAL",
+            notes: row.note.trim() || null,
+            items: [{
+              itemName: row.itemName.trim(),
+              description: row.jobDetail.trim() || null,
+              originType: row.estimate === "LN" ? "LN" : "LOKAL",
+              qty: Number(row.qty ?? 0),
+              uom: row.uom.trim(),
+              estimatedPrice: null,
+              photoUrl: null,
+            }],
+          })
+          : await createVendor({
+            carId: countdown.carId,
+            coreId: countdown.countdownId,
+            prId: null,
+            vendorId: null,
+            vendorName: row.vendorName.trim(),
+            picVendor: row.picVendor.trim() || null,
+            itemName: row.itemName.trim(),
+            quantity: Number.isFinite(qty) && qty > 0 ? qty : null,
+            uom: row.uom.trim() || null,
+            goodsConditionOut: null,
+            targetDateReturn: row.targetDate || null,
+            estimatedCost: null,
+            remarks: row.note.trim() || null,
+            items: [],
+          });
+      if (!result.success) failed.push({ ...row, error: result.message });
+    }
     setIsSavingOperationalDraft(false);
-    if (!result.success) {
-      setOperationalDraftError(result.message);
-      setOperationalDraftForm((current) => ({ ...current, error: result.message }));
+    if (failed.length > 0) {
+      setOperationalDraftRows(failed);
+      setOperationalDraftError(`${failed.length} draft belum tersimpan.`);
       return;
     }
     sweetAlert.notifySuccess("Draft tersimpan", `${operationalDraftType.toUpperCase()} dibuat sebagai draft.`);
+    setOperationalDraftRows([]);
     setOperationalDraftType(null);
     router.refresh();
+  }
+
+  function addJobPlanDraftRow() {
+    setJobPlanDraftRows((current) => [...current, makeJobPlanDraftRow(countdown, {
+      divisionId: current.at(-1)?.divisionId ?? (countdown.divisionId ? String(countdown.divisionId) : ""),
+      employeeId: current.at(-1)?.employeeId ?? "",
+    })]);
+  }
+
+  function addOperationalDraftRow() {
+    if (!operationalDraftType) return;
+    setOperationalDraftRows((current) => [...current, makeOperationalDraftRow(countdown, operationalDraftType, {
+      divisionId: current.at(-1)?.divisionId ?? (countdown.divisionId ? String(countdown.divisionId) : ""),
+      priority: current.at(-1)?.priority ?? "NORMAL",
+      uom: current.at(-1)?.uom ?? "PCS",
+    })]);
+  }
+
+  async function handleJobPlanGridKeyDown(event: CellKeyDownEvent<JobPlanDraftRow>) {
+    const keyboardEvent = event.event as KeyboardEvent | undefined;
+    if (!keyboardEvent || !event.data) return;
+    const fields: Array<keyof JobPlanDraftRow> = ["divisionId", "employeeId", "taskDate", "startTime", "durationText", "jobDescription", "note"];
+    const field = event.column.getColId() as keyof JobPlanDraftRow;
+
+    if ((keyboardEvent.ctrlKey || keyboardEvent.metaKey) && keyboardEvent.key.toLowerCase() === "c") {
+      const selectedRows = event.api.getSelectedRows();
+      await navigator.clipboard?.writeText(copyCells(selectedRows.length > 0 ? selectedRows : [event.data], fields));
+      keyboardEvent.preventDefault();
+      return;
+    }
+
+    if ((keyboardEvent.ctrlKey || keyboardEvent.metaKey) && keyboardEvent.key.toLowerCase() === "v") {
+      const text = await navigator.clipboard?.readText();
+      if (!text) return;
+      const matrix = parseClipboardTsv(text);
+      if (matrix.length > 500) return setJobPlanDraftError("Paste maksimal 500 baris.");
+      const startRow = event.node.rowIndex ?? jobPlanDraftRows.length;
+      const startField = Math.max(0, fields.indexOf(field));
+      const next = [...jobPlanDraftRows];
+      for (let rowOffset = 0; rowOffset < matrix.length; rowOffset += 1) {
+        const rowIndex = startRow + rowOffset;
+        if (!next[rowIndex]) next[rowIndex] = makeJobPlanDraftRow(countdown);
+        let row = { ...next[rowIndex], error: null };
+        for (let colOffset = 0; colOffset < matrix[rowOffset].length; colOffset += 1) {
+          const targetField = fields[startField + colOffset];
+          const raw = matrix[rowOffset][colOffset] ?? "";
+          if (!targetField) break;
+          if (targetField === "divisionId") row = { ...row, divisionId: resolveOptionValue(jobPlanDivisions, raw) };
+          else if (targetField === "employeeId") row = { ...row, employeeId: resolveOptionValue(filterEmployeesByDivision(jobPlanEmployees, row.divisionId), raw) };
+          else row = { ...row, [targetField]: raw };
+        }
+        next[rowIndex] = row;
+      }
+      setJobPlanDraftRows(next);
+      keyboardEvent.preventDefault();
+      return;
+    }
+
+    if (keyboardEvent.key === "Enter" && event.node.rowIndex === jobPlanDraftRows.length - 1 && field === fields.at(-1)) {
+      addJobPlanDraftRow();
+    }
+  }
+
+  async function handleOperationalGridKeyDown(event: CellKeyDownEvent<OperationalDraftRow>) {
+    const keyboardEvent = event.event as KeyboardEvent | undefined;
+    if (!keyboardEvent || !event.data || !operationalDraftType) return;
+    const fields: Array<keyof OperationalDraftRow> = operationalDraftType === "wo"
+      ? ["divisionId", "jobDetail", "estimate", "targetDate", "priority", "note"]
+      : operationalDraftType === "pr"
+        ? ["itemName", "qty", "uom", "estimate", "targetDate", "priority", "note"]
+        : ["vendorName", "picVendor", "itemName", "qty", "uom", "targetDate", "note"];
+    const field = event.column.getColId() as keyof OperationalDraftRow;
+
+    if ((keyboardEvent.ctrlKey || keyboardEvent.metaKey) && keyboardEvent.key.toLowerCase() === "c") {
+      const selectedRows = event.api.getSelectedRows();
+      await navigator.clipboard?.writeText(copyCells(selectedRows.length > 0 ? selectedRows : [event.data], fields));
+      keyboardEvent.preventDefault();
+      return;
+    }
+
+    if ((keyboardEvent.ctrlKey || keyboardEvent.metaKey) && keyboardEvent.key.toLowerCase() === "v") {
+      const text = await navigator.clipboard?.readText();
+      if (!text) return;
+      const matrix = parseClipboardTsv(text);
+      if (matrix.length > 500) return setOperationalDraftError("Paste maksimal 500 baris.");
+      const startRow = event.node.rowIndex ?? operationalDraftRows.length;
+      const startField = Math.max(0, fields.indexOf(field));
+      const next = operationalDraftRows.filter((row) => row.type === operationalDraftType);
+      for (let rowOffset = 0; rowOffset < matrix.length; rowOffset += 1) {
+        const rowIndex = startRow + rowOffset;
+        if (!next[rowIndex]) next[rowIndex] = makeOperationalDraftRow(countdown, operationalDraftType);
+        let row = { ...next[rowIndex], error: null };
+        for (let colOffset = 0; colOffset < matrix[rowOffset].length; colOffset += 1) {
+          const targetField = fields[startField + colOffset];
+          const raw = matrix[rowOffset][colOffset] ?? "";
+          if (!targetField) break;
+          if (targetField === "divisionId") row = { ...row, divisionId: resolveOptionValue(jobPlanDivisions, raw) };
+          else if (targetField === "priority") row = { ...row, priority: resolveOptionValue(priorityOptions, raw) };
+          else if (targetField === "estimate" && operationalDraftType === "pr") row = { ...row, estimate: resolveOptionValue(originOptions, raw) };
+          else if (targetField === "qty") row = { ...row, qty: Number(raw) };
+          else row = { ...row, [targetField]: raw };
+        }
+        next[rowIndex] = row;
+      }
+      setOperationalDraftRows(next);
+      keyboardEvent.preventDefault();
+      return;
+    }
+
+    if (keyboardEvent.key === "Enter" && event.node.rowIndex === operationalDraftRows.length - 1 && field === fields.at(-1)) {
+      addOperationalDraftRow();
+    }
   }
   return (
     <div className="flex flex-col gap-3">
@@ -948,13 +1102,15 @@ export function CountdownDetailShell({
                   getRowId={({ data }) => data.clientId}
                   singleClickEdit
                   onCellValueChanged={updateJobPlanDraft}
+                  onCellKeyDown={(event) => { if ("column" in event) void handleJobPlanGridKeyDown(event); }}
                   emptyMessage={isLoadingJobPlanRefs ? "Memuat referensi..." : "Belum ada draft."}
                 />
               </div>
               {jobPlanDraftError ? <p className="px-3 pb-2 text-[13px] text-destructive">{jobPlanDraftError}</p> : null}
               <div className="flex justify-end gap-2 border-t border-border px-3 py-2">
-                <button type="button" onClick={() => setJobPlanDraftOpen(false)} className="h-9 border border-border px-3 text-[12px] text-muted-foreground hover:text-foreground">Batal</button>
-                <button type="button" disabled={isSavingJobPlanDraft || isLoadingJobPlanRefs} onClick={() => void saveJobPlanDraft()} className="h-9 border border-primary/30 bg-primary/10 px-3 text-[12px] text-app-accent-ink hover:bg-primary/15 disabled:opacity-50">
+                <button type="button" onClick={addJobPlanDraftRow} disabled={isSavingJobPlanDraft} className="h-9 border border-border px-3 text-[12px] text-foreground hover:bg-muted disabled:opacity-50">+ Row</button>
+                <button type="button" onClick={() => { setJobPlanDraftRows([]); setJobPlanDraftOpen(false); }} className="h-9 border border-border px-3 text-[12px] text-muted-foreground hover:text-foreground">Batal</button>
+                <button type="button" disabled={isSavingJobPlanDraft || isLoadingJobPlanRefs || jobPlanDraftRows.length === 0} onClick={() => void saveJobPlanDraft()} className="h-9 border border-primary/30 bg-primary/10 px-3 text-[12px] text-app-accent-ink hover:bg-primary/15 disabled:opacity-50">
                   {isSavingJobPlanDraft ? "Menyimpan..." : "Simpan Draft"}
                 </button>
               </div>
@@ -979,13 +1135,15 @@ export function CountdownDetailShell({
                   getRowId={({ data }) => data.clientId}
                   singleClickEdit
                   onCellValueChanged={updateOperationalDraft}
+                  onCellKeyDown={(event) => { if ("column" in event) void handleOperationalGridKeyDown(event); }}
                   emptyMessage={isLoadingJobPlanRefs ? "Memuat referensi..." : "Belum ada draft."}
                 />
               </div>
               {operationalDraftError ? <p className="px-3 pb-2 text-[13px] text-destructive">{operationalDraftError}</p> : null}
               <div className="flex justify-end gap-2 border-t border-border px-3 py-2">
-                <button type="button" onClick={() => setOperationalDraftType(null)} className="h-9 border border-border px-3 text-[12px] text-muted-foreground hover:text-foreground">Batal</button>
-                <button type="button" disabled={isSavingOperationalDraft || isLoadingJobPlanRefs} onClick={() => void saveOperationalDraft()} className="h-9 border border-primary/30 bg-primary/10 px-3 text-[12px] text-app-accent-ink hover:bg-primary/15 disabled:opacity-50">
+                <button type="button" onClick={addOperationalDraftRow} disabled={isSavingOperationalDraft} className="h-9 border border-border px-3 text-[12px] text-foreground hover:bg-muted disabled:opacity-50">+ Row</button>
+                <button type="button" onClick={() => { setOperationalDraftRows([]); setOperationalDraftType(null); }} className="h-9 border border-border px-3 text-[12px] text-muted-foreground hover:text-foreground">Batal</button>
+                <button type="button" disabled={isSavingOperationalDraft || isLoadingJobPlanRefs || operationalDraftRows.length === 0} onClick={() => void saveOperationalDraft()} className="h-9 border border-primary/30 bg-primary/10 px-3 text-[12px] text-app-accent-ink hover:bg-primary/15 disabled:opacity-50">
                   {isSavingOperationalDraft ? "Menyimpan..." : "Simpan Draft"}
                 </button>
               </div>
