@@ -3,11 +3,11 @@
 // Hallmark · pre-emit critique: P5 H5 E4 S5 R5 V4 · Workbench utilitarian · design.md
 
 import type { CountdownDetail } from "@smsystem/contracts/countdown";
-import type { ColDef, ICellRendererParams } from "ag-grid-community";
+import type { CellValueChangedEvent, ColDef, ICellRendererParams } from "ag-grid-community";
 import { ArrowLeft, Camera, Check, ChevronLeft, ChevronRight, RotateCcw, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { humanizeCodeLabel, fmtTime } from "@/shared/format/humanize";
 import { DataGridStatusBadge } from "@/shared/datagrid/status-badge";
 import { SmsAgGrid } from "@/shared/datagrid/sms-ag-grid";
@@ -16,6 +16,7 @@ import { fetchJobPlanGrid } from "@/shared/api/job-plan";
 import { createJobPlanV2, createJobPlanV2CommandId } from "@/shared/api/job-plan-v2";
 import { ActionButton, CompactInput, CompactTextarea, FieldLabel, SectionCard } from "@/shared/ui/compact";
 import { useSweetAlert } from "@/shared/ui/sweet-alert";
+import { SmartSelectCellEditor, type SmartSelectOption } from "@/modules/units/components/master-panel-smart-select-editor";
 import { resolveCountdownPhotoUrl, resolveCountdownRevisionActions } from "../countdown-dialog";
 import { formatCountdownRevisionStatus } from "../countdown-revision";
 
@@ -33,7 +34,10 @@ interface JobPlanEmployeeOption {
   divisionId?: number | null;
 }
 
+type JobPlanDivisionOption = SmartSelectOption;
+
 interface JobPlanDraftForm {
+  divisionId: string;
   employeeId: string;
   taskDate: string;
   startTime: string;
@@ -42,6 +46,11 @@ interface JobPlanDraftForm {
   note: string;
   isPriority: boolean;
 }
+
+type JobPlanDraftRow = JobPlanDraftForm & {
+  clientId: string;
+  error: string | null;
+};
 
 function DetailField({ label, value }: { label: string; value: string }) {
   return (
@@ -98,6 +107,21 @@ function parseTimeMinutes(value: string) {
   const match = value.trim().match(/^([01]?\d|2[0-3]):([0-5]\d)$/u);
   if (!match) return null;
   return (Number(match[1]) * 60) + Number(match[2]);
+}
+
+function labelForOption(options: SmartSelectOption[], value: string) {
+  return options.find((option) => option.value === value)?.label ?? "";
+}
+
+function filterEmployeesByDivision(employees: JobPlanEmployeeOption[], divisionId: string) {
+  if (!divisionId) return employees;
+  const numericDivisionId = Number(divisionId);
+  return employees.filter((employee) => employee.divisionId === numericDivisionId);
+}
+
+function defaultEmployeeId(employees: JobPlanEmployeeOption[], currentEmployeeId = "") {
+  if (currentEmployeeId && employees.some((employee) => employee.value === currentEmployeeId)) return currentEmployeeId;
+  return employees.length === 1 ? employees[0].value : "";
 }
 
 function MetricField({ label, value }: { label: string; value: string }) {
@@ -224,11 +248,13 @@ export function CountdownDetailShell({
   const [isSubmittingRevision, setIsSubmittingRevision] = useState(false);
   const [isDecidingRevision, setIsDecidingRevision] = useState(false);
   const [jobPlanDraftOpen, setJobPlanDraftOpen] = useState(false);
+  const [jobPlanDivisions, setJobPlanDivisions] = useState<JobPlanDivisionOption[]>([]);
   const [jobPlanEmployees, setJobPlanEmployees] = useState<JobPlanEmployeeOption[]>([]);
   const [isLoadingJobPlanRefs, setIsLoadingJobPlanRefs] = useState(false);
   const [isSavingJobPlanDraft, setIsSavingJobPlanDraft] = useState(false);
   const [jobPlanDraftError, setJobPlanDraftError] = useState<string | null>(null);
   const [jobPlanDraftForm, setJobPlanDraftForm] = useState<JobPlanDraftForm>(() => ({
+    divisionId: countdown.divisionId ? String(countdown.divisionId) : "",
     employeeId: "",
     taskDate: todayDate(),
     startTime: "08:00",
@@ -245,6 +271,63 @@ export function CountdownDetailShell({
     canApproveMoRevision,
   });
   const approvalRole = revisionActions.canApprove ? "KP" : revisionActions.canApproveMo ? "MO" : null;
+  const jobPlanDraftRows = useMemo<JobPlanDraftRow[]>(() => jobPlanDraftOpen ? [{
+    clientId: "job-plan-draft",
+    ...jobPlanDraftForm,
+    error: jobPlanDraftError,
+  }] : [], [jobPlanDraftError, jobPlanDraftForm, jobPlanDraftOpen]);
+  const jobPlanColumnDefs = useMemo<ColDef<JobPlanDraftRow>[]>(() => [
+    {
+      headerName: "Divisi",
+      field: "divisionId",
+      editable: jobPlanDivisions.length > 1,
+      cellEditor: SmartSelectCellEditor,
+      cellEditorParams: { values: jobPlanDivisions },
+      cellEditorPopup: true,
+      cellEditorPopupPosition: "under",
+      valueFormatter: ({ value }) => labelForOption(jobPlanDivisions, String(value ?? "")) || countdown.divisionName || "",
+      minWidth: 145,
+      flex: 0.75,
+    },
+    {
+      headerName: "PIC",
+      field: "employeeId",
+      editable: ({ data }) => filterEmployeesByDivision(jobPlanEmployees, String(data?.divisionId ?? "")).length > 1,
+      cellEditor: SmartSelectCellEditor,
+      cellEditorParams: ({ data }: { data?: JobPlanDraftRow }) => ({
+        values: filterEmployeesByDivision(jobPlanEmployees, String(data?.divisionId ?? "")),
+      }),
+      cellEditorPopup: true,
+      cellEditorPopupPosition: "under",
+      valueFormatter: ({ value }) => labelForOption(jobPlanEmployees, String(value ?? "")),
+      minWidth: 150,
+      flex: 0.8,
+    },
+    { headerName: "Tanggal", field: "taskDate", editable: true, cellEditor: "agDateStringCellEditor", minWidth: 120 },
+    { headerName: "Mulai", field: "startTime", editable: true, minWidth: 90 },
+    { headerName: "Estimasi", field: "durationText", editable: true, minWidth: 105 },
+    { headerName: "Detail Pekerjaan", field: "jobDescription", editable: true, minWidth: 220, flex: 1.3 },
+    { headerName: "Catatan", field: "note", editable: true, minWidth: 180, flex: 0.9 },
+    {
+      headerName: "Prioritas",
+      field: "isPriority",
+      editable: true,
+      cellRenderer: "agCheckboxCellRenderer",
+      cellEditor: "agCheckboxCellEditor",
+      minWidth: 105,
+      valueFormatter: ({ value }) => value ? "Ya" : "Tidak",
+    },
+    {
+      headerName: "Status",
+      field: "error",
+      editable: false,
+      minWidth: 155,
+      pinned: "right",
+      cellRenderer: ({ data }: ICellRendererParams<JobPlanDraftRow>) => data?.error
+        ? <span className="text-[12px] text-destructive">{data.error}</span>
+        : <span className="text-[12px] text-muted-foreground">Draft</span>,
+    },
+  ], [countdown.divisionName, jobPlanDivisions, jobPlanEmployees]);
 
   useEffect(() => {
     const dialog = revisionDialogRef.current;
@@ -317,11 +400,38 @@ export function CountdownDetailShell({
     }
 
     const employees = result.payload.references.employees;
+    const divisions = result.payload.references.divisions.map((division) => ({
+      label: division.label,
+      value: String(division.value),
+      code: division.code ?? null,
+    }));
+    const divisionId = countdown.divisionId ? String(countdown.divisionId) : (divisions.length === 1 ? divisions[0].value : "");
+    const filteredEmployees = filterEmployeesByDivision(employees, divisionId);
+    setJobPlanDivisions(divisions);
     setJobPlanEmployees(employees);
-    const preferred = employees.find((employee) => employee.divisionId === countdown.divisionId) ?? employees[0] ?? null;
-    if (preferred) {
-      setJobPlanDraftForm((current) => ({ ...current, employeeId: current.employeeId || preferred.value }));
-    }
+    setJobPlanDraftForm((current) => ({
+      ...current,
+      divisionId: current.divisionId || divisionId,
+      employeeId: defaultEmployeeId(filteredEmployees, current.employeeId),
+    }));
+  }
+
+  function updateJobPlanDraft(event: CellValueChangedEvent<JobPlanDraftRow>) {
+    const row = event.data;
+    const divisionId = String(row.divisionId ?? "");
+    const employees = filterEmployeesByDivision(jobPlanEmployees, divisionId);
+    const employeeId = event.colDef.field === "divisionId" ? defaultEmployeeId(employees, row.employeeId) : String(row.employeeId ?? "");
+    setJobPlanDraftForm({
+      divisionId,
+      employeeId,
+      taskDate: String(row.taskDate ?? ""),
+      startTime: String(row.startTime ?? ""),
+      durationText: String(row.durationText ?? ""),
+      jobDescription: String(row.jobDescription ?? ""),
+      note: String(row.note ?? ""),
+      isPriority: Boolean(row.isPriority),
+    });
+    setJobPlanDraftError(null);
   }
 
   async function saveJobPlanDraft() {
@@ -503,47 +613,20 @@ export function CountdownDetailShell({
               <div className="flex items-start justify-between gap-3 border-b border-border px-3 py-2">
                 <div>
                   <p className="text-[12px] font-mono uppercase tracking-[0.12em] text-app-accent-ink">Draft Job Plan</p>
-                  <p className="mt-1 text-[13px] text-muted-foreground">Data unit, panel, divisi, dan countdown mengikuti sumber ini.</p>
+                  <p className="mt-1 text-[13px] text-muted-foreground">Pilih divisi untuk membatasi PIC. Data unit, panel, dan countdown tetap mengikuti sumber ini.</p>
                 </div>
                 <button type="button" onClick={() => setJobPlanDraftOpen(false)} className="h-8 border border-border px-2 text-[12px] text-muted-foreground hover:text-foreground">Tutup</button>
               </div>
-              <div className="grid gap-3 p-3 md:grid-cols-2">
-                <label className="space-y-1.5">
-                  <span className="text-[12px] text-muted-foreground">PIC</span>
-                  <select
-                    value={jobPlanDraftForm.employeeId}
-                    disabled={isLoadingJobPlanRefs || jobPlanEmployees.length === 0}
-                    onChange={(event) => setJobPlanDraftForm((current) => ({ ...current, employeeId: event.target.value }))}
-                    className="h-9 w-full border border-border bg-card px-2 text-[13px] text-foreground"
-                  >
-                    {jobPlanEmployees.length === 0 ? <option value="">{isLoadingJobPlanRefs ? "Memuat PIC..." : "Tidak ada pilihan"}</option> : null}
-                    {jobPlanEmployees.map((employee) => <option key={employee.value} value={employee.value}>{employee.label}</option>)}
-                  </select>
-                </label>
-                <label className="space-y-1.5">
-                  <span className="text-[12px] text-muted-foreground">Tanggal</span>
-                  <input type="date" value={jobPlanDraftForm.taskDate} onChange={(event) => setJobPlanDraftForm((current) => ({ ...current, taskDate: event.target.value }))} className="h-9 w-full border border-border bg-card px-2 text-[13px] text-foreground" />
-                </label>
-                <label className="space-y-1.5">
-                  <span className="text-[12px] text-muted-foreground">Mulai</span>
-                  <input value={jobPlanDraftForm.startTime} onChange={(event) => setJobPlanDraftForm((current) => ({ ...current, startTime: event.target.value }))} placeholder="08:00" className="h-9 w-full border border-border bg-card px-2 text-[13px] text-foreground" />
-                </label>
-                <label className="space-y-1.5">
-                  <span className="text-[12px] text-muted-foreground">Estimasi</span>
-                  <input value={jobPlanDraftForm.durationText} onChange={(event) => setJobPlanDraftForm((current) => ({ ...current, durationText: event.target.value }))} placeholder="01:00" className="h-9 w-full border border-border bg-card px-2 text-[13px] text-foreground" />
-                </label>
-                <label className="space-y-1.5 md:col-span-2">
-                  <span className="text-[12px] text-muted-foreground">Detail pekerjaan</span>
-                  <textarea value={jobPlanDraftForm.jobDescription} onChange={(event) => setJobPlanDraftForm((current) => ({ ...current, jobDescription: event.target.value }))} rows={3} className="w-full resize-none border border-border bg-card px-2 py-2 text-[13px] text-foreground" />
-                </label>
-                <label className="space-y-1.5 md:col-span-2">
-                  <span className="text-[12px] text-muted-foreground">Catatan</span>
-                  <textarea value={jobPlanDraftForm.note} onChange={(event) => setJobPlanDraftForm((current) => ({ ...current, note: event.target.value }))} rows={2} className="w-full resize-none border border-border bg-card px-2 py-2 text-[13px] text-foreground" />
-                </label>
-                <label className="flex items-center gap-2 border border-border px-3 py-2 text-[13px] text-muted-foreground">
-                  <input type="checkbox" checked={jobPlanDraftForm.isPriority} onChange={(event) => setJobPlanDraftForm((current) => ({ ...current, isPriority: event.target.checked }))} />
-                  Prioritas
-                </label>
+              <div className="p-3">
+                <SmsAgGrid<JobPlanDraftRow>
+                  heightClassName="h-44"
+                  rowData={jobPlanDraftRows}
+                  columnDefs={jobPlanColumnDefs}
+                  getRowId={({ data }) => data.clientId}
+                  singleClickEdit
+                  onCellValueChanged={updateJobPlanDraft}
+                  emptyMessage={isLoadingJobPlanRefs ? "Memuat referensi..." : "Belum ada draft."}
+                />
               </div>
               {jobPlanDraftError ? <p className="px-3 pb-2 text-[13px] text-destructive">{jobPlanDraftError}</p> : null}
               <div className="flex justify-end gap-2 border-t border-border px-3 py-2">
