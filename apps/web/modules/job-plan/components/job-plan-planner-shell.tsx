@@ -8,7 +8,6 @@ import {
   createJobPlanV2,
   createJobPlanV2CommandId,
   fetchJobPlanV2List,
-  manualExecuteJobPlanV2,
   mutateJobPlanV2Approval,
 } from "@/shared/api/job-plan-v2";
 import { SmsAgGrid, SmsGridDraftActions } from "@/shared/datagrid/sms-ag-grid";
@@ -19,32 +18,27 @@ import { SmartSelectCellEditor, type SmartSelectOption } from "@/modules/units/c
 import {
   buildCreateJobPlanV2Payload,
   buildEditDraftJobPlanV2Payload,
-  buildManualExecutionJobPlanV2Payload,
-  createManualExecutionDraft,
   createJobPlanV2Draft,
   minutesToDuration,
   minutesToTime,
   toLocalDateValue,
   toJobPlanV2DisplayRows,
-  validateManualExecutionDraft,
   validateJobPlanV2Draft,
   type JobPlanV2DisplayRow,
   type JobPlanCountdownOption,
   type JobPlanEmployeeOption,
-  type JobPlanV2ManualExecutionDraft,
   type JobPlanV2PlannerDraft,
 } from "../job-plan-planner";
 import { parseClipboardTsv } from "@/shared/datagrid/clipboard";
 import { parseSmsDate, parseSmsDurationMinutes, parseSmsReference, parseSmsTime } from "@/shared/datagrid/parsers";
 
-type PlannerMode = "planner" | "approval" | "execution";
+type PlannerMode = "planner" | "approval";
 type PlannerRow = JobPlanV2DisplayRow | (JobPlanV2DisplayRow & JobPlanV2PlannerDraft & { editPlanId?: string; editVersion?: number });
 
 interface JobPlanPlannerShellProps {
   userId: string;
   canCreate: boolean;
   canApprove: boolean;
-  canExecute: boolean;
   initialCoreId: string | null;
   initialDate: string | null;
   initialMode: string | null;
@@ -102,6 +96,9 @@ function draftToDisplay(
     ledgerState: "UNMATERIALIZED",
     sync: "Draft",
     version: null,
+    accumulatedWorkMinutes: 0,
+    persistedWorkMinutes: 0,
+    unverifiedWorkMinutes: 0,
     isPriority: draft.isPriority,
   };
 }
@@ -119,13 +116,11 @@ function copyPlannerValue(row: PlannerRow, field: string) {
 
 function viewForMode(mode: PlannerMode) {
   if (mode === "approval") return "approval_queue";
-  if (mode === "execution") return "execution";
   return "browse";
 }
 
 function initialPlannerMode(value: string | null): PlannerMode {
   if (value === "approval") return "approval";
-  if (value === "execution") return "execution";
   return "planner";
 }
 
@@ -337,7 +332,6 @@ export function JobPlanPlannerShell({
   const [items, setItems] = useState<JobPlanV2ReadItem[]>([]);
   const [drafts, setDrafts] = useState<JobPlanV2PlannerDraft[]>([]);
   const [editDrafts, setEditDrafts] = useState<Array<JobPlanV2PlannerDraft & { editPlanId: string; editVersion: number }>>([]);
-  const [manualDraft, setManualDraft] = useState<JobPlanV2ManualExecutionDraft | null>(null);
   const [selectedRow, setSelectedRow] = useState<PlannerRow | null>(null);
   const [gridApi, setGridApi] = useState<GridApi<PlannerRow> | null>(null);
   const [mode, setMode] = useState<PlannerMode>(() => initialPlannerMode(initialMode));
@@ -379,13 +373,13 @@ export function JobPlanPlannerShell({
 
   useEffect(() => {
     function beforeUnload(event: BeforeUnloadEvent) {
-      if (drafts.length === 0 && editDrafts.length === 0 && !manualDraft) return;
+      if (drafts.length === 0 && editDrafts.length === 0) return;
       event.preventDefault();
       event.returnValue = "Ada perubahan yang belum disimpan.";
     }
     window.addEventListener("beforeunload", beforeUnload);
     return () => window.removeEventListener("beforeunload", beforeUnload);
-  }, [drafts.length, editDrafts.length, manualDraft]);
+  }, [drafts.length, editDrafts.length]);
 
   const rows = useMemo<PlannerRow[]>(() => [
     ...toJobPlanV2DisplayRows(items, countdowns, employees).map((row) => {
@@ -533,24 +527,6 @@ export function JobPlanPlannerShell({
       pinned: "right",
     },
   ], [employeeOptions]);
-
-  const manualColumnDefs = useMemo<ColDef<JobPlanV2ManualExecutionDraft>[]>(() => [
-    { headerName: "Mulai Aktual", field: "actualStart", editable: true, minWidth: 160, flex: 0.8 },
-    { headerName: "Selesai Aktual", field: "actualFinish", editable: true, minWidth: 160, flex: 0.8 },
-    { headerName: "Durasi Aktual", field: "actualMinutesText", editable: true, minWidth: 105 },
-    { headerName: "Hasil", field: "result", editable: true, minWidth: 180, flex: 1 },
-    { headerName: "Catatan", field: "note", editable: true, minWidth: 180, flex: 1 },
-    { headerName: "Lampiran", field: "attachmentRef", editable: true, minWidth: 150, flex: 0.8 },
-    {
-      headerName: "Status",
-      field: "error",
-      editable: false,
-      minWidth: 170,
-      cellRenderer: ({ data }: ICellRendererParams<JobPlanV2ManualExecutionDraft>) => (
-        data?.error ? <span className="text-[12px] text-destructive">{data.error}</span> : <span className="text-[12px] text-muted-foreground">Draft hasil</span>
-      ),
-    },
-  ], []);
 
   function addDraft() {
     const draft = createJobPlanV2Draft(selectedContext);
@@ -738,28 +714,6 @@ export function JobPlanPlannerShell({
     await reviewRows(selectedRows, "reject", reason);
   }
 
-  async function saveManualExecution() {
-    if (!manualDraft || isSaving) return;
-    const errorMessage = validateManualExecutionDraft(manualDraft);
-    if (errorMessage) {
-      setManualDraft({ ...manualDraft, error: errorMessage });
-      return;
-    }
-    setIsSaving(true);
-    const result = await manualExecuteJobPlanV2(
-      manualDraft.planId,
-      buildManualExecutionJobPlanV2Payload(manualDraft, userId, createJobPlanV2CommandId("web-manual-exec")),
-    );
-    if (!result.success) {
-      setManualDraft({ ...manualDraft, error: result.message });
-      setError(result.message);
-    } else {
-      setManualDraft(null);
-      await load();
-    }
-    setIsSaving(false);
-  }
-
   function openReportPrint() {
     const popup = window.open("", "_blank", "noopener,noreferrer");
     if (!popup) {
@@ -786,9 +740,9 @@ export function JobPlanPlannerShell({
           title="Rencana Pekerjaan"
           actions={(
             <div className="flex items-center gap-1">
-              {(["planner", "approval", "execution"] as const).map((nextMode) => (
+              {(["planner", "approval"] as const).map((nextMode) => (
                 <ActionButton key={nextMode} variant={mode === nextMode ? "primary" : "default"} onClick={() => setMode(nextMode)}>
-                  {nextMode === "planner" ? "Perencanaan" : nextMode === "approval" ? "Persetujuan" : "Pelaksanaan"}
+                  {nextMode === "planner" ? "Perencanaan" : "Persetujuan"}
                 </ActionButton>
               ))}
             </div>
@@ -904,30 +858,6 @@ export function JobPlanPlannerShell({
       />
       {selectedRow && !selectedRow.isNew && !selectedRow.editPlanId ? (
         <JobPlanDetailDrawer row={selectedRow} onClose={() => setSelectedRow(null)} />
-      ) : null}
-      {manualDraft ? (
-        <div className="space-y-2 border border-border bg-card p-3">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-[12px] font-mono uppercase tracking-[0.14em] text-muted-foreground">Input Hasil Cadangan</p>
-              <h2 className="text-sm font-semibold text-foreground">Input Hasil Pekerjaan</h2>
-            </div>
-            <div className="flex items-center gap-2">
-              <button type="button" className="border border-border px-3 py-2 text-[12px] text-muted-foreground hover:bg-muted" onClick={() => setManualDraft(null)}>Batal</button>
-              <button type="button" className="border border-primary px-3 py-2 text-[12px] text-primary hover:bg-primary/10 disabled:opacity-50" disabled={isSaving} onClick={() => void saveManualExecution()}>
-                {isSaving ? "Menyimpan..." : "Simpan Hasil"}
-              </button>
-            </div>
-          </div>
-          <SmsAgGrid<JobPlanV2ManualExecutionDraft>
-            heightClassName="h-44"
-            rowData={[manualDraft]}
-            columnDefs={manualColumnDefs}
-            getRowId={(params) => params.data.clientId}
-            onCellValueChanged={(event) => setManualDraft({ ...event.data, error: null })}
-        emptyMessage="Belum ada hasil pekerjaan."
-          />
-        </div>
       ) : null}
       {rejectDialogOpen ? (
         <RejectReasonDialog

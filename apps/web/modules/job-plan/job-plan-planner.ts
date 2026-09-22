@@ -73,6 +73,9 @@ export interface JobPlanV2DisplayRow {
   ledgerState: JobPlanV2LedgerState;
   sync: string;
   version: number | null;
+  accumulatedWorkMinutes: number;
+  persistedWorkMinutes: number;
+  unverifiedWorkMinutes: number;
   note: string;
   isPriority: boolean;
   error: string | null;
@@ -211,6 +214,9 @@ export function toJobPlanV2DisplayRows(
       ledgerState: item.ledger_state,
       sync: resolveJobPlanV2Sync(item),
       version: item.version ?? null,
+      accumulatedWorkMinutes: item.accumulated_work_minutes,
+      persistedWorkMinutes: item.persisted_work_minutes,
+      unverifiedWorkMinutes: item.unverified_work_minutes,
       note: item.note ?? "",
       isPriority: item.is_priority,
       error: null,

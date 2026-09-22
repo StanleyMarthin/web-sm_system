@@ -1,68 +1,63 @@
 import { headers } from "next/headers";
 import dynamic from "next/dynamic";
-import { notFound, redirect } from "next/navigation";
-import { fetchMonitoringToday, fetchMonitoringUnit } from "@/shared/api/monitoring";
+import { redirect } from "next/navigation";
+import { permissionCodes } from "@smsystem/permissions";
+import { fetchJobPlanGrid } from "@/shared/api/job-plan";
+import { fetchCurrentUser } from "@/shared/auth/server";
 import { ModuleUnavailableState } from "@/shared/ui/module-unavailable-state";
 import { PageDataSkeleton } from "@/shared/ui/page-data-skeleton";
 
-const MonitoringEmployeeShell = dynamic(
-  () =>
-    import("@/modules/monitoring/components/monitoring-employee-shell").then(
-      (mod) => mod.MonitoringEmployeeShell,
-    ),
-  {
-    loading: () => <PageDataSkeleton title="Memuat monitoring karyawan" rows={8} />,
-  },
+const JobActualShell = dynamic(
+  () => import("@/modules/job-plan/components/job-actual-shell").then((mod) => mod.JobActualShell),
+  { loading: () => <PageDataSkeleton title="Memuat Job Actual" rows={8} /> },
 );
 
-interface MonitoringEmployeePageProps {
+interface JobActualPageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
-async function MonitoringEmployeePageContent({ searchParams }: MonitoringEmployeePageProps) {
+function resolveSingleSearchParam(value: string | string[] | undefined): string | null {
+  if (typeof value === "string") return value;
+  return value?.[0] ?? null;
+}
+
+async function JobActualPageContent({ searchParams }: JobActualPageProps) {
   const resolvedSearchParams = await searchParams;
   const requestHeaders = await headers();
   const cookieHeader = requestHeaders.get("cookie") ?? "";
+  const requestedDate = resolveSingleSearchParam(resolvedSearchParams.date);
 
-  const [{ payload, status }, todayResult] = await Promise.all([
-    fetchMonitoringUnit(cookieHeader, resolvedSearchParams),
-    fetchMonitoringToday(cookieHeader, {
-      ...resolvedSearchParams,
-      limit: "100",
-    }),
+  const [{ payload, status }, { user, status: userStatus }] = await Promise.all([
+    fetchJobPlanGrid(cookieHeader, resolvedSearchParams, "normal"),
+    fetchCurrentUser(cookieHeader),
   ]);
 
-  if (status === 401) {
-    redirect("/login");
-  }
+  if (status === 401 || userStatus === 401) redirect("/login");
+  if (status === 403 || userStatus === 403) redirect("/forbidden");
 
-  if (status === 403) {
-    redirect("/forbidden");
-  }
-
-  if (!payload) {
+  if (!payload || !user) {
     return (
       <ModuleUnavailableState
-        module="Monitoring Karyawan"
-        title="Monitoring karyawan belum bisa dimuat"
-        message="Data timesheet karyawan tidak dapat diakses saat ini. Coba muat ulang beberapa saat lagi."
+        module="Job Actual"
+        title="Job Actual belum bisa dimuat"
+        message="Data referensi pekerjaan belum terbaca saat ini. Coba muat ulang beberapa saat lagi."
       />
     );
   }
 
   return (
-    <MonitoringEmployeeShell
-      date={payload.date}
-      dateTo={payload.dateTo ?? ""}
-      activeSpan={payload.span ?? "daily"}
-      rows={payload.data}
-      references={todayResult.payload?.references ?? { divisions: [], units: [], employees: [] }}
-      plans={todayResult.payload?.data ?? []}
+    <JobActualShell
+      userId={user.employeeId}
+      canInput={user.permissions.includes(permissionCodes.taskExecute)}
+      canMonitor={user.permissions.includes(permissionCodes.reviewTask)}
+      canValidate={user.permissions.includes(permissionCodes.qcValidate)}
+      initialDate={requestedDate}
+      countdowns={payload.references.countdowns}
+      employees={payload.references.employees}
     />
   );
 }
 
-
-export default function MonitoringEmployeePage(props: MonitoringEmployeePageProps) {
-  return <MonitoringEmployeePageContent {...props} />;
+export default function JobActualPage(props: JobActualPageProps) {
+  return <JobActualPageContent {...props} />;
 }
