@@ -13,7 +13,7 @@ import {
 } from "@/shared/api/job-plan-v2";
 import { SmsAgGrid } from "@/shared/datagrid/sms-ag-grid";
 import { DataGridStatusBadge } from "@/shared/datagrid/status-badge";
-import { ActionButton, CompactDateInput } from "@/shared/ui/compact";
+import { ActionButton, CompactDateInput, MetricBar, PageHeader } from "@/shared/ui/compact";
 import { useSweetAlert } from "@/shared/ui/sweet-alert";
 import {
   buildManualExecutionJobPlanV2Payload,
@@ -54,6 +54,15 @@ function qcStatus(row: JobPlanV2DisplayRow, actual?: JobPlanRecord) {
   return "Belum QC";
 }
 
+function uniqueByValue(options: Array<{ value: string; label: string }>) {
+  const seen = new Set<string>();
+  return options.filter((option) => {
+    if (!option.value || seen.has(option.value)) return false;
+    seen.add(option.value);
+    return true;
+  }).sort((left, right) => left.label.localeCompare(right.label));
+}
+
 function dateTimeText(date: string, time: string) {
   return `${date} ${time}`;
 }
@@ -78,6 +87,8 @@ export function JobActualShell({
 }: JobActualShellProps) {
   const [items, setItems] = useState<JobPlanV2ReadItem[]>([]);
   const [dateFilter, setDateFilter] = useState(initialDate ?? toLocalDateValue());
+  const [kpFilter, setKpFilter] = useState("");
+  const [qaFilter, setQaFilter] = useState("");
   const [divisionFilter, setDivisionFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [draft, setDraft] = useState<JobPlanV2ManualExecutionDraft | null>(null);
@@ -118,12 +129,36 @@ export function JobActualShell({
   const actualByPlanId = useMemo(() => new Map(actualRows.map((row) => [row.planId, row])), [actualRows]);
   const filteredRows = useMemo(() => rows.filter((row) => {
     if (dateFilter && row.taskDate !== dateFilter) return false;
+    if (kpFilter && row.kpId !== kpFilter) return false;
+    if (qaFilter && !row.qaIds.includes(qaFilter)) return false;
     if (divisionFilter && row.divisionName !== divisionFilter) return false;
     if (statusFilter && row.executionState !== statusFilter && row.approvalState !== statusFilter) return false;
     return true;
-  }), [dateFilter, divisionFilter, rows, statusFilter]);
+  }), [dateFilter, divisionFilter, kpFilter, qaFilter, rows, statusFilter]);
 
-  const divisionOptions = useMemo(() => [...new Set(rows.map((row) => row.divisionName).filter(Boolean))].sort(), [rows]);
+  const kpOptions = useMemo(() => uniqueByValue(countdowns.map((item) => ({
+    value: item.kpId ?? "",
+    label: item.kpName ?? item.kpId ?? "",
+  }))), [countdowns]);
+  const qaOptions = useMemo(() => uniqueByValue(countdowns.flatMap((item) => (item.qaIds ?? []).map((value, index) => ({
+    value,
+    label: item.qaNames?.[index] ?? value,
+  })))), [countdowns]);
+  const divisionOptions = useMemo(() => uniqueByValue(rows.map((row) => ({
+    value: row.divisionName,
+    label: row.divisionName,
+  }))), [rows]);
+  const statusOptions = [
+    ["DRAFT", "Draft"],
+    ["DIVISION_REVIEW", "Review Divisi"],
+    ["UNIT_REVIEW", "Review Unit"],
+    ["MANAGEMENT_REVIEW", "Review Manajemen"],
+    ["APPROVED", "Disetujui"],
+    ["RUNNING", "Berjalan"],
+    ["HOLD", "Ditahan"],
+    ["FINISHED_PENDING_VALIDATION", "Selesai"],
+    ["VALIDATED", "Tervalidasi"],
+  ] as const;
   const summaryItems = useMemo(() => [
     { label: "Siap Input", value: rows.filter((row) => row.approvalState === "APPROVED" && row.executionState === "NOT_STARTED").length },
     { label: "Menunggu QC", value: rows.filter((row) => row.executionState === "FINISHED_PENDING_VALIDATION").length, tone: "warn" as const },
@@ -271,48 +306,53 @@ export function JobActualShell({
     <div className="space-y-3">
       {sweetAlert.alertElement}
       <div className="border border-border bg-card px-3 py-2 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex min-w-0 items-center gap-2">
-            <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground dark:text-foreground/45">JOB ACTUAL</p>
-            <span className="text-muted-foreground dark:text-foreground/25">·</span>
-            <h1 className="truncate text-[16px] font-semibold text-foreground">Hasil Pekerjaan</h1>
-          </div>
-          <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
-            {summaryItems.map((item) => (
-              <span key={item.label} className="border border-border bg-background px-2 py-1">
-                {item.label}: <strong className="font-mono text-foreground">{item.value}</strong>
-              </span>
-            ))}
-            <span className="px-1">{filteredRows.length} dari {rows.length} baris</span>
-          </div>
+        <PageHeader eyebrow="JOB ACTUAL" title="Hasil Pekerjaan" />
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+          <div className="min-w-0" />
+          <p className="text-[11px] text-muted-foreground">{filteredRows.length} dari {rows.length} baris</p>
+        </div>
+        <div className="mt-2">
+          <MetricBar items={summaryItems} />
         </div>
       </div>
 
-      <div className="relative z-40 flex flex-wrap items-center gap-2 border border-border bg-card px-3 py-2">
-        <div className="flex min-w-[12rem] flex-1 items-center gap-2">
-          <span className="w-12 shrink-0 text-[11px] text-muted-foreground">Tanggal</span>
-          <CompactDateInput value={dateFilter} onChange={setDateFilter} className="flex-1" panelClassName="z-[100] w-[17rem]" />
+      <div className="relative z-40 flex flex-wrap items-end gap-2 border border-border bg-card px-3 py-2">
+        <div className="min-w-[9rem] flex-1">
+          <span className="text-[11px] text-muted-foreground">Tanggal</span>
+          <CompactDateInput value={dateFilter} onChange={setDateFilter} className="mt-1" panelClassName="z-[100] w-[17rem]" />
         </div>
-        <label className="flex min-w-[11rem] flex-1 items-center gap-2 text-[11px] text-muted-foreground">
-          <span className="w-10 shrink-0">Divisi</span>
-          <select value={divisionFilter} onChange={(event) => setDivisionFilter(event.target.value)} className="h-8 w-full border border-border bg-background px-2 text-[12px] text-foreground">
-            <option value="">Semua divisi</option>
-            {divisionOptions.map((division) => <option key={division} value={division}>{division}</option>)}
+        <label className="min-w-[8.5rem] flex-1 text-[11px] text-muted-foreground">
+          KP
+          <select value={kpFilter} onChange={(event) => setKpFilter(event.target.value)} className="mt-1 h-8 w-full border border-border bg-background px-2 text-[12px] text-foreground">
+            <option value="">Semua KP</option>
+            {kpOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
           </select>
         </label>
-        <label className="flex min-w-[11rem] flex-1 items-center gap-2 text-[11px] text-muted-foreground">
-          <span className="w-10 shrink-0">Status</span>
-          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="h-8 w-full border border-border bg-background px-2 text-[12px] text-foreground">
+        <label className="min-w-[8.5rem] flex-1 text-[11px] text-muted-foreground">
+          QA
+          <select value={qaFilter} onChange={(event) => setQaFilter(event.target.value)} className="mt-1 h-8 w-full border border-border bg-background px-2 text-[12px] text-foreground">
+            <option value="">Semua QA</option>
+            {qaOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
+        </label>
+        <label className="min-w-[8.5rem] flex-1 text-[11px] text-muted-foreground">
+          Divisi
+          <select value={divisionFilter} onChange={(event) => setDivisionFilter(event.target.value)} className="mt-1 h-8 w-full border border-border bg-background px-2 text-[12px] text-foreground">
+            <option value="">Semua divisi</option>
+            {divisionOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
+        </label>
+        <label className="min-w-[8.5rem] flex-1 text-[11px] text-muted-foreground">
+          Status
+          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="mt-1 h-8 w-full border border-border bg-background px-2 text-[12px] text-foreground">
             <option value="">Semua status</option>
-            <option value="APPROVED">Siap input</option>
-            <option value="RUNNING">Berjalan</option>
-            <option value="HOLD">Ditahan</option>
-            <option value="FINISHED_PENDING_VALIDATION">Menunggu QC</option>
-            <option value="VALIDATED">QC selesai</option>
+            {statusOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </select>
         </label>
         <ActionButton onClick={() => {
           setDateFilter(initialDate ?? toLocalDateValue());
+          setKpFilter("");
+          setQaFilter("");
           setDivisionFilter("");
           setStatusFilter("");
         }}>Reset</ActionButton>
