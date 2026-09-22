@@ -546,7 +546,7 @@ export function AppShell({ user, navigation, children }: AppShellProps) {
                   </Link>
 
                   <Link
-                    href="/settings/password"
+                    href="/profile#password"
                     onClick={() => setIsProfileMenuOpen(false)}
                     className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-[13px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
                   >

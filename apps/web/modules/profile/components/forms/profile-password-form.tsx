@@ -76,7 +76,7 @@ export function ProfilePasswordForm({ onSuccess, onError }: ProfilePasswordFormP
 
   if (!isEditing) {
     return (
-      <div className="bg-card border border-white/[0.06] rounded-xl p-6">
+      <div id="password" className="scroll-mt-24 bg-card border border-white/[0.06] rounded-xl p-6">
         <div className="flex items-center justify-between mb-5">
           <div>
             <h3 className="text-base font-medium text-foreground">Keamanan Akun</h3>
@@ -100,7 +100,7 @@ export function ProfilePasswordForm({ onSuccess, onError }: ProfilePasswordFormP
   }
 
   return (
-    <div className="bg-card border border-white/[0.06] rounded-xl p-6">
+    <div id="password" className="scroll-mt-24 bg-card border border-white/[0.06] rounded-xl p-6">
       <div className="mb-5">
         <h3 className="text-base font-medium text-foreground">Keamanan Akun</h3>
         <p className="text-xs text-foreground/35 mt-0.5">Ubah password akun Anda</p>
