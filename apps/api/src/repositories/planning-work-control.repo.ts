@@ -387,7 +387,7 @@ function buildUnitProgressBaseSql(scopeClause: string): string {
         car_id,
         AVG(COALESCE(actual_progress_percent, 0)) AS progressPercent,
         SUM(CASE WHEN COALESCE(status, 'PLAN') <> 'DONE' THEN COALESCE(remaining_hours, 0) ELSE 0 END) AS remainingHours,
-        SUM(COALESCE(target_hours_revised, target_hours_initial + time_extension_hours, target_hours_initial, 0)) AS totalEstimatedHours,
+        SUM(COALESCE(target_hours, target_hours_initial, 0)) AS totalEstimatedHours,
         SUM(COALESCE(total_actual_hours, 0)) AS actualHours
       FROM sm_jobdesc_countdown
       GROUP BY car_id
@@ -549,7 +549,7 @@ export class MySqlPlanningWorkControlRepository implements PlanningWorkControlRe
           cd.division_id AS divisionId,
           d.name AS divisionName,
           ROUND(SUM(COALESCE(cd.remaining_hours, 0)), 2) AS pendingHours,
-          ROUND(SUM(COALESCE(cd.target_hours_revised, cd.target_hours_initial + cd.time_extension_hours, cd.target_hours_initial, 0)), 2) AS targetHours,
+          ROUND(SUM(COALESCE(cd.target_hours, cd.target_hours_initial, 0)), 2) AS targetHours,
           ROUND(SUM(COALESCE(cd.total_actual_hours, 0)), 2) AS actualHours
         FROM sm_jobdesc_countdown cd
         LEFT JOIN sm_divisi d ON d.id = cd.division_id
@@ -572,7 +572,7 @@ export class MySqlPlanningWorkControlRepository implements PlanningWorkControlRe
           COALESCE(mjt.job_name, cd.section_name, 'Pekerjaan') AS jobName,
           cd.section_name AS panel,
           COALESCE(cd.status, 'PLAN') AS status,
-          ROUND(COALESCE(cd.target_hours_revised, cd.target_hours_initial + cd.time_extension_hours, cd.target_hours_initial, 0), 2) AS estimatedHours,
+          ROUND(COALESCE(cd.target_hours, cd.target_hours_initial, 0), 2) AS estimatedHours,
           CASE
             WHEN cd.total_actual_hours IS NULL THEN NULL
             ELSE ROUND(cd.total_actual_hours, 2)

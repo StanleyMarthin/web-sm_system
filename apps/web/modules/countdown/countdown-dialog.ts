@@ -4,6 +4,8 @@ export function resolveCountdownPhotoUrl(value: string): string | null {
   if (/^\/(?!\/)/u.test(value)) return value;
   try {
     const url = new URL(value);
+    const driveFileId = url.hostname === "drive.google.com" ? url.pathname.match(/^\/file\/d\/([^/]+)/u)?.[1] : null;
+    if (driveFileId) return `https://drive.google.com/thumbnail?id=${encodeURIComponent(driveFileId)}&sz=w2000`;
     return url.protocol === "http:" || url.protocol === "https:" ? value : null;
   } catch {
     return null;

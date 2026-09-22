@@ -237,3 +237,108 @@ describe("DefaultCountdownService revision authority", () => {
     expect(permissionLookups.at(-1)).toEqual(["COUNTDOWN_SUBMIT_APPROVAL", undefined]);
   });
 });
+
+describe("DefaultCountdownService manual PIC and grade", () => {
+  const manualSession = { user: { employeeId: "ACTOR-1", fullName: "Planner", scope: {} } } as never;
+  const optionalFields = [
+    "panelId",
+    "jobTypeId",
+    "startDate",
+    "prerequisiteCoreId",
+    "refWoId",
+    "picPlan",
+    "requiredGrade",
+    "note",
+    "temuanAwal",
+    "keterangan",
+  ] as const;
+  const existingRow = {
+    countdownId: "CD-1",
+    carId: "CAR-1",
+    unitName: "Unit A",
+    divisionId: 10,
+    panelName: "Panel A",
+    sectionName: "BODY WORK",
+    taskCategory: "MAIN",
+    targetHoursInitial: 8,
+    deadlineDate: "2026-09-25",
+    status: "PLAN",
+    panelId: 457,
+    jobTypeId: "JT-1",
+    startDate: "2026-09-18",
+    prerequisiteCoreId: "CD-0",
+    refWoId: "WO-1",
+    picPlan: "SM-09.001",
+    requiredGrade: "TK. I",
+    note: "catatan lama",
+    temuanAwal: "temuan lama",
+    keterangan: "keterangan lama",
+  };
+
+  function buildService(capture: (input: Record<string, unknown>) => void) {
+    return new DefaultCountdownService({
+      findCountdownDetail: mock(async () => existingRow),
+      updateCountdown: mock(async (...args: unknown[]) => {
+        capture(args[2] as Record<string, unknown>);
+        return { countdownId: "CD-1", carId: "CAR-1", unitName: "Unit A", panelName: "Panel A", sectionName: "BODY WORK", divisionId: 10, status: "PLAN" };
+      }),
+    } as never);
+  }
+
+  it("passes new PIC and grade from the manual form to the repository", async () => {
+    let merged: Record<string, unknown> = {};
+    await buildService((input) => { merged = input; })
+      .update(manualSession, "CD-1", { picPlan: "SM-09.002", requiredGrade: "TK. II" } as never);
+
+    expect(merged).toMatchObject({ picPlan: "SM-09.002", requiredGrade: "TK. II", carId: "CAR-1" });
+  });
+
+  it("clears PIC and grade when the form sends null", async () => {
+    let merged: Record<string, unknown> = {};
+    await buildService((input) => { merged = input; })
+      .update(manualSession, "CD-1", { picPlan: null, requiredGrade: null } as never);
+
+    expect(merged).toMatchObject({ picPlan: null, requiredGrade: null });
+  });
+
+  it("keeps existing PIC and grade when the field is not sent", async () => {
+    let merged: Record<string, unknown> = {};
+    await buildService((input) => { merged = input; })
+      .update(manualSession, "CD-1", { note: "catatan baru" } as never);
+
+    expect(merged).toMatchObject({ picPlan: "SM-09.001", requiredGrade: "TK. I" });
+  });
+
+  it("clears every optional field when the payload sends null", async () => {
+    let merged: Record<string, unknown> = {};
+    const payload = Object.fromEntries(optionalFields.map((field) => [field, null]));
+
+    await buildService((input) => { merged = input; })
+      .update(manualSession, "CD-1", payload as never);
+
+    for (const field of optionalFields) {
+      expect(merged[field]).toBe(null);
+    }
+  });
+
+  it("keeps every optional field when the payload omits it", async () => {
+    let merged: Record<string, unknown> = {};
+
+    await buildService((input) => { merged = input; })
+      .update(manualSession, "CD-1", { status: "PROSES" } as never);
+
+    for (const field of optionalFields) {
+      expect(merged[field]).toBe(existingRow[field]);
+    }
+  });
+
+  it("treats blank text as a clear for optional text fields", async () => {
+    let merged: Record<string, unknown> = {};
+
+    await buildService((input) => { merged = input; })
+      .update(manualSession, "CD-1", { note: "   ", keterangan: "" } as never);
+
+    expect(merged.note).toBe(null);
+    expect(merged.keterangan).toBe(null);
+  });
+});

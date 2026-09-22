@@ -1,4 +1,5 @@
 import type { AuthScope } from "@smsystem/contracts/auth";
+import type { GridFilter } from "@smsystem/contracts/grid";
 import type {
   CountdownBoardRow,
   CountdownCreateRequest,
@@ -28,6 +29,10 @@ interface CountdownBoardRowPacket extends RowDataPacket {
   prerequisiteCoreId: string | null;
   refWoId: string | null;
   picPlan: string | null;
+  picName: string | null;
+  requiredGrade: string | null;
+  kpName: string | null;
+  kdName: string | null;
   note: string | null;
   temuanAwal: string | null;
   keterangan: string | null;
@@ -66,6 +71,10 @@ interface CountdownDetailRowPacket extends RowDataPacket {
   prerequisiteCoreId: string | null;
   refWoId: string | null;
   picPlan: string | null;
+  picName: string | null;
+  requiredGrade: string | null;
+  kpName: string | null;
+  kdName: string | null;
   note: string | null;
   temuanAwal: string | null;
   keterangan: string | null;
@@ -198,6 +207,13 @@ export interface CountdownReferenceOptions {
     divisionParentName?: string | null;
     divisionParentCode?: string | null;
   }>;
+  employees: Array<{
+    label: string;
+    value: string;
+    divisionId?: number | null;
+    grade?: string | null;
+  }>;
+  grades: Array<{ label: string; value: string }>;
   taskCategories?: Array<{ label: string; value: string }>;
 }
 
@@ -279,8 +295,19 @@ function buildScopeWhereClause(
   return `(${clauses.join(" OR ")})`;
 }
 
+const NUMERIC_FILTER_OPERATORS: Partial<Record<GridFilter["operator"], string>> = {
+  eq: "=",
+  gt: ">",
+  gte: ">=",
+  lt: "<",
+  lte: "<=",
+};
+
 function buildFilterClauses(query: CountdownGridQuery, params: unknown[]): string[] {
   const clauses: string[] = [];
+  // Unit dan divisi bisa dikirim beberapa kali (scope KP/KD), jadi digabung sebagai OR.
+  const unitIds: string[] = [];
+  const divisionIds: string[] = [];
 
   if (query.search) {
     const value = `%${query.search}%`;
@@ -295,11 +322,12 @@ function buildFilterClauses(query: CountdownGridQuery, params: unknown[]): strin
         OR COALESCE(mjt.job_name, '') LIKE ?
         OR COALESCE(cd.temuan_awal, '') LIKE ?
         OR COALESCE(cd.keterangan, '') LIKE ?
+        OR COALESCE(pic.full_name, cd.pic_plan, '') LIKE ?
         OR COALESCE(cd.task_category, '') LIKE ?
         OR COALESCE(cd.status, '') LIKE ?
       )`,
     );
-    params.push(value, value, value, value, value, value, value, value, value, value, value);
+    params.push(value, value, value, value, value, value, value, value, value, value, value, value);
   }
 
   for (const filter of query.filters) {
@@ -316,22 +344,12 @@ function buildFilterClauses(query: CountdownGridQuery, params: unknown[]): strin
     }
 
     if (filter.field === "divisionId") {
-      clauses.push(`(
-        cd.division_id = ?
-        OR EXISTS (
-          SELECT 1
-          FROM sm_divisi selected_division
-          WHERE selected_division.id = ?
-            AND selected_division.parent_id = cd.division_id
-        )
-      )`);
-      params.push(filter.value, filter.value);
+      divisionIds.push(filter.value);
       continue;
     }
 
     if (filter.field === "unitId") {
-      clauses.push("cd.car_id = ?");
-      params.push(filter.value);
+      unitIds.push(filter.value);
       continue;
     }
 
@@ -354,6 +372,59 @@ function buildFilterClauses(query: CountdownGridQuery, params: unknown[]): strin
       clauses.push("cd.job_type_id = ?");
       params.push(filter.value);
       continue;
+    }
+
+    if (filter.field === "picPlan") {
+      clauses.push("cd.pic_plan = ?");
+      params.push(filter.value);
+      continue;
+    }
+
+    if (filter.field === "requiredGrade") {
+      clauses.push("cd.required_grade = ?");
+      params.push(filter.value);
+      continue;
+    }
+
+    if (filter.field === "deadlineDate") {
+      const operator = NUMERIC_FILTER_OPERATORS[filter.operator];
+      if (operator) {
+        clauses.push(`cd.deadline_date ${operator} ?`);
+        params.push(filter.value);
+      }
+      continue;
+    }
+
+    if (filter.field === "actualProgressPercent") {
+      const operator = NUMERIC_FILTER_OPERATORS[filter.operator];
+      const value = Number(filter.value);
+      if (operator && Number.isFinite(value)) {
+        clauses.push(`COALESCE(cd.actual_progress_percent, 0) ${operator} ?`);
+        params.push(value);
+      }
+      continue;
+    }
+  }
+
+  if (unitIds.length > 0) {
+    clauses.push(`cd.car_id IN (${unitIds.map(() => "?").join(", ")})`);
+    params.push(...unitIds);
+  }
+
+  if (divisionIds.length > 0) {
+    clauses.push(`(${divisionIds
+      .map(() => `(
+        cd.division_id = ?
+        OR EXISTS (
+          SELECT 1
+          FROM sm_divisi selected_division
+          WHERE selected_division.id = ?
+            AND selected_division.parent_id = cd.division_id
+        )
+      )`)
+      .join(" OR ")})`);
+    for (const divisionId of divisionIds) {
+      params.push(divisionId, divisionId);
     }
   }
 
@@ -465,6 +536,15 @@ function countdownFromSql(): string {
     LEFT JOIN sm_divisi sd ON sd.id = cd.division_id
     LEFT JOIN master_panels mp ON mp.id = cd.panel_id
     LEFT JOIN master_job_types mjt ON mjt.id = cd.job_type_id
+    LEFT JOIN (
+      SELECT car_id, MAX(kp_id) AS kp_id, MAX(kd_id) AS kd_id
+      FROM car_project_assignment
+      WHERE ended_at IS NULL
+      GROUP BY car_id
+    ) cpa ON cpa.car_id = cd.car_id
+    LEFT JOIN sm_employee kp ON kp.employee_id = cpa.kp_id
+    LEFT JOIN sm_employee kd ON kd.employee_id = cpa.kd_id
+    LEFT JOIN sm_employee pic ON pic.employee_id = cd.pic_plan
   `;
 }
 
@@ -484,23 +564,56 @@ function countdownSelectSql(): string {
       cd.prerequisite_core_id AS prerequisiteCoreId,
       cd.ref_taks_id AS refWoId,
       cd.pic_plan AS picPlan,
-      cd.revision_reason AS note,
+      pic.full_name AS picName,
+      cd.required_grade AS requiredGrade,
+      kp.full_name AS kpName,
+      kd.full_name AS kdName,
+      cd.keterangan AS note,
       cd.temuan_awal AS temuanAwal,
       cd.keterangan AS keterangan,
       cd.job_type_id AS jobTypeId,
       COALESCE(mjt.job_name, cd.section_name) AS jobTypeName,
       ROUND(COALESCE(cd.target_hours_initial, 0), 2) AS targetHoursInitial,
-      ROUND(COALESCE(cd.time_extension_hours, 0), 2) AS timeExtensionHours,
-      ROUND(COALESCE(cd.target_hours_revised, cd.target_hours_initial + cd.time_extension_hours, cd.target_hours_initial), 2) AS targetHoursRevised,
+      0 AS timeExtensionHours,
+      ROUND(COALESCE(cd.target_hours, cd.target_hours_initial, 0), 2) AS targetHoursRevised,
       ROUND(COALESCE(cd.total_actual_hours, 0), 2) AS totalActualHours,
-      ROUND(COALESCE(cd.remaining_hours, GREATEST(COALESCE(cd.target_hours_revised, cd.target_hours_initial + cd.time_extension_hours, cd.target_hours_initial) - COALESCE(cd.total_actual_hours, 0), 0)), 2) AS remainingHours,
+      ROUND(COALESCE(cd.remaining_hours, GREATEST(COALESCE(cd.target_hours, cd.target_hours_initial, 0) - COALESCE(cd.total_actual_hours, 0), 0)), 2) AS remainingHours,
       ROUND(COALESCE(cd.actual_progress_percent, 0), 2) AS actualProgressPercent,
       COALESCE(cd.status, 'PLAN') AS status,
-      cd.extension_request_status AS extensionRequestStatus,
-      ROUND(COALESCE(cd.requested_extension_hours, 0), 2) AS requestedExtensionHours,
-      DATE_FORMAT(cd.requested_deadline, '%Y-%m-%d') AS requestedDeadline,
-      cd.revision_reason AS revisionReason,
-      COALESCE(cd.count_revisi, 0) AS countRevision,
+      (
+        SELECT cr.approval_status
+        FROM sm_jobdesc_countdown_revisions cr
+        WHERE cr.countdown_id = cd.id
+        ORDER BY cr.created_at DESC, cr.id DESC
+        LIMIT 1
+      ) AS extensionRequestStatus,
+      ROUND(COALESCE((
+        SELECT cr.delta_hours
+        FROM sm_jobdesc_countdown_revisions cr
+        WHERE cr.countdown_id = cd.id
+        ORDER BY cr.created_at DESC, cr.id DESC
+        LIMIT 1
+      ), 0), 2) AS requestedExtensionHours,
+      DATE_FORMAT((
+        SELECT cr.new_deadline_date
+        FROM sm_jobdesc_countdown_revisions cr
+        WHERE cr.countdown_id = cd.id
+        ORDER BY cr.created_at DESC, cr.id DESC
+        LIMIT 1
+      ), '%Y-%m-%d') AS requestedDeadline,
+      (
+        SELECT cr.reason_detail
+        FROM sm_jobdesc_countdown_revisions cr
+        WHERE cr.countdown_id = cd.id
+        ORDER BY cr.created_at DESC, cr.id DESC
+        LIMIT 1
+      ) AS revisionReason,
+      (
+        SELECT COUNT(*)
+        FROM sm_jobdesc_countdown_revisions cr
+        WHERE cr.countdown_id = cd.id
+          AND cr.approval_status = 'APPROVED'
+      ) AS countRevision,
       DATE_FORMAT(cd.start_date, '%Y-%m-%d') AS startDate,
       DATE_FORMAT(cd.deadline_date, '%Y-%m-%d') AS deadlineDate,
       DATE_FORMAT(cd.created_at, '%Y-%m-%d %H:%i:%s') AS createdAt,
@@ -528,6 +641,10 @@ function mapCountdownBoardRow(row: CountdownBoardRowPacket): CountdownBoardRow {
     prerequisiteCoreId: row.prerequisiteCoreId,
     refWoId: row.refWoId,
     picPlan: row.picPlan,
+    picName: row.picName,
+    requiredGrade: row.requiredGrade,
+    kpName: row.kpName,
+    kdName: row.kdName,
     note: row.note,
     temuanAwal: row.temuanAwal,
     keterangan: row.keterangan,
@@ -710,6 +827,7 @@ interface NormalizedCountdownMutationInput {
   prerequisiteCoreId: string | null;
   refWoId: string | null;
   picPlan: string | null;
+  requiredGrade: string | null;
   note: string | null;
   temuanAwal: string | null;
   keterangan: string | null;
@@ -758,14 +876,10 @@ function classifyCountdownRevision(
 
 function currentCountdownTarget(row: {
   targetHours?: number | null;
-  targetHoursRevised?: number | null;
   targetHoursInitial?: number | null;
-  timeExtensionHours?: number | null;
 }): number | null {
   const candidates = [
     row.targetHours,
-    row.targetHoursRevised,
-    Number(row.targetHoursInitial ?? 0) + Number(row.timeExtensionHours ?? 0),
     row.targetHoursInitial,
   ];
   const value = candidates.find((candidate) => candidate !== null && candidate !== undefined && Number.isFinite(Number(candidate)));
@@ -789,6 +903,7 @@ async function insertCountdownRevision(
     referenceType: string | null;
     referenceId: string | null;
     changedBy: string;
+    approvalStatus?: "REQUESTED" | "APPROVED" | "REJECTED";
   },
 ): Promise<void> {
   const delta = params.oldTargetHours !== null && params.newTargetHours !== null
@@ -801,8 +916,8 @@ async function insertCountdownRevision(
        old_deadline_date, new_deadline_date,
        old_pic_plan, new_pic_plan,
        old_required_grade, new_required_grade,
-       reference_type, reference_id, reason_detail, changed_by
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       reference_type, reference_id, reason_detail, changed_by, approval_status
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       params.countdownId,
       classifyCountdownRevision(params.oldTargetHours, params.newTargetHours, params.reasonCode),
@@ -820,6 +935,7 @@ async function insertCountdownRevision(
       params.referenceId,
       params.reasonDetail,
       params.changedBy,
+      params.approvalStatus ?? "APPROVED",
     ],
   );
 }
@@ -849,9 +965,11 @@ async function normalizeAndValidateCountdownMutation(
   const prerequisiteCoreId = toNullableString(input.prerequisiteCoreId);
   const refWoId = toNullableString(input.refWoId);
   const picPlan = toNullableString(input.picPlan);
+  const requiredGrade = toNullableString(input.requiredGrade);
   const note = toNullableString(input.note);
   const temuanAwal = toNullableString(input.temuanAwal);
-  const keterangan = toNullableString(input.keterangan);
+  // `note` dan `keterangan` memakai kolom yang sama (cd.keterangan); keterangan menang bila keduanya diisi.
+  const keterangan = toNullableString(input.keterangan) ?? note;
   const status = toStringValue(input.status ?? "PLAN").toUpperCase();
 
   if (!carId) {
@@ -970,6 +1088,7 @@ async function normalizeAndValidateCountdownMutation(
     prerequisiteCoreId,
     refWoId,
     picPlan,
+    requiredGrade,
     note,
     temuanAwal,
     keterangan,
@@ -1192,19 +1311,24 @@ export class CountdownRepository {
       if (revision.extensionRequestStatus === "REQUESTED" || revision.extensionRequestStatus === "MO_REVIEW") {
         throw new Error("COUNTDOWN_REVISION_ALREADY_REQUESTED");
       }
-      await connection.execute(
-        `UPDATE sm_jobdesc_countdown
-         SET extension_request_status = 'REQUESTED', requested_extension_hours = ?,
-             requested_deadline = ?, revision_reason = ?, user_update = ?, updated_at = NOW()
-         WHERE id = ?`,
-        [
-          params.input.requestedHours,
-          params.input.requestedDeadline,
-          params.input.reason,
-          params.employeeId,
-          params.countdownId,
-        ],
-      );
+      const oldTarget = currentCountdownTarget(revision);
+      await insertCountdownRevision(connection, {
+        countdownId: params.countdownId,
+        oldTargetHours: oldTarget,
+        newTargetHours: Number(oldTarget ?? 0) + params.input.requestedHours,
+        oldDeadlineDate: revision.deadlineDate,
+        newDeadlineDate: params.input.requestedDeadline,
+        oldPicPlan: revision.picPlan,
+        newPicPlan: revision.picPlan,
+        oldRequiredGrade: revision.requiredGrade,
+        newRequiredGrade: revision.requiredGrade,
+        reasonCode: normalizeCountdownRevisionReason(params.input.reason),
+        reasonDetail: params.input.reason,
+        referenceType: "COUNTDOWN_REVISION_REQUEST",
+        referenceId: params.countdownId,
+        changedBy: params.employeeId,
+        approvalStatus: "REQUESTED",
+      });
       await connection.commit();
       return { countdownId: params.countdownId, status: "REQUESTED", carId: revision.carId, divisionId: revision.divisionId };
     } catch (error) {
@@ -1222,8 +1346,7 @@ export class CountdownRepository {
     try {
       await connection.beginTransaction();
       const revision = await this.lockRevision(connection, params);
-      const requiredStatus = params.isMo ? "MO_REVIEW" : "REQUESTED";
-      if (revision.extensionRequestStatus !== requiredStatus) {
+      if (revision.extensionRequestStatus !== "REQUESTED" && !(params.isMo && revision.extensionRequestStatus === "MO_REVIEW")) {
         throw new Error("COUNTDOWN_REVISION_STATUS_INVALID");
       }
       if (!params.isMo && !params.scope.canViewAllUnits && !await this.isActiveCountdownKp(connection, revision.carId, params.employeeId)) {
@@ -1232,8 +1355,7 @@ export class CountdownRepository {
 
       let nextStatus: CountdownRevisionResult["status"] = params.input.isApproved ? "APPROVED" : "REJECTED";
       if (params.input.isApproved) {
-        const extension = Number(revision.timeExtensionHours ?? 0) + params.input.approvedHours;
-        const target = Number(revision.targetHoursInitial ?? 0) + extension;
+        const target = Number(currentCountdownTarget(revision) ?? 0) + params.input.approvedHours;
         if (!params.isMo) {
           const [budgetRows] = await connection.query<Array<RowDataPacket & { allocatedHours: number | null }>>(
             `SELECT pm_allocated_hours AS allocatedHours FROM sm_unit_budgets
@@ -1241,7 +1363,7 @@ export class CountdownRepository {
             [revision.carId, revision.divisionId],
           );
           const [usageRows] = await connection.query<Array<RowDataPacket & { totalUsed: number }>>(
-            `SELECT COALESCE(SUM(target_hours_revised), 0) AS totalUsed
+            `SELECT COALESCE(SUM(target_hours), 0) AS totalUsed
              FROM sm_jobdesc_countdown WHERE car_id = ? AND division_id = ? AND id <> ?`,
             [revision.carId, revision.divisionId, params.countdownId],
           );
@@ -1252,10 +1374,6 @@ export class CountdownRepository {
         }
 
         if (nextStatus === "MO_REVIEW") {
-          await connection.execute(
-            `UPDATE sm_jobdesc_countdown SET extension_request_status = 'MO_REVIEW', user_update = ?, updated_at = NOW() WHERE id = ?`,
-            [params.employeeId, params.countdownId],
-          );
         } else {
           if (params.isMo) {
             const [budgetUpdate] = await connection.execute<ResultSetHeader>(
@@ -1270,11 +1388,13 @@ export class CountdownRepository {
           }
           await connection.execute(
             `UPDATE sm_jobdesc_countdown
-             SET extension_request_status = 'APPROVED', time_extension_hours = ?, target_hours_revised = ?, target_hours = ?,
-                 remaining_hours = GREATEST(? - COALESCE(total_actual_hours, 0), 0), deadline_date = ?,
-                 count_revisi = count_revisi + 1, user_update = ?, updated_at = NOW()
+             SET target_hours = ?,
+                 remaining_hours = GREATEST(? - COALESCE(total_actual_hours, 0), 0),
+                 deadline_date = ?,
+                 user_update = ?,
+                 updated_at = NOW()
              WHERE id = ?`,
-            [extension, target, target, target, params.input.approvedDeadline, params.employeeId, params.countdownId],
+            [target, target, params.input.approvedDeadline, params.employeeId, params.countdownId],
           );
           await insertCountdownRevision(connection, {
             countdownId: params.countdownId,
@@ -1291,13 +1411,27 @@ export class CountdownRepository {
             referenceType: params.isMo ? "MO_APPROVAL" : "KP_APPROVAL",
             referenceId: params.countdownId,
             changedBy: params.employeeId,
+            approvalStatus: "APPROVED",
           });
         }
       } else {
-        await connection.execute(
-          `UPDATE sm_jobdesc_countdown SET extension_request_status = 'REJECTED', user_update = ?, updated_at = NOW() WHERE id = ?`,
-          [params.employeeId, params.countdownId],
-        );
+        await insertCountdownRevision(connection, {
+          countdownId: params.countdownId,
+          oldTargetHours: currentCountdownTarget(revision),
+          newTargetHours: currentCountdownTarget(revision),
+          oldDeadlineDate: revision.deadlineDate,
+          newDeadlineDate: revision.deadlineDate,
+          oldPicPlan: revision.picPlan,
+          newPicPlan: revision.picPlan,
+          oldRequiredGrade: revision.requiredGrade,
+          newRequiredGrade: revision.requiredGrade,
+          reasonCode: normalizeCountdownRevisionReason(revision.revisionReason),
+          reasonDetail: revision.revisionReason,
+          referenceType: params.isMo ? "MO_REJECTION" : "KP_REJECTION",
+          referenceId: params.countdownId,
+          changedBy: params.employeeId,
+          approvalStatus: "REJECTED",
+        });
       }
       await connection.commit();
       return { countdownId: params.countdownId, status: nextStatus, carId: revision.carId, divisionId: revision.divisionId };
@@ -1315,16 +1449,26 @@ export class CountdownRepository {
   ): Promise<CountdownRevisionRowPacket> {
     const [rows] = await connection.query<CountdownRevisionRowPacket[]>(
       `SELECT id AS countdownId, car_id AS carId, division_id AS divisionId, status,
-              extension_request_status AS extensionRequestStatus,
-              COALESCE(time_extension_hours, 0) AS timeExtensionHours,
               COALESCE(target_hours_initial, 0) AS targetHoursInitial,
               target_hours AS targetHours,
-              target_hours_revised AS targetHoursRevised,
               COALESCE(total_actual_hours, 0) AS totalActualHours,
               DATE_FORMAT(deadline_date, '%Y-%m-%d') AS deadlineDate,
               pic_plan AS picPlan,
               required_grade AS requiredGrade,
-              revision_reason AS revisionReason
+              (
+                SELECT cr.approval_status
+                FROM sm_jobdesc_countdown_revisions cr
+                WHERE cr.countdown_id = sm_jobdesc_countdown.id
+                ORDER BY cr.created_at DESC, cr.id DESC
+                LIMIT 1
+              ) AS extensionRequestStatus,
+              (
+                SELECT cr.reason_detail
+                FROM sm_jobdesc_countdown_revisions cr
+                WHERE cr.countdown_id = sm_jobdesc_countdown.id
+                ORDER BY cr.created_at DESC, cr.id DESC
+                LIMIT 1
+              ) AS revisionReason
        FROM sm_jobdesc_countdown WHERE id = ? FOR UPDATE`,
       [params.countdownId],
     );
@@ -1394,7 +1538,7 @@ export class CountdownRepository {
       ? `WHERE ${unitClauses.join(" OR ")}` 
       : (params.scope.canViewAllUnits ? "" : "WHERE 1 = 0");
 
-    const [divisionRows, unitRows, panelRows, sectionRows, jobTypeRows] = await Promise.all([
+    const [divisionRows, unitRows, panelRows, sectionRows, jobTypeRows, employeeRows] = await Promise.all([
       pool.query<ReferenceOptionRow[]>(
         `
           SELECT
@@ -1458,6 +1602,18 @@ export class CountdownRepository {
           ORDER BY mjt.job_name ASC
         `,
       ),
+      pool.query<ReferenceOptionRow[]>(
+        `
+          SELECT
+            e.employee_id AS value,
+            e.full_name AS label,
+            e.division_id AS divisionId,
+            NULLIF(TRIM(COALESCE(e.grade, '')), '') AS grade
+          FROM sm_employee e
+          WHERE e.is_active = 1
+          ORDER BY e.full_name ASC
+        `,
+      ),
     ]);
 
     return {
@@ -1466,6 +1622,16 @@ export class CountdownRepository {
       panels: panelRows[0].map(mapPanelReference),
       sections: sectionRows[0].map(mapReferenceOption),
       jobTypes: jobTypeRows[0].map(mapJobTypeReference),
+      employees: employeeRows[0].map((row) => ({
+        label: row.label,
+        value: String(row.value),
+        divisionId: row.divisionId ?? null,
+        grade: row.grade ?? null,
+      })),
+      // Grade tidak punya tabel master: daftar diambil dari grade karyawan yang sudah dipakai.
+      grades: [...new Set(employeeRows[0].map((row) => row.grade).filter((grade): grade is string => Boolean(grade)))]
+        .sort((left, right) => left.localeCompare(right))
+        .map((grade) => ({ label: grade, value: grade })),
       taskCategories: [
         { label: "Main", value: "MAIN" },
         { label: "Additional", value: "ADDITIONAL" },
@@ -1484,8 +1650,7 @@ export class CountdownRepository {
       const normalized = await normalizeAndValidateCountdownMutation(connection, params, input);
       const countdownId = randomUUID();
       const now = new Date();
-      const timeExtensionHours = 0;
-      const targetHoursRevised = normalized.targetHoursInitial + timeExtensionHours;
+      const targetHoursRevised = normalized.targetHoursInitial;
       const remainingHours = Math.max(targetHoursRevised, 0);
 
       await connection.execute(
@@ -1501,31 +1666,25 @@ export class CountdownRepository {
             section_name,
             job_type_id,
             target_hours_initial,
-            time_extension_hours,
-            target_hours_revised,
             target_hours,
             total_actual_hours,
             remaining_hours,
             actual_progress_percent,
             status,
             pic_plan,
+            required_grade,
             qc_last_status,
             created_at,
             start_date,
             deadline_date,
             latest_qc_id,
             ref_rework_qc_id,
-            count_revisi,
             updated_at,
             user_update,
-            extension_request_status,
-            requested_extension_hours,
-            requested_deadline,
-            revision_reason,
             temuan_awal,
             keterangan,
             last_qc_level
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 0, ?, ?, NULL, ?, ?, ?, NULL, NULL, 0, ?, ?, NULL, 0, NULL, ?, ?, ?, NULL)
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 0, ?, ?, ?, NULL, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, NULL)
         `,
         [
           countdownId,
@@ -1538,18 +1697,16 @@ export class CountdownRepository {
           normalized.sectionName,
           normalized.jobTypeId,
           normalized.targetHoursInitial,
-          timeExtensionHours,
-          targetHoursRevised,
           targetHoursRevised,
           remainingHours,
           normalized.status,
           normalized.picPlan,
+          normalized.requiredGrade,
           now,
           normalized.startDate,
           normalized.deadlineDate,
           now,
           params.employeeId,
-          normalized.note,
           normalized.temuanAwal,
           normalized.keterangan,
         ],
@@ -1612,15 +1769,13 @@ export class CountdownRepository {
 
       const [lockedRows] = await connection.query<Array<RowDataPacket & {
         targetHours: number | null;
-        targetHoursRevised: number | null;
         targetHoursInitial: number | null;
-        timeExtensionHours: number | null;
         deadlineDate: string | null;
         picPlan: string | null;
         requiredGrade: string | null;
       }>>(
-        `SELECT target_hours AS targetHours, target_hours_revised AS targetHoursRevised,
-                target_hours_initial AS targetHoursInitial, time_extension_hours AS timeExtensionHours,
+        `SELECT target_hours AS targetHours,
+                target_hours_initial AS targetHoursInitial,
                 DATE_FORMAT(deadline_date, '%Y-%m-%d') AS deadlineDate,
                 pic_plan AS picPlan, required_grade AS requiredGrade
          FROM sm_jobdesc_countdown WHERE id = ? FOR UPDATE`,
@@ -1629,9 +1784,8 @@ export class CountdownRepository {
 
       const scopeParams: ScopeParams = params;
       const normalized = await normalizeAndValidateCountdownMutation(connection, scopeParams, input);
-      const timeExtensionHours = Number(existing.timeExtensionHours ?? 0);
       const totalActualHours = Number(existing.totalActualHours ?? 0);
-      const targetHoursRevised = normalized.targetHoursInitial + timeExtensionHours;
+      const targetHoursRevised = normalized.targetHoursInitial;
       const remainingHours = Math.max(targetHoursRevised - totalActualHours, 0);
       const actualProgressPercent =
         targetHoursRevised > 0
@@ -1651,17 +1805,16 @@ export class CountdownRepository {
             section_name = ?,
             job_type_id = ?,
             target_hours_initial = ?,
-            target_hours_revised = ?,
             target_hours = ?,
             remaining_hours = ?,
             actual_progress_percent = ?,
             status = ?,
             pic_plan = ?,
+            required_grade = ?,
             start_date = ?,
             deadline_date = ?,
             updated_at = ?,
             user_update = ?,
-            revision_reason = ?,
             temuan_awal = ?,
             keterangan = ?
           WHERE id = ?
@@ -1677,16 +1830,15 @@ export class CountdownRepository {
           normalized.jobTypeId,
           normalized.targetHoursInitial,
           targetHoursRevised,
-          targetHoursRevised,
           remainingHours,
           actualProgressPercent,
           normalized.status,
           normalized.picPlan,
+          normalized.requiredGrade,
           normalized.startDate,
           normalized.deadlineDate,
           new Date(),
           params.employeeId,
-          normalized.note,
           normalized.temuanAwal,
           normalized.keterangan,
           countdownId,
@@ -1815,7 +1967,8 @@ export class CountdownRepository {
         const refWoId = toNullableString(row.refWoId);
         const note = toNullableString(row.note);
         const temuanAwal = toNullableString(row.temuanAwal);
-        const keterangan = toNullableString(row.keterangan);
+        // Sama seperti create/update: `note` dan `keterangan` menulis ke kolom cd.keterangan.
+        const keterangan = toNullableString(row.keterangan) ?? note;
 
         if (!carId) {
           issues.push(mapImportIssue(row.rowNumber, "carId", "carId wajib diisi.", row.carId));
@@ -1961,8 +2114,6 @@ export class CountdownRepository {
               section_name,
               job_type_id,
               target_hours_initial,
-              time_extension_hours,
-              target_hours_revised,
               target_hours,
               total_actual_hours,
               remaining_hours,
@@ -1974,17 +2125,12 @@ export class CountdownRepository {
               deadline_date,
               latest_qc_id,
               ref_rework_qc_id,
-              count_revisi,
               updated_at,
               user_update,
-              extension_request_status,
-              requested_extension_hours,
-              requested_deadline,
-              revision_reason,
               temuan_awal,
               keterangan,
               last_qc_level
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 0, ?, 0, 'PLAN', NULL, ?, ?, ?, NULL, NULL, 0, ?, ?, NULL, 0, NULL, ?, ?, ?, NULL)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 0, 'PLAN', NULL, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, NULL)
           `,
           [
             countdownId,
@@ -1998,14 +2144,11 @@ export class CountdownRepository {
             jobTypeId,
             targetHoursInitial,
             targetHoursRevised,
-            targetHoursRevised,
-            targetHoursRevised,
             now,
             startDate,
             deadlineDate,
             now,
             params.employeeId,
-            note,
             temuanAwal,
             keterangan,
           ],

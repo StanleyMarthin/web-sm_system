@@ -1485,7 +1485,7 @@ export class UnitsRepository {
             cd.task_category AS taskCategory,
             cd.job_type_id AS jobTypeId,
             jt.job_name AS jobTypeName,
-            ROUND(COALESCE(cd.target_hours_revised, cd.target_hours_initial + cd.time_extension_hours, cd.target_hours_initial), 2) AS targetHoursRevised,
+            ROUND(COALESCE(cd.target_hours, cd.target_hours_initial, 0), 2) AS targetHoursRevised,
             ROUND(COALESCE(cd.total_actual_hours, 0), 2) AS totalActualHours,
             ROUND(COALESCE(cd.remaining_hours, 0), 2) AS remainingHours,
             ROUND(COALESCE(cd.actual_progress_percent, 0), 2) AS actualProgressPercent,
@@ -1639,7 +1639,12 @@ export class UnitsRepository {
                 1
               ) AS qcLastStatus,
               DATE_FORMAT(MIN(cd.deadline_date), '%Y-%m-%d') AS deadlineDate,
-              MAX(cd.count_revisi) AS countRevisi,
+              MAX((
+                SELECT COUNT(*)
+                FROM sm_jobdesc_countdown_revisions cr
+                WHERE cr.countdown_id = cd.id
+                  AND cr.approval_status = 'APPROVED'
+              )) AS countRevisi,
               SUBSTRING_INDEX(
                 GROUP_CONCAT(cd.id ORDER BY cd.updated_at DESC SEPARATOR ','),
                 ',',
@@ -1650,7 +1655,7 @@ export class UnitsRepository {
                 ',',
                 1
               ) AS activeJobName,
-              ROUND(MAX(COALESCE(cd.target_hours_revised, cd.target_hours_initial + cd.time_extension_hours, cd.target_hours_initial, 0)), 2) AS activeTargetHours,
+              ROUND(MAX(COALESCE(cd.target_hours, cd.target_hours_initial, 0)), 2) AS activeTargetHours,
               MAX(
                 CASE
                   WHEN COALESCE(cd.status, 'PLAN') = 'DONE' OR COALESCE(cd.actual_progress_percent, 0) >= 100
@@ -1832,7 +1837,7 @@ export class UnitsRepository {
               COALESCE(mjt.job_name, cd.section_name, 'Job Plan') AS jobName,
               COALESCE(NULLIF(TRIM(p.jobdescription), ''), cd.section_name, mjt.job_name, '-') AS jobDescription,
               COALESCE(e.full_name, p.assigned_user_id) AS employeeName,
-              ROUND(COALESCE(TIME_TO_SEC(p.dailyTargetHours) / 3600, cd.target_hours_revised, cd.target_hours_initial + cd.time_extension_hours, cd.target_hours_initial, 0), 2) AS targetHours,
+              ROUND(COALESCE(TIME_TO_SEC(p.dailyTargetHours) / 3600, cd.target_hours, cd.target_hours_initial, 0), 2) AS targetHours,
               COALESCE(a.status, p.status, cd.status, 'PLAN') AS statusLabel,
               ROUND(COALESCE(a.progres, cd.actual_progress_percent, 0), 2) AS progressPercent
             FROM sm_jobdesc_countdown cd
@@ -2109,7 +2114,7 @@ export class UnitsRepository {
           SELECT
             panel_id,
             COUNT(*) AS totalJobdesc,
-            ROUND(SUM(COALESCE(target_hours_revised, target_hours_initial + time_extension_hours, target_hours_initial, 0)), 2) AS totalHours,
+            ROUND(SUM(COALESCE(target_hours, target_hours_initial, 0)), 2) AS totalHours,
             ROUND(SUM(COALESCE(remaining_hours, 0)), 2) AS remainingHours
           FROM sm_jobdesc_countdown
           GROUP BY panel_id
@@ -2197,7 +2202,7 @@ export class UnitsRepository {
           SELECT
             panel_id,
             COUNT(*) AS totalJobdesc,
-            ROUND(SUM(COALESCE(target_hours_revised, target_hours_initial + time_extension_hours, target_hours_initial, 0)), 2) AS totalHours,
+            ROUND(SUM(COALESCE(target_hours, target_hours_initial, 0)), 2) AS totalHours,
             ROUND(SUM(COALESCE(remaining_hours, 0)), 2) AS remainingHours
           FROM sm_jobdesc_countdown
           GROUP BY panel_id
@@ -2302,7 +2307,7 @@ export class UnitsRepository {
             COALESCE(cd.status, 'PLAN') AS status,
             DATE_FORMAT(COALESCE(cd.updated_at, cd.created_at), '%Y-%m-%d %H:%i:%s') AS date,
             CONCAT('/countdown/', cd.id) AS url,
-            ROUND(COALESCE(cd.target_hours_revised, cd.target_hours_initial + cd.time_extension_hours, cd.target_hours_initial, 0), 2) AS targetHours,
+            ROUND(COALESCE(cd.target_hours, cd.target_hours_initial, 0), 2) AS targetHours,
             ROUND(COALESCE(cd.remaining_hours, 0), 2) AS remainingHours,
             ROUND(COALESCE(cd.actual_progress_percent, 0), 2) AS progressPercent,
             ? AS carId,
@@ -2336,7 +2341,7 @@ export class UnitsRepository {
             COALESCE(p.status, cd.status, 'PLAN') AS status,
             DATE_FORMAT(COALESCE(p.created_at, cd.updated_at, cd.created_at), '%Y-%m-%d %H:%i:%s') AS date,
             CONCAT('/job-plan?planId=', p.id) AS url,
-            ROUND(COALESCE(TIME_TO_SEC(p.dailyTargetHours) / 3600, cd.target_hours_revised, cd.target_hours_initial + cd.time_extension_hours, cd.target_hours_initial, 0), 2) AS targetHours,
+            ROUND(COALESCE(TIME_TO_SEC(p.dailyTargetHours) / 3600, cd.target_hours, cd.target_hours_initial, 0), 2) AS targetHours,
             ROUND(COALESCE(cd.remaining_hours, 0), 2) AS remainingHours,
             ROUND(COALESCE(cd.actual_progress_percent, 0), 2) AS progressPercent
           FROM sm_jobdesc_plan p
@@ -2401,7 +2406,7 @@ export class UnitsRepository {
             COALESCE(w.status, 'SUBMITTED') AS status,
             DATE_FORMAT(COALESCE(w.updated_at, w.created_at), '%Y-%m-%d %H:%i:%s') AS date,
             CONCAT('/wo/', w.id) AS url,
-            ROUND(COALESCE(cd.target_hours_revised, cd.target_hours_initial + cd.time_extension_hours, cd.target_hours_initial, 0), 2) AS targetHours,
+            ROUND(COALESCE(cd.target_hours, cd.target_hours_initial, 0), 2) AS targetHours,
             ROUND(COALESCE(cd.remaining_hours, 0), 2) AS remainingHours,
             ROUND(COALESCE(cd.actual_progress_percent, 0), 2) AS progressPercent,
             w.wo_number AS woNumber,
@@ -2434,7 +2439,7 @@ export class UnitsRepository {
             COALESCE(w.status, 'SUBMITTED') AS status,
             DATE_FORMAT(COALESCE(w.updated_at, w.created_at), '%Y-%m-%d %H:%i:%s') AS date,
             CONCAT('/wo/', w.id) AS url,
-            ROUND(COALESCE(cd.target_hours_revised, cd.target_hours_initial + cd.time_extension_hours, cd.target_hours_initial, 0), 2) AS targetHours,
+            ROUND(COALESCE(cd.target_hours, cd.target_hours_initial, 0), 2) AS targetHours,
             ROUND(COALESCE(cd.remaining_hours, 0), 2) AS remainingHours,
             ROUND(COALESCE(cd.actual_progress_percent, 0), 2) AS progressPercent,
             w.wo_number AS woNumber,

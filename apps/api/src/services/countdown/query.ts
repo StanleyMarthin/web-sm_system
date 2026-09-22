@@ -22,6 +22,10 @@ const COUNTDOWN_GRID_FILTER_FIELDS = [
   "panelId",
   "sectionName",
   "jobTypeId",
+  "picPlan",
+  "requiredGrade",
+  "deadlineDate",
+  "actualProgressPercent",
 ] as const;
 
 export type CountdownGridSortField = (typeof COUNTDOWN_GRID_SORT_FIELDS)[number];

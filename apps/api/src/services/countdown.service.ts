@@ -53,6 +53,25 @@ function normalizeOptionalString(value: string | null | undefined): string | nul
   return text.length > 0 ? text : null;
 }
 
+/**
+ * Semantik update countdown: `undefined` = pertahankan nilai lama, `null` (atau teks kosong) = kosongkan nilai.
+ * Dipakai untuk semua field yang boleh kosong; field wajib tetap menolak null di kontrak.
+ */
+function mergeOptionalText(
+  next: string | null | undefined,
+  current: string | null | undefined,
+): string | null {
+  if (next === undefined) return normalizeOptionalString(current) ?? null;
+  return normalizeOptionalString(next) ?? null;
+}
+
+function mergeOptionalValue<T>(
+  next: T | null | undefined,
+  current: T | null | undefined,
+): T | null {
+  return next === undefined ? current ?? null : next;
+}
+
 export interface CountdownListResult {
   data: Awaited<ReturnType<CountdownRepository["findCountdownBoard"]>>["rows"];
   references: Awaited<ReturnType<CountdownRepository["listFilterReferences"]>>;
@@ -413,11 +432,16 @@ export class DefaultCountdownService implements CountdownService {
         }),
       ),
     ]);
+    const canManage = canManageCountdown(session);
+    // Daftar karyawan + grade hanya dipakai form create/edit yang butuh akses kelola.
+    const visibleReferences = canManage
+      ? references
+      : { ...references, employees: [], grades: [] };
 
     return {
       data: payload.rows,
-      references,
-      canManage: canManageCountdown(session),
+      references: visibleReferences,
+      canManage,
       meta: buildGridMeta(payload.total, normalizedQuery.page, normalizedQuery.limit),
       query: normalizedQuery,
     };
@@ -544,30 +568,25 @@ export class DefaultCountdownService implements CountdownService {
     }
 
     const mergedInput: CountdownCreateRequest = {
+      // Field wajib (unit, divisi, bagian, target, deadline, kategori, status) tidak bisa dikosongkan:
+      // kontrak menolak null, jadi `undefined` berarti pertahankan nilai lama.
       carId: input.carId ?? existing.carId,
       divisionId: input.divisionId ?? (existing.divisionId ?? 0),
-      panelId: input.panelId !== undefined ? input.panelId : existing.panelId ?? null,
       taskCategory: input.taskCategory ?? (existing.taskCategory as CountdownCreateRequest["taskCategory"]),
       sectionName: input.sectionName ?? (existing.sectionName ?? ""),
-      jobTypeId: normalizeOptionalString(input.jobTypeId) ?? existing.jobTypeId ?? null,
       targetHoursInitial: input.targetHoursInitial ?? existing.targetHoursInitial,
-      startDate: normalizeOptionalString(input.startDate) ?? existing.startDate ?? null,
       deadlineDate: input.deadlineDate ?? (existing.deadlineDate ?? ""),
-      prerequisiteCoreId:
-        normalizeOptionalString(input.prerequisiteCoreId) ??
-        existing.prerequisiteCoreId ??
-        null,
-      refWoId: normalizeOptionalString(input.refWoId) ?? existing.refWoId ?? null,
-      note: normalizeOptionalString(input.note) ?? existing.note ?? null,
-      temuanAwal:
-        normalizeOptionalString(input.temuanAwal) ??
-        existing.temuanAwal ??
-        null,
-      keterangan:
-        normalizeOptionalString(input.keterangan) ??
-        existing.keterangan ??
-        null,
       status: input.status ?? (existing.status as CountdownCreateRequest["status"]),
+      panelId: mergeOptionalValue(input.panelId, existing.panelId),
+      jobTypeId: mergeOptionalText(input.jobTypeId, existing.jobTypeId),
+      startDate: mergeOptionalText(input.startDate, existing.startDate),
+      prerequisiteCoreId: mergeOptionalText(input.prerequisiteCoreId, existing.prerequisiteCoreId),
+      refWoId: mergeOptionalText(input.refWoId, existing.refWoId),
+      picPlan: mergeOptionalText(input.picPlan, existing.picPlan),
+      requiredGrade: mergeOptionalText(input.requiredGrade, existing.requiredGrade),
+      note: mergeOptionalText(input.note, existing.note),
+      temuanAwal: mergeOptionalText(input.temuanAwal, existing.temuanAwal),
+      keterangan: mergeOptionalText(input.keterangan, existing.keterangan),
     };
 
     const detail = await this.repository.updateCountdown(

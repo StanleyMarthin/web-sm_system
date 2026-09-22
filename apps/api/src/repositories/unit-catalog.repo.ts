@@ -926,10 +926,10 @@ export class UnitCatalogRepository {
         await connection.execute(
           `
             INSERT INTO sm_jobdesc_countdown (
-              id, car_id, division_id, pic_plan, required_grade, standard_hours, target_hours,
+              id, car_id, division_id, pic_plan, required_grade, target_hours,
               task_category, panel_id, section_name, job_type_id,
-              target_hours_initial, target_hours_revised, remaining_hours, status, start_date, deadline_date
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PLAN', ?, ?)
+              target_hours_initial, remaining_hours, status, start_date, deadline_date
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PLAN', ?, ?)
           `,
           [
             countdownId,
@@ -937,13 +937,11 @@ export class UnitCatalogRepository {
             job.divisionId,
             job.picPlan,
             job.requiredGrade,
-            job.standardHours,
             job.targetHoursInitial,
             job.taskCategory,
             panelId,
             job.description,
             job.jobTypeId,
-            job.targetHoursInitial,
             job.targetHoursInitial,
             job.targetHoursInitial,
             job.startDate,

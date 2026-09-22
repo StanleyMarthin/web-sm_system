@@ -405,7 +405,7 @@ function baseQcSelectSql(issueStorageReady: boolean): string {
         2
       ) AS waitingHours,
       cd.remaining_hours AS remainingHours,
-      COALESCE(cd.target_hours_revised, cd.target_hours_initial) AS targetHours,
+      COALESCE(cd.target_hours, cd.target_hours_initial) AS targetHours,
       DATE_FORMAT(cd.deadline_date, '%Y-%m-%d') AS deadlineDate,
       DATE_FORMAT(latest_qc.inspection_date, '%Y-%m-%d %H:%i:%s') AS latestInspectionDate,
       latest_qc.qc_notes AS latestInspectionNotes,

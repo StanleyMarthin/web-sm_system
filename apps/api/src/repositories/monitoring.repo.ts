@@ -284,10 +284,10 @@ function buildMonitoringBaseSql(): string {
         ''
       ) AS instructionText,
       ROUND(TIME_TO_SEC(p.dailyTargetHours) / 3600, 2) AS targetDailyHours,
-      ROUND(COALESCE(cd.target_hours_revised, cd.target_hours_initial, 0), 2) AS targetTotalHours,
+      ROUND(COALESCE(cd.target_hours, cd.target_hours_initial, 0), 2) AS targetTotalHours,
       cd.panel_id AS masterPanelId,
       DATE_FORMAT(cd.deadline_date, '%Y-%m-%d') AS countdownDeadline,
-      ROUND(COALESCE(cd.target_hours_revised, cd.target_hours_initial, 0), 2) AS countdownTargetHours,
+      ROUND(COALESCE(cd.target_hours, cd.target_hours_initial, 0), 2) AS countdownTargetHours,
       ROUND(COALESCE(cd.remaining_hours, 0), 2) AS countdownRemainingHours,
       COALESCE(p.status, 'PLAN') AS planStatus,
       actual.actualStatus AS actualStatus,
@@ -710,8 +710,6 @@ async function createManualCountdown(
         section_name,
         job_type_id,
         target_hours_initial,
-        time_extension_hours,
-        target_hours_revised,
         total_actual_hours,
         remaining_hours,
         actual_progress_percent,
@@ -722,15 +720,11 @@ async function createManualCountdown(
         deadline_date,
         latest_qc_id,
         ref_rework_qc_id,
-        count_revisi,
         updated_at,
         user_update,
-        extension_request_status,
-        requested_extension_hours,
-        requested_deadline,
-        revision_reason,
+        keterangan,
         last_qc_level
-      ) VALUES (?, ?, ?, 'ADDITIONAL', NULL, NULL, NULL, ?, NULL, 0, 0, 0, 0, 0, 0, 'PLAN', NULL, ?, ?, ?, NULL, NULL, 0, ?, ?, NULL, 0, NULL, ?, NULL)
+      ) VALUES (?, ?, ?, 'ADDITIONAL', NULL, NULL, NULL, ?, NULL, 0, 0, 0, 0, 'PLAN', NULL, ?, ?, ?, NULL, NULL, ?, ?, ?, NULL)
     `,
     [
       coreId,

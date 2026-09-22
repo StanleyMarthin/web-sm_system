@@ -1201,7 +1201,7 @@ export class MySqlWoRepository implements WoRepository {
                 panel_id,
                 section_name,
                 target_hours_initial,
-                target_hours_revised,
+                target_hours,
                 remaining_hours,
                 status,
                 start_date,

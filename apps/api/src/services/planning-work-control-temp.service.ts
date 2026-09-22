@@ -88,8 +88,7 @@ export class RedisPlanningWorkControlTempStore implements PlanningWorkControlTem
           mjt.division_id AS divisionId,
           d.name AS divisionName,
           ROUND(AVG(COALESCE(
-            cd.target_hours_revised,
-            cd.target_hours_initial + cd.time_extension_hours,
+            cd.target_hours,
             cd.target_hours_initial
           )), 2) AS estimatedHours,
           COUNT(cd.id) AS sampleCount

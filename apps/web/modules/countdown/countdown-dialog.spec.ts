@@ -65,6 +65,7 @@ describe("countdown documentation URL", () => {
   it("allows HTTP and root-relative photos but rejects protocol-relative URLs", () => {
     expect(resolveCountdownPhotoUrl("https://cdn.example.com/work.jpg")).toBe("https://cdn.example.com/work.jpg");
     expect(resolveCountdownPhotoUrl("/uploads/work.jpg")).toBe("/uploads/work.jpg");
+    expect(resolveCountdownPhotoUrl("https://drive.google.com/file/d/abc123/view?usp=drive_link")).toBe("https://drive.google.com/thumbnail?id=abc123&sz=w2000");
     expect(resolveCountdownPhotoUrl("//evil.example/work.jpg")).toBeNull();
     expect(resolveCountdownPhotoUrl("javascript:alert(1)")).toBeNull();
   });
