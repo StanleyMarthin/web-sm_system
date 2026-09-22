@@ -77,6 +77,9 @@ interface JobPlanRow extends RowDataPacket {
   actualStatus: string | null;
   actualProgressPercent: number | null;
   actualBreakMinutes: number | null;
+  actualValidationStatus: string | null;
+  actualValidationProgress: number | null;
+  actualValidationNote: string | null;
 }
 
 interface CountRow extends RowDataPacket {
@@ -253,6 +256,12 @@ function mapJobPlanRow(row: JobPlanRow): JobPlanRecord {
       row.actualBreakMinutes === null || row.actualBreakMinutes === undefined
         ? null
         : Number(row.actualBreakMinutes),
+    actualValidationStatus: row.actualValidationStatus ?? null,
+    actualValidationProgress:
+      row.actualValidationProgress === null || row.actualValidationProgress === undefined
+        ? null
+        : Number(row.actualValidationProgress),
+    actualValidationNote: row.actualValidationNote ?? null,
   };
 }
 
@@ -583,7 +592,10 @@ function buildListSelectSql(): string {
         ELSE latest_actual.status
       END AS actualStatus,
       latest_actual.progres AS actualProgressPercent,
-      latest_actual.break_duration_minutes AS actualBreakMinutes
+      latest_actual.break_duration_minutes AS actualBreakMinutes,
+      latest_validation.status AS actualValidationStatus,
+      latest_validation.progress_final AS actualValidationProgress,
+      latest_validation.note AS actualValidationNote
     FROM sm_jobdesc_plan p
     LEFT JOIN sm_jobdesc_countdown jc ON jc.id = p.core_id
     LEFT JOIN cars c ON c.id = jc.car_id
@@ -621,7 +633,7 @@ function buildListSelectSql(): string {
       GROUP BY p.core_id
     ) planCapacity ON planCapacity.core_id = jc.id
     LEFT JOIN (
-      SELECT a.plandaily_id, a.start_time, a.finish_time, a.status, a.progres, a.break_duration_minutes
+      SELECT a.id, a.plandaily_id, a.start_time, a.finish_time, a.status, a.progres, a.break_duration_minutes
       FROM sm_jobdesc_actual a
       JOIN (
         SELECT plandaily_id, MAX(created_at) AS latestCreatedAt
@@ -629,6 +641,15 @@ function buildListSelectSql(): string {
         GROUP BY plandaily_id
       ) la ON la.plandaily_id = a.plandaily_id AND la.latestCreatedAt = a.created_at
     ) latest_actual ON latest_actual.plandaily_id = p.id
+    LEFT JOIN (
+      SELECT v.actual_id, v.status, v.progress_final, v.note
+      FROM sm_jobdesc_validation v
+      JOIN (
+        SELECT actual_id, MAX(created_at) AS latestCreatedAt
+        FROM sm_jobdesc_validation
+        GROUP BY actual_id
+      ) lv ON lv.actual_id = v.actual_id AND lv.latestCreatedAt = v.created_at
+    ) latest_validation ON latest_validation.actual_id = latest_actual.id
   `;
 }
 

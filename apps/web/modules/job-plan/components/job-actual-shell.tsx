@@ -1,6 +1,7 @@
 "use client";
 
 import type { JobPlanV2ReadItem } from "@smsystem/contracts/job-plan-v2";
+import type { JobPlanRecord } from "@smsystem/contracts/job-plan";
 import type { CellValueChangedEvent, ColDef, ICellRendererParams, SelectionChangedEvent } from "ag-grid-community";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -35,20 +36,22 @@ interface JobActualShellProps {
   initialDate: string | null;
   countdowns: JobPlanCountdownOption[];
   employees: JobPlanEmployeeOption[];
-}
-
-function actualStatus(row: JobPlanV2DisplayRow) {
-  if (row.executionState === "VALIDATED") return "QC selesai";
-  if (row.executionState === "FINISHED_PENDING_VALIDATION") return "Menunggu QC";
-  if (row.executionState === "RUNNING") return "Berjalan";
-  if (row.executionState === "HOLD") return "Ditahan";
-  return row.approvalState === "APPROVED" ? "Siap input" : row.approval;
+  actualRows: JobPlanRecord[];
 }
 
 function monitoringStatus(row: JobPlanV2DisplayRow) {
   if (row.persistedWorkMinutes > 0) return "Tercatat";
   if (row.unverifiedWorkMinutes > 0) return "Menunggu monitoring";
   return "Belum ada hasil";
+}
+
+function qcStatus(row: JobPlanV2DisplayRow, actual?: JobPlanRecord) {
+  if (actual?.actualValidationStatus === "done") return "QC selesai";
+  if (actual?.actualValidationStatus === "hold") return "QC hold";
+  if (actual?.actualValidationStatus === "onprogress") return "Monitoring";
+  if (row.executionState === "VALIDATED") return "QC selesai";
+  if (row.executionState === "FINISHED_PENDING_VALIDATION") return "Menunggu QC";
+  return "Belum QC";
 }
 
 function dateTimeText(date: string, time: string) {
@@ -71,6 +74,7 @@ export function JobActualShell({
   initialDate,
   countdowns,
   employees,
+  actualRows,
 }: JobActualShellProps) {
   const [items, setItems] = useState<JobPlanV2ReadItem[]>([]);
   const [dateFilter, setDateFilter] = useState(initialDate ?? toLocalDateValue());
@@ -111,6 +115,7 @@ export function JobActualShell({
   }, [draft]);
 
   const rows = useMemo(() => toJobPlanV2DisplayRows(items, countdowns, employees), [countdowns, employees, items]);
+  const actualByPlanId = useMemo(() => new Map(actualRows.map((row) => [row.planId, row])), [actualRows]);
   const filteredRows = useMemo(() => rows.filter((row) => {
     if (dateFilter && row.taskDate !== dateFilter) return false;
     if (divisionFilter && row.divisionName !== divisionFilter) return false;
@@ -135,12 +140,22 @@ export function JobActualShell({
     { headerName: "INTRUKSI", field: "instructionText", minWidth: 180, flex: 0.9 },
     { headerName: "PLAN START", field: "startTime", minWidth: 135, valueFormatter: ({ data }) => data ? dateTimeText(data.taskDate, data.startTime) : "" },
     { headerName: "PLAN FINISH", field: "finishTime", minWidth: 135, valueFormatter: ({ data }) => data ? dateTimeText(data.taskDate, data.finishTime) : "" },
-    { headerName: "ACTUAL START", minWidth: 125, valueGetter: () => "-" },
-    { headerName: "ACTUAL FINISH", minWidth: 125, valueGetter: () => "-" },
-    { headerName: "DURASI AKTUAL", field: "accumulatedWorkMinutes", minWidth: 120, valueFormatter: ({ value }) => minutesToDuration(Number(value ?? 0)) },
+    { headerName: "ACTUAL START", minWidth: 125, valueGetter: ({ data }) => data?.planId ? actualByPlanId.get(data.planId)?.actualStartTime ?? "-" : "-" },
+    { headerName: "ACTUAL FINISH", minWidth: 125, valueGetter: ({ data }) => data?.planId ? actualByPlanId.get(data.planId)?.actualFinishTime ?? "-" : "-" },
+    {
+      headerName: "DURASI AKTUAL",
+      field: "accumulatedWorkMinutes",
+      minWidth: 120,
+      valueFormatter: ({ data, value }) => {
+        const actual = data?.planId ? actualByPlanId.get(data.planId) : null;
+        return actual?.actualProgressPercent != null
+          ? `${minutesToDuration(Number(value ?? 0))} · ${actual.actualProgressPercent}%`
+          : minutesToDuration(Number(value ?? 0));
+      },
+    },
     { headerName: "MONITORING", minWidth: 145, valueGetter: ({ data }) => data ? monitoringStatus(data) : "", cellRenderer: ({ data }: ICellRendererParams<JobPlanV2DisplayRow>) => data ? <DataGridStatusBadge value={monitoringStatus(data)} /> : null },
-    { headerName: "QC", minWidth: 120, valueGetter: ({ data }) => data ? actualStatus(data) : "", cellRenderer: ({ data }: ICellRendererParams<JobPlanV2DisplayRow>) => data ? <DataGridStatusBadge value={actualStatus(data)} /> : null },
-    { headerName: "CATATAN", field: "note", minWidth: 180, flex: 0.8 },
+    { headerName: "QC", minWidth: 120, valueGetter: ({ data }) => data ? qcStatus(data, data.planId ? actualByPlanId.get(data.planId) : undefined) : "", cellRenderer: ({ data }: ICellRendererParams<JobPlanV2DisplayRow>) => data ? <DataGridStatusBadge value={qcStatus(data, data.planId ? actualByPlanId.get(data.planId) : undefined)} /> : null },
+    { headerName: "CATATAN", field: "note", minWidth: 180, flex: 0.8, valueGetter: ({ data }) => data?.planId ? actualByPlanId.get(data.planId)?.actualValidationNote ?? data.note : data?.note ?? "" },
     {
       headerName: "AKSI",
       width: 230,
@@ -155,7 +170,7 @@ export function JobActualShell({
         </div>
       ) : null,
     },
-  ], [canInput, canMonitor, canValidate]);
+  ], [actualByPlanId, canInput, canMonitor, canValidate]);
 
   const draftColumns = useMemo<ColDef<JobPlanV2ManualExecutionDraft>[]>(() => [
     { headerName: "ACTUAL START", field: "actualStart", editable: true, minWidth: 165, flex: 0.8 },

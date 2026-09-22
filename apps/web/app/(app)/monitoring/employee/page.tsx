@@ -54,6 +54,7 @@ async function JobActualPageContent({ searchParams }: JobActualPageProps) {
       initialDate={requestedDate}
       countdowns={payload.references.countdowns}
       employees={payload.references.employees}
+      actualRows={payload.data}
     />
   );
 }

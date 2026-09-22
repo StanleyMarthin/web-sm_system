@@ -93,7 +93,7 @@ const navigationModules: NavigationItem[] = [
       {
         id: "monitoring-list",
         label: "Job Actual",
-        href: "/monitoring",
+        href: "/monitoring/employee",
         permission: permissionCodes.listCarProgress,
       },
       {
