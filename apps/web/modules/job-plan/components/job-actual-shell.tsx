@@ -2,7 +2,7 @@
 
 import type { JobPlanV2ReadItem } from "@smsystem/contracts/job-plan-v2";
 import type { JobPlanRecord } from "@smsystem/contracts/job-plan";
-import type { CellValueChangedEvent, ColDef, ICellRendererParams, SelectionChangedEvent } from "ag-grid-community";
+import type { CellValueChangedEvent, ColDef, ICellRendererParams } from "ag-grid-community";
 import { useEffect, useMemo, useState } from "react";
 import {
   createJobPlanV2CommandId,
@@ -13,7 +13,7 @@ import {
 } from "@/shared/api/job-plan-v2";
 import { SmsAgGrid } from "@/shared/datagrid/sms-ag-grid";
 import { DataGridStatusBadge } from "@/shared/datagrid/status-badge";
-import { ActionButton, CompactDateInput, MetricBar, PageHeader } from "@/shared/ui/compact";
+import { ActionButton, CompactDateInput, PageHeader } from "@/shared/ui/compact";
 import { useSweetAlert } from "@/shared/ui/sweet-alert";
 import {
   buildManualExecutionJobPlanV2Payload,
@@ -92,7 +92,6 @@ export function JobActualShell({
   const [divisionFilter, setDivisionFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [draft, setDraft] = useState<JobPlanV2ManualExecutionDraft | null>(null);
-  const [selectedRows, setSelectedRows] = useState<JobPlanV2DisplayRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -166,7 +165,6 @@ export function JobActualShell({
   ], [rows]);
 
   const columnDefs = useMemo<ColDef<JobPlanV2DisplayRow>[]>(() => [
-    { headerName: "", width: 44, pinned: "left", sortable: false, filter: false, checkboxSelection: true, headerCheckboxSelection: true },
     { headerName: "TEAM", field: "divisionName", minWidth: 125, pinned: "left" },
     { headerName: "PERSONIL", field: "employeeName", minWidth: 155, flex: 0.8 },
     { headerName: "NAMA UNIT", field: "unitName", minWidth: 120 },
@@ -274,45 +272,28 @@ export function JobActualShell({
     setIsSaving(false);
   }
 
-  function bulkValidate() {
-    const validRows = selectedRows.filter((row) => row.planId && row.version && row.accumulatedWorkMinutes > 0);
-    void (async () => {
-      if (validRows.length === 0 || isSaving) return;
-      const confirmed = await sweetAlert.confirm({
-        title: `QC ${validRows.length} hasil pekerjaan?`,
-        description: "Semua baris terpilih yang valid akan diproses.",
-        confirmLabel: "QC",
-      });
-      if (!confirmed) return;
-      setIsSaving(true);
-      for (const row of validRows) {
-        if (!row.planId || !row.version) continue;
-        const result = await validateJobPlanV2(row.planId, {
-          userId,
-          commandId: createJobPlanV2CommandId("web-qc-bulk"),
-          expectedVersion: row.version,
-          verifiedTotalMinutes: row.accumulatedWorkMinutes,
-          progressSeen: 100,
-          note: null,
-        });
-        if (!result.success) setError(result.message);
-      }
-      await load();
-      setIsSaving(false);
-    })();
-  }
-
   return (
     <div className="space-y-3">
       {sweetAlert.alertElement}
       <div className="border border-border bg-card px-3 py-2 shadow-sm">
-        <PageHeader eyebrow="JOB ACTUAL" title="Hasil Pekerjaan" />
-        <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-          <div className="min-w-0" />
-          <p className="text-[11px] text-muted-foreground">{filteredRows.length} dari {rows.length} baris</p>
-        </div>
-        <div className="mt-2">
-          <MetricBar items={summaryItems} />
+        <PageHeader
+          eyebrow="JOB ACTUAL"
+          title="Hasil Pekerjaan"
+          actions={<p className="text-[11px] text-muted-foreground">{filteredRows.length} dari {rows.length} baris</p>}
+        />
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {summaryItems.map((item) => {
+            const toneClass = item.tone === "warn"
+              ? "text-app-accent-ink"
+              : item.tone === "up"
+                ? "text-success"
+                : "text-foreground";
+            return (
+              <span key={item.label} className="border border-border bg-background px-2 py-1 text-[11px] text-muted-foreground">
+                {item.label}: <strong className={`font-mono ${toneClass}`}>{item.value}</strong>
+              </span>
+            );
+          })}
         </div>
       </div>
 
@@ -383,19 +364,13 @@ export function JobActualShell({
         </div>
       ) : null}
 
-      <div className="flex justify-end gap-2">
-        <ActionButton disabled={!canValidate || selectedRows.length === 0 || isSaving} onClick={bulkValidate}>QC Terpilih</ActionButton>
-      </div>
-
       <SmsAgGrid<JobPlanV2DisplayRow>
         heightClassName="h-[calc(100vh-330px)] min-h-[28rem]"
         rowData={filteredRows}
         columnDefs={columnDefs}
         getRowId={(params) => params.data.clientId}
         loading={isLoading}
-        rowSelection="multiple"
         defaultColDef={{ floatingFilter: true, filter: "agTextColumnFilter", filterParams: { trimInput: true, debounceMs: 150 } }}
-        onSelectionChanged={(event: SelectionChangedEvent<JobPlanV2DisplayRow>) => setSelectedRows(event.api.getSelectedRows())}
         emptyMessage="Belum ada Job Actual."
       />
     </div>
