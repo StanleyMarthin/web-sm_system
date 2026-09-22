@@ -205,7 +205,7 @@ export function CompactDateInput({
 
       {open ? (
         <div
-          className={`absolute right-0 z-50 mt-1 w-[320px] overflow-hidden border border-border bg-popover shadow-lg dark:border-white/[0.08] dark:bg-popover ${panelClassName}`}
+          className={`absolute right-0 z-[100] mt-1 w-[17rem] overflow-hidden border border-border bg-popover shadow-lg dark:border-white/[0.08] dark:bg-popover ${panelClassName}`}
         >
           <div className="border-b border-border bg-muted px-3 py-2 dark:border-white/[0.08] dark:bg-muted">
             <div className="flex items-center justify-between gap-3">
@@ -243,7 +243,7 @@ export function CompactDateInput({
               {monthCells.map((cell) => {
                 const isActive = cell.iso === value;
                 if (!cell.inMonth) {
-                  return <div key={cell.iso} className="h-9" aria-hidden="true" />;
+                  return <div key={cell.iso} className="h-8" aria-hidden="true" />;
                 }
                 return (
                   <button
@@ -254,7 +254,7 @@ export function CompactDateInput({
                       setOpen(false);
                     }}
                     className={[
-                      "flex h-9 items-center justify-center text-[13px] transition-colors hover:bg-muted",
+                      "flex h-8 items-center justify-center text-[13px] transition-colors hover:bg-muted",
                       "text-foreground",
                       isActive
                         ? "rounded-full bg-primary font-semibold text-primary-foreground hover:bg-primary"

@@ -13,7 +13,7 @@ import {
 } from "@/shared/api/job-plan-v2";
 import { SmsAgGrid, SmsGridDraftActions } from "@/shared/datagrid/sms-ag-grid";
 import { DataGridStatusBadge } from "@/shared/datagrid/status-badge";
-import { ActionButton, CompactDateInput, PageHeader } from "@/shared/ui/compact";
+import { ActionButton, CompactDateInput, MetricBar, PageHeader } from "@/shared/ui/compact";
 import { useSweetAlert } from "@/shared/ui/sweet-alert";
 import { SmartSelectCellEditor, type SmartSelectOption } from "@/modules/units/components/master-panel-smart-select-editor";
 import {
@@ -349,7 +349,7 @@ export function JobPlanPlannerShell({
   const [dateFilter, setDateFilter] = useState(initialDate ?? toLocalDateValue());
   const [kpFilter, setKpFilter] = useState("");
   const [qaFilter, setQaFilter] = useState("");
-  const [employeeFilter, setEmployeeFilter] = useState("");
+  const [divisionFilter, setDivisionFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const sweetAlert = useSweetAlert();
   const selectedContext = useMemo(() => contextForCore(countdowns, initialCoreId), [countdowns, initialCoreId]);
@@ -399,10 +399,10 @@ export function JobPlanPlannerShell({
     if (dateFilter && row.taskDate !== dateFilter) return false;
     if (kpFilter && row.kpId !== kpFilter) return false;
     if (qaFilter && !row.qaIds.includes(qaFilter)) return false;
-    if (employeeFilter && row.employeeId !== employeeFilter) return false;
+    if (divisionFilter && row.divisionName !== divisionFilter) return false;
     if (statusFilter && row.approvalState !== statusFilter && row.executionState !== statusFilter) return false;
     return true;
-  }), [dateFilter, employeeFilter, kpFilter, qaFilter, rows, statusFilter]);
+  }), [dateFilter, divisionFilter, kpFilter, qaFilter, rows, statusFilter]);
 
   const kpOptions = useMemo(() => uniqueByValue(countdowns.map((item) => ({
     value: item.kpId ?? "",
@@ -413,6 +413,11 @@ export function JobPlanPlannerShell({
     value,
     label: item.qaNames?.[index] ?? value,
   })))), [countdowns]);
+
+  const divisionOptions = useMemo(() => uniqueByValue(rows.map((row) => ({
+    value: row.divisionName,
+    label: row.divisionName,
+  }))), [rows]);
 
   const statusOptions = [
     ["DRAFT", "Draft"],
@@ -775,7 +780,7 @@ export function JobPlanPlannerShell({
 
   return (
     <div className="space-y-3">
-      <div className="border border-border bg-card px-4 py-3 shadow-sm">
+      <div className="border border-border bg-card px-3 py-2 shadow-sm">
         <PageHeader
           eyebrow="PERENCANAAN KERJA"
           title="Rencana Pekerjaan"
@@ -789,54 +794,49 @@ export function JobPlanPlannerShell({
             </div>
           )}
         />
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
           <div className="min-w-0">
           {selectedContext ? (
-            <p className="text-[13px] text-muted-foreground">
+            <p className="text-[12px] text-muted-foreground">
               {selectedContext.unitName} · {selectedContext.panelName ?? "-"} · {selectedContext.jobName ?? selectedContext.label}
             </p>
           ) : null}
           </div>
           <p className="text-[11px] text-muted-foreground">{filteredRows.length} dari {rows.length} baris</p>
         </div>
-        <div className="mt-3 grid gap-2 sm:grid-cols-3">
-          {summaryItems.slice(0, 3).map((item) => (
-            <div key={item.label} className="border border-border bg-background px-3 py-2">
-              <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground">{item.label}</p>
-              <p className="mt-1 font-mono text-[18px] font-semibold tabular-nums text-foreground">{item.value}</p>
-            </div>
-          ))}
+        <div className="mt-2">
+          <MetricBar items={summaryItems.slice(0, 3)} />
         </div>
       </div>
-      <div className="flex flex-wrap items-end gap-2 border border-border bg-card px-3 py-3">
-        <div className="min-w-[10rem] flex-1">
+      <div className="relative z-40 flex flex-wrap items-end gap-2 border border-border bg-card px-3 py-2">
+        <div className="min-w-[9rem] flex-1">
           <span className="text-[11px] text-muted-foreground">Tanggal</span>
-          <CompactDateInput value={dateFilter} onChange={setDateFilter} className="mt-1" />
+          <CompactDateInput value={dateFilter} onChange={setDateFilter} className="mt-1" panelClassName="z-[100] w-[17rem]" />
         </div>
-        <label className="min-w-[10rem] flex-1 text-[11px] text-muted-foreground">
+        <label className="min-w-[8.5rem] flex-1 text-[11px] text-muted-foreground">
           KP
-          <select value={kpFilter} onChange={(event) => setKpFilter(event.target.value)} className="mt-1 h-9 w-full border border-border bg-background px-2 text-[12px] text-foreground">
+          <select value={kpFilter} onChange={(event) => setKpFilter(event.target.value)} className="mt-1 h-8 w-full border border-border bg-background px-2 text-[12px] text-foreground">
             <option value="">Semua KP</option>
             {kpOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
           </select>
         </label>
-        <label className="min-w-[10rem] flex-1 text-[11px] text-muted-foreground">
+        <label className="min-w-[8.5rem] flex-1 text-[11px] text-muted-foreground">
           QA
-          <select value={qaFilter} onChange={(event) => setQaFilter(event.target.value)} className="mt-1 h-9 w-full border border-border bg-background px-2 text-[12px] text-foreground">
+          <select value={qaFilter} onChange={(event) => setQaFilter(event.target.value)} className="mt-1 h-8 w-full border border-border bg-background px-2 text-[12px] text-foreground">
             <option value="">Semua QA</option>
             {qaOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
           </select>
         </label>
-        <label className="min-w-[10rem] flex-1 text-[11px] text-muted-foreground">
-          PIC
-          <select value={employeeFilter} onChange={(event) => setEmployeeFilter(event.target.value)} className="mt-1 h-9 w-full border border-border bg-background px-2 text-[12px] text-foreground">
-            <option value="">Semua PIC</option>
-            {employees.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+        <label className="min-w-[8.5rem] flex-1 text-[11px] text-muted-foreground">
+          Divisi
+          <select value={divisionFilter} onChange={(event) => setDivisionFilter(event.target.value)} className="mt-1 h-8 w-full border border-border bg-background px-2 text-[12px] text-foreground">
+            <option value="">Semua divisi</option>
+            {divisionOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
           </select>
         </label>
-        <label className="min-w-[10rem] flex-1 text-[11px] text-muted-foreground">
+        <label className="min-w-[8.5rem] flex-1 text-[11px] text-muted-foreground">
           Status
-          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="mt-1 h-9 w-full border border-border bg-background px-2 text-[12px] text-foreground">
+          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="mt-1 h-8 w-full border border-border bg-background px-2 text-[12px] text-foreground">
             <option value="">Semua status</option>
             {statusOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </select>
@@ -845,10 +845,9 @@ export function JobPlanPlannerShell({
           setDateFilter(initialDate ?? toLocalDateValue());
           setKpFilter("");
           setQaFilter("");
-          setEmployeeFilter("");
+          setDivisionFilter("");
           setStatusFilter("");
         }}>Reset</ActionButton>
-        <ActionButton onClick={openReportPrint}>Download PDF</ActionButton>
         <ActionButton onClick={openReportPrint}>Print</ActionButton>
       </div>
       {error ? <p className="border border-destructive/25 bg-destructive/5 px-3 py-2 text-sm text-destructive">{error}</p> : null}
