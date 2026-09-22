@@ -18,6 +18,9 @@ export interface JobPlanV2PlannerDraft {
   clientId: string;
   isNew: true;
   coreId: string;
+  divisionId: number | null;
+  carId: string;
+  panelId: number | null;
   employeeId: string;
   taskDate: string;
   startTime: string;
@@ -48,6 +51,9 @@ export interface JobPlanV2DisplayRow {
   isNew: boolean;
   planId: string | null;
   coreId: string;
+  divisionId: number | null;
+  carId: string;
+  panelId: number | null;
   kpId: string | null;
   kpName: string | null;
   qaIds: string[];
@@ -158,6 +164,9 @@ export function createJobPlanV2Draft(context: JobPlanCountdownOption | null): Jo
     clientId: `draft-${crypto.randomUUID()}`,
     isNew: true,
     coreId: context?.value ?? "",
+    divisionId: context?.divisionId ?? null,
+    carId: context?.carId ?? "",
+    panelId: context?.panelId ?? null,
     employeeId: "",
     taskDate: toLocalDateValue(),
     startTime: "08:00",
@@ -189,6 +198,9 @@ export function toJobPlanV2DisplayRows(
       isNew: false,
       planId: item.plan_id,
       coreId: item.core_id,
+      divisionId: countdown?.divisionId ?? (typeof item.division_id === "number" ? item.division_id : null),
+      carId: countdown?.carId ?? item.car_id ?? "",
+      panelId: countdown?.panelId ?? null,
       kpId: countdown?.kpId ?? null,
       kpName: countdown?.kpName ?? null,
       qaIds: countdown?.qaIds ?? [],

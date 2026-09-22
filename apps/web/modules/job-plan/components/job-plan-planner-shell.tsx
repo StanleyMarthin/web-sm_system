@@ -30,7 +30,7 @@ import {
   type JobPlanV2PlannerDraft,
 } from "../job-plan-planner";
 import { parseClipboardTsv } from "@/shared/datagrid/clipboard";
-import { parseSmsDate, parseSmsDurationMinutes, parseSmsReference, parseSmsTime } from "@/shared/datagrid/parsers";
+import { parseSmsDurationMinutes, parseSmsReference } from "@/shared/datagrid/parsers";
 
 type PlannerMode = "planner" | "approval";
 type PlannerRow = JobPlanV2DisplayRow | (JobPlanV2DisplayRow & JobPlanV2PlannerDraft & { editPlanId?: string; editVersion?: number });
@@ -58,12 +58,22 @@ function contextForCore(countdowns: JobPlanCountdownOption[], coreId: string | n
   return countdowns.find((item) => item.value === coreId) ?? null;
 }
 
+function contextForDraft(countdowns: JobPlanCountdownOption[], draft: Pick<JobPlanV2PlannerDraft, "coreId" | "divisionId" | "carId" | "panelId">) {
+  return contextForCore(countdowns, draft.coreId)
+    ?? countdowns.find((item) =>
+      item.divisionId === draft.divisionId
+      && item.carId === draft.carId
+      && item.panelId === draft.panelId
+    )
+    ?? null;
+}
+
 function draftToDisplay(
   draft: JobPlanV2PlannerDraft,
   countdowns: JobPlanCountdownOption[],
   employees: JobPlanEmployeeOption[],
 ): PlannerRow {
-  const countdown = contextForCore(countdowns, draft.coreId);
+  const countdown = contextForDraft(countdowns, draft);
   const employee = employees.find((item) => item.value === draft.employeeId);
   const startMinute = Number(draft.startTime.slice(0, 2)) * 60 + Number(draft.startTime.slice(3, 5));
   const durationHour = Number(draft.durationText.slice(0, 2));
@@ -79,11 +89,11 @@ function draftToDisplay(
     kpName: countdown?.kpName ?? null,
     qaIds: countdown?.qaIds ?? [],
     qaNames: countdown?.qaNames ?? [],
-    unitName: countdown?.unitName ?? "-",
+    unitName: countdown?.unitName ?? draft.carId ?? "-",
     panelName: countdown?.panelName ?? "-",
     instructionText: draft.note,
     employeeName: employee?.label ?? "",
-    divisionName: countdown?.divisionName ?? "-",
+    divisionName: countdown?.divisionName ?? countdowns.find((item) => item.divisionId === draft.divisionId)?.divisionName ?? "-",
     finishTime: minutesToTime(startMinute + duration),
     durationText: draft.durationText,
     targetTotalText: minutesToDuration(Math.round((countdown?.targetTotalHours ?? duration / 60) * 60)),
@@ -110,6 +120,9 @@ function resolveOption(value: string, options: SmartSelectOption[], label: strin
 function copyPlannerValue(row: PlannerRow, field: string) {
   if (field === "coreId") return row.jobDescription;
   if (field === "employeeId") return row.employeeName;
+  if (field === "divisionId") return row.divisionName;
+  if (field === "carId") return row.unitName;
+  if (field === "panelId") return row.panelName;
   const value = row[field as keyof PlannerRow];
   return value == null ? "" : String(value);
 }
@@ -145,6 +158,12 @@ function uniqueByValue(options: Array<{ value: string; label: string }>) {
     seen.add(option.value);
     return true;
   }).sort((left, right) => left.label.localeCompare(right.label));
+}
+
+function numberValue(value: unknown) {
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function statusLabel(row: PlannerRow) {
@@ -347,8 +366,105 @@ export function JobPlanPlannerShell({
   const [statusFilter, setStatusFilter] = useState("");
   const sweetAlert = useSweetAlert();
   const selectedContext = useMemo(() => contextForCore(countdowns, initialCoreId), [countdowns, initialCoreId]);
-  const countdownOptions = useMemo(() => toOptions(countdowns), [countdowns]);
-  const employeeOptions = useMemo(() => toOptions(employees), [employees]);
+  const countdownDivisionOptions = useMemo(() => uniqueByValue(countdowns.map((item) => ({
+    value: String(item.divisionId ?? ""),
+    label: item.divisionName,
+  }))), [countdowns]);
+
+  function teamOptions() {
+    return countdownDivisionOptions;
+  }
+
+  function rowDivisionId(row: Partial<PlannerRow> | Partial<JobPlanV2PlannerDraft> | null | undefined) {
+    return numberValue(row?.divisionId);
+  }
+
+  function rowCarId(row: Partial<PlannerRow> | Partial<JobPlanV2PlannerDraft> | null | undefined) {
+    return String(row?.carId ?? "");
+  }
+
+  function rowPanelId(row: Partial<PlannerRow> | Partial<JobPlanV2PlannerDraft> | null | undefined) {
+    return numberValue(row?.panelId);
+  }
+
+  function personOptions(row: Partial<PlannerRow> | Partial<JobPlanV2PlannerDraft> | null | undefined) {
+    const divisionId = rowDivisionId(row);
+    const source = divisionId === null ? employees : employees.filter((item) => item.divisionId === divisionId);
+    return toOptions(source);
+  }
+
+  function unitOptions(row: Partial<PlannerRow> | Partial<JobPlanV2PlannerDraft> | null | undefined) {
+    const divisionId = rowDivisionId(row);
+    return uniqueByValue(countdowns
+      .filter((item) => divisionId === null || item.divisionId === divisionId)
+      .map((item) => ({ value: item.carId, label: item.unitName })));
+  }
+
+  function panelOptions(row: Partial<PlannerRow> | Partial<JobPlanV2PlannerDraft> | null | undefined) {
+    const divisionId = rowDivisionId(row);
+    const carId = rowCarId(row);
+    return uniqueByValue(countdowns
+      .filter((item) => (divisionId === null || item.divisionId === divisionId) && (!carId || item.carId === carId))
+      .map((item) => ({ value: String(item.panelId ?? ""), label: item.panelName ?? "-" })));
+  }
+
+  function jobOptions(row: Partial<PlannerRow> | Partial<JobPlanV2PlannerDraft> | null | undefined) {
+    const divisionId = rowDivisionId(row);
+    const carId = rowCarId(row);
+    const panelId = rowPanelId(row);
+    return countdowns
+      .filter((item) =>
+        (divisionId === null || item.divisionId === divisionId)
+        && (!carId || item.carId === carId)
+        && (panelId === null || item.panelId === panelId)
+      )
+      .map((item) => ({
+        value: item.value,
+        label: `${item.jobName ?? item.label} · ${minutesToDuration(Math.round((item.availablePlanHours ?? item.remainingHours) * 60))}`,
+      }));
+  }
+
+  function normalizeDraftSelection(row: JobPlanV2PlannerDraft): JobPlanV2PlannerDraft {
+    let next = { ...row };
+    const divisionOptionsForRow = teamOptions();
+    if (next.divisionId === null && divisionOptionsForRow.length === 1) next.divisionId = numberValue(divisionOptionsForRow[0].value);
+    if (next.divisionId !== null && !divisionOptionsForRow.some((option) => option.value === String(next.divisionId))) {
+      next = { ...next, divisionId: null, carId: "", panelId: null, coreId: "", employeeId: "", jobDescription: "" };
+    }
+
+    const availableEmployees = personOptions(next);
+    if (next.employeeId && !availableEmployees.some((option) => option.value === next.employeeId)) next.employeeId = "";
+    if (!next.employeeId && availableEmployees.length === 1) next.employeeId = availableEmployees[0].value;
+
+    const availableUnits = unitOptions(next);
+    if (next.carId && !availableUnits.some((option) => option.value === next.carId)) {
+      next = { ...next, carId: "", panelId: null, coreId: "", jobDescription: "" };
+    }
+    if (!next.carId && availableUnits.length === 1) next.carId = availableUnits[0].value;
+
+    const availablePanels = panelOptions(next);
+    if (next.panelId !== null && !availablePanels.some((option) => option.value === String(next.panelId))) {
+      next = { ...next, panelId: null, coreId: "", jobDescription: "" };
+    }
+    if (next.panelId === null && availablePanels.length === 1) next.panelId = numberValue(availablePanels[0].value);
+
+    const availableJobs = jobOptions(next);
+    if (next.coreId && !availableJobs.some((option) => option.value === next.coreId)) next = { ...next, coreId: "", jobDescription: "" };
+    if (!next.coreId && availableJobs.length === 1) next.coreId = availableJobs[0].value;
+
+    const countdown = contextForCore(countdowns, next.coreId);
+    if (countdown) {
+      next = {
+        ...next,
+        divisionId: countdown.divisionId,
+        carId: countdown.carId,
+        panelId: countdown.panelId ?? null,
+        jobDescription: countdown.jobName ?? countdown.label,
+      };
+    }
+    return { ...next, startTime: "08:00" };
+  }
+
   async function load() {
     setIsLoading(true);
     const result = await fetchJobPlanV2List({
@@ -453,28 +569,77 @@ export function JobPlanPlannerShell({
       checkboxSelection: true,
       headerCheckboxSelection: true,
     },
-    { headerName: "TEAM", field: "divisionName", editable: false, minWidth: 125, pinned: "left" },
+    {
+      headerName: "TEAM",
+      field: "divisionId",
+      editable: ({ data }) => Boolean(data?.isNew || data?.editPlanId) && teamOptions().length > 1,
+      cellEditor: SmartSelectCellEditor,
+      cellEditorParams: { values: teamOptions() },
+      cellEditorPopup: true,
+      cellEditorPopupPosition: "under",
+      filterValueGetter: ({ data }) => data?.divisionName ?? "",
+      valueFormatter: ({ data, value }) => data?.isNew || data?.editPlanId
+        ? teamOptions().find((option) => option.value === String(value ?? ""))?.label ?? data?.divisionName ?? ""
+        : data?.divisionName ?? "",
+      minWidth: 125,
+      pinned: "left",
+    },
     {
       headerName: "PERSONIL",
       field: "employeeId",
       filterValueGetter: ({ data }) => data?.employeeName ?? "",
-      editable: ({ data }) => Boolean(data?.isNew || data?.editPlanId) && employeeOptions.length > 1,
+      editable: ({ data }) => Boolean(data?.isNew || data?.editPlanId) && personOptions(data).length > 1,
       cellEditor: SmartSelectCellEditor,
-      cellEditorParams: { values: employeeOptions },
+      cellEditorParams: ({ data }: { data?: PlannerRow }) => ({ values: personOptions(data) }),
       cellEditorPopup: true,
       cellEditorPopupPosition: "under",
       valueFormatter: ({ value, data }) => data?.isNew || data?.editPlanId
-        ? employeeOptions.find((option) => option.value === String(value ?? ""))?.label ?? ""
+        ? personOptions(data).find((option) => option.value === String(value ?? ""))?.label ?? ""
         : data?.employeeName ?? "",
       minWidth: 155,
       flex: 0.8,
     },
-    { headerName: "NAMA UNIT", field: "unitName", editable: false, minWidth: 120 },
-    { headerName: "NAMA PANEL / PART", field: "panelName", editable: false, minWidth: 160, flex: 0.9 },
+    {
+      headerName: "NAMA UNIT",
+      field: "carId",
+      editable: ({ data }) => Boolean(data?.isNew || data?.editPlanId) && unitOptions(data).length > 1,
+      cellEditor: SmartSelectCellEditor,
+      cellEditorParams: ({ data }: { data?: PlannerRow }) => ({ values: unitOptions(data) }),
+      cellEditorPopup: true,
+      cellEditorPopupPosition: "under",
+      filterValueGetter: ({ data }) => data?.unitName ?? "",
+      valueFormatter: ({ value, data }) => data?.isNew || data?.editPlanId
+        ? unitOptions(data).find((option) => option.value === String(value ?? ""))?.label ?? data?.unitName ?? ""
+        : data?.unitName ?? "",
+      minWidth: 120,
+    },
+    {
+      headerName: "NAMA PANEL / PART",
+      field: "panelId",
+      editable: ({ data }) => Boolean(data?.isNew || data?.editPlanId) && panelOptions(data).length > 1,
+      cellEditor: SmartSelectCellEditor,
+      cellEditorParams: ({ data }: { data?: PlannerRow }) => ({ values: panelOptions(data) }),
+      cellEditorPopup: true,
+      cellEditorPopupPosition: "under",
+      filterValueGetter: ({ data }) => data?.panelName ?? "",
+      valueFormatter: ({ value, data }) => data?.isNew || data?.editPlanId
+        ? panelOptions(data).find((option) => option.value === String(value ?? ""))?.label ?? data?.panelName ?? ""
+        : data?.panelName ?? "",
+      minWidth: 160,
+      flex: 0.9,
+    },
     {
       headerName: "JOB DESCRIPTION",
-      field: "jobDescription",
-      editable: ({ data }) => Boolean(data?.isNew || data?.editPlanId),
+      field: "coreId",
+      editable: ({ data }) => Boolean(data?.isNew || data?.editPlanId) && jobOptions(data).length > 1,
+      cellEditor: SmartSelectCellEditor,
+      cellEditorParams: ({ data }: { data?: PlannerRow }) => ({ values: jobOptions(data) }),
+      cellEditorPopup: true,
+      cellEditorPopupPosition: "under",
+      filterValueGetter: ({ data }) => data?.jobDescription ?? "",
+      valueFormatter: ({ value, data }) => data?.isNew || data?.editPlanId
+        ? jobOptions(data).find((option) => option.value === String(value ?? ""))?.label?.split(" · ")[0] ?? data?.jobDescription ?? ""
+        : data?.jobDescription ?? "",
       minWidth: 220,
       flex: 1.15,
     },
@@ -489,10 +654,11 @@ export function JobPlanPlannerShell({
     },
     { headerName: "TOTAL TARGET", field: "targetTotalText", editable: false, minWidth: 115 },
     { headerName: "SISA TARGET", field: "remainingText", editable: false, minWidth: 110 },
+    { headerName: "TOTAL TARGET HARI INI", field: "durationText", editable: ({ data }) => Boolean(data?.isNew || data?.editPlanId), minWidth: 150 },
     {
       headerName: "START",
       field: "startTime",
-      editable: ({ data }) => Boolean(data?.isNew || data?.editPlanId),
+      editable: false,
       minWidth: 135,
       filterValueGetter: ({ data }) => data ? `${formatReportDate(data.taskDate)} ${data.startTime}` : "",
       valueFormatter: ({ data }) => data ? `${formatReportDate(data.taskDate)} ${data.startTime}` : "",
@@ -505,7 +671,6 @@ export function JobPlanPlannerShell({
       filterValueGetter: ({ data }) => data ? `${formatReportDate(data.taskDate)} ${data.finishTime}` : "",
       valueFormatter: ({ data }) => data ? `${formatReportDate(data.taskDate)} ${data.finishTime}` : "",
     },
-    { headerName: "TOTAL TARGET HARI INI", field: "durationText", editable: ({ data }) => Boolean(data?.isNew || data?.editPlanId), minWidth: 150 },
     {
       headerName: "CATATAN / KETERANGAN",
       field: "note",
@@ -526,14 +691,12 @@ export function JobPlanPlannerShell({
       ) : null,
       pinned: "right",
     },
-  ], [employeeOptions]);
+  ], [countdowns, employees]);
 
   function addDraft() {
     const draft = createJobPlanV2Draft(selectedContext);
-    const employeeId = employees.length === 1 ? employees[0].value : "";
     setDrafts((current) => [...current, {
-      ...draft,
-      employeeId,
+      ...normalizeDraftSelection(draft),
       taskDate: initialDate ?? draft.taskDate,
       isOvertime: initialMode === "overtime",
     }]);
@@ -544,22 +707,52 @@ export function JobPlanPlannerShell({
     if (!row.isNew && !row.editPlanId) return;
     const next = {
       coreId: String(row.coreId ?? ""),
+      divisionId: numberValue(row.divisionId),
+      carId: String(row.carId ?? ""),
+      panelId: numberValue(row.panelId),
       employeeId: String(row.employeeId ?? ""),
       taskDate: String(row.taskDate ?? ""),
-      startTime: String(row.startTime ?? ""),
+      startTime: "08:00",
       durationText: String(row.durationText ?? ""),
       jobDescription: String(row.jobDescription ?? ""),
       note: String(row.note ?? ""),
       isPriority: Boolean(row.isPriority),
       error: null,
     };
+    const field = event.column.getColId();
+    if (field === "divisionId") {
+      next.carId = "";
+      next.panelId = null;
+      next.coreId = "";
+      next.employeeId = "";
+      next.jobDescription = "";
+    }
+    if (field === "carId") {
+      next.panelId = null;
+      next.coreId = "";
+      next.jobDescription = "";
+    }
+    if (field === "panelId") {
+      next.coreId = "";
+      next.jobDescription = "";
+    }
     if (row.editPlanId) {
-      setEditDrafts((current) => current.map((draft) => draft.clientId === row.clientId ? { ...draft, ...next } : draft));
+      const currentDraft = editDrafts.find((draft) => draft.clientId === row.clientId);
+      const normalized = normalizeDraftSelection({
+        ...(currentDraft ?? createJobPlanV2Draft(contextForCore(countdowns, row.coreId))),
+        ...next,
+      });
+      setEditDrafts((current) => current.map((draft) => draft.clientId === row.clientId ? { ...draft, ...normalized } : draft));
       return;
     }
+    const currentDraft = drafts.find((draft) => draft.clientId === row.clientId);
+    const normalized = normalizeDraftSelection({
+      ...(currentDraft ?? createJobPlanV2Draft(contextForCore(countdowns, row.coreId))),
+      ...next,
+    });
     setDrafts((current) => current.map((draft) => draft.clientId === row.clientId ? {
       ...draft,
-      ...next,
+      ...normalized,
     } : draft));
   }
 
@@ -582,7 +775,7 @@ export function JobPlanPlannerShell({
     if (!text) return;
 
     keyboardEvent.preventDefault();
-    const editableFields = ["coreId", "employeeId", "taskDate", "startTime", "durationText", "jobDescription"];
+    const editableFields = ["divisionId", "employeeId", "carId", "panelId", "coreId", "note", "durationText"];
     const startField = editableFields.includes(field) ? field : "employeeId";
     const startFieldIndex = Math.max(0, editableFields.indexOf(startField));
     const matrix = parseClipboardTsv(text);
@@ -594,38 +787,61 @@ export function JobPlanPlannerShell({
 
     for (let rowOffset = 0; rowOffset < matrix.length; rowOffset += 1) {
       const draftIndex = (baseDraftIndex < 0 ? drafts.length : baseDraftIndex) + rowOffset;
-      if (!nextDrafts[draftIndex]) nextDrafts[draftIndex] = createJobPlanV2Draft(countdownContext);
+      if (!nextDrafts[draftIndex]) nextDrafts[draftIndex] = normalizeDraftSelection(createJobPlanV2Draft(countdownContext));
       let draft: JobPlanV2PlannerDraft = { ...nextDrafts[draftIndex], error: null };
 
       for (let columnOffset = 0; columnOffset < matrix[rowOffset].length; columnOffset += 1) {
         const targetField = editableFields[startFieldIndex + columnOffset];
         if (!targetField) break;
         const rawValue = matrix[rowOffset][columnOffset] ?? "";
+        if (targetField === "divisionId") {
+          const parsed = resolveOption(rawValue, teamOptions(), "Team");
+          draft = parsed.error ? { ...draft, error: parsed.error } : {
+            ...draft,
+            divisionId: numberValue(parsed.value),
+            carId: "",
+            panelId: null,
+            coreId: "",
+            employeeId: "",
+            jobDescription: "",
+          };
+        }
+        if (targetField === "carId") {
+          const parsed = resolveOption(rawValue, unitOptions(draft), "Unit");
+          draft = parsed.error ? { ...draft, error: parsed.error } : {
+            ...draft,
+            carId: parsed.value ?? "",
+            panelId: null,
+            coreId: "",
+            jobDescription: "",
+          };
+        }
+        if (targetField === "panelId") {
+          const parsed = resolveOption(rawValue, panelOptions(draft), "Panel");
+          draft = parsed.error ? { ...draft, error: parsed.error } : {
+            ...draft,
+            panelId: numberValue(parsed.value),
+            coreId: "",
+            jobDescription: "",
+          };
+        }
         if (targetField === "coreId") {
-          const parsed = resolveOption(rawValue, countdownOptions, "Countdown");
+          const parsed = resolveOption(rawValue, jobOptions(draft), "Jobdesc");
           draft = parsed.error ? { ...draft, error: parsed.error } : { ...draft, coreId: parsed.value ?? "" };
         }
         if (targetField === "employeeId") {
-          const parsed = resolveOption(rawValue, employeeOptions, "PIC");
+          const parsed = resolveOption(rawValue, personOptions(draft), "PIC");
           draft = parsed.error ? { ...draft, error: parsed.error } : { ...draft, employeeId: parsed.value ?? "" };
-        }
-        if (targetField === "taskDate") {
-          const parsed = parseSmsDate(rawValue, "Tanggal");
-          draft = parsed.error ? { ...draft, error: parsed.error } : { ...draft, taskDate: parsed.value ?? "" };
-        }
-        if (targetField === "startTime") {
-          const parsed = parseSmsTime(rawValue, "Mulai");
-          draft = parsed.error ? { ...draft, error: parsed.error } : { ...draft, startTime: parsed.value ?? "" };
         }
         if (targetField === "durationText") {
           const parsed = parseSmsDurationMinutes(rawValue, "Durasi");
           draft = parsed.error ? { ...draft, error: parsed.error } : { ...draft, durationText: rawValue.trim() };
         }
-        if (targetField === "jobDescription") {
-          draft = { ...draft, jobDescription: rawValue.trim() };
+        if (targetField === "note") {
+          draft = { ...draft, note: rawValue.trim() };
         }
       }
-      nextDrafts[draftIndex] = draft;
+      nextDrafts[draftIndex] = normalizeDraftSelection(draft);
     }
 
     setDrafts(nextDrafts);
