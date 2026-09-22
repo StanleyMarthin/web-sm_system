@@ -12,7 +12,7 @@ import {
 } from "@/shared/api/job-plan-v2";
 import { SmsAgGrid, SmsGridDraftActions } from "@/shared/datagrid/sms-ag-grid";
 import { DataGridStatusBadge } from "@/shared/datagrid/status-badge";
-import { ActionButton, CompactDateInput, MetricBar, PageHeader } from "@/shared/ui/compact";
+import { ActionButton, CompactDateInput, PageHeader } from "@/shared/ui/compact";
 import { useSweetAlert } from "@/shared/ui/sweet-alert";
 import { SmartSelectCellEditor, type SmartSelectOption } from "@/modules/units/components/master-panel-smart-select-editor";
 import {
@@ -758,8 +758,19 @@ export function JobPlanPlannerShell({
           </div>
           <p className="text-[11px] text-muted-foreground">{filteredRows.length} dari {rows.length} baris</p>
         </div>
-        <div className="mt-2">
-          <MetricBar items={summaryItems.slice(0, 3)} />
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {summaryItems.slice(0, 3).map((item) => {
+            const toneClass = item.tone === "warn"
+              ? "text-app-accent-ink"
+              : item.tone === "up"
+                ? "text-success"
+                : "text-foreground";
+            return (
+              <span key={item.label} className="border border-border bg-background px-2 py-1 text-[11px] text-muted-foreground">
+                {item.label}: <strong className={`font-mono ${toneClass}`}>{item.value}</strong>
+              </span>
+            );
+          })}
         </div>
       </div>
       <div className="relative z-40 flex flex-wrap items-end gap-2 border border-border bg-card px-3 py-2">
