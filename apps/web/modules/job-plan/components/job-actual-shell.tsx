@@ -13,7 +13,7 @@ import {
 } from "@/shared/api/job-plan-v2";
 import { SmsAgGrid } from "@/shared/datagrid/sms-ag-grid";
 import { DataGridStatusBadge } from "@/shared/datagrid/status-badge";
-import { ActionButton, CompactDateInput, MetricBar, PageHeader } from "@/shared/ui/compact";
+import { ActionButton, CompactDateInput } from "@/shared/ui/compact";
 import { useSweetAlert } from "@/shared/ui/sweet-alert";
 import {
   buildManualExecutionJobPlanV2Payload,
@@ -271,28 +271,38 @@ export function JobActualShell({
     <div className="space-y-3">
       {sweetAlert.alertElement}
       <div className="border border-border bg-card px-3 py-2 shadow-sm">
-        <PageHeader eyebrow="JOB ACTUAL" title="Hasil Pekerjaan" />
-        <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-          <MetricBar items={summaryItems} />
-          <p className="text-[11px] text-muted-foreground">{filteredRows.length} dari {rows.length} baris</p>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground dark:text-foreground/45">JOB ACTUAL</p>
+            <span className="text-muted-foreground dark:text-foreground/25">·</span>
+            <h1 className="truncate text-[16px] font-semibold text-foreground">Hasil Pekerjaan</h1>
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+            {summaryItems.map((item) => (
+              <span key={item.label} className="border border-border bg-background px-2 py-1">
+                {item.label}: <strong className="font-mono text-foreground">{item.value}</strong>
+              </span>
+            ))}
+            <span className="px-1">{filteredRows.length} dari {rows.length} baris</span>
+          </div>
         </div>
       </div>
 
-      <div className="relative z-40 flex flex-wrap items-end gap-2 border border-border bg-card px-3 py-2">
-        <div className="min-w-[9rem] flex-1">
-          <span className="text-[11px] text-muted-foreground">Tanggal</span>
-          <CompactDateInput value={dateFilter} onChange={setDateFilter} className="mt-1" panelClassName="z-[100] w-[17rem]" />
+      <div className="relative z-40 flex flex-wrap items-center gap-2 border border-border bg-card px-3 py-2">
+        <div className="flex min-w-[12rem] flex-1 items-center gap-2">
+          <span className="w-12 shrink-0 text-[11px] text-muted-foreground">Tanggal</span>
+          <CompactDateInput value={dateFilter} onChange={setDateFilter} className="flex-1" panelClassName="z-[100] w-[17rem]" />
         </div>
-        <label className="min-w-[8.5rem] flex-1 text-[11px] text-muted-foreground">
-          Divisi
-          <select value={divisionFilter} onChange={(event) => setDivisionFilter(event.target.value)} className="mt-1 h-8 w-full border border-border bg-background px-2 text-[12px] text-foreground">
+        <label className="flex min-w-[11rem] flex-1 items-center gap-2 text-[11px] text-muted-foreground">
+          <span className="w-10 shrink-0">Divisi</span>
+          <select value={divisionFilter} onChange={(event) => setDivisionFilter(event.target.value)} className="h-8 w-full border border-border bg-background px-2 text-[12px] text-foreground">
             <option value="">Semua divisi</option>
             {divisionOptions.map((division) => <option key={division} value={division}>{division}</option>)}
           </select>
         </label>
-        <label className="min-w-[8.5rem] flex-1 text-[11px] text-muted-foreground">
-          Status
-          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="mt-1 h-8 w-full border border-border bg-background px-2 text-[12px] text-foreground">
+        <label className="flex min-w-[11rem] flex-1 items-center gap-2 text-[11px] text-muted-foreground">
+          <span className="w-10 shrink-0">Status</span>
+          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="h-8 w-full border border-border bg-background px-2 text-[12px] text-foreground">
             <option value="">Semua status</option>
             <option value="APPROVED">Siap input</option>
             <option value="RUNNING">Berjalan</option>
