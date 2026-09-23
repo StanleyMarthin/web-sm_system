@@ -553,6 +553,7 @@ export function JobPlanPlannerShell({
   const approvableSelectedRows = selectedRows.filter((row) => !row.isNew && !row.editPlanId && isReviewState(row.approvalState));
   const submittableSelectedRows = selectedRows.filter((row) => !row.isNew && !row.editPlanId && row.approvalState === "DRAFT" && row.planId && row.version);
   const editableSelectedRows = selectedRows.filter((row) => !row.isNew && !row.editPlanId && row.approvalState === "DRAFT" && row.planId && row.version);
+  const cancellableSelectedRows = selectedRows.filter((row) => row.approvalState === "DRAFT" && (row.planId || row.editPlanId) && (row.version || row.editVersion));
   const canBulkReviewSelected = canApprove
     && approvableSelectedRows.length > 0
     && sameApprovalStage(approvableSelectedRows);
@@ -952,7 +953,7 @@ export function JobPlanPlannerShell({
     setIsSaving(true);
     let failed = 0;
     for (const row of validRows) {
-      const result = await mutateJobPlanV2Approval(row.planId as string, {
+      const result = await mutateJobPlanV2Approval((row.planId ?? row.editPlanId) as string, {
         action: "submit",
         userId,
         commandId: createJobPlanV2CommandId("web-submit"),
@@ -990,7 +991,7 @@ export function JobPlanPlannerShell({
 
   async function cancelDraftRows(rowsToCancel: PlannerRow[]) {
     if (rowsToCancel.length === 0 || isSaving) return;
-    const validRows = rowsToCancel.filter((row) => row.planId && row.version && row.approvalState === "DRAFT");
+    const validRows = rowsToCancel.filter((row) => row.approvalState === "DRAFT" && (row.planId || row.editPlanId) && (row.version || row.editVersion));
     if (validRows.length !== rowsToCancel.length) {
       setError("Hanya draft tersimpan yang bisa dihapus.");
       return;
@@ -1009,7 +1010,7 @@ export function JobPlanPlannerShell({
         action: "cancel",
         userId,
         commandId: createJobPlanV2CommandId("web-cancel-draft"),
-        expectedVersion: row.version as number,
+        expectedVersion: (row.version ?? row.editVersion) as number,
         reason: "Dihapus dari Web Job Plan",
       });
       if (!result.success) {
@@ -1171,7 +1172,7 @@ export function JobPlanPlannerShell({
             <span>{selectedRows.length} dipilih</span>
             <ActionButton disabled={editableSelectedRows.length === 0 || isSaving} onClick={() => editRows(editableSelectedRows)}>Edit Draft</ActionButton>
             <ActionButton variant="success" disabled={submittableSelectedRows.length === 0 || isSaving} onClick={() => void submitRows(submittableSelectedRows)}>Ajukan</ActionButton>
-            <ActionButton variant="danger" disabled={editableSelectedRows.length === 0 || isSaving} onClick={() => void cancelDraftRows(editableSelectedRows)}>Hapus Draft</ActionButton>
+            <ActionButton variant="danger" disabled={cancellableSelectedRows.length === 0 || isSaving} onClick={() => void cancelDraftRows(cancellableSelectedRows)}>Hapus Draft</ActionButton>
           </div>
         ) : null}
       </div>
