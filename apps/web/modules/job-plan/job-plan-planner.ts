@@ -237,6 +237,29 @@ export function toJobPlanV2DisplayRows(
   });
 }
 
+export function createEditDraftFromRow(row: JobPlanV2DisplayRow): JobPlanV2PlannerDraft & { editPlanId: string; editVersion: number } {
+  return {
+    clientId: `edit-${row.planId}`,
+    isNew: true,
+    coreId: row.coreId,
+    divisionId: row.divisionId,
+    carId: row.carId,
+    panelId: row.panelId,
+    employeeId: row.employeeId,
+    taskDate: row.taskDate,
+    startTime: row.startTime,
+    durationText: row.durationText,
+    jobDescription: row.jobDescription,
+    note: row.note,
+    isOvertime: false,
+    isRework: false,
+    isPriority: row.isPriority,
+    error: null,
+    editPlanId: row.planId ?? "",
+    editVersion: row.version ?? 0,
+  };
+}
+
 export function validateJobPlanV2Draft(row: JobPlanV2PlannerDraft) {
   if (!row.coreId) return "Countdown wajib dipilih.";
   if (!row.employeeId) return "PIC wajib dipilih.";

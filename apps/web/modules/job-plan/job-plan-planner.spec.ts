@@ -4,6 +4,7 @@ import {
   buildCreateJobPlanV2Payload,
   buildEditDraftJobPlanV2Payload,
   buildManualExecutionJobPlanV2Payload,
+  createEditDraftFromRow,
   createManualExecutionDraft,
   formatJobPlanV2Approval,
   formatJobPlanV2Execution,
@@ -255,6 +256,51 @@ describe("Job Plan planner helpers", () => {
       expectedVersion: 4,
       employeeId: "EMP-1",
       jobDescription: "Repair bumper edited",
+    });
+  });
+
+  test("creates an editable draft from a saved draft row", () => {
+    const [row] = toJobPlanV2DisplayRows([
+      {
+        plan_id: "PLAN-1",
+        core_id: "CORE-1",
+        car_id: "220S",
+        panel_id: 10,
+        division_id: 7,
+        employee_id: "EMP-1",
+        task_date: "2026-09-15",
+        planned_start_minute: 480,
+        planned_finish_minute: 600,
+        planned_work_minutes: 120,
+        approval_state: "DRAFT",
+        execution_state: "NOT_STARTED",
+        ledger_state: "UNMATERIALIZED",
+        legacy_status: null,
+        urgent: false,
+        is_rework: false,
+        is_overtime: false,
+        is_priority: true,
+        jobdescription: "Repair bumper",
+        note: "awal",
+        source: "V2_REDIS",
+        version: 7,
+        projection_ready: true,
+        accumulated_work_minutes: 0,
+        persisted_work_minutes: 0,
+        unverified_work_minutes: 0,
+        live_state_available: true,
+        read_only: false,
+      },
+    ], [countdown], [employee]);
+
+    expect(createEditDraftFromRow(row)).toMatchObject({
+      editPlanId: "PLAN-1",
+      editVersion: 7,
+      coreId: "CORE-1",
+      employeeId: "EMP-1",
+      durationText: "02:00",
+      note: "awal",
+      isPriority: true,
     });
   });
 

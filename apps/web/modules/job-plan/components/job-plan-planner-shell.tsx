@@ -18,6 +18,7 @@ import {
   buildCreateJobPlanV2Payload,
   buildEditDraftJobPlanV2Payload,
   createJobPlanV2Draft,
+  createEditDraftFromRow,
   minutesToDuration,
   minutesToTime,
   toLocalDateValue,
@@ -551,6 +552,7 @@ export function JobPlanPlannerShell({
 
   const approvableSelectedRows = selectedRows.filter((row) => !row.isNew && !row.editPlanId && isReviewState(row.approvalState));
   const submittableSelectedRows = selectedRows.filter((row) => !row.isNew && !row.editPlanId && row.approvalState === "DRAFT" && row.planId && row.version);
+  const editableSelectedRows = selectedRows.filter((row) => !row.isNew && !row.editPlanId && row.approvalState === "DRAFT" && row.planId && row.version);
   const canBulkReviewSelected = canApprove
     && approvableSelectedRows.length > 0
     && sameApprovalStage(approvableSelectedRows);
@@ -969,6 +971,60 @@ export function JobPlanPlannerShell({
     }
   }
 
+  function editRows(rowsToEdit: PlannerRow[]) {
+    const validRows = rowsToEdit.filter((row) => row.planId && row.version && row.approvalState === "DRAFT");
+    if (validRows.length !== rowsToEdit.length) {
+      setError("Pilih rencana draft yang sudah tersimpan.");
+      return;
+    }
+    setEditDrafts((current) => {
+      const currentIds = new Set(current.map((row) => row.editPlanId));
+      return [
+        ...current,
+        ...validRows.filter((row) => !currentIds.has(row.planId as string)).map(createEditDraftFromRow),
+      ];
+    });
+    setSelectedRows([]);
+    setError(null);
+  }
+
+  async function cancelDraftRows(rowsToCancel: PlannerRow[]) {
+    if (rowsToCancel.length === 0 || isSaving) return;
+    const validRows = rowsToCancel.filter((row) => row.planId && row.version && row.approvalState === "DRAFT");
+    if (validRows.length !== rowsToCancel.length) {
+      setError("Hanya draft tersimpan yang bisa dihapus.");
+      return;
+    }
+    const confirmed = await sweetAlert.confirm({
+      title: `Hapus ${validRows.length} draft?`,
+      description: "Draft akan dibatalkan dan tidak tampil di daftar operasional.",
+      confirmLabel: "Hapus",
+      tone: "error",
+    });
+    if (!confirmed) return;
+    setIsSaving(true);
+    let failed = 0;
+    for (const row of validRows) {
+      const result = await mutateJobPlanV2Approval(row.planId as string, {
+        action: "cancel",
+        userId,
+        commandId: createJobPlanV2CommandId("web-cancel-draft"),
+        expectedVersion: row.version as number,
+        reason: "Dihapus dari Web Job Plan",
+      });
+      if (!result.success) {
+        failed += 1;
+        setError(result.message);
+      }
+    }
+    await load();
+    setIsSaving(false);
+    if (failed === 0) {
+      sweetAlert.notifySuccess("Draft dihapus", `${validRows.length} draft dibatalkan.`);
+      setSelectedRows([]);
+    }
+  }
+
   async function submitRejectReason(reason: string) {
     setRejectDialogOpen(false);
     await reviewRows(selectedRows, "reject", reason);
@@ -1113,7 +1169,9 @@ export function JobPlanPlannerShell({
         {mode === "planner" && canCreate ? (
           <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
             <span>{selectedRows.length} dipilih</span>
+            <ActionButton disabled={editableSelectedRows.length === 0 || isSaving} onClick={() => editRows(editableSelectedRows)}>Edit Draft</ActionButton>
             <ActionButton variant="success" disabled={submittableSelectedRows.length === 0 || isSaving} onClick={() => void submitRows(submittableSelectedRows)}>Ajukan</ActionButton>
+            <ActionButton variant="danger" disabled={editableSelectedRows.length === 0 || isSaving} onClick={() => void cancelDraftRows(editableSelectedRows)}>Hapus Draft</ActionButton>
           </div>
         ) : null}
       </div>
