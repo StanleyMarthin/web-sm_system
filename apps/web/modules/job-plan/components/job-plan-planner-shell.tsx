@@ -177,6 +177,14 @@ function joinDistinct(values: Array<string | null | undefined>) {
   return [...new Set(values.map((value) => value?.trim()).filter(Boolean) as string[])].join(" · ");
 }
 
+function reportMonthTitle(value: string) {
+  const date = value ? new Date(`${value}T00:00:00`) : new Date();
+  return new Intl.DateTimeFormat("id-ID", {
+    month: "long",
+    year: "numeric",
+  }).format(Number.isNaN(date.getTime()) ? new Date() : date).toUpperCase();
+}
+
 function escapeHtml(value: string) {
   return value
     .replaceAll("&", "&amp;")
@@ -185,10 +193,23 @@ function escapeHtml(value: string) {
     .replaceAll('"', "&quot;");
 }
 
+function printTeamColor(team: string) {
+  const normalized = team.toUpperCase();
+  if (normalized.includes("BODY WORK")) return { background: "#f47c2c", color: "#111827" };
+  if (normalized.includes("BODY PAINT")) return { background: "#d98795", color: "#111827" };
+  if (normalized.includes("MECHANIC")) return { background: "#ef7373", color: "#111827" };
+  if (normalized.includes("INTERIOR")) return { background: "#f5c95c", color: "#111827" };
+  if (normalized.includes("CHROME")) return { background: "#9fb7c9", color: "#111827" };
+  return { background: "#73c7df", color: "#111827" };
+}
+
 function buildReportTableHtml(rows: PlannerRow[], meta: { date: string; kp: string; qa: string }) {
-  const body = rows.map((row) => `
+  const title = `MONITORING PLAN & ACTUAL KINERJA HARIAN ALL TEAM ( ${reportMonthTitle(meta.date)} ) - Google Spreadsheet`;
+  const body = rows.map((row) => {
+    const color = printTeamColor(row.divisionName);
+    return `
     <tr>
-      <td>${escapeHtml(row.divisionName)}</td>
+      <td class="team-cell" style="background:${color.background};color:${color.color}">${escapeHtml(row.divisionName)}</td>
       <td>${escapeHtml(row.employeeName)}</td>
       <td>${escapeHtml(row.unitName)}</td>
       <td>${escapeHtml(row.panelName)}</td>
@@ -200,29 +221,49 @@ function buildReportTableHtml(rows: PlannerRow[], meta: { date: string; kp: stri
       <td>${escapeHtml(`${row.taskDate} ${row.finishTime}`)}</td>
       <td>${escapeHtml(row.durationText)}</td>
       <td>${escapeHtml(joinDistinct([row.note, row.instructionText]))}</td>
-      <td><span class="badge">${escapeHtml(statusLabel(row))}</span></td>
     </tr>
-  `).join("");
+    `;
+  }).join("");
 
   return `<!doctype html>
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>Laporan Job Plan</title>
+  <title>${escapeHtml(title)}</title>
   <style>
-    @page { size: A4 landscape; margin: 10mm; }
-    body { font-family: Arial, sans-serif; color: #1f2933; font-size: 9px; }
-    h1 { margin: 0 0 8px; font-size: 16px; letter-spacing: .04em; }
-    .meta { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 10px; font-size: 10px; }
+    @page { size: A4 landscape; margin: 8mm; }
+    body { font-family: Arial, sans-serif; color: #111827; font-size: 8.5px; }
+    .titlebar {
+      position: relative;
+      margin-bottom: 5px;
+      background: #075f75;
+      color: #fff;
+      padding: 8px 44px;
+      text-align: center;
+      font-size: 14px;
+      font-weight: 800;
+      letter-spacing: .02em;
+    }
+    .titlebar img { position: absolute; left: 10px; top: 5px; width: 24px; height: 24px; object-fit: contain; }
+    .date-title { margin: 0 0 6px; color: #ff0000; text-align: center; font-size: 13px; font-weight: 800; }
+    .meta { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 6px; font-size: 9px; }
     table { width: 100%; border-collapse: collapse; }
-    th { background: #2b2b2b; color: #fff; padding: 5px; text-align: left; }
-    td { border: 1px solid #d7d7d7; padding: 4px; vertical-align: top; }
-    tr:nth-child(even) td { background: #f6f6f6; }
-    .badge { display: inline-block; border-radius: 3px; background: #e9b872; color: #1f2933; padding: 2px 5px; font-weight: 700; }
+    th { border: 1px solid #13aee0; background: #75c9dd; color: #000; padding: 5px 4px; text-align: center; font-size: 8px; font-weight: 800; }
+    th.plan-group { background: #75c9dd; }
+    th.target-today { background: #339638; color: #fff; }
+    td { border: 1px solid #62c4e8; padding: 4px 3px; vertical-align: middle; }
+    td:nth-child(8) { background: #0878bd; color: #fff; font-weight: 800; text-align: center; }
+    td:nth-child(9), td:nth-child(10), td:nth-child(11) { text-align: center; font-weight: 700; }
+    td:nth-child(11) { background: #339638; color: #fff; }
+    .team-cell { font-weight: 800; text-align: center; }
   </style>
 </head>
 <body>
-  <h1>LAPORAN JOB PLAN</h1>
+  <div class="titlebar">
+    <img src="/favicon.ico" alt="" />
+    MONITORING LAPORAN PLAN & ACTUAL KINERJA HARIAN ALL TEAM
+  </div>
+  <p class="date-title">JOB DESCRIPTIONS : ${escapeHtml(formatReportDate(meta.date))}</p>
   <div class="meta">
     <div><strong>Tanggal:</strong> ${escapeHtml(formatReportDate(meta.date))}</div>
     <div><strong>KP:</strong> ${escapeHtml(meta.kp || "Semua KP")}</div>
@@ -231,10 +272,24 @@ function buildReportTableHtml(rows: PlannerRow[], meta: { date: string; kp: stri
   <table>
     <thead>
       <tr>
-        <th>TEAM</th><th>PERSONIL</th><th>UNIT</th><th>PANEL / PART</th><th>JOB DESCRIPTION</th><th>INTRUKSI</th><th>TOTAL TARGET</th><th>SISA TARGET</th><th>START</th><th>FINISH</th><th>TARGET HARI INI</th><th>CATATAN</th><th>STATUS</th>
+        <th rowspan="2">TEAM</th>
+        <th rowspan="2">PERSONIL</th>
+        <th rowspan="2">NAMA UNIT</th>
+        <th rowspan="2">NAMA PANEL / PART</th>
+        <th rowspan="2">JOB DESCRIPTION</th>
+        <th rowspan="2">KETERANGAN</th>
+        <th colspan="4" class="plan-group">PLAN</th>
+        <th rowspan="2" class="target-today">TARGET</th>
+        <th rowspan="2">CATATAN / KETERANGAN</th>
+      </tr>
+      <tr>
+        <th>TARGET AWAL</th>
+        <th>SISA TARGET AWAL</th>
+        <th>START</th>
+        <th>FINISH</th>
       </tr>
     </thead>
-    <tbody>${body || `<tr><td colspan="13">Belum ada data.</td></tr>`}</tbody>
+    <tbody>${body || `<tr><td colspan="12">Belum ada data.</td></tr>`}</tbody>
   </table>
 </body>
 </html>`;
