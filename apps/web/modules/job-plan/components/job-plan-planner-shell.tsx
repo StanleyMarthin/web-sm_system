@@ -205,7 +205,13 @@ function printTeamColor(team: string) {
 
 function buildReportTableHtml(rows: PlannerRow[], meta: { date: string; kp: string; qa: string }) {
   const title = `MONITORING PLAN & ACTUAL KINERJA HARIAN ALL TEAM ( ${reportMonthTitle(meta.date)} ) - Google Spreadsheet`;
-  const body = rows.map((row) => {
+  const sortedRows = [...rows].sort((left, right) =>
+    left.divisionName.localeCompare(right.divisionName)
+    || left.employeeName.localeCompare(right.employeeName)
+    || left.unitName.localeCompare(right.unitName)
+    || left.startTime.localeCompare(right.startTime)
+  );
+  const body = sortedRows.map((row) => {
     const color = printTeamColor(row.divisionName);
     return `
     <tr>
