@@ -129,6 +129,80 @@ describe("Job Plan planner helpers", () => {
     });
   });
 
+  test("uses employee division name when countdown reference is missing", () => {
+    const rows = toJobPlanV2DisplayRows([
+      {
+        plan_id: "PLAN-1",
+        core_id: "MISSING-CORE",
+        car_id: "220S",
+        panel_id: 10,
+        division_id: 11,
+        employee_id: "EMP-1",
+        task_date: "2026-09-15",
+        planned_start_minute: 480,
+        planned_finish_minute: 600,
+        planned_work_minutes: 120,
+        approval_state: "DRAFT",
+        execution_state: "NOT_STARTED",
+        ledger_state: "UNMATERIALIZED",
+        legacy_status: null,
+        urgent: false,
+        is_rework: false,
+        is_overtime: false,
+        is_priority: false,
+        jobdescription: "Repair bumper",
+        note: null,
+        source: "V2_REDIS",
+        version: 1,
+        projection_ready: true,
+        accumulated_work_minutes: 0,
+        persisted_work_minutes: 0,
+        unverified_work_minutes: 0,
+        live_state_available: true,
+        read_only: false,
+      },
+    ], [], [employee]);
+
+    expect(rows[0]?.divisionName).toBe("BODY");
+  });
+
+  test("hides cancelled rows from the operational grid", () => {
+    const rows = toJobPlanV2DisplayRows([
+      {
+        plan_id: "PLAN-1",
+        core_id: "CORE-1",
+        car_id: "220S",
+        panel_id: 10,
+        division_id: 7,
+        employee_id: "EMP-1",
+        task_date: "2026-09-15",
+        planned_start_minute: 480,
+        planned_finish_minute: 600,
+        planned_work_minutes: 120,
+        approval_state: "CANCELLED",
+        execution_state: "NOT_STARTED",
+        ledger_state: "UNMATERIALIZED",
+        legacy_status: null,
+        urgent: false,
+        is_rework: false,
+        is_overtime: false,
+        is_priority: false,
+        jobdescription: "Repair bumper",
+        note: null,
+        source: "V2_REDIS",
+        version: 1,
+        projection_ready: true,
+        accumulated_work_minutes: 0,
+        persisted_work_minutes: 0,
+        unverified_work_minutes: 0,
+        live_state_available: true,
+        read_only: false,
+      },
+    ], [countdown], [employee]);
+
+    expect(rows).toHaveLength(0);
+  });
+
   test("validates and builds canonical create payload", () => {
     const draft = {
       clientId: "draft-1",

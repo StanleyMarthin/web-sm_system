@@ -190,9 +190,10 @@ export function toJobPlanV2DisplayRows(
   const countdownByCore = new Map(countdowns.map((item) => [item.value, item]));
   const employeeById = new Map(employees.map((item) => [item.value, item]));
 
-  return items.map((item) => {
+  return items.filter((item) => item.approval_state !== "CANCELLED").map((item) => {
     const countdown = countdownByCore.get(item.core_id);
     const employee = item.employee_id ? employeeById.get(item.employee_id) : null;
+    const divisionName = countdown?.divisionName ?? employee?.divisionName ?? "-";
     return {
       clientId: `plan-${item.plan_id}`,
       isNew: false,
@@ -211,7 +212,7 @@ export function toJobPlanV2DisplayRows(
       instructionText: item.note ?? "",
       employeeId: item.employee_id ?? "",
       employeeName: employee?.label ?? item.employee_id ?? "-",
-      divisionName: countdown?.divisionName ?? String(item.division_id ?? "-"),
+      divisionName,
       taskDate: item.task_date,
       startTime: minutesToTime(item.planned_start_minute),
       finishTime: minutesToTime(item.planned_finish_minute),
