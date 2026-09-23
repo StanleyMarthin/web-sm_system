@@ -2,7 +2,6 @@
 
 import type { JobPlanV2ReadItem } from "@smsystem/contracts/job-plan-v2";
 import type { CellKeyDownEvent, CellValueChangedEvent, ColDef, GridApi, GridReadyEvent, ICellRendererParams, SelectionChangedEvent } from "ag-grid-community";
-import { X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
   createJobPlanV2,
@@ -246,58 +245,6 @@ function sameApprovalStage(rows: PlannerRow[]) {
   return Boolean(first) && rows.every((row) => row.approvalState === first);
 }
 
-function DetailField({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div className="min-w-0">
-      <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground">{label}</p>
-      <div className="mt-1 break-words text-[13px] text-foreground">{value || "-"}</div>
-    </div>
-  );
-}
-
-function JobPlanDetailDrawer({ row, onClose }: { row: PlannerRow; onClose: () => void }) {
-  return (
-    <div className="fixed inset-0 z-[80] flex justify-end bg-black/65 backdrop-blur-[1px]" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <aside role="dialog" aria-modal="true" aria-labelledby="job-plan-detail-title" className="flex h-full w-full max-w-2xl flex-col border-l border-border bg-background shadow-2xl">
-        <div className="flex items-start justify-between gap-3 border-b border-border px-4 py-3">
-          <div className="min-w-0">
-            <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground">Detail Rencana</p>
-            <h2 id="job-plan-detail-title" className="mt-1 truncate text-[16px] font-semibold text-foreground">{row.jobDescription}</h2>
-            <p className="mt-1 text-[12px] text-muted-foreground">{row.unitName} · {row.panelName}</p>
-          </div>
-          <button type="button" onClick={onClose} className="inline-flex h-9 w-9 items-center justify-center border border-border text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="Tutup detail rencana">
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
-          <section className="border border-border bg-card p-3">
-            <p className="border-b border-border pb-2 font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground">Perencanaan</p>
-            <div className="grid gap-3 pt-3 sm:grid-cols-2">
-              <DetailField label="Unit" value={row.unitName} />
-              <DetailField label="Panel" value={row.panelName} />
-              <DetailField label="Pekerjaan" value={row.jobDescription} />
-              <DetailField label="Instruksi" value={row.note} />
-              <DetailField label="Divisi" value={row.divisionName} />
-              <DetailField label="PIC" value={row.employeeName} />
-              <DetailField label="Tanggal" value={row.taskDate} />
-              <DetailField label="Jadwal" value={`${row.startTime} - ${row.finishTime}`} />
-            </div>
-          </section>
-          <section className="border border-border bg-card p-3">
-            <p className="border-b border-border pb-2 font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground">Status</p>
-            <div className="grid gap-3 pt-3 sm:grid-cols-2">
-              <DetailField label="Approval" value={<DataGridStatusBadge value={row.approval} />} />
-              <DetailField label="Execution" value={<DataGridStatusBadge value={row.execution} />} />
-              <DetailField label="Ledger" value={<DataGridStatusBadge value={row.ledger} />} />
-              <DetailField label="Sync" value={<DataGridStatusBadge value={row.sync} />} />
-            </div>
-          </section>
-        </div>
-      </aside>
-    </div>
-  );
-}
-
 function RejectReasonDialog({
   count,
   stage,
@@ -351,7 +298,6 @@ export function JobPlanPlannerShell({
   const [items, setItems] = useState<JobPlanV2ReadItem[]>([]);
   const [drafts, setDrafts] = useState<JobPlanV2PlannerDraft[]>([]);
   const [editDrafts, setEditDrafts] = useState<Array<JobPlanV2PlannerDraft & { editPlanId: string; editVersion: number }>>([]);
-  const [selectedRow, setSelectedRow] = useState<PlannerRow | null>(null);
   const [gridApi, setGridApi] = useState<GridApi<PlannerRow> | null>(null);
   const [mode, setMode] = useState<PlannerMode>(() => initialPlannerMode(initialMode));
   const [isLoading, setIsLoading] = useState(true);
@@ -542,6 +488,7 @@ export function JobPlanPlannerShell({
   ] as const;
 
   const approvableSelectedRows = selectedRows.filter((row) => !row.isNew && !row.editPlanId && isReviewState(row.approvalState));
+  const submittableSelectedRows = selectedRows.filter((row) => !row.isNew && !row.editPlanId && row.approvalState === "DRAFT" && row.planId && row.version);
   const canBulkReviewSelected = canApprove
     && approvableSelectedRows.length > 0
     && sameApprovalStage(approvableSelectedRows);
@@ -925,27 +872,75 @@ export function JobPlanPlannerShell({
     }
   }
 
+  async function submitRows(rowsToSubmit: PlannerRow[]) {
+    if (rowsToSubmit.length === 0 || isSaving) return;
+    const validRows = rowsToSubmit.filter((row) => row.planId && row.version && row.approvalState === "DRAFT");
+    if (validRows.length !== rowsToSubmit.length) {
+      setError("Pilih rencana draft yang sudah tersimpan.");
+      return;
+    }
+    const confirmed = await sweetAlert.confirm({
+      title: `Ajukan ${validRows.length} rencana?`,
+      description: "Rencana akan masuk ke Review Divisi.",
+      confirmLabel: "Ajukan",
+    });
+    if (!confirmed) return;
+    setIsSaving(true);
+    let failed = 0;
+    for (const row of validRows) {
+      const result = await mutateJobPlanV2Approval(row.planId as string, {
+        action: "submit",
+        userId,
+        commandId: createJobPlanV2CommandId("web-submit"),
+        expectedVersion: row.version as number,
+      });
+      if (!result.success) {
+        failed += 1;
+        setError(result.message);
+      }
+    }
+    await load();
+    setIsSaving(false);
+    if (failed === 0) {
+      sweetAlert.notifySuccess("Rencana diajukan", `${validRows.length} draft masuk Review Divisi.`);
+      setSelectedRows([]);
+    }
+  }
+
   async function submitRejectReason(reason: string) {
     setRejectDialogOpen(false);
     await reviewRows(selectedRows, "reject", reason);
   }
 
   function openReportPrint() {
-    const popup = window.open("", "_blank", "noopener,noreferrer");
-    if (!popup) {
-      setError("Popup browser ditahan. Izinkan popup untuk mencetak laporan.");
-      return;
-    }
     const visibleRows: PlannerRow[] = [];
     gridApi?.forEachNodeAfterFilterAndSort((node) => {
       if (node.data) visibleRows.push(node.data);
     });
     const kpLabel = kpOptions.find((option) => option.value === kpFilter)?.label ?? "";
     const qaLabel = qaOptions.find((option) => option.value === qaFilter)?.label ?? "";
-    popup.document.write(buildReportTableHtml(gridApi ? visibleRows : filteredRows, { date: dateFilter, kp: kpLabel, qa: qaLabel }));
-    popup.document.close();
-    popup.focus();
-    popup.print();
+    const iframe = document.createElement("iframe");
+    iframe.style.position = "fixed";
+    iframe.style.right = "0";
+    iframe.style.bottom = "0";
+    iframe.style.width = "0";
+    iframe.style.height = "0";
+    iframe.style.border = "0";
+    document.body.appendChild(iframe);
+    const doc = iframe.contentWindow?.document;
+    if (!doc) {
+      iframe.remove();
+      setError("Gagal menyiapkan halaman print.");
+      return;
+    }
+    doc.open();
+    doc.write(buildReportTableHtml(gridApi ? visibleRows : filteredRows, { date: dateFilter, kp: kpLabel, qa: qaLabel }));
+    doc.close();
+    window.setTimeout(() => {
+      iframe.contentWindow?.focus();
+      iframe.contentWindow?.print();
+      window.setTimeout(() => iframe.remove(), 1000);
+    }, 100);
   }
 
   return (
@@ -1053,6 +1048,12 @@ export function JobPlanPlannerShell({
             {approvableSelectedRows.length > 0 && !sameApprovalStage(approvableSelectedRows) ? <span className="text-destructive">Tahap persetujuan harus sama.</span> : null}
           </div>
         ) : null}
+        {mode === "planner" && canCreate ? (
+          <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+            <span>{selectedRows.length} dipilih</span>
+            <ActionButton variant="success" disabled={submittableSelectedRows.length === 0 || isSaving} onClick={() => void submitRows(submittableSelectedRows)}>Ajukan</ActionButton>
+          </div>
+        ) : null}
       </div>
       {canCreate && employees.length === 0 ? (
         <p className="border border-warning/25 bg-warning/[0.06] px-3 py-2 text-sm text-warning">
@@ -1080,12 +1081,8 @@ export function JobPlanPlannerShell({
         onCellKeyDown={(event) => {
           if ("column" in event) void handleGridKeyDown(event);
         }}
-        onRowDoubleClicked={(event) => setSelectedRow(event.data ?? null)}
         emptyMessage="Belum ada Job Plan."
       />
-      {selectedRow && !selectedRow.isNew && !selectedRow.editPlanId ? (
-        <JobPlanDetailDrawer row={selectedRow} onClose={() => setSelectedRow(null)} />
-      ) : null}
       {rejectDialogOpen ? (
         <RejectReasonDialog
           count={approvableSelectedRows.length}
