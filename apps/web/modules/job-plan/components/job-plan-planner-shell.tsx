@@ -232,6 +232,7 @@ function buildReportTableHtml(rows: PlannerRow[], meta: { date: string; kp: stri
   <title>${escapeHtml(title)}</title>
   <style>
     @page { size: A4 landscape; margin: 8mm; }
+    * { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
     body { font-family: Arial, sans-serif; color: #111827; font-size: 8.5px; }
     .titlebar {
       position: relative;
