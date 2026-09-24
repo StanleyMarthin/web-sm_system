@@ -13,10 +13,12 @@ function createRedisConnection(env: ApiEnv): RedisClientType {
   return createClient({
     password: env.REDIS_PASSWORD,
     database: env.REDIS_DB,
+    disableOfflineQueue: true,
     socket: {
       connectTimeout: 1_000,
       host: env.REDIS_HOST,
       port: env.REDIS_PORT,
+      reconnectStrategy: (retries) => (retries > 3 ? false : Math.min(retries * 200, 500)),
     },
   });
 }
@@ -33,12 +35,18 @@ export async function getRedisClient(env: ApiEnv = getApiEnv()): Promise<RedisCl
     });
   }
 
+  const activeClient = client;
+
   if (!connectionPromise) {
-    connectionPromise = client.connect().then(() => client as RedisClientType);
+    connectionPromise = activeClient.connect().then(() => activeClient);
   }
 
   try {
     return await connectionPromise;
+  } catch (error) {
+    activeClient.destroy();
+    client = null;
+    throw error;
   } finally {
     connectionPromise = null;
   }
