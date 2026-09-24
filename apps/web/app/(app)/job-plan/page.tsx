@@ -51,6 +51,7 @@ async function JobPlanPageContent({ searchParams }: JobPlanPageProps) {
       initialMode={requestedModeParam}
       countdowns={payload.references.countdowns}
       employees={payload.references.employees}
+      divisions={payload.references.divisions}
     />
   );
 }

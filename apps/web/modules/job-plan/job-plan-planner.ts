@@ -17,6 +17,7 @@ export type JobPlanEmployeeOption = z.infer<typeof jobPlanEmployeeOptionSchema>;
 export interface JobPlanV2PlannerDraft {
   clientId: string;
   isNew: true;
+  workMode: "normal" | "overtime" | "holiday_overtime";
   coreId: string;
   divisionId: number | null;
   carId: string;
@@ -49,6 +50,7 @@ export interface JobPlanV2ManualExecutionDraft {
 export interface JobPlanV2DisplayRow {
   clientId: string;
   isNew: boolean;
+  workMode: "normal" | "overtime" | "holiday_overtime";
   planId: string | null;
   coreId: string;
   divisionId: number | null;
@@ -163,6 +165,7 @@ export function createJobPlanV2Draft(context: JobPlanCountdownOption | null): Jo
   return {
     clientId: `draft-${crypto.randomUUID()}`,
     isNew: true,
+    workMode: "normal",
     coreId: context?.value ?? "",
     divisionId: context?.divisionId ?? null,
     carId: context?.carId ?? "",
@@ -198,6 +201,7 @@ export function toJobPlanV2DisplayRows(
       clientId: `plan-${item.plan_id}`,
       isNew: false,
       planId: item.plan_id,
+      workMode: item.is_overtime ? "overtime" : "normal",
       coreId: item.core_id,
       divisionId: countdown?.divisionId ?? (typeof item.division_id === "number" ? item.division_id : null),
       carId: countdown?.carId ?? item.car_id ?? "",
@@ -251,12 +255,13 @@ export function createEditDraftFromRow(row: JobPlanV2DisplayRow): JobPlanV2Plann
     durationText: row.durationText,
     jobDescription: row.jobDescription,
     note: row.note,
-    isOvertime: false,
+    isOvertime: row.workMode !== "normal",
     isRework: false,
     isPriority: row.isPriority,
     error: null,
     editPlanId: row.planId ?? "",
     editVersion: row.version ?? 0,
+    workMode: row.workMode,
   };
 }
 

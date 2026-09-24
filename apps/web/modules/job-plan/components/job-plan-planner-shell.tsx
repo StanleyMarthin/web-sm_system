@@ -33,7 +33,16 @@ import { parseClipboardTsv } from "@/shared/datagrid/clipboard";
 import { parseSmsDurationMinutes, parseSmsReference } from "@/shared/datagrid/parsers";
 
 type PlannerMode = "planner" | "approval";
+type WorkMode = "normal" | "overtime" | "holiday_overtime";
 type PlannerRow = JobPlanV2DisplayRow | (JobPlanV2DisplayRow & JobPlanV2PlannerDraft & { editPlanId?: string; editVersion?: number });
+
+interface JobPlanDivisionOption {
+  value: string;
+  label: string;
+  code?: string | null;
+  isTeknis?: boolean | null;
+  isTechnical?: boolean | null;
+}
 
 interface JobPlanPlannerShellProps {
   userId: string;
@@ -44,6 +53,7 @@ interface JobPlanPlannerShellProps {
   initialMode: string | null;
   countdowns: JobPlanCountdownOption[];
   employees: JobPlanEmployeeOption[];
+  divisions: JobPlanDivisionOption[];
 }
 
 function toOptions(items: Array<{ value: string; label: string; code?: string | null }>): SmartSelectOption[] {
@@ -68,6 +78,15 @@ function contextForDraft(countdowns: JobPlanCountdownOption[], draft: Pick<JobPl
     ?? null;
 }
 
+function startTimeForWorkMode(workMode: WorkMode) {
+  if (workMode === "overtime") return "17:00";
+  return "08:00";
+}
+
+function isOvertimeMode(workMode: WorkMode) {
+  return workMode !== "normal";
+}
+
 function draftToDisplay(
   draft: JobPlanV2PlannerDraft,
   countdowns: JobPlanCountdownOption[],
@@ -85,6 +104,7 @@ function draftToDisplay(
   return {
     ...draft,
     planId: null,
+    workMode: draft.workMode,
     kpId: countdown?.kpId ?? null,
     kpName: countdown?.kpName ?? null,
     qaIds: countdown?.qaIds ?? [],
@@ -98,7 +118,7 @@ function draftToDisplay(
     durationText: draft.durationText,
     targetTotalText: minutesToDuration(Math.round((countdown?.targetTotalHours ?? duration / 60) * 60)),
     remainingText: minutesToDuration(Math.round((countdown?.remainingHours ?? 0) * 60)),
-    approval: "Draft",
+    approval: "Belum Disimpan",
     approvalState: "DRAFT",
     execution: "Belum Mulai",
     executionState: "NOT_STARTED",
@@ -114,7 +134,14 @@ function draftToDisplay(
 }
 
 function resolveOption(value: string, options: SmartSelectOption[], label: string) {
-  return parseSmsReference(value, options, label);
+  const exact = parseSmsReference(value, options, label);
+  if (!exact.error) return exact;
+  const query = value.trim().toLowerCase();
+  if (!query) return exact;
+  const matches = options.filter((option) => `${option.label} ${option.code ?? ""} ${option.value}`.toLowerCase().includes(query));
+  if (matches.length === 1) return { value: matches[0].value } as const;
+  if (matches.length > 1) return { value: null, error: `${label} "${value}" cocok ke beberapa pilihan.` } as const;
+  return exact;
 }
 
 function copyPlannerValue(row: PlannerRow, field: string) {
@@ -167,6 +194,7 @@ function numberValue(value: unknown) {
 }
 
 function statusLabel(row: PlannerRow) {
+  if (row.isNew || row.editPlanId) return "Belum Disimpan";
   if (row.executionState === "RUNNING") return "Berjalan";
   if (row.executionState === "HOLD") return "Hold";
   if (row.executionState === "FINISHED_PENDING_VALIDATION") return "Selesai";
@@ -357,6 +385,7 @@ export function JobPlanPlannerShell({
   initialMode,
   countdowns,
   employees,
+  divisions,
 }: JobPlanPlannerShellProps) {
   const [items, setItems] = useState<JobPlanV2ReadItem[]>([]);
   const [drafts, setDrafts] = useState<JobPlanV2PlannerDraft[]>([]);
@@ -375,13 +404,19 @@ export function JobPlanPlannerShell({
   const [statusFilter, setStatusFilter] = useState("");
   const sweetAlert = useSweetAlert();
   const selectedContext = useMemo(() => contextForCore(countdowns, initialCoreId), [countdowns, initialCoreId]);
-  const countdownDivisionOptions = useMemo(() => uniqueByValue(countdowns.map((item) => ({
-    value: String(item.divisionId ?? ""),
-    label: item.divisionName,
-  }))), [countdowns]);
+  const technicalDivisionOptions = useMemo(() => {
+    const fromReferences = divisions
+      .filter((item) => item.isTechnical === true || item.isTeknis === true)
+      .map((item) => ({ value: item.value, label: item.label }));
+    const fallback = [
+      ...employees.map((item) => ({ value: String(item.divisionId ?? ""), label: item.divisionName ?? "" })),
+      ...countdowns.map((item) => ({ value: String(item.divisionId ?? ""), label: item.divisionName })),
+    ];
+    return uniqueByValue((fromReferences.length > 0 ? fromReferences : fallback).filter((item) => item.value && item.label));
+  }, [countdowns, divisions, employees]);
 
   function teamOptions() {
-    return countdownDivisionOptions;
+    return technicalDivisionOptions;
   }
 
   function rowDivisionId(row: Partial<PlannerRow> | Partial<JobPlanV2PlannerDraft> | null | undefined) {
@@ -433,6 +468,12 @@ export function JobPlanPlannerShell({
       }));
   }
 
+  const workModeOptions = useMemo<SmartSelectOption[]>(() => [
+    { value: "normal", label: "Normal 08:00-17:00" },
+    { value: "overtime", label: "Lembur 17:00-22:00" },
+    { value: "holiday_overtime", label: "Lembur Libur 08:00-16:00" },
+  ], []);
+
   function normalizeDraftSelection(row: JobPlanV2PlannerDraft): JobPlanV2PlannerDraft {
     let next = { ...row };
     const divisionOptionsForRow = teamOptions();
@@ -471,7 +512,11 @@ export function JobPlanPlannerShell({
         jobDescription: countdown.jobName ?? countdown.label,
       };
     }
-    return { ...next, startTime: "08:00" };
+    return {
+      ...next,
+      startTime: startTimeForWorkMode(next.workMode),
+      isOvertime: isOvertimeMode(next.workMode),
+    };
   }
 
   async function load() {
@@ -664,6 +709,17 @@ export function JobPlanPlannerShell({
       filterValueGetter: ({ data }) => data ? joinDistinct([data.instructionText, data.note]) : "",
       valueFormatter: ({ data }) => data ? joinDistinct([data.instructionText, data.note]) : "",
     },
+    {
+      headerName: "MODE",
+      field: "workMode",
+      editable: ({ data }) => Boolean(data?.isNew || data?.editPlanId),
+      cellEditor: SmartSelectCellEditor,
+      cellEditorParams: { values: workModeOptions },
+      cellEditorPopup: true,
+      cellEditorPopupPosition: "under",
+      valueFormatter: ({ value }) => workModeOptions.find((option) => option.value === String(value ?? ""))?.label ?? "Normal 08:00-17:00",
+      minWidth: 135,
+    },
     { headerName: "TOTAL TARGET", field: "targetTotalText", editable: false, minWidth: 115 },
     { headerName: "SISA TARGET", field: "remainingText", editable: false, minWidth: 110 },
     { headerName: "TOTAL TARGET HARI INI", field: "durationText", editable: ({ data }) => Boolean(data?.isNew || data?.editPlanId), minWidth: 150 },
@@ -703,35 +759,44 @@ export function JobPlanPlannerShell({
       ) : null,
       pinned: "right",
     },
-  ], [countdowns, employees]);
+  ], [countdowns, employees, technicalDivisionOptions, workModeOptions]);
 
   function addDraft() {
     const draft = createJobPlanV2Draft(selectedContext);
-    setDrafts((current) => [...current, {
-      ...normalizeDraftSelection(draft),
+    const nextDraft = {
+      ...draft,
       taskDate: initialDate ?? draft.taskDate,
+      workMode: initialMode === "overtime" ? "overtime" : draft.workMode,
       isOvertime: initialMode === "overtime",
-    }]);
+    };
+    setDrafts((current) => [...current, normalizeDraftSelection(nextDraft)]);
   }
 
   function updateDraft(event: CellValueChangedEvent<PlannerRow>) {
     const row = event.data;
     if (!row.isNew && !row.editPlanId) return;
+    const field = event.column.getColId();
     const next = {
+      workMode: (String(row.workMode ?? "normal") as WorkMode),
       coreId: String(row.coreId ?? ""),
       divisionId: numberValue(row.divisionId),
       carId: String(row.carId ?? ""),
       panelId: numberValue(row.panelId),
       employeeId: String(row.employeeId ?? ""),
       taskDate: String(row.taskDate ?? ""),
-      startTime: "08:00",
+      startTime: String(row.startTime ?? ""),
       durationText: String(row.durationText ?? ""),
       jobDescription: String(row.jobDescription ?? ""),
       note: String(row.note ?? ""),
+      isOvertime: isOvertimeMode(String(row.workMode ?? "normal") as WorkMode),
+      isRework: false,
       isPriority: Boolean(row.isPriority),
       error: null,
     };
-    const field = event.column.getColId();
+    if (field === "workMode") {
+      next.startTime = startTimeForWorkMode(next.workMode);
+      next.isOvertime = isOvertimeMode(next.workMode);
+    }
     if (field === "divisionId") {
       next.carId = "";
       next.panelId = null;
@@ -770,9 +835,17 @@ export function JobPlanPlannerShell({
 
   async function handleGridKeyDown(event: CellKeyDownEvent<PlannerRow>) {
     const keyboardEvent = event.event as KeyboardEvent | undefined;
-    if (!keyboardEvent || (!keyboardEvent.ctrlKey && !keyboardEvent.metaKey)) return;
+    if (!keyboardEvent) return;
 
     const field = event.column.getColId();
+    if (keyboardEvent.key === "Enter" && canCreate && mode === "planner" && event.data?.isNew && (field === "durationText" || field === "note")) {
+      keyboardEvent.preventDefault();
+      addDraft();
+      return;
+    }
+
+    if (!keyboardEvent.ctrlKey && !keyboardEvent.metaKey) return;
+
     if (keyboardEvent.key.toLowerCase() === "c" && event.data) {
       const selectedRows = event.api.getSelectedRows();
       const copyRows = selectedRows.length > 1 ? selectedRows : [event.data];
@@ -787,7 +860,7 @@ export function JobPlanPlannerShell({
     if (!text) return;
 
     keyboardEvent.preventDefault();
-    const editableFields = ["divisionId", "employeeId", "carId", "panelId", "coreId", "note", "durationText"];
+    const editableFields = ["divisionId", "employeeId", "carId", "panelId", "coreId", "note", "workMode", "durationText"];
     const startField = editableFields.includes(field) ? field : "employeeId";
     const startFieldIndex = Math.max(0, editableFields.indexOf(startField));
     const matrix = parseClipboardTsv(text);
@@ -848,6 +921,13 @@ export function JobPlanPlannerShell({
         if (targetField === "durationText") {
           const parsed = parseSmsDurationMinutes(rawValue, "Durasi");
           draft = parsed.error ? { ...draft, error: parsed.error } : { ...draft, durationText: rawValue.trim() };
+        }
+        if (targetField === "workMode") {
+          const parsed = resolveOption(rawValue, workModeOptions, "Mode");
+          draft = parsed.error ? { ...draft, error: parsed.error } : {
+            ...draft,
+            workMode: (parsed.value ?? "normal") as WorkMode,
+          };
         }
         if (targetField === "note") {
           draft = { ...draft, note: rawValue.trim() };
