@@ -1,6 +1,6 @@
 import { DEVICE_COOKIE_NAME, REFRESH_COOKIE_NAME } from "@smsystem/contracts/auth";
 import type { AuthUser, LoginRequest } from "@smsystem/contracts/auth";
-import type { AuthContextRepository } from "@/repositories/auth-context.repo";
+import type { AuthContextRepository } from "@/repositories/auth-context/auth-context.repo";
 import type { AuditService } from "@/services/audit/audit.service";
 import type { SessionStore, WebSession } from "@/services/auth/session.service";
 import type {

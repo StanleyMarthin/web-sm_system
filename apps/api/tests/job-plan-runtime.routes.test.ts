@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import type { AuthService } from "@/services/auth/auth.service";
 import type { WebSession } from "@/services/auth/session.service";
-import { handleJobPlanRuntimeProxyRoute } from "../src/routes/job-plan-runtime.routes";
+import { handleJobPlanRuntimeProxyRoute } from "../src/routes/job-plan/job-plan-runtime.routes";
 
 const session = {
   user: {

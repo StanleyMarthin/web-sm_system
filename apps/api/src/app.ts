@@ -1,6 +1,6 @@
 import { handleHealthRequest, type HealthDependencies } from "@/health/service";
-import { MySqlAuthContextRepository } from "@/repositories/auth-context.repo";
-import { MySqlAuditRepository } from "@/repositories/audit.repo";
+import { MySqlAuthContextRepository } from "@/repositories/auth-context/auth-context.repo";
+import { MySqlAuditRepository } from "@/repositories/audit/audit.repo";
 import { DefaultAuditService } from "@/services/audit/audit.service";
 import { DefaultAuthService, type AuthService } from "@/services/auth/auth.service";
 import { RedisSessionStore } from "@/services/auth/session.service";
@@ -11,11 +11,11 @@ import {
   handleMeRoute,
   handlePermissionsRoute,
   handleRefreshRoute,
-} from "@/routes/auth.routes";
+} from "@/routes/auth/auth.routes";
 import {
   handleDashboardBootstrapRoute,
   handleDashboardSummaryRoute,
-} from "@/routes/dashboard.routes";
+} from "@/routes/dashboard/dashboard.routes";
 import { preflightResponse, withSecurityHeaders } from "@/http/response";
 import {
   handleUsersCreateRoute,
@@ -28,10 +28,10 @@ import {
   handleProfileAvatarUploadRoute,
   handleProfileUpdateRoute,
   handleProfilePasswordRoute,
-} from "@/routes/users.routes";
-import { DefaultUsersService, type UsersService } from "@/services/users.service";
-import { handleImageProxyRoute } from "@/routes/proxy.routes";
-import { handleNotificationsRoute } from "@/routes/notification.routes";
+} from "@/routes/users/users.routes";
+import { DefaultUsersService, type UsersService } from "@/services/users/users.service";
+import { handleImageProxyRoute } from "@/routes/proxy/proxy.routes";
+import { handleNotificationsRoute } from "@/routes/notifications/notification.routes";
 import {
   handlePermissionsListRoute,
   handleRolesReferencesRoute,
@@ -40,7 +40,7 @@ import {
   handleRolesCreateRoute,
   handleRolesListRoute,
   handleRolesUpdateRoute,
-} from "@/routes/roles.routes";
+} from "@/routes/roles/roles.routes";
 import {
   handleDivisionCreateRoute,
   handleDivisionDeleteRoute,
@@ -50,8 +50,8 @@ import {
   handleGeneralJobTypeCreateRoute,
   handleJobTypeDeleteRoute,
   handleJobTypeUpdateRoute,
-} from "@/routes/division-management.routes";
-import { DefaultRolesService, type RolesService } from "@/services/roles.service";
+} from "@/routes/division-management/division-management.routes";
+import { DefaultRolesService, type RolesService } from "@/services/roles/roles.service";
 import {
   handleUnitBomRoute,
   handleUnitDetailRoute,
@@ -62,8 +62,8 @@ import {
   handleUnitWorkspaceRoute,
   handleUnitsListRoute,
   handleUnitClientsRoute,
-} from "@/routes/units.routes";
-import { DefaultUnitsService, type UnitsService } from "@/services/units.service";
+} from "@/routes/units/units.routes";
+import { DefaultUnitsService, type UnitsService } from "@/services/units/units.service";
 import {
   handleCatalogComponentPanelsRoute,
   handleCatalogComponentPanelsBatchRoute,
@@ -87,8 +87,8 @@ import {
   handleUnitCatalogSurveyConfirmRoute,
   handleUnitCatalogSurveyRoute,
   handleUnitCatalogUploadTicketRoute,
-} from "@/routes/unit-catalog.routes";
-import { UnitCatalogService } from "@/services/unit-catalog.service";
+} from "@/routes/units/unit-catalog.routes";
+import { UnitCatalogService } from "@/services/units/unit-catalog.service";
 import {
   handleCountdownCreateRoute,
   handleCountdownDeleteRoute,
@@ -100,7 +100,7 @@ import {
   handleCountdownRevisionRequestRoute,
   handleCountdownTemplateRoute,
   handleCountdownUpdateRoute,
-} from "@/routes/countdown.routes";
+} from "@/routes/countdown/countdown.routes";
 import {
   handleJobPlanBulkCreateRoute,
   handleJobPlanAdditionalCountdownCreateRoute,
@@ -117,20 +117,20 @@ import {
   handleJobPlanTodayRoute,
   handleJobPlanUpdateRoute,
   handleJobPlanWorkspaceCreateRoute,
-} from "@/routes/job-plan.routes";
-import { handleJobPlanRuntimeProxyRoute } from "@/routes/job-plan-runtime.routes";
+} from "@/routes/job-plan/job-plan.routes";
+import { handleJobPlanRuntimeProxyRoute } from "@/routes/job-plan/job-plan-runtime.routes";
 import {
   handleWorkflowLayoutGetRoute,
   handleWorkflowLayoutSaveRoute,
-} from "@/routes/workflow-layout.routes";
+} from "@/routes/workflow-layout/workflow-layout.routes";
 import {
   DefaultCountdownService,
   type CountdownService,
-} from "@/services/countdown.service";
+} from "@/services/countdown/countdown.service";
 import {
   DefaultJobPlanService,
   type JobPlanService,
-} from "@/services/job-plan.service";
+} from "@/services/job-plan/job-plan.service";
 import {
   handleSpkActivateRoute,
   handleSpkApproveRoute,
@@ -145,11 +145,11 @@ import {
   handleSpkSubmitRoute,
   handleSpkSummaryRoute,
   handleSpkTodayRoute,
-} from "@/routes/spk.routes";
+} from "@/routes/spk/spk.routes";
 import {
   DefaultSpkService,
   type SpkService,
-} from "@/services/spk.service";
+} from "@/services/spk/spk.service";
 import {
   handleWoApproveRoute,
   handleWoCreateRoute,
@@ -162,11 +162,11 @@ import {
   handleWoRejectRoute,
   handleWoUpdateRoute,
   handleWoUrgentRoute,
-} from "@/routes/wo.routes";
+} from "@/routes/wo/wo.routes";
 import {
   DefaultWoService,
   type WoService,
-} from "@/services/wo.service";
+} from "@/services/wo/wo.service";
 import {
   handlePrApproveRoute,
   handlePrCancelRoute,
@@ -178,11 +178,11 @@ import {
   handlePrReceiveRoute,
   handlePrUploadTicketRoute,
   handlePrUpdateRoute,
-} from "@/routes/pr.routes";
+} from "@/routes/pr/pr.routes";
 import {
   DefaultPrService,
   type PrService,
-} from "@/services/pr.service";
+} from "@/services/pr/pr.service";
 import {
   handleCalendarDayOverrideListRoute,
   handleCalendarDayOverrideUpsertRoute,
@@ -193,11 +193,11 @@ import {
   handleWeeklyConfigListRoute,
   handleWeeklyConfigUpsertRoute,
   handleWorkingDaysRoute,
-} from "@/routes/calendar.routes";
+} from "@/routes/calendar/calendar.routes";
 import {
   DefaultCalendarService,
   type CalendarService,
-} from "@/services/calendar.service";
+} from "@/services/calendar/calendar.service";
 import {
   handleWeeklyPlanAlertsRoute,
   handleWeeklyPlanDetailRoute,
@@ -208,8 +208,8 @@ import {
   handleWeeklyPlanSnapshotAbsenceRoute,
   handleWeeklyPlanUnitsRoute,
   handleWeeklyPlanUpsertRoute,
-} from "@/routes/planning.routes";
-import { handlePlanningWorkspaceSummaryRoute } from "@/routes/planning-workspace.routes";
+} from "@/routes/planning/planning.routes";
+import { handlePlanningWorkspaceSummaryRoute } from "@/routes/planning/planning-workspace.routes";
 import {
   handleWorkControlCapacityRoute,
   handleWorkControlCreateTargetRoute,
@@ -222,24 +222,24 @@ import {
   handleWorkControlServiceTemplatesRoute,
   handleWorkControlUnitProgressRoute,
   handleWorkControlUnitsRoute,
-} from "@/routes/planning-work-control.routes";
+} from "@/routes/planning/planning-work-control.routes";
 import {
   DefaultWeeklyPlanningService,
   type WeeklyPlanningService,
-} from "@/services/planning.service";
+} from "@/services/planning/planning.service";
 import {
   DefaultPlanningWorkspaceService,
   type PlanningWorkspaceService,
-} from "@/services/planning-workspace.service";
+} from "@/services/planning/planning-workspace.service";
 import {
   DefaultPlanningWorkControlService,
   type PlanningWorkControlService,
-} from "@/services/planning-work-control.service";
-import { handlePlanningEvaluationRoute } from "@/routes/planning-evaluation.routes";
+} from "@/services/planning/planning-work-control.service";
+import { handlePlanningEvaluationRoute } from "@/routes/planning/planning-evaluation.routes";
 import {
   DefaultPlanningEvaluationService,
   type PlanningEvaluationService,
-} from "@/services/planning-evaluation.service";
+} from "@/services/planning/planning-evaluation.service";
 import {
   handleIssuesAcknowledgeRoute,
   handleIssuesAssignRoute,
@@ -253,11 +253,11 @@ import {
   handleIssuesUrgentRoute,
   handleIssuesWaiveRoute,
   handleIssuesEscalateRoute,
-} from "@/routes/issues.routes";
+} from "@/routes/issues/issues.routes";
 import {
   DefaultIssuesService,
   type IssuesService,
-} from "@/services/issues.service";
+} from "@/services/issues/issues.service";
 import {
   handleMonitoringDivisionDetailRoute,
   handleMonitoringDivisionRoute,
@@ -269,11 +269,11 @@ import {
   handleMonitoringNoSubmitRoute,
   handleMonitoringOvertimeRoute,
   handleMonitoringTodayRoute,
-} from "@/routes/monitoring.routes";
+} from "@/routes/monitoring/monitoring.routes";
 import {
   DefaultMonitoringService,
   type MonitoringService,
-} from "@/services/monitoring.service";
+} from "@/services/monitoring/monitoring.service";
 import {
   handleQcDetailRoute,
   handleQcFinalChecklistApproveRoute,
@@ -283,19 +283,19 @@ import {
   handleQcRecheckRoute,
   handleQcRejectRoute,
   handleQcReworkRoute,
-} from "@/routes/qc.routes";
+} from "@/routes/qc/qc.routes";
 import {
   DefaultQcService,
   type QcService,
-} from "@/services/qc.service";
+} from "@/services/qc/qc.service";
 import {
   handleQaInspectionUpdateRoute,
   handleQaPortalRoute,
-} from "@/routes/qa.routes";
+} from "@/routes/qa/qa.routes";
 import {
   DefaultQaService,
   type QaService,
-} from "@/services/qa.service";
+} from "@/services/qa/qa.service";
 import {
   handleVendorApproveRoute,
   handleVendorCancelRoute,
@@ -305,11 +305,11 @@ import {
   handleVendorReceiveRoute,
   handleVendorStatusRoute,
   handleVendorUpdateRoute,
-} from "@/routes/vendor.routes";
+} from "@/routes/vendor/vendor.routes";
 import {
   DefaultVendorService,
   type VendorService,
-} from "@/services/vendor.service";
+} from "@/services/vendor/vendor.service";
 import {
   handleWarehouseApproveRoute,
   handleWarehouseIssueRoute,
@@ -342,19 +342,19 @@ import {
   handleWarehouseStoreRoute,
   handleWarehouseStorageLocationsRoute,
   handleWarehouseTransactionsRoute,
-} from "@/routes/warehouse.routes";
+} from "@/routes/warehouse/warehouse.routes";
 import {
   DefaultWarehouseService,
   type WarehouseService,
-} from "@/services/warehouse.service";
+} from "@/services/warehouse/warehouse.service";
 import {
   handleReportsExportRoute,
   handleReportsGridRoute,
-} from "@/routes/reports.routes";
+} from "@/routes/reports/reports.routes";
 import {
   DefaultReportsService,
   type ReportsService,
-} from "@/services/reports.service";
+} from "@/services/reports/reports.service";
 import {
   handleBubutInvoiceCancelRoute,
   handleBubutInvoiceDetailRoute,
@@ -364,11 +364,11 @@ import {
   handleBubutInvoiceUpdateRoute,
   handleBubutInvoiceWorkHistoryRoute,
   handleBubutInvoiceWorkOrdersRoute,
-} from "@/routes/bubut-invoice.routes";
+} from "@/routes/bubut-invoice/bubut-invoice.routes";
 import {
   DefaultBubutInvoiceService,
   type BubutInvoiceService,
-} from "@/services/bubut-invoice.service";
+} from "@/services/bubut-invoice/bubut-invoice.service";
 import {
   handleGalleryCreatePhotoRoute,
   handleGalleryDeletePhotoRoute,
@@ -376,15 +376,15 @@ import {
   handleGalleryPhotosRoute,
   handleGalleryUpdatePhotoRoute,
   handleGalleryUploadTicketRoute,
-} from "@/routes/gallery.routes";
+} from "@/routes/gallery/gallery.routes";
 import {
   DefaultGalleryService,
   type GalleryService,
-} from "@/services/gallery.service";
+} from "@/services/gallery/gallery.service";
 import {
   DefaultDashboardService,
   type DashboardService,
-} from "@/services/dashboard.service";
+} from "@/services/dashboard/dashboard.service";
 import { reportTypeSchema } from "@smsystem/contracts/reports";
 import { enforceSecurityRateLimit } from "@/security/rate-limit";
 import { enforceCsrfProtection } from "@/security/csrf";
@@ -494,6 +494,7 @@ export function createApiFetchHandler(dependencies: AppDependencies = {}) {
     dependencies.galleryService ?? new DefaultGalleryService();
 
   const routes: AppRoute[] = [
+    // Session and profile
     { method: "POST", pattern: "/api/auth/login", handler: (request) => handleLoginRoute(request, getAuthService()) },
     { method: "POST", pattern: "/api/auth/logout", handler: (request) => handleLogoutRoute(request, getAuthService()) },
     { method: "POST", pattern: "/api/auth/refresh", handler: (request) => handleRefreshRoute(request, getAuthService()) },
@@ -502,10 +503,16 @@ export function createApiFetchHandler(dependencies: AppDependencies = {}) {
     { method: "PUT", pattern: "/api/profile/me", handler: (request) => handleProfileUpdateRoute(request, getAuthService()) },
     { method: "POST", pattern: "/api/profile/password", handler: (request) => handleProfilePasswordRoute(request, getAuthService()) },
     { method: "GET", pattern: "/api/auth/permissions", handler: (request) => handlePermissionsRoute(request, getAuthService()) },
+
+    // Dashboard
     { method: "GET", pattern: "/api/dashboard/bootstrap", handler: (request) => handleDashboardBootstrapRoute(request, getAuthService()) },
     { method: "GET", pattern: "/api/dashboard/summary", handler: (request) => handleDashboardSummaryRoute(request, getAuthService(), getDashboardService()) },
+
+    // Utilities
     { method: "GET", pattern: "/api/proxy/image", handler: (request) => handleImageProxyRoute(request, getAuthService()) },
     { method: "GET", pattern: "/api/notifications", handler: (request) => handleNotificationsRoute(request, getAuthService()) },
+
+    // Users
     { method: "GET", pattern: "/api/users", handler: (request) => handleUsersListRoute(request, getAuthService(), getUsersService()) },
     { method: "POST", pattern: "/api/users", handler: (request) => handleUsersCreateRoute(request, getAuthService(), getUsersService()) },
     { method: "GET", pattern: "/api/users/export", handler: (request) => handleUsersExportRoute(request, getAuthService(), getUsersService()) },
@@ -513,8 +520,12 @@ export function createApiFetchHandler(dependencies: AppDependencies = {}) {
     { method: "PUT", pattern: /^\/api\/users\/([^/]+)$/, handler: (request, match) => handleUsersUpdateRoute(request, match![1], getAuthService(), getUsersService()) },
     { method: "POST", pattern: /^\/api\/users\/([^/]+)\/reset-password$/, handler: (request, match) => handleUsersResetPasswordRoute(request, match![1], getAuthService(), getUsersService()) },
     { method: "POST", pattern: /^\/api\/users\/([^/]+)\/deactivate$/, handler: (request, match) => handleUsersDeactivateRoute(request, match![1], getAuthService(), getUsersService()) },
+
+    // Roles and permissions
     { method: "GET", pattern: "/api/roles", handler: (request) => handleRolesListRoute(request, getAuthService(), getRolesService()) },
     { method: "GET", pattern: "/api/roles/references", handler: (request) => handleRolesReferencesRoute(request, getAuthService(), getRolesService()) },
+
+    // Admin master data
     { method: "GET", pattern: "/api/admin/divisions", handler: (request) => handleDivisionManagementListRoute(request, getAuthService()) },
     { method: "POST", pattern: "/api/admin/divisions", handler: (request) => handleDivisionCreateRoute(request, getAuthService()) },
     { method: "POST", pattern: "/api/admin/job-types", handler: (request) => handleGeneralJobTypeCreateRoute(request, getAuthService()) },
@@ -531,17 +542,25 @@ export function createApiFetchHandler(dependencies: AppDependencies = {}) {
     { method: "PUT", pattern: /^\/api\/roles\/(\d+)\/permissions$/, handler: (request, match) => handleRolePermissionsUpdateRoute(request, Number.parseInt(match![1], 10), getAuthService(), getRolesService()) },
     { method: "PUT", pattern: /^\/api\/roles\/(\d+)$/, handler: (request, match) => handleRolesUpdateRoute(request, Number.parseInt(match![1], 10), getAuthService(), getRolesService()) },
     { method: "PATCH", pattern: /^\/api\/roles\/(\d+)$/, handler: (request, match) => handleRolesUpdateRoute(request, Number.parseInt(match![1], 10), getAuthService(), getRolesService()) },
+
+    // Units
     { method: "GET", pattern: "/api/units", handler: (request) => handleUnitsListRoute(request, getAuthService(), getUnitsService()) },
     { method: "GET", pattern: "/api/units/clients", handler: (request) => handleUnitClientsRoute(request, getAuthService(), getUnitsService()) },
     { method: "POST", pattern: "/api/units", handler: (request) => handleUnitsListRoute(request, getAuthService(), getUnitsService()) },
+
+    // Countdown
     { method: "GET", pattern: "/api/countdown", handler: (request) => handleCountdownListRoute(request, getAuthService(), getCountdownService()) },
     { method: "GET", pattern: "/api/countdown/download", handler: (request) => handleCountdownDownloadRoute(request, getAuthService(), getCountdownService()) },
     { method: "POST", pattern: /^\/api\/countdown\/([^/]+)\/revision$/, handler: (request, match) => handleCountdownRevisionRequestRoute(request, match![1], getAuthService(), getCountdownService()) },
     { method: "PUT", pattern: /^\/api\/countdown\/([^/]+)\/revision\/approval$/, handler: (request, match) => handleCountdownRevisionApprovalRoute(request, match![1], getAuthService(), getCountdownService()) },
     { method: "POST", pattern: "/api/countdown", handler: (request) => handleCountdownCreateRoute(request, getAuthService(), getCountdownService()) },
+
+    // Job Plan
     { method: "GET", pattern: "/api/job-plan", handler: (request) => handleJobPlanListRoute(request, getAuthService(), getJobPlanService()) },
     { method: "GET", pattern: "/api/job-plan-runtime", handler: (request) => handleJobPlanRuntimeProxyRoute(request, "", getAuthService()) },
     { method: "POST", pattern: "/api/job-plan-runtime", handler: (request) => handleJobPlanRuntimeProxyRoute(request, "", getAuthService()) },
+
+    // Monitoring
     { method: "GET", pattern: "/api/monitoring/today", handler: (request) => handleMonitoringTodayRoute(request, getAuthService(), getMonitoringService()) },
     { method: "GET", pattern: "/api/monitoring/division", handler: (request) => handleMonitoringDivisionRoute(request, getAuthService(), getMonitoringService()) },
     { method: "GET", pattern: "/api/monitoring/unit", handler: (request) => handleMonitoringUnitRoute(request, getAuthService(), getMonitoringService()) },
@@ -552,12 +571,18 @@ export function createApiFetchHandler(dependencies: AppDependencies = {}) {
     { method: "GET", pattern: "/api/monitoring/overtime", handler: (request) => handleMonitoringOvertimeRoute(request, getAuthService(), getMonitoringService()) },
     { method: "GET", pattern: "/api/monitoring/no-start", handler: (request) => handleMonitoringNoStartRoute(request, getAuthService(), getMonitoringService()) },
     { method: "GET", pattern: "/api/monitoring/no-submit", handler: (request) => handleMonitoringNoSubmitRoute(request, getAuthService(), getMonitoringService()) },
+
+    // Issues
     { method: "GET", pattern: "/api/issues", handler: (request) => handleIssuesListRoute(request, getAuthService(), getIssuesService()) },
     { method: "POST", pattern: "/api/issues", handler: (request) => handleIssuesCreateRoute(request, getAuthService(), getIssuesService()) },
     { method: "GET", pattern: "/api/issues/urgent", handler: (request) => handleIssuesUrgentRoute(request, getAuthService(), getIssuesService()) },
+
+    // Gallery
     { method: "GET", pattern: "/api/gallery", handler: (request) => handleGalleryListRoute(request, getAuthService(), getGalleryService()) },
     { method: "GET", pattern: "/api/gallery/upload-ticket", handler: (request) => handleGalleryUploadTicketRoute(request, getAuthService(), getGalleryService()) },
     { method: "POST", pattern: "/api/gallery/photos", handler: (request) => handleGalleryCreatePhotoRoute(request, getAuthService(), getGalleryService()) },
+
+    // Calendar
     { method: "GET", pattern: "/api/calendar/weekly-config", handler: (request) => handleWeeklyConfigListRoute(request, getAuthService(), getCalendarService()) },
     { method: "POST", pattern: "/api/calendar/weekly-config", handler: (request) => handleWeeklyConfigUpsertRoute(request, getAuthService(), getCalendarService()) },
     { method: "GET", pattern: "/api/calendar/working-days", handler: (request) => handleWorkingDaysRoute(request, getAuthService(), getCalendarService()) },
@@ -565,6 +590,8 @@ export function createApiFetchHandler(dependencies: AppDependencies = {}) {
     { method: "POST", pattern: "/api/calendar/day-overrides", handler: (request) => handleCalendarDayOverrideUpsertRoute(request, getAuthService(), getCalendarService()) },
     { method: "POST", pattern: "/api/calendar/holiday-sync", handler: (request) => handleHolidaySyncRoute(request, getAuthService(), getCalendarService()) },
     { method: "POST", pattern: "/api/calendar/simulate-capacity", handler: (request) => handleCapacityPreviewRoute(request, getAuthService(), getCalendarService()) },
+
+    // Planning
     { method: "GET", pattern: "/api/planning/delivery-risk", handler: (request) => handleDeliveryRiskRoute(request, getAuthService(), getCalendarService()) },
     { method: "GET", pattern: "/api/planning/workspace", handler: (request) => handlePlanningWorkspaceSummaryRoute(request, getAuthService(), getPlanningWorkspaceService()) },
     { method: "GET", pattern: "/api/planning/work-control/units", handler: (request) => handleWorkControlUnitsRoute(request, getAuthService(), getPlanningWorkControlService()) },
@@ -580,6 +607,8 @@ export function createApiFetchHandler(dependencies: AppDependencies = {}) {
     { method: "POST", pattern: "/api/planning/work-control/labour-overrides", handler: (request) => handleWorkControlLabourOverrideRoute(request, getAuthService(), getPlanningWorkControlService()) },
     { method: "GET", pattern: "/api/planning/evaluation", handler: (request) => handlePlanningEvaluationRoute(request, getAuthService(), getPlanningEvaluationService()) },
     { method: "POST", pattern: "/api/planning/weekly-plan", handler: (request) => handleWeeklyPlanUpsertRoute(request, getAuthService(), getPlanningService()) },
+
+    // Job Plan exports and drafts
     { method: "GET", pattern: "/api/job-plan/export", handler: (request) => handleJobPlanExportRoute(request, getAuthService(), getJobPlanService()) },
     { method: "GET", pattern: /^\/api\/units\/([^/]+)\/workflow-layout\/([^/]+)$/, handler: (request, match) => handleWorkflowLayoutGetRoute(request, decodeURIComponent(match![1]), decodeURIComponent(match![2]), getAuthService()) },
     { method: "PUT", pattern: /^\/api\/units\/([^/]+)\/workflow-layout\/([^/]+)$/, handler: (request, match) => handleWorkflowLayoutSaveRoute(request, decodeURIComponent(match![1]), decodeURIComponent(match![2]), getAuthService()) },
@@ -593,22 +622,32 @@ export function createApiFetchHandler(dependencies: AppDependencies = {}) {
     { method: "POST", pattern: "/api/job-plan/draft", handler: (request) => handleJobPlanDraftSaveRoute(request, getAuthService(), getJobPlanService()) },
     { method: "POST", pattern: "/api/job-plan/draft/submit", handler: (request) => handleJobPlanDraftSubmitRoute(request, getAuthService(), getJobPlanService()) },
     { method: "POST", pattern: "/api/job-plan/draft/delete", handler: (request) => handleJobPlanDraftDeleteRoute(request, getAuthService(), getJobPlanService()) },
+
+    // SPK
     { method: "GET", pattern: "/api/spk", handler: (request) => handleSpkListRoute(request, getAuthService(), getSpkService()) },
     { method: "GET", pattern: "/api/spk/preview", handler: (request) => handleSpkPreviewRoute(request, getAuthService(), getSpkService()) },
     { method: "POST", pattern: "/api/spk/generate", handler: (request) => handleSpkGenerateRoute(request, getAuthService(), getSpkService()) },
     { method: "GET", pattern: "/api/spk/today", handler: (request) => handleSpkTodayRoute(request, getAuthService(), getSpkService()) },
     { method: "GET", pattern: "/api/spk/summary", handler: (request) => handleSpkSummaryRoute(request, getAuthService(), getSpkService()) },
+
+    // Work Order
     { method: "GET", pattern: "/api/wo", handler: (request) => handleWoListRoute(request, getAuthService(), getWoService()) },
     { method: "GET", pattern: "/api/wo/pending-approval", handler: (request) => handleWoPendingApprovalRoute(request, getAuthService(), getWoService()) },
     { method: "GET", pattern: "/api/wo/my-division", handler: (request) => handleWoMyDivisionRoute(request, getAuthService(), getWoService()) },
     { method: "GET", pattern: "/api/wo/urgent", handler: (request) => handleWoUrgentRoute(request, getAuthService(), getWoService()) },
     { method: "POST", pattern: "/api/wo", handler: (request) => handleWoCreateRoute(request, getAuthService(), getWoService()) },
+
+    // Purchase Request
     { method: "GET", pattern: "/api/pr/upload-ticket", handler: (request) => handlePrUploadTicketRoute(request, getAuthService()) },
     { method: "GET", pattern: "/api/pr", handler: (request) => handlePrListRoute(request, getAuthService(), getPrService()) },
     { method: "GET", pattern: "/api/pr/critical", handler: (request) => handlePrCriticalRoute(request, getAuthService(), getPrService()) },
     { method: "POST", pattern: "/api/pr", handler: (request) => handlePrCreateRoute(request, getAuthService(), getPrService()) },
+
+    // Vendor WO
     { method: "GET", pattern: "/api/vendor", handler: (request) => handleVendorListRoute(request, getAuthService(), getVendorService()) },
     { method: "POST", pattern: "/api/vendor", handler: (request) => handleVendorCreateRoute(request, getAuthService(), getVendorService()) },
+
+    // Warehouse
     { method: "GET", pattern: "/api/warehouse/transactions", handler: (request) => handleWarehouseTransactionsRoute(request, getAuthService(), getWarehouseService()) },
     { method: "GET", pattern: "/api/warehouse/dashboard", handler: (request) => handleWarehouseDashboardRoute(request, getAuthService(), getWarehouseService()) },
     { method: "GET", pattern: "/api/warehouse/pending-approval", handler: (request) => handleWarehousePendingApprovalRoute(request, getAuthService(), getWarehouseService()) },
@@ -624,11 +663,15 @@ export function createApiFetchHandler(dependencies: AppDependencies = {}) {
     { method: "GET", pattern: "/api/warehouse/storage-locations", handler: (request) => handleWarehouseStorageLocationsRoute(request, getAuthService(), getWarehouseService()) },
     { method: "GET", pattern: "/api/warehouse/opname", handler: (request) => handleWarehouseStockOpnameRoute(request, getAuthService(), getWarehouseService()) },
     { method: "GET", pattern: "/api/warehouse/adjustments", handler: (request) => handleWarehouseStockAdjustmentRoute(request, getAuthService(), getWarehouseService()) },
+
+    // Bubut Invoice
     { method: "GET", pattern: "/api/bubut-invoices/work-orders", handler: (request) => handleBubutInvoiceWorkOrdersRoute(request, getAuthService(), getBubutInvoiceService()) },
     { method: "POST", pattern: "/api/bubut-invoices/preview", handler: (request) => handleBubutInvoicePreviewRoute(request, getAuthService(), getBubutInvoiceService()) },
     { method: "POST", pattern: "/api/bubut-invoices/release", handler: (request) => handleBubutInvoiceReleaseRoute(request, getAuthService(), getBubutInvoiceService()) },
     { method: "GET", pattern: /^\/api\/wo-bubut-invoice\/([^/]+)\/work-history$/u, handler: (request, match) => handleBubutInvoiceWorkHistoryRoute(request, match![1], getAuthService(), getBubutInvoiceService()) },
     { method: "GET", pattern: /^\/api\/bubut-invoices\/([^/]+)\/work-history$/u, handler: (request, match) => handleBubutInvoiceWorkHistoryRoute(request, match![1], getAuthService(), getBubutInvoiceService()) },
+
+    // Reports
     { method: "GET", pattern: /^\/api\/reports\/([^/]+)\/export$/u, handler: (request, match) => {
       const reportType = reportTypeSchema.safeParse(match![1]);
       return reportType.success
@@ -645,6 +688,8 @@ export function createApiFetchHandler(dependencies: AppDependencies = {}) {
     { method: "GET", pattern: /^\/api\/bubut-invoices\/(\d+)\/print$/u, handler: (request, match) => handleBubutInvoicePrintRoute(request, Number(match![1]), getAuthService(), getBubutInvoiceService()) },
     { method: "PATCH", pattern: /^\/api\/bubut-invoices\/(\d+)\/cancel$/u, handler: (request, match) => handleBubutInvoiceCancelRoute(request, Number(match![1]), getAuthService(), getBubutInvoiceService()) },
     { method: "GET", pattern: /^\/api\/bubut-invoices\/(\d+)$/u, handler: (request, match) => handleBubutInvoiceDetailRoute(request, Number(match![1]), getAuthService(), getBubutInvoiceService()) },
+
+    // Warehouse actions
     { method: "POST", pattern: "/api/warehouse/request", handler: (request) => handleWarehouseRequestCreateRoute(request, getAuthService(), getWarehouseService()) },
     { method: "POST", pattern: "/api/warehouse/approve", handler: (request) => handleWarehouseApproveRoute(request, getAuthService(), getWarehouseService()) },
     { method: "POST", pattern: "/api/warehouse/reject", handler: (request) => handleWarehouseRejectRoute(request, getAuthService(), getWarehouseService()) },
@@ -661,17 +706,23 @@ export function createApiFetchHandler(dependencies: AppDependencies = {}) {
     { method: "DELETE", pattern: /^\/api\/warehouse\/storage-locations\/(\d+)$/u, handler: (request, match) => handleWarehouseStorageLocationDeleteRoute(request, Number(match![1]), getAuthService(), getWarehouseService()) },
     { method: "POST", pattern: "/api/warehouse/opname", handler: (request) => handleWarehouseStockOpnameCreateRoute(request, getAuthService(), getWarehouseService()) },
     { method: "POST", pattern: "/api/warehouse/adjustments", handler: (request) => handleWarehouseStockAdjustmentCreateRoute(request, getAuthService(), getWarehouseService()) },
+
+    // QA/QC
     { method: "GET", pattern: "/api/qc/queue", handler: (request) => handleQcQueueRoute(request, getAuthService(), getQcService()) },
     { method: "GET", pattern: "/api/qc/rework", handler: (request) => handleQcReworkRoute(request, getAuthService(), getQcService()) },
     { method: "GET", pattern: "/api/qc/recheck", handler: (request) => handleQcRecheckRoute(request, getAuthService(), getQcService()) },
     { method: "GET", pattern: "/api/qa/inspections", handler: (request) => handleQaPortalRoute(request, getAuthService(), getQaService()) },
     { method: "GET", pattern: "/api/countdown/template", handler: (request) => handleCountdownTemplateRoute(request, getAuthService(), getCountdownService()) },
+
+    // Job Plan detail actions
     { method: "PATCH", pattern: /^\/api\/job-plan\/([^/]+)\/status$/, handler: (request, match) => handleJobPlanStatusRoute(request, match![1], getAuthService(), getJobPlanService()) },
     { method: "GET", pattern: /^\/api\/job-plan-runtime\/(.+)$/, handler: (request, match) => handleJobPlanRuntimeProxyRoute(request, match![1], getAuthService()) },
     { method: "POST", pattern: /^\/api\/job-plan-runtime\/(.+)$/, handler: (request, match) => handleJobPlanRuntimeProxyRoute(request, match![1], getAuthService()) },
     { method: "PUT", pattern: /^\/api\/job-plan-runtime\/(.+)$/, handler: (request, match) => handleJobPlanRuntimeProxyRoute(request, match![1], getAuthService()) },
     { method: "PUT", pattern: /^\/api\/job-plan\/([^/]+)$/, handler: (request, match) => handleJobPlanUpdateRoute(request, match![1], getAuthService(), getJobPlanService()) },
     { method: "DELETE", pattern: /^\/api\/job-plan\/([^/]+)$/, handler: (request, match) => handleJobPlanDeleteRoute(request, match![1], getAuthService(), getJobPlanService()) },
+
+    // SPK detail actions
     { method: "PATCH", pattern: /^\/api\/spk\/([^/]+)\/item\/([^/]+)$/, handler: (request, match) => handleSpkItemApprovalRoute(request, match![1], match![2], getAuthService(), getSpkService()) },
     { method: "PATCH", pattern: /^\/api\/spk\/([^/]+)\/draft-details$/, handler: (request, match) => handleSpkDraftDetailsRoute(request, match![1], getAuthService(), getSpkService()) },
     { method: "PATCH", pattern: /^\/api\/spk\/([^/]+)\/(submit|approve|reject|activate|done)$/, handler: (request, match) => {
@@ -685,6 +736,8 @@ export function createApiFetchHandler(dependencies: AppDependencies = {}) {
       return handlers[match![2] as keyof typeof handlers](request, match![1], getAuthService(), getSpkService());
     } },
     { method: "GET", pattern: /^\/api\/spk\/([^/]+)$/, handler: (request, match) => handleSpkDetailRoute(request, match![1], getAuthService(), getSpkService()) },
+
+    // Work Order detail actions
     { method: "GET", pattern: /^\/api\/wo\/([^/]+)\/linked-countdowns$/, handler: (request, match) => handleWoLinkedCountdownsRoute(request, match![1], getAuthService(), getWoService()) },
     { method: "PATCH", pattern: /^\/api\/wo\/([^/]+)\/(approve|reject|done)$/, handler: (request, match) => {
       const handlers = {
@@ -696,6 +749,8 @@ export function createApiFetchHandler(dependencies: AppDependencies = {}) {
     } },
     { method: "PUT", pattern: /^\/api\/wo\/([^/]+)$/, handler: (request, match) => handleWoUpdateRoute(request, match![1], getAuthService(), getWoService()) },
     { method: "GET", pattern: /^\/api\/wo\/([^/]+)$/, handler: (request, match) => handleWoDetailRoute(request, match![1], getAuthService(), getWoService()) },
+
+    // Purchase Request detail actions
     { method: "PATCH", pattern: /^\/api\/pr\/([^/]+)\/(approve|order|receive|cancel)$/, handler: (request, match) => {
       const handlers = {
         approve: handlePrApproveRoute,
@@ -707,6 +762,8 @@ export function createApiFetchHandler(dependencies: AppDependencies = {}) {
     } },
     { method: "PUT", pattern: /^\/api\/pr\/([^/]+)$/, handler: (request, match) => handlePrUpdateRoute(request, match![1], getAuthService(), getPrService()) },
     { method: "GET", pattern: /^\/api\/pr\/([^/]+)$/, handler: (request, match) => handlePrDetailRoute(request, match![1], getAuthService(), getPrService()) },
+
+    // Vendor WO detail actions
     { method: "PATCH", pattern: /^\/api\/vendor\/([^/]+)\/(approve|status|receive|cancel)$/, handler: (request, match) => {
       const handlers = {
         approve: handleVendorApproveRoute,
@@ -718,6 +775,8 @@ export function createApiFetchHandler(dependencies: AppDependencies = {}) {
     } },
     { method: "PUT", pattern: /^\/api\/vendor\/([^/]+)$/, handler: (request, match) => handleVendorUpdateRoute(request, match![1], getAuthService(), getVendorService()) },
     { method: "GET", pattern: /^\/api\/vendor\/([^/]+)$/, handler: (request, match) => handleVendorDetailRoute(request, match![1], getAuthService(), getVendorService()) },
+
+    // Issue detail actions
     { method: "GET", pattern: /^\/api\/issues\/unit\/([^/]+)$/, handler: (request, match) => handleIssuesByUnitRoute(request, match![1], getAuthService(), getIssuesService()) },
     { method: "PATCH", pattern: /^\/api\/issues\/([^/]+)\/(acknowledge|assign|start|qc-recheck|resolve|escalate|waive)$/, handler: (request, match) => {
       const handlers = {
@@ -732,9 +791,13 @@ export function createApiFetchHandler(dependencies: AppDependencies = {}) {
       return handlers[match![2] as keyof typeof handlers](request, match![1], getAuthService(), getIssuesService());
     } },
     { method: "GET", pattern: /^\/api\/issues\/([^/]+)$/, handler: (request, match) => handleIssuesDetailRoute(request, match![1], getAuthService(), getIssuesService()) },
+
+    // Gallery detail actions
     { method: "GET", pattern: /^\/api\/gallery\/([^/]+)\/photos$/, handler: (request, match) => handleGalleryPhotosRoute(request, match![1], getAuthService(), getGalleryService()) },
     { method: "PUT", pattern: /^\/api\/gallery\/photos\/([^/]+)$/, handler: (request, match) => handleGalleryUpdatePhotoRoute(request, match![1], getAuthService(), getGalleryService()) },
     { method: "DELETE", pattern: /^\/api\/gallery\/photos\/([^/]+)$/, handler: (request, match) => handleGalleryDeletePhotoRoute(request, match![1], getAuthService(), getGalleryService()) },
+
+    // QA/QC detail actions
     { method: "POST", pattern: /^\/api\/qc\/final-checklist\/([^/]+)\/approve$/, handler: (request, match) => handleQcFinalChecklistApproveRoute(request, match![1], getAuthService(), getQcService()) },
     { method: "GET", pattern: /^\/api\/qc\/final-checklist\/([^/]+)$/, handler: (request, match) => handleQcFinalChecklistRoute(request, match![1], getAuthService(), getQcService()) },
     { method: "PATCH", pattern: /^\/api\/qa\/inspections\/([^/]+)$/, handler: (request, match) => handleQaInspectionUpdateRoute(request, match![1], getAuthService(), getQaService()) },
@@ -743,6 +806,8 @@ export function createApiFetchHandler(dependencies: AppDependencies = {}) {
         ? handleQcPassRoute(request, match![1], getAuthService(), getQcService())
         : handleQcRejectRoute(request, match![1], getAuthService(), getQcService()) },
     { method: "GET", pattern: /^\/api\/qc\/([^/]+)$/, handler: (request, match) => handleQcDetailRoute(request, match![1], getAuthService(), getQcService()) },
+
+    // Planning detail actions
     { method: "GET", pattern: /^\/api\/planning\/eta\/([^/]+)$/, handler: (request, match) => handleUnitEtaRoute(request, match![1], getAuthService(), getCalendarService()) },
     { method: "POST", pattern: /^\/api\/planning\/weekly-plan\/([^/]+)\/overtime$/, handler: (request, match) => handleWeeklyPlanOvertimeRoute(request, match![1], getAuthService(), getPlanningService()) },
     { method: "POST", pattern: /^\/api\/planning\/weekly-plan\/([^/]+)\/divisions$/, handler: (request, match) => handleWeeklyPlanDivisionRoute(request, match![1], getAuthService(), getPlanningService()) },
@@ -752,7 +817,11 @@ export function createApiFetchHandler(dependencies: AppDependencies = {}) {
     { method: "GET", pattern: /^\/api\/planning\/weekly-plan\/([^/]+)\/gap$/, handler: (request, match) => handleWeeklyPlanGapRoute(request, match![1], getAuthService(), getPlanningService()) },
     { method: "GET", pattern: /^\/api\/planning\/weekly-plan\/([^/]+)\/alerts$/, handler: (request, match) => handleWeeklyPlanAlertsRoute(request, match![1], getAuthService(), getPlanningService()) },
     { method: "GET", pattern: /^\/api\/planning\/weekly-plan\/([^/]+)$/, handler: (request, match) => handleWeeklyPlanDetailRoute(request, match![1], getAuthService(), getPlanningService()) },
+
+    // Countdown import and detail actions
     { method: "POST", pattern: "/api/countdown/import", handler: (request) => handleCountdownImportRoute(request, getAuthService(), getCountdownService()) },
+
+    // Unit workspace and catalog
     { method: "GET", pattern: /^\/api\/units\/([^/]+)\/workspace$/, handler: (request, match) => handleUnitWorkspaceRoute(request, match![1], getAuthService(), getUnitsService()) },
     { method: "GET", pattern: /^\/api\/units\/([^/]+)\/bom$/, handler: (request, match) => handleUnitBomRoute(request, match![1], getAuthService(), getUnitsService()) },
     { method: "GET", pattern: "/api/catalog/components", handler: (request) => handleCatalogComponentsRoute(request, getAuthService(), getUnitCatalogService()) },

@@ -1,4 +1,4 @@
-import type { AuditLogEntry, AuditRepository } from "@/repositories/audit.repo";
+import type { AuditLogEntry, AuditRepository } from "@/repositories/audit/audit.repo";
 
 export interface AuditService {
   log(entry: AuditLogEntry): Promise<void>;

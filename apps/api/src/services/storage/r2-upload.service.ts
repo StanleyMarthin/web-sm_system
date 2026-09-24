@@ -2,7 +2,7 @@ import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import type { ApiEnv } from "@/config/env";
 import { MAX_IMAGE_UPLOAD_BYTES, MAX_VIDEO_UPLOAD_BYTES } from "@/security/upload-ticket";
-import type { GalleryUploadTicketProvider } from "@/services/gallery.service";
+import type { GalleryUploadTicketProvider } from "@/services/gallery/gallery.service";
 
 function stripTrailingSlash(value: string): string {
   return value.replace(/\/$/u, "");
