@@ -1,5 +1,6 @@
 import {
   bulkCreateJobPlanRequestSchema,
+  createJobPlanAdditionalCountdownRequestSchema,
   createJobPlanRequestSchema,
   createJobPlanWorkspaceRequestSchema,
   deleteJobPlanDraftRequestSchema,
@@ -55,6 +56,15 @@ function mapJobPlanError(request: Request, error: unknown): Response {
         "Countdown dari WO belum tersedia. Approve WO terlebih dahulu.",
         404,
         "WORK_ORDER_COUNTDOWN_NOT_FOUND",
+      );
+    }
+
+    if (error.message === "ADDITIONAL_REFERENCE_INCOMPLETE") {
+      return errorResponse(
+        request,
+        "Referensi jobdesc tambahan tidak lengkap atau tidak sesuai divisi.",
+        400,
+        "ADDITIONAL_REFERENCE_INCOMPLETE",
       );
     }
 
@@ -392,6 +402,34 @@ export async function handleJobPlanWorkspaceCreateRoute(
         data: result,
       }),
     );
+  } catch (error) {
+    return mapJobPlanError(request, error);
+  }
+}
+
+export async function handleJobPlanAdditionalCountdownCreateRoute(
+  request: Request,
+  authService: AuthService,
+  jobPlanService: JobPlanService,
+): Promise<Response> {
+  const sessionResult = await requireJobPlanSession(request, authService);
+  if ("response" in sessionResult) {
+    return sessionResult.response;
+  }
+
+  const parsedBody = await parseJsonBody(request, createJobPlanAdditionalCountdownRequestSchema);
+  if (!parsedBody.success) {
+    return parsedBody.response;
+  }
+
+  try {
+    const result = await jobPlanService.createAdditionalCountdown(
+      sessionResult.session,
+      parsedBody.data,
+    );
+    return successResponse(request, "Countdown tambahan berhasil dibuat.", { ...result }, {
+      status: 201,
+    });
   } catch (error) {
     return mapJobPlanError(request, error);
   }

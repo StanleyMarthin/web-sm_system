@@ -30,6 +30,7 @@ export const catalogComponentSchema = z.object({
 
 export const catalogPanelSchema = z.object({
   id: z.number().int().positive(),
+  carId: z.string().nullable().optional().default(null),
   componentId: z.number().int().positive(),
   componentCode: catalogComponentCodeSchema,
   componentName: z.string(),

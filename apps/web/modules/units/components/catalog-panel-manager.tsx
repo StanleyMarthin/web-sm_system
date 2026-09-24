@@ -28,6 +28,7 @@ import { useSweetAlert } from "@/shared/ui/sweet-alert";
 ModuleRegistry.registerModules([AllCommunityModule]);
 
 interface CatalogPanelManagerProps {
+  unitId: string;
   components: CatalogComponent[];
   onClose: () => void;
   onSaved: () => void;
@@ -35,7 +36,7 @@ interface CatalogPanelManagerProps {
 
 type GridRef = AgGridReact<CatalogPanelDraftRow>;
 
-export function CatalogPanelManager({ components, onClose, onSaved }: CatalogPanelManagerProps) {
+export function CatalogPanelManager({ unitId, components, onClose, onSaved }: CatalogPanelManagerProps) {
   const sweetAlert = useSweetAlert();
   const gridRef = useRef<GridRef>(null);
   const [componentId, setComponentId] = useState(components[0]?.id ?? 0);
@@ -76,7 +77,7 @@ export function CatalogPanelManager({ components, onClose, onSaved }: CatalogPan
 
   async function loadPanels(nextComponentId: number) {
     setLoading(true);
-    const result = await fetchCatalogPanelsByComponent(nextComponentId);
+    const result = await fetchCatalogPanelsByComponent(nextComponentId, unitId);
     setLoading(false);
     if (!result.success) {
       sweetAlert.notifyError("Panel belum dapat dimuat", result.message);
@@ -169,7 +170,7 @@ export function CatalogPanelManager({ components, onClose, onSaved }: CatalogPan
       return false;
     }
 
-    const result = await saveCatalogPanels(componentId, { items, deletedIds });
+    const result = await saveCatalogPanels(componentId, { items, deletedIds }, unitId);
     setSaving(false);
     if (!result.success) {
       const conflict = result.data as {

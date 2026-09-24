@@ -76,6 +76,8 @@ export const jobPlanWorkOrderOptionSchema = jobPlanReferenceOptionSchema.extend(
 export const jobPlanPanelOptionSchema = jobPlanReferenceOptionSchema.extend({
   carId: z.string().nullable().optional(),
   panelName: z.string(),
+  componentName: z.string().nullable().optional(),
+  partName: z.string().nullable().optional(),
 });
 
 export const jobPlanJobTypeOptionSchema = jobPlanReferenceOptionSchema.extend({
@@ -269,6 +271,30 @@ export const createJobPlanWorkspaceRequestSchema = z.object({
   rows: z.array(jobPlanWorkspaceDraftRowSchema).min(1).max(100),
 });
 
+export const createJobPlanAdditionalCountdownRequestSchema = z.object({
+  carId: z.string().trim().min(1).max(100),
+  divisionId: z.number().int().positive(),
+  panelId: z.number().int().positive(),
+  jobTypeId: z.string().trim().max(100).nullable().optional().default(null),
+  jobTypeName: z.string().trim().max(150).nullable().optional().default(null),
+  taskDate: isoDateSchema,
+  deadlineDate: isoDateSchema,
+  targetHours: z.number().positive().max(24),
+  jobDescription: z.string().trim().min(1).max(500),
+  note: z.string().trim().max(500).nullable().optional().default(null),
+  picPlan: z.string().trim().max(50).nullable().optional(),
+  requiredGrade: optionalNullableTextSchema,
+});
+
+export const createJobPlanAdditionalCountdownResponseSchema = z.object({
+  coreId: z.string(),
+  carId: z.string(),
+  divisionId: z.number().int().nullable(),
+  panelId: z.number().int().nullable(),
+  unitName: z.string().nullable(),
+  divisionName: z.string().nullable(),
+});
+
 export const updateJobPlanRequestSchema = jobPlanDraftItemSchema.omit({
   coreId: true,
 }).partial().extend({
@@ -341,6 +367,8 @@ export type CreateJobPlanRequest = z.infer<typeof createJobPlanRequestSchema>;
 export type BulkCreateJobPlanRequest = z.infer<typeof bulkCreateJobPlanRequestSchema>;
 export type JobPlanWorkspaceDraftRow = z.infer<typeof jobPlanWorkspaceDraftRowSchema>;
 export type CreateJobPlanWorkspaceRequest = z.infer<typeof createJobPlanWorkspaceRequestSchema>;
+export type CreateJobPlanAdditionalCountdownRequest = z.infer<typeof createJobPlanAdditionalCountdownRequestSchema>;
+export type CreateJobPlanAdditionalCountdownResponse = z.infer<typeof createJobPlanAdditionalCountdownResponseSchema>;
 export type UpdateJobPlanRequest = z.infer<typeof updateJobPlanRequestSchema>;
 export type UpdateJobPlanStatusRequest = z.infer<typeof updateJobPlanStatusRequestSchema>;
 export type JobPlanDraftRecord = z.infer<typeof jobPlanDraftRecordSchema>;

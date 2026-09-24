@@ -7,21 +7,26 @@ import type {
   ManualExecutionJobPlanV2Request,
   MutateJobPlanV2ApprovalRequest,
 } from "@smsystem/contracts/job-plan-v2";
-import { jobPlanCountdownOptionSchema, jobPlanEmployeeOptionSchema } from "@smsystem/contracts/job-plan";
+import { jobPlanCountdownOptionSchema, jobPlanEmployeeOptionSchema, jobPlanJobTypeOptionSchema, jobPlanPanelOptionSchema } from "@smsystem/contracts/job-plan";
 import type { z } from "zod";
 import { parseSmsDate, parseSmsDurationMinutes, parseSmsTime } from "@/shared/datagrid/parsers";
 
 export type JobPlanCountdownOption = z.infer<typeof jobPlanCountdownOptionSchema>;
 export type JobPlanEmployeeOption = z.infer<typeof jobPlanEmployeeOptionSchema>;
+export type JobPlanJobTypeOption = z.infer<typeof jobPlanJobTypeOptionSchema>;
+export type JobPlanPanelOption = z.infer<typeof jobPlanPanelOptionSchema>;
 
 export interface JobPlanV2PlannerDraft {
   clientId: string;
   isNew: true;
+  sourceType: "countdown" | "additional";
   workMode: "normal" | "overtime" | "holiday_overtime";
   coreId: string;
   divisionId: number | null;
   carId: string;
   panelId: number | null;
+  jobTypeId: string;
+  jobTypeName: string;
   employeeId: string;
   taskDate: string;
   startTime: string;
@@ -165,11 +170,14 @@ export function createJobPlanV2Draft(context: JobPlanCountdownOption | null): Jo
   return {
     clientId: `draft-${crypto.randomUUID()}`,
     isNew: true,
+    sourceType: "countdown",
     workMode: "normal",
     coreId: context?.value ?? "",
     divisionId: context?.divisionId ?? null,
     carId: context?.carId ?? "",
     panelId: context?.panelId ?? null,
+    jobTypeId: "",
+    jobTypeName: "",
     employeeId: "",
     taskDate: toLocalDateValue(),
     startTime: "08:00",
@@ -245,10 +253,13 @@ export function createEditDraftFromRow(row: JobPlanV2DisplayRow): JobPlanV2Plann
   return {
     clientId: `edit-${row.planId}`,
     isNew: true,
+    sourceType: "countdown",
     coreId: row.coreId,
     divisionId: row.divisionId,
     carId: row.carId,
     panelId: row.panelId,
+    jobTypeId: "",
+    jobTypeName: "",
     employeeId: row.employeeId,
     taskDate: row.taskDate,
     startTime: row.startTime,
@@ -266,7 +277,14 @@ export function createEditDraftFromRow(row: JobPlanV2DisplayRow): JobPlanV2Plann
 }
 
 export function validateJobPlanV2Draft(row: JobPlanV2PlannerDraft) {
-  if (!row.coreId) return "Countdown wajib dipilih.";
+  if (row.sourceType === "additional") {
+    if (!row.divisionId) return "Team wajib dipilih.";
+    if (!row.carId) return "Unit wajib dipilih.";
+    if (!row.panelId) return "Panel wajib dipilih.";
+    if (!row.jobTypeId && !row.jobTypeName.trim()) return "Jobdesc tambahan wajib diisi.";
+  } else if (!row.coreId) {
+    return "Countdown wajib dipilih.";
+  }
   if (!row.employeeId) return "PIC wajib dipilih.";
   const date = parseSmsDate(row.taskDate, "Tanggal");
   if (date.error || !date.value) return date.error ?? "Tanggal wajib diisi.";

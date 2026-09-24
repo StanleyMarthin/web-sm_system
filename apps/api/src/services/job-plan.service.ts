@@ -1,5 +1,6 @@
 import type {
   BulkCreateJobPlanRequest,
+  CreateJobPlanAdditionalCountdownRequest,
   CreateJobPlanRequest,
   CreateJobPlanWorkspaceRequest,
   DeleteJobPlanDraftRequest,
@@ -53,6 +54,15 @@ interface JobPlanMutationResult {
   updatedPlanId: string | null;
   deletedPlanId: string | null;
   status: JobPlanStatus | null;
+}
+
+interface JobPlanAdditionalCountdownResult {
+  coreId: string;
+  carId: string;
+  unitName: string | null;
+  divisionId: number | null;
+  divisionName: string | null;
+  panelId: number | null;
 }
 
 interface JobPlanExportResult {
@@ -320,6 +330,10 @@ export interface JobPlanService {
     session: WebSession,
     input: CreateJobPlanWorkspaceRequest,
   ): Promise<JobPlanMutationResult>;
+  createAdditionalCountdown(
+    session: WebSession,
+    input: CreateJobPlanAdditionalCountdownRequest,
+  ): Promise<JobPlanAdditionalCountdownResult>;
   bulkCreate(
     session: WebSession,
     input: BulkCreateJobPlanRequest,
@@ -1318,6 +1332,42 @@ export class DefaultJobPlanService implements JobPlanService {
       updatedPlanId: null,
       deletedPlanId: null,
       status: null,
+    };
+  }
+
+  async createAdditionalCountdown(
+    session: WebSession,
+    input: CreateJobPlanAdditionalCountdownRequest,
+  ): Promise<JobPlanAdditionalCountdownResult> {
+    const result = await this.repository.createAdditionalCountdown(
+      {
+        employeeId: session.user.employeeId,
+        scope: session.user.scope,
+      },
+      input,
+    );
+
+    await this.auditService.log({
+      actorId: session.user.employeeId,
+      actorName: session.user.fullName,
+      action: "jobplan.additional_countdown_create",
+      module: "jobplan",
+      recordId: result.coreId,
+      newValue: {
+        coreId: result.coreId,
+        carId: result.carId,
+        divisionId: result.divisionId,
+        panelId: result.panelId,
+      },
+    });
+
+    return {
+      coreId: result.coreId,
+      carId: result.carId ?? input.carId,
+      unitName: result.unitName,
+      divisionId: result.divisionId,
+      divisionName: result.divisionName,
+      panelId: result.panelId,
     };
   }
 

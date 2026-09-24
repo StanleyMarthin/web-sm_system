@@ -31,6 +31,7 @@ interface ComponentRow extends RowDataPacket {
 
 interface PanelRow extends RowDataPacket {
   id: number;
+  carId: string | null;
   componentId: number;
   componentCode: CatalogComponent["code"];
   componentName: string;
@@ -116,6 +117,7 @@ function mapComponent(row: ComponentRow): CatalogComponent {
 function mapPanel(row: PanelRow): CatalogPanel {
   return {
     id: Number(row.id),
+    carId: row.carId ?? null,
     componentId: Number(row.componentId),
     componentCode: row.componentCode,
     componentName: row.componentName,
@@ -184,11 +186,12 @@ export class UnitCatalogRepository {
     return rows.map(mapComponent);
   }
 
-  async listPanelsByComponent(componentId: number): Promise<CatalogPanel[]> {
+  async listPanelsByComponent(componentId: number, unitId: string | null = null): Promise<CatalogPanel[]> {
     const [rows] = await this.poolFactory(this.env).query<PanelRow[]>(
       `
         SELECT
           p.id,
+          p.car_id AS carId,
           p.component_id AS componentId,
           c.code AS componentCode,
           c.component_name AS componentName,
@@ -196,14 +199,18 @@ export class UnitCatalogRepository {
         FROM catalog_panels p
         JOIN catalog_components c ON c.id = p.component_id
         WHERE p.component_id = ?
+          AND (
+            (? IS NULL AND p.car_id IS NULL)
+            OR p.car_id = ?
+          )
         ORDER BY p.panel_name ASC
       `,
-      [componentId],
+      [componentId, unitId, unitId],
     );
     return rows.map(mapPanel);
   }
 
-  async saveCatalogPanels(componentId: number, input: SaveCatalogPanelsRequest): Promise<CatalogPanel[]> {
+  async saveCatalogPanels(componentId: number, input: SaveCatalogPanelsRequest, unitId: string | null = null): Promise<CatalogPanel[]> {
     const connection = await this.poolFactory(this.env).getConnection();
     try {
       await connection.beginTransaction();
@@ -217,6 +224,7 @@ export class UnitCatalogRepository {
         `
           SELECT
             p.id,
+            p.car_id AS carId,
             p.component_id AS componentId,
             c.code AS componentCode,
             c.component_name AS componentName,
@@ -224,9 +232,13 @@ export class UnitCatalogRepository {
           FROM catalog_panels p
           JOIN catalog_components c ON c.id = p.component_id
           WHERE p.component_id = ?
+            AND (
+              (? IS NULL AND p.car_id IS NULL)
+              OR p.car_id = ?
+            )
           FOR UPDATE
         `,
-        [componentId],
+        [componentId, unitId, unitId],
       );
       const existingById = new Map(existingRows.map((panel) => [Number(panel.id), mapPanel(panel)]));
       const deletedIdSet = new Set(input.deletedIds);
@@ -284,8 +296,8 @@ export class UnitCatalogRepository {
         const deletedIds = [...deletedIdSet].filter((panelId) => existingById.has(panelId));
         if (deletedIds.length > 0) {
           await connection.execute(
-            `DELETE FROM catalog_panels WHERE component_id = ? AND id IN (${deletedIds.map(() => "?").join(",")})`,
-            [componentId, ...deletedIds],
+            `DELETE FROM catalog_panels WHERE component_id = ? AND ((? IS NULL AND car_id IS NULL) OR car_id = ?) AND id IN (${deletedIds.map(() => "?").join(",")})`,
+            [componentId, unitId, unitId, ...deletedIds],
           );
         }
       }
@@ -293,19 +305,19 @@ export class UnitCatalogRepository {
       for (const item of normalizedItems) {
         if (item.id) {
           await connection.execute(
-            "UPDATE catalog_panels SET panel_name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND component_id = ?",
-            [item.panelName, item.id, componentId],
+            "UPDATE catalog_panels SET panel_name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND component_id = ? AND ((? IS NULL AND car_id IS NULL) OR car_id = ?)",
+            [item.panelName, item.id, componentId, unitId, unitId],
           );
         } else {
           await connection.execute(
-            "INSERT INTO catalog_panels (component_id, panel_name) VALUES (?, ?)",
-            [componentId, item.panelName],
+            "INSERT INTO catalog_panels (component_id, car_id, panel_name) VALUES (?, ?, ?)",
+            [componentId, unitId, item.panelName],
           );
         }
       }
 
       await connection.commit();
-      return this.listPanelsByComponent(componentId);
+      return this.listPanelsByComponent(componentId, unitId);
     } catch (error) {
       await connection.rollback();
       throw error;
@@ -320,6 +332,7 @@ export class UnitCatalogRepository {
       `
         SELECT
           p.id,
+          p.car_id AS carId,
           p.component_id AS componentId,
           c.code AS componentCode,
           c.component_name AS componentName,
@@ -330,10 +343,11 @@ export class UnitCatalogRepository {
         FROM catalog_panels p
         JOIN catalog_components c ON c.id = p.component_id
         LEFT JOIN unit_catalog uc ON uc.panel_id = p.id AND uc.car_id = ?
-        GROUP BY p.id, p.component_id, c.code, c.component_name, p.panel_name
-        ORDER BY c.id ASC, p.panel_name ASC
+        WHERE p.car_id = ? OR p.car_id IS NULL
+        GROUP BY p.id, p.car_id, p.component_id, c.code, c.component_name, p.panel_name
+        ORDER BY c.id ASC, p.car_id IS NULL ASC, p.panel_name ASC
       `,
-      [unitId],
+      [unitId, unitId],
     );
 
     return {
@@ -356,7 +370,7 @@ export class UnitCatalogRepository {
     const connection = await this.poolFactory(this.env).getConnection();
     try {
       await connection.beginTransaction();
-      const panel = await this.ensurePanelByName(connection, input.componentCode, input.panelName);
+      const panel = await this.ensurePanelByName(connection, unitId, input.componentCode, input.panelName);
       await connection.commit();
       return this.getPanelWorkspace(unitId, panel.id);
     } catch (error) {
@@ -1105,6 +1119,7 @@ export class UnitCatalogRepository {
       `
         SELECT
           p.id,
+          p.car_id AS carId,
           p.component_id AS componentId,
           c.code AS componentCode,
           c.component_name AS componentName,
@@ -1139,7 +1154,7 @@ export class UnitCatalogRepository {
     return rows[0] ?? null;
   }
 
-  private async ensurePanelByName(connection: PoolConnection, componentCode: CatalogComponent["code"], panelName: string) {
+  private async ensurePanelByName(connection: PoolConnection, unitId: string, componentCode: CatalogComponent["code"], panelName: string) {
     const [componentRows] = await connection.query<ComponentRow[]>(
       "SELECT id, code, component_name AS componentName FROM catalog_components WHERE code = ? LIMIT 1",
       [componentCode],
@@ -1152,6 +1167,7 @@ export class UnitCatalogRepository {
       `
         SELECT
           p.id,
+          p.car_id AS carId,
           p.component_id AS componentId,
           c.code AS componentCode,
           c.component_name AS componentName,
@@ -1160,18 +1176,21 @@ export class UnitCatalogRepository {
         JOIN catalog_components c ON c.id = p.component_id
         WHERE p.component_id = ?
           AND UPPER(TRIM(p.panel_name)) = ?
+          AND (p.car_id = ? OR p.car_id IS NULL)
+        ORDER BY p.car_id IS NULL ASC
         LIMIT 1
       `,
-      [component.id, normalized],
+      [component.id, normalized, unitId],
     );
     if (panelRows[0]) return mapPanel(panelRows[0]);
 
     const [result] = await connection.execute<ResultSetHeader>(
-      "INSERT INTO catalog_panels (component_id, panel_name) VALUES (?, ?)",
-      [component.id, normalized],
+      "INSERT INTO catalog_panels (component_id, car_id, panel_name) VALUES (?, ?, ?)",
+      [component.id, unitId, normalized],
     );
     return {
       id: Number(result.insertId),
+      carId: unitId,
       componentId: component.id,
       componentCode: component.code,
       componentName: component.componentName,

@@ -37,12 +37,14 @@ export class UnitCatalogService {
     return this.repository.listComponents();
   }
 
-  async listPanelsByComponent(componentId: number) {
-    return this.repository.listPanelsByComponent(componentId);
+  async listPanelsByComponent(session: WebSession, componentId: number, unitId: string | null = null) {
+    if (unitId) await this.assertUnitAccess(session, unitId);
+    return this.repository.listPanelsByComponent(componentId, unitId);
   }
 
-  async saveCatalogPanels(_session: WebSession, componentId: number, input: SaveCatalogPanelsRequest) {
-    return this.repository.saveCatalogPanels(componentId, input);
+  async saveCatalogPanels(session: WebSession, componentId: number, input: SaveCatalogPanelsRequest, unitId: string | null = null) {
+    if (unitId) await this.assertUnitAccess(session, unitId);
+    return this.repository.saveCatalogPanels(componentId, input, unitId);
   }
 
   async getOverview(session: WebSession, unitId: string) {

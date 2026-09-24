@@ -52,6 +52,8 @@ async function JobPlanPageContent({ searchParams }: JobPlanPageProps) {
       countdowns={payload.references.countdowns}
       employees={payload.references.employees}
       divisions={payload.references.divisions}
+      panels={payload.references.panels}
+      jobTypes={payload.references.jobTypes}
     />
   );
 }

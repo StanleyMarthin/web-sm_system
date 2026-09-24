@@ -412,8 +412,20 @@ describe("UnitCatalogRepository saveCatalogPanels", () => {
 
     const inserts = statements.filter(({ sql }) => sql.includes("INSERT INTO catalog_panels"));
     expect(inserts.length).toBe(2);
-    expect(inserts[0]?.params).toEqual([4, "Front Door LH"]);
-    expect(inserts[1]?.params).toEqual([4, "Rear Door RH"]);
+    expect(inserts[0]?.params).toEqual([4, null, "Front Door LH"]);
+    expect(inserts[1]?.params).toEqual([4, null, "Rear Door RH"]);
+  });
+
+  it("creates unit scoped catalog panels when unit id is provided", async () => {
+    const { repository, statements } = createRepository();
+
+    await repository.saveCatalogPanels(4, {
+      items: [{ id: null, panelName: "Front Door LH" }],
+      deletedIds: [],
+    }, "CAR-1");
+
+    const insert = statements.find(({ sql }) => sql.includes("INSERT INTO catalog_panels"));
+    expect(insert?.params).toEqual([4, "CAR-1", "Front Door LH"]);
   });
 
   it("renames an existing panel without changing its id", async () => {
@@ -427,7 +439,7 @@ describe("UnitCatalogRepository saveCatalogPanels", () => {
     });
 
     const update = statements.find(({ sql }) => sql.includes("UPDATE catalog_panels"));
-    expect(update?.params).toEqual(["FRONT DOOR LEFT", 12, 4]);
+    expect(update?.params).toEqual(["FRONT DOOR LEFT", 12, 4, null, null]);
   });
 
   it("rejects duplicate panel name within the same component", async () => {

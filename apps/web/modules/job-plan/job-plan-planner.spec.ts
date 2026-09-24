@@ -208,7 +208,14 @@ describe("Job Plan planner helpers", () => {
     const draft = {
       clientId: "draft-1",
       isNew: true as const,
+      sourceType: "countdown" as const,
+      workMode: "normal" as const,
       coreId: "CORE-1",
+      divisionId: 1,
+      carId: "CAR-1",
+      panelId: 10,
+      jobTypeId: "",
+      jobTypeName: "",
       employeeId: "EMP-1",
       taskDate: "2026-09-15",
       startTime: "08:00",
@@ -233,11 +240,45 @@ describe("Job Plan planner helpers", () => {
     });
   });
 
+  test("validates additional jobdesc draft before countdown exists", () => {
+    const draft = {
+      clientId: "draft-additional-1",
+      isNew: true as const,
+      sourceType: "additional" as const,
+      workMode: "overtime" as const,
+      coreId: "additional:JOB-1",
+      divisionId: 1,
+      carId: "CAR-1",
+      panelId: 10,
+      jobTypeId: "JOB-1",
+      jobTypeName: "",
+      employeeId: "EMP-1",
+      taskDate: "2026-09-15",
+      startTime: "17:00",
+      durationText: "02:00",
+      jobDescription: "Jobdesc tambahan",
+      note: "Temuan dadakan",
+      isOvertime: true,
+      isRework: false,
+      isPriority: false,
+      error: null,
+    };
+
+    expect(validateJobPlanV2Draft(draft)).toBeNull();
+  });
+
   test("builds edit draft mutation payload", () => {
     const draft = {
       clientId: "edit-1",
       isNew: true as const,
+      sourceType: "countdown" as const,
+      workMode: "normal" as const,
       coreId: "CORE-1",
+      divisionId: 1,
+      carId: "CAR-1",
+      panelId: 10,
+      jobTypeId: "",
+      jobTypeName: "",
       employeeId: "EMP-1",
       taskDate: "2026-09-15",
       startTime: "08:00",

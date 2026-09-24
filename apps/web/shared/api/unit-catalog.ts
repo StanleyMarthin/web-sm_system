@@ -50,6 +50,7 @@ const searchEnvelopeSchema = z.object({
 const catalogComponentSchema = catalogOverviewSchema.shape.components.element;
 const catalogPanelSchema = catalogOverviewSchema.shape.panels.element.pick({
   id: true,
+  carId: true,
   componentId: true,
   componentCode: true,
   componentName: true,
@@ -160,14 +161,16 @@ export async function fetchCatalogComponents() {
   return requestJson("/api/catalog/components", componentsEnvelopeSchema);
 }
 
-export async function fetchCatalogPanelsByComponent(componentId: number) {
-  return requestJson(`/api/catalog/components/${componentId}/panels`, panelsEnvelopeSchema);
+export async function fetchCatalogPanelsByComponent(componentId: number, unitId?: string | null) {
+  const suffix = unitId ? `?carId=${encodeURIComponent(unitId)}` : "";
+  return requestJson(`/api/catalog/components/${componentId}/panels${suffix}`, panelsEnvelopeSchema);
 }
 
-export async function saveCatalogPanels(componentId: number, input: SaveCatalogPanelsRequest) {
+export async function saveCatalogPanels(componentId: number, input: SaveCatalogPanelsRequest, unitId?: string | null) {
   const body = saveCatalogPanelsRequestSchema.parse(input);
+  const suffix = unitId ? `?carId=${encodeURIComponent(unitId)}` : "";
   return requestJson(
-    `/api/catalog/components/${componentId}/panels/batch`,
+    `/api/catalog/components/${componentId}/panels/batch${suffix}`,
     panelsEnvelopeSchema,
     { method: "PUT", body: JSON.stringify(body) },
   );

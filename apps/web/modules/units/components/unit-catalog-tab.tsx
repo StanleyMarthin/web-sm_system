@@ -707,6 +707,7 @@ export function UnitCatalogTab({ unitId, unitName, canManageCatalog }: UnitCatal
 
       {managePanelMode ? (
         <CatalogPanelManager
+          unitId={unitId}
           components={overview?.components ?? []}
           onClose={() => setManagePanelMode(false)}
           onSaved={() => { void loadOverview(); }}

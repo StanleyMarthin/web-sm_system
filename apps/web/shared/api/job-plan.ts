@@ -1,5 +1,6 @@
 import type {
   BulkCreateJobPlanRequest,
+  CreateJobPlanAdditionalCountdownRequest,
   CreateJobPlanRequest,
   CreateJobPlanWorkspaceRequest,
   DeleteJobPlanDraftRequest,
@@ -10,6 +11,7 @@ import type {
   UpdateJobPlanStatusRequest,
 } from "@smsystem/contracts/job-plan";
 import {
+  createJobPlanAdditionalCountdownResponseSchema,
   jobPlanGridEnvelopeSchema,
   jobPlanMutationEnvelopeSchema,
   jobPlanPicLoadEnvelopeSchema,
@@ -196,6 +198,31 @@ export async function createJobPlanWorkspace(input: CreateJobPlanWorkspaceReques
   return {
     success: true as const,
     result: payload.data,
+  };
+}
+
+export async function createJobPlanAdditionalCountdown(input: CreateJobPlanAdditionalCountdownRequest) {
+  const response = await fetch(`${getApiBaseUrl()}/api/job-plan/additional-countdown`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(input),
+  });
+
+  if (!response.ok) {
+    const failure = await parseFailure(response);
+    return {
+      ...failure,
+      success: false as const,
+    };
+  }
+
+  const payload = await response.json() as { data: unknown };
+  return {
+    success: true as const,
+    result: createJobPlanAdditionalCountdownResponseSchema.parse(payload.data),
   };
 }
 

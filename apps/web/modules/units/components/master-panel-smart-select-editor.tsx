@@ -12,6 +12,7 @@ export interface SmartSelectOption {
 
 type SmartSelectCellEditorProps<TData> = ICellEditorParams<TData, string> & Partial<CustomCellEditorProps<TData, string>> & {
   values?: SmartSelectOption[];
+  inline?: boolean;
 };
 
 function matchesOption(option: SmartSelectOption, query: string): boolean {
@@ -25,6 +26,7 @@ export const SmartSelectCellEditor = forwardRef(function SmartSelectCellEditor<T
 ) {
   const options = props.values ?? [];
   const initialValue = options.length === 1 ? options[0].value : String(props.value ?? "");
+  const datalistId = useRef(`sms-smart-select-${Math.random().toString(36).slice(2)}`);
   const valueRef = useRef(initialValue);
   const compactListRef = useRef<HTMLDivElement | null>(null);
   const [value, setValue] = useState(initialValue);
@@ -35,9 +37,21 @@ export const SmartSelectCellEditor = forwardRef(function SmartSelectCellEditor<T
     return source.slice(0, query.trim() ? 20 : 3);
   }, [options, query]);
 
+  function resolveInputValue(input: string): string {
+    const trimmed = input.trim();
+    const exact = options.find((option) =>
+      option.value.toLowerCase() === trimmed.toLowerCase()
+      || option.label.toLowerCase() === trimmed.toLowerCase()
+      || (option.code ?? "").toLowerCase() === trimmed.toLowerCase()
+    );
+    if (exact) return exact.value;
+    const matches = options.filter((option) => matchesOption(option, trimmed));
+    return matches.length === 1 ? matches[0].value : valueRef.current;
+  }
+
   useImperativeHandle(ref, () => ({
-    getValue: () => valueRef.current,
-    isPopup: () => true,
+    getValue: () => props.inline ? resolveInputValue(query) : valueRef.current,
+    isPopup: () => !props.inline,
     getPopupPosition: () => "under",
   }));
 
@@ -51,6 +65,37 @@ export const SmartSelectCellEditor = forwardRef(function SmartSelectCellEditor<T
     setValue(option.value);
     setQuery(option.label);
     props.stopEditing();
+  }
+
+  if (props.inline) {
+    return (
+      <div className="h-full w-full">
+        <input
+          autoFocus
+          list={datalistId.current}
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          onBlur={() => {
+            valueRef.current = resolveInputValue(query);
+            props.onValueChange?.(valueRef.current);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === "Tab") {
+              valueRef.current = resolveInputValue(query);
+              props.onValueChange?.(valueRef.current);
+              props.stopEditing();
+            }
+            if (event.key === "Escape") props.stopEditing(true);
+          }}
+          className="h-full w-full border-0 bg-transparent px-2 text-[13px] text-foreground outline-none"
+        />
+        <datalist id={datalistId.current}>
+          {options.slice(0, 80).map((option) => (
+            <option key={option.value} value={option.label} />
+          ))}
+        </datalist>
+      </div>
+    );
   }
 
   if (options.length === 0) {

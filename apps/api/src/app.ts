@@ -103,6 +103,7 @@ import {
 } from "@/routes/countdown.routes";
 import {
   handleJobPlanBulkCreateRoute,
+  handleJobPlanAdditionalCountdownCreateRoute,
   handleJobPlanCreateRoute,
   handleJobPlanDeleteRoute,
   handleJobPlanDraftDeleteRoute,
@@ -587,6 +588,7 @@ export function createApiFetchHandler(dependencies: AppDependencies = {}) {
     { method: "GET", pattern: "/api/job-plan/pic-load", handler: (request) => handleJobPlanPicLoadRoute(request, getAuthService(), getJobPlanService()) },
     { method: "POST", pattern: "/api/job-plan", handler: (request) => handleJobPlanCreateRoute(request, getAuthService(), getJobPlanService()) },
     { method: "POST", pattern: "/api/job-plan/bulk", handler: (request) => handleJobPlanBulkCreateRoute(request, getAuthService(), getJobPlanService()) },
+    { method: "POST", pattern: "/api/job-plan/additional-countdown", handler: (request) => handleJobPlanAdditionalCountdownCreateRoute(request, getAuthService(), getJobPlanService()) },
     { method: "POST", pattern: "/api/job-plan/workspace", handler: (request) => handleJobPlanWorkspaceCreateRoute(request, getAuthService(), getJobPlanService()) },
     { method: "POST", pattern: "/api/job-plan/draft", handler: (request) => handleJobPlanDraftSaveRoute(request, getAuthService(), getJobPlanService()) },
     { method: "POST", pattern: "/api/job-plan/draft/submit", handler: (request) => handleJobPlanDraftSubmitRoute(request, getAuthService(), getJobPlanService()) },

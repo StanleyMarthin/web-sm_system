@@ -217,8 +217,9 @@ export async function handleCatalogComponentPanelsRoute(request: Request, compon
   if ("response" in sessionResult) return sessionResult.response;
 
   try {
+    const unitId = new URL(request.url).searchParams.get("carId")?.trim() || null;
     return successResponse(request, "Daftar panel catalog berhasil dimuat.", {
-      panels: await service.listPanelsByComponent(componentId),
+      panels: await service.listPanelsByComponent(sessionResult.session, componentId, unitId),
     });
   } catch (error) {
     return mapCatalogError(request, error);
@@ -232,8 +233,9 @@ export async function handleCatalogComponentPanelsBatchRoute(request: Request, c
   if (!body.success) return withCors(request, body.response);
 
   try {
+    const unitId = new URL(request.url).searchParams.get("carId")?.trim() || null;
     return successResponse(request, "Panel catalog berhasil disimpan.", {
-      panels: await service.saveCatalogPanels(sessionResult.session, componentId, body.data),
+      panels: await service.saveCatalogPanels(sessionResult.session, componentId, body.data, unitId),
     });
   } catch (error) {
     return mapCatalogError(request, error);

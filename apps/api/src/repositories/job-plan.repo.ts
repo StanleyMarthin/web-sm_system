@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { AuthScope } from "@smsystem/contracts/auth";
 import type {
+  CreateJobPlanAdditionalCountdownRequest,
   CreateJobPlanWorkspaceRequest,
   JobPlanDraftRecord,
   JobPlanGridQuery,
@@ -147,6 +148,8 @@ interface PanelReferenceRow extends RowDataPacket {
   label: string;
   carId: string | null;
   panelName: string;
+  componentName: string | null;
+  partName: string | null;
 }
 
 interface JobTypeReferenceRow extends RowDataPacket {
@@ -940,6 +943,44 @@ async function checkAllowedJobTypeForDivision(
   return rows.length > 0;
 }
 
+async function resolveOrCreateJobType(
+  connection: Pick<PoolConnection, "query">,
+  divisionId: number,
+  jobTypeId: string | null | undefined,
+  jobTypeName: string | null | undefined,
+): Promise<string> {
+  if (jobTypeId) return jobTypeId;
+
+  const trimmedName = jobTypeName?.trim();
+  if (!trimmedName) {
+    throw new Error("ADDITIONAL_REFERENCE_INCOMPLETE");
+  }
+
+  const [existingRows] = (await connection.query(
+    `
+      SELECT id
+      FROM master_job_types
+      WHERE division_id = ?
+        AND UPPER(job_name) = UPPER(?)
+      LIMIT 1
+    `,
+    [divisionId, trimmedName],
+  )) as [Array<RowDataPacket & { id: string }>, unknown];
+
+  const existing = existingRows[0]?.id;
+  if (existing) return existing;
+
+  const id = randomUUID();
+  await connection.query(
+    `
+      INSERT INTO master_job_types (id, division_id, job_name, is_teknis)
+      VALUES (?, ?, ?, 1)
+    `,
+    [id, divisionId, trimmedName],
+  );
+  return id;
+}
+
 async function findExistingWorkOrderCountdown(
   connection: Pick<PoolConnection, "query">,
   workOrderId: string,
@@ -1141,6 +1182,10 @@ export interface JobPlanRepository {
     params: ScopeParams & { actorId: string; actorName: string },
     input: CreateJobPlanWorkspaceRequest,
   ): Promise<{ createdIds: string[] }>;
+  createAdditionalCountdown(
+    params: ScopeParams,
+    input: CreateJobPlanAdditionalCountdownRequest,
+  ): Promise<CountdownContextRow>;
   submitDrafts(
     params: ScopeParams & { actorId: string; actorName: string },
     drafts: JobPlanDraftRecord[],
@@ -1623,7 +1668,9 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
               ELSE CONCAT(COALESCE(c.unit_name, mp.car_id), ' · ', COALESCE(mp.panel_name, mp.name_part))
             END AS label,
             mp.car_id AS carId,
-            COALESCE(mp.panel_name, mp.name_part) AS panelName
+            COALESCE(mp.panel_name, mp.name_part) AS panelName,
+            mp.component_name AS componentName,
+            mp.name_part AS partName
           FROM master_panels mp
           LEFT JOIN cars c ON c.id = mp.car_id
           WHERE ${
@@ -1734,6 +1781,8 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
         label: row.label,
         carId: row.carId,
         panelName: row.panelName,
+        componentName: row.componentName,
+        partName: row.partName,
       })),
       jobTypes: jobTypeRows.map((row) => ({
         value: row.value,
@@ -1952,6 +2001,59 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
 
       await connection.commit();
       return { createdIds };
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
+
+  async createAdditionalCountdown(
+    params: ScopeParams,
+    input: CreateJobPlanAdditionalCountdownRequest,
+  ) {
+    const pool = this.poolFactory();
+    const connection = await pool.getConnection();
+
+    try {
+      await connection.beginTransaction();
+      const jobTypeId = await resolveOrCreateJobType(
+        connection,
+        input.divisionId,
+        input.jobTypeId,
+        input.jobTypeName,
+      );
+
+      const additional = await getAdditionalContext(
+        connection,
+        input.carId,
+        input.divisionId,
+        input.panelId,
+        jobTypeId,
+      );
+      if (!additional || !additional.divisionId) {
+        throw new Error("ADDITIONAL_REFERENCE_INCOMPLETE");
+      }
+
+      const countdown = await createCountdownInTransaction(connection, params, {
+        carId: additional.carId,
+        divisionId: additional.divisionId,
+        panelId: additional.panelId,
+        taskCategory: "ADDITIONAL",
+        sectionName: input.jobDescription.trim() || `${additional.panelName ?? "Panel"} · ${additional.jobName ?? "Tambahan"}`,
+        jobTypeId: additional.jobTypeId,
+        targetHoursInitial: input.targetHours,
+        picPlan: input.picPlan ?? null,
+        requiredGrade: input.requiredGrade ?? null,
+        startDate: input.taskDate,
+        deadlineDate: input.deadlineDate,
+        refTaskId: null,
+        note: input.note ?? null,
+      });
+
+      await connection.commit();
+      return countdown;
     } catch (error) {
       await connection.rollback();
       throw error;
