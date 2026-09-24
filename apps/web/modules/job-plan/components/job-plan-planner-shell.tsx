@@ -1,7 +1,7 @@
 "use client";
 
 import type { JobPlanV2ReadItem } from "@smsystem/contracts/job-plan-v2";
-import type { CellKeyDownEvent, CellValueChangedEvent, ColDef, GridApi, GridReadyEvent, ICellRendererParams, SelectionChangedEvent } from "ag-grid-community";
+import type { CellKeyDownEvent, CellValueChangedEvent, ColDef, GridApi, GridReadyEvent, ICellRendererParams, SelectionChangedEvent, TabToNextCellParams } from "ag-grid-community";
 import { useEffect, useMemo, useState } from "react";
 import {
   createJobPlanV2,
@@ -336,6 +336,8 @@ function sameApprovalStage(rows: PlannerRow[]) {
   return Boolean(first) && rows.every((row) => row.approvalState === first);
 }
 
+const lastDraftEntryFields = new Set(["durationText", "note"]);
+
 function RejectReasonDialog({
   count,
   stage,
@@ -604,10 +606,11 @@ export function JobPlanPlannerShell({
     && sameApprovalStage(approvableSelectedRows);
 
   const summaryItems = useMemo(() => {
-    const draftCount = rows.filter((row) => row.approvalState === "DRAFT").length;
-    const reviewCount = rows.filter((row) => isReviewState(row.approvalState)).length;
-    const approvedCount = rows.filter((row) => row.approvalState === "APPROVED").length;
-    const actualInputCount = rows.filter((row) => row.executionState === "FINISHED_PENDING_VALIDATION" || row.executionState === "VALIDATED").length;
+    const persistedRows = rows.filter((row) => !row.isNew && !row.editPlanId);
+    const draftCount = persistedRows.filter((row) => row.approvalState === "DRAFT").length;
+    const reviewCount = persistedRows.filter((row) => isReviewState(row.approvalState)).length;
+    const approvedCount = persistedRows.filter((row) => row.approvalState === "APPROVED").length;
+    const actualInputCount = persistedRows.filter((row) => row.executionState === "FINISHED_PENDING_VALIDATION" || row.executionState === "VALIDATED").length;
     return [
       { label: "Draft", value: draftCount, tone: draftCount > 0 ? "warn" as const : undefined },
       { label: "Review", value: reviewCount, tone: reviewCount > 0 ? "warn" as const : undefined },
@@ -772,6 +775,28 @@ export function JobPlanPlannerShell({
     setDrafts((current) => [...current, normalizeDraftSelection(nextDraft)]);
   }
 
+  function addDraftAfter(row: PlannerRow, focusField = "divisionId") {
+    addDraft();
+    window.setTimeout(() => {
+      const rowCount = gridApi?.getDisplayedRowCount() ?? 0;
+      if (rowCount <= 0) return;
+      const currentIndex = row.clientId ? filteredRows.findIndex((item) => item.clientId === row.clientId) : -1;
+      const nextIndex = currentIndex >= 0 ? Math.min(currentIndex + 1, rowCount - 1) : rowCount - 1;
+      gridApi?.setFocusedCell(nextIndex, focusField);
+      gridApi?.startEditingCell({ rowIndex: nextIndex, colKey: focusField });
+    }, 0);
+  }
+
+  function tabToNextCell(params: TabToNextCellParams<PlannerRow>) {
+    const field = params.previousCellPosition.column.getColId();
+    const row = filteredRows[params.previousCellPosition.rowIndex];
+    if (!params.backwards && row?.isNew && (field === "note" || (field === "durationText" && !params.nextCellPosition))) {
+      addDraftAfter(row, "divisionId");
+      return false;
+    }
+    return params.nextCellPosition ?? false;
+  }
+
   function updateDraft(event: CellValueChangedEvent<PlannerRow>) {
     const row = event.data;
     if (!row.isNew && !row.editPlanId) return;
@@ -838,9 +863,10 @@ export function JobPlanPlannerShell({
     if (!keyboardEvent) return;
 
     const field = event.column.getColId();
-    if (keyboardEvent.key === "Enter" && canCreate && mode === "planner" && event.data?.isNew && (field === "durationText" || field === "note")) {
+    const isDraftAppendKey = keyboardEvent.key === "Enter" || (keyboardEvent.key === "Tab" && !keyboardEvent.shiftKey);
+    if (isDraftAppendKey && canCreate && mode === "planner" && event.data?.isNew && lastDraftEntryFields.has(field)) {
       keyboardEvent.preventDefault();
-      addDraft();
+      addDraftAfter(event.data, "divisionId");
       return;
     }
 
@@ -1268,6 +1294,10 @@ export function JobPlanPlannerShell({
         getRowId={(params) => params.data.clientId}
         loading={isLoading}
         rowSelection="multiple"
+        singleClickEdit
+        enterNavigatesVertically
+        enterNavigatesVerticallyAfterEdit
+        tabToNextCell={tabToNextCell}
         defaultColDef={{
           floatingFilter: true,
           filter: "agTextColumnFilter",
