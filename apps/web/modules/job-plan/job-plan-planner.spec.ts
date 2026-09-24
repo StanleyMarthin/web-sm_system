@@ -1,18 +1,18 @@
 import { describe, expect, test } from "bun:test";
-import { jobPlanV2ReadItemSchema } from "@smsystem/contracts/job-plan-v2";
+import { jobPlanRuntimeReadItemSchema } from "@smsystem/contracts/job-plan-runtime";
 import {
-  buildCreateJobPlanV2Payload,
-  buildEditDraftJobPlanV2Payload,
-  buildManualExecutionJobPlanV2Payload,
+  buildCreateJobPlanRuntimePayload,
+  buildEditDraftJobPlanRuntimePayload,
+  buildManualExecutionJobPlanRuntimePayload,
   createEditDraftFromRow,
   createManualExecutionDraft,
-  formatJobPlanV2Approval,
-  formatJobPlanV2Execution,
+  formatJobPlanRuntimeApproval,
+  formatJobPlanRuntimeExecution,
   minutesToDuration,
   minutesToTime,
   toLocalDateValue,
-  toJobPlanV2DisplayRows,
-  validateJobPlanV2Draft,
+  toJobPlanRuntimeDisplayRows,
+  validateJobPlanRuntimeDraft,
 } from "./job-plan-planner";
 
 const countdown = {
@@ -42,7 +42,7 @@ const employee = {
 
 describe("Job Plan planner helpers", () => {
   test("normalizes the active job description response key at the contract boundary", () => {
-    const result = jobPlanV2ReadItemSchema.parse({
+    const result = jobPlanRuntimeReadItemSchema.parse({
       plan_id: "PLAN-1",
       core_id: "CORE-1",
       car_id: "220S",
@@ -71,9 +71,9 @@ describe("Job Plan planner helpers", () => {
     expect("job_description" in result).toBe(false);
   });
 
-  test("formats V2 states without collapsing domains", () => {
-    expect(formatJobPlanV2Approval("DIVISION_REVIEW")).toBe("Review Divisi");
-    expect(formatJobPlanV2Execution("FINISHED_PENDING_VALIDATION")).toBe("Menunggu Validasi");
+  test("formats runtime states without collapsing domains", () => {
+    expect(formatJobPlanRuntimeApproval("DIVISION_REVIEW")).toBe("Review Divisi");
+    expect(formatJobPlanRuntimeExecution("FINISHED_PENDING_VALIDATION")).toBe("Menunggu Validasi");
   });
 
   test("formats planned minutes for grid display", () => {
@@ -86,7 +86,7 @@ describe("Job Plan planner helpers", () => {
   });
 
   test("enriches read rows from countdown and employee references", () => {
-    const rows = toJobPlanV2DisplayRows([
+    const rows = toJobPlanRuntimeDisplayRows([
       {
         plan_id: "PLAN-1",
         core_id: "CORE-1",
@@ -131,7 +131,7 @@ describe("Job Plan planner helpers", () => {
   });
 
   test("uses employee division name when countdown reference is missing", () => {
-    const rows = toJobPlanV2DisplayRows([
+    const rows = toJobPlanRuntimeDisplayRows([
       {
         plan_id: "PLAN-1",
         core_id: "MISSING-CORE",
@@ -168,7 +168,7 @@ describe("Job Plan planner helpers", () => {
   });
 
   test("hides cancelled rows from the operational grid", () => {
-    const rows = toJobPlanV2DisplayRows([
+    const rows = toJobPlanRuntimeDisplayRows([
       {
         plan_id: "PLAN-1",
         core_id: "CORE-1",
@@ -228,8 +228,8 @@ describe("Job Plan planner helpers", () => {
       error: null,
     };
 
-    expect(validateJobPlanV2Draft(draft)).toBeNull();
-    expect(buildCreateJobPlanV2Payload(draft, "USER-1", "cmd-1")).toMatchObject({
+    expect(validateJobPlanRuntimeDraft(draft)).toBeNull();
+    expect(buildCreateJobPlanRuntimePayload(draft, "USER-1", "cmd-1")).toMatchObject({
       userId: "USER-1",
       coreId: "CORE-1",
       employeeId: "EMP-1",
@@ -264,7 +264,7 @@ describe("Job Plan planner helpers", () => {
       error: null,
     };
 
-    expect(validateJobPlanV2Draft(draft)).toBeNull();
+    expect(validateJobPlanRuntimeDraft(draft)).toBeNull();
   });
 
   test("builds edit draft mutation payload", () => {
@@ -291,7 +291,7 @@ describe("Job Plan planner helpers", () => {
       error: null,
     };
 
-    expect(buildEditDraftJobPlanV2Payload(draft, "USER-1", "cmd-edit", 4)).toMatchObject({
+    expect(buildEditDraftJobPlanRuntimePayload(draft, "USER-1", "cmd-edit", 4)).toMatchObject({
       action: "edit_draft",
       userId: "USER-1",
       expectedVersion: 4,
@@ -301,7 +301,7 @@ describe("Job Plan planner helpers", () => {
   });
 
   test("creates an editable draft from a saved draft row", () => {
-    const [row] = toJobPlanV2DisplayRows([
+    const [row] = toJobPlanRuntimeDisplayRows([
       {
         plan_id: "PLAN-1",
         core_id: "CORE-1",
@@ -346,7 +346,7 @@ describe("Job Plan planner helpers", () => {
   });
 
   test("builds manual execution payload from detail draft", () => {
-    const [row] = toJobPlanV2DisplayRows([
+    const [row] = toJobPlanRuntimeDisplayRows([
       {
         plan_id: "PLAN-1",
         core_id: "CORE-1",
@@ -386,7 +386,7 @@ describe("Job Plan planner helpers", () => {
       result: "Selesai",
     };
 
-    expect(buildManualExecutionJobPlanV2Payload(draft, "USER-1", "cmd-manual")).toMatchObject({
+    expect(buildManualExecutionJobPlanRuntimePayload(draft, "USER-1", "cmd-manual")).toMatchObject({
       userId: "USER-1",
       commandId: "cmd-manual",
       expectedVersion: 5,

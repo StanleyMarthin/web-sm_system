@@ -1,12 +1,12 @@
 import type {
-  CreateJobPlanV2Request,
-  JobPlanV2ApprovalState,
-  JobPlanV2ExecutionState,
-  JobPlanV2LedgerState,
-  JobPlanV2ReadItem,
-  ManualExecutionJobPlanV2Request,
-  MutateJobPlanV2ApprovalRequest,
-} from "@smsystem/contracts/job-plan-v2";
+  CreateJobPlanRuntimeRequest,
+  JobPlanRuntimeApprovalState,
+  JobPlanRuntimeExecutionState,
+  JobPlanRuntimeLedgerState,
+  JobPlanRuntimeReadItem,
+  ManualExecutionJobPlanRuntimeRequest,
+  MutateJobPlanRuntimeApprovalRequest,
+} from "@smsystem/contracts/job-plan-runtime";
 import { jobPlanCountdownOptionSchema, jobPlanEmployeeOptionSchema, jobPlanJobTypeOptionSchema, jobPlanPanelOptionSchema } from "@smsystem/contracts/job-plan";
 import type { z } from "zod";
 import { parseSmsDate, parseSmsDurationMinutes, parseSmsTime } from "@/shared/datagrid/parsers";
@@ -16,7 +16,7 @@ export type JobPlanEmployeeOption = z.infer<typeof jobPlanEmployeeOptionSchema>;
 export type JobPlanJobTypeOption = z.infer<typeof jobPlanJobTypeOptionSchema>;
 export type JobPlanPanelOption = z.infer<typeof jobPlanPanelOptionSchema>;
 
-export interface JobPlanV2PlannerDraft {
+export interface JobPlanRuntimePlannerDraft {
   clientId: string;
   isNew: true;
   sourceType: "countdown" | "additional";
@@ -39,7 +39,7 @@ export interface JobPlanV2PlannerDraft {
   error: string | null;
 }
 
-export interface JobPlanV2ManualExecutionDraft {
+export interface JobPlanRuntimeManualExecutionDraft {
   clientId: string;
   planId: string;
   expectedVersion: number;
@@ -52,7 +52,7 @@ export interface JobPlanV2ManualExecutionDraft {
   error: string | null;
 }
 
-export interface JobPlanV2DisplayRow {
+export interface JobPlanRuntimeDisplayRow {
   clientId: string;
   isNew: boolean;
   workMode: "normal" | "overtime" | "holiday_overtime";
@@ -79,11 +79,11 @@ export interface JobPlanV2DisplayRow {
   targetTotalText: string;
   remainingText: string;
   approval: string;
-  approvalState: JobPlanV2ApprovalState;
+  approvalState: JobPlanRuntimeApprovalState;
   execution: string;
-  executionState: JobPlanV2ExecutionState;
+  executionState: JobPlanRuntimeExecutionState;
   ledger: string;
-  ledgerState: JobPlanV2LedgerState;
+  ledgerState: JobPlanRuntimeLedgerState;
   sync: string;
   version: number | null;
   accumulatedWorkMinutes: number;
@@ -96,7 +96,7 @@ export interface JobPlanV2DisplayRow {
   editVersion?: number;
 }
 
-const approvalLabels: Record<JobPlanV2ApprovalState, string> = {
+const approvalLabels: Record<JobPlanRuntimeApprovalState, string> = {
   DRAFT: "Draft",
   DIVISION_REVIEW: "Review Divisi",
   UNIT_REVIEW: "Review Unit",
@@ -106,7 +106,7 @@ const approvalLabels: Record<JobPlanV2ApprovalState, string> = {
   CANCELLED: "Dibatalkan",
 };
 
-const executionLabels: Record<JobPlanV2ExecutionState, string> = {
+const executionLabels: Record<JobPlanRuntimeExecutionState, string> = {
   NOT_STARTED: "Belum Mulai",
   RUNNING: "Berjalan",
   HOLD: "Hold",
@@ -114,21 +114,21 @@ const executionLabels: Record<JobPlanV2ExecutionState, string> = {
   VALIDATED: "Validated",
 };
 
-const ledgerLabels: Record<JobPlanV2LedgerState, string> = {
+const ledgerLabels: Record<JobPlanRuntimeLedgerState, string> = {
   UNMATERIALIZED: "Belum Diproses",
   MATERIALIZED: "Sudah Diproses",
   FINALIZED: "Ditetapkan",
 };
 
-export function formatJobPlanV2Approval(value: JobPlanV2ApprovalState) {
+export function formatJobPlanRuntimeApproval(value: JobPlanRuntimeApprovalState) {
   return approvalLabels[value] ?? value;
 }
 
-export function formatJobPlanV2Execution(value: JobPlanV2ExecutionState) {
+export function formatJobPlanRuntimeExecution(value: JobPlanRuntimeExecutionState) {
   return executionLabels[value] ?? value;
 }
 
-export function formatJobPlanV2Ledger(value: JobPlanV2LedgerState) {
+export function formatJobPlanRuntimeLedger(value: JobPlanRuntimeLedgerState) {
   return ledgerLabels[value] ?? value;
 }
 
@@ -160,13 +160,13 @@ export function parseTimeToMinutes(value: string) {
   return { value: (hour * 60) + minute };
 }
 
-export function resolveJobPlanV2Sync(row: JobPlanV2ReadItem) {
+export function resolveJobPlanRuntimeSync(row: JobPlanRuntimeReadItem) {
   if (row.read_only || row.live_state_available === false) return "Temporarily unavailable";
   if (row.projection_ready === false) return "Syncing";
   return "Synced";
 }
 
-export function createJobPlanV2Draft(context: JobPlanCountdownOption | null): JobPlanV2PlannerDraft {
+export function createJobPlanRuntimeDraft(context: JobPlanCountdownOption | null): JobPlanRuntimePlannerDraft {
   return {
     clientId: `draft-${crypto.randomUUID()}`,
     isNew: true,
@@ -193,11 +193,11 @@ export function createJobPlanV2Draft(context: JobPlanCountdownOption | null): Jo
   };
 }
 
-export function toJobPlanV2DisplayRows(
-  items: JobPlanV2ReadItem[],
+export function toJobPlanRuntimeDisplayRows(
+  items: JobPlanRuntimeReadItem[],
   countdowns: JobPlanCountdownOption[],
   employees: JobPlanEmployeeOption[],
-): JobPlanV2DisplayRow[] {
+): JobPlanRuntimeDisplayRow[] {
   const countdownByCore = new Map(countdowns.map((item) => [item.value, item]));
   const employeeById = new Map(employees.map((item) => [item.value, item]));
 
@@ -231,13 +231,13 @@ export function toJobPlanV2DisplayRows(
       durationText: minutesToDuration(item.planned_work_minutes),
       targetTotalText: minutesToDuration(Math.round((countdown?.targetTotalHours ?? item.planned_work_minutes / 60) * 60)),
       remainingText: minutesToDuration(Math.round((countdown?.remainingHours ?? 0) * 60)),
-      approval: formatJobPlanV2Approval(item.approval_state),
+      approval: formatJobPlanRuntimeApproval(item.approval_state),
       approvalState: item.approval_state,
-      execution: formatJobPlanV2Execution(item.execution_state),
+      execution: formatJobPlanRuntimeExecution(item.execution_state),
       executionState: item.execution_state,
-      ledger: formatJobPlanV2Ledger(item.ledger_state),
+      ledger: formatJobPlanRuntimeLedger(item.ledger_state),
       ledgerState: item.ledger_state,
-      sync: resolveJobPlanV2Sync(item),
+      sync: resolveJobPlanRuntimeSync(item),
       version: item.version ?? null,
       accumulatedWorkMinutes: item.accumulated_work_minutes,
       persistedWorkMinutes: item.persisted_work_minutes,
@@ -249,7 +249,7 @@ export function toJobPlanV2DisplayRows(
   });
 }
 
-export function createEditDraftFromRow(row: JobPlanV2DisplayRow): JobPlanV2PlannerDraft & { editPlanId: string; editVersion: number } {
+export function createEditDraftFromRow(row: JobPlanRuntimeDisplayRow): JobPlanRuntimePlannerDraft & { editPlanId: string; editVersion: number } {
   return {
     clientId: `edit-${row.planId}`,
     isNew: true,
@@ -276,7 +276,7 @@ export function createEditDraftFromRow(row: JobPlanV2DisplayRow): JobPlanV2Plann
   };
 }
 
-export function validateJobPlanV2Draft(row: JobPlanV2PlannerDraft) {
+export function validateJobPlanRuntimeDraft(row: JobPlanRuntimePlannerDraft) {
   if (row.sourceType === "additional") {
     if (!row.divisionId) return "Team wajib dipilih.";
     if (!row.carId) return "Unit wajib dipilih.";
@@ -296,17 +296,17 @@ export function validateJobPlanV2Draft(row: JobPlanV2PlannerDraft) {
   return null;
 }
 
-export function buildCreateJobPlanV2Payload(
-  row: JobPlanV2PlannerDraft,
+export function buildCreateJobPlanRuntimePayload(
+  row: JobPlanRuntimePlannerDraft,
   userId: string,
   commandId: string,
-): CreateJobPlanV2Request {
+): CreateJobPlanRuntimeRequest {
   const date = parseSmsDate(row.taskDate, "Tanggal").value;
   const start = parseTimeToMinutes(row.startTime).value;
   const duration = parseSmsDurationMinutes(row.durationText, "Durasi").value;
 
   if (!date || start == null || duration == null) {
-    throw new Error(validateJobPlanV2Draft(row) ?? "Draft Job Plan tidak valid.");
+    throw new Error(validateJobPlanRuntimeDraft(row) ?? "Draft Job Plan tidak valid.");
   }
 
   return {
@@ -325,13 +325,13 @@ export function buildCreateJobPlanV2Payload(
   };
 }
 
-export function buildEditDraftJobPlanV2Payload(
-  row: JobPlanV2PlannerDraft,
+export function buildEditDraftJobPlanRuntimePayload(
+  row: JobPlanRuntimePlannerDraft,
   userId: string,
   commandId: string,
   expectedVersion: number,
-): MutateJobPlanV2ApprovalRequest {
-  const createPayload = buildCreateJobPlanV2Payload(row, userId, commandId);
+): MutateJobPlanRuntimeApprovalRequest {
+  const createPayload = buildCreateJobPlanRuntimePayload(row, userId, commandId);
   return {
     action: "edit_draft",
     userId,
@@ -346,7 +346,7 @@ export function buildEditDraftJobPlanV2Payload(
   };
 }
 
-export function createManualExecutionDraft(plan: JobPlanV2DisplayRow): JobPlanV2ManualExecutionDraft {
+export function createManualExecutionDraft(plan: JobPlanRuntimeDisplayRow): JobPlanRuntimeManualExecutionDraft {
   const today = new Date().toISOString().slice(0, 10);
   return {
     clientId: `manual-${plan.planId}`,
@@ -362,7 +362,7 @@ export function createManualExecutionDraft(plan: JobPlanV2DisplayRow): JobPlanV2
   };
 }
 
-export function validateManualExecutionDraft(row: JobPlanV2ManualExecutionDraft) {
+export function validateManualExecutionDraft(row: JobPlanRuntimeManualExecutionDraft) {
   if (!row.planId) return "Plan wajib dipilih.";
   if (!row.expectedVersion) return "Version plan tidak tersedia.";
   if (!row.actualStart.trim()) return "Waktu mulai aktual wajib diisi.";
@@ -372,11 +372,11 @@ export function validateManualExecutionDraft(row: JobPlanV2ManualExecutionDraft)
   return null;
 }
 
-export function buildManualExecutionJobPlanV2Payload(
-  row: JobPlanV2ManualExecutionDraft,
+export function buildManualExecutionJobPlanRuntimePayload(
+  row: JobPlanRuntimeManualExecutionDraft,
   userId: string,
   commandId: string,
-): ManualExecutionJobPlanV2Request {
+): ManualExecutionJobPlanRuntimeRequest {
   const minutes = parseSmsDurationMinutes(row.actualMinutesText, "Durasi aktual").value;
   if (minutes == null) {
     throw new Error(validateManualExecutionDraft(row) ?? "Hasil pekerjaan tidak valid.");

@@ -1,14 +1,14 @@
 "use client";
 
-import type { JobPlanV2ReadItem } from "@smsystem/contracts/job-plan-v2";
+import type { JobPlanRuntimeReadItem } from "@smsystem/contracts/job-plan-runtime";
 import type { CellKeyDownEvent, CellValueChangedEvent, ColDef, GridApi, GridReadyEvent, ICellRendererParams, SelectionChangedEvent, TabToNextCellParams } from "ag-grid-community";
 import { useEffect, useMemo, useState } from "react";
 import {
-  createJobPlanV2,
-  createJobPlanV2CommandId,
-  fetchJobPlanV2List,
-  mutateJobPlanV2Approval,
-} from "@/shared/api/job-plan-v2";
+  createJobPlan,
+  createJobPlanCommandId,
+  fetchJobPlanRuntimeList,
+  mutateJobPlanApproval,
+} from "@/shared/api/job-plan-runtime";
 import { createJobPlanAdditionalCountdown } from "@/shared/api/job-plan";
 import { SmsAgGrid } from "@/shared/datagrid/sms-ag-grid";
 import { DataGridStatusBadge } from "@/shared/datagrid/status-badge";
@@ -16,28 +16,28 @@ import { ActionButton, CompactDateInput, PageHeader } from "@/shared/ui/compact"
 import { useSweetAlert } from "@/shared/ui/sweet-alert";
 import { SmartSelectCellEditor, type SmartSelectOption } from "@/modules/units/components/master-panel-smart-select-editor";
 import {
-  buildCreateJobPlanV2Payload,
-  buildEditDraftJobPlanV2Payload,
-  createJobPlanV2Draft,
+  buildCreateJobPlanRuntimePayload,
+  buildEditDraftJobPlanRuntimePayload,
+  createJobPlanRuntimeDraft,
   createEditDraftFromRow,
   minutesToDuration,
   minutesToTime,
   toLocalDateValue,
-  toJobPlanV2DisplayRows,
-  validateJobPlanV2Draft,
-  type JobPlanV2DisplayRow,
+  toJobPlanRuntimeDisplayRows,
+  validateJobPlanRuntimeDraft,
+  type JobPlanRuntimeDisplayRow,
   type JobPlanCountdownOption,
   type JobPlanEmployeeOption,
   type JobPlanJobTypeOption,
   type JobPlanPanelOption,
-  type JobPlanV2PlannerDraft,
+  type JobPlanRuntimePlannerDraft,
 } from "../job-plan-planner";
 import { parseClipboardTsv } from "@/shared/datagrid/clipboard";
 import { parseSmsDurationMinutes, parseSmsReference } from "@/shared/datagrid/parsers";
 
 type PlannerMode = "planner" | "approval";
 type WorkMode = "normal" | "overtime" | "holiday_overtime";
-type PlannerRow = JobPlanV2DisplayRow | (JobPlanV2DisplayRow & JobPlanV2PlannerDraft & { editPlanId?: string; editVersion?: number });
+type PlannerRow = JobPlanRuntimeDisplayRow | (JobPlanRuntimeDisplayRow & JobPlanRuntimePlannerDraft & { editPlanId?: string; editVersion?: number });
 
 interface AdditionalJobFormState {
   divisionId: string;
@@ -84,7 +84,7 @@ function contextForCore(countdowns: JobPlanCountdownOption[], coreId: string | n
   return countdowns.find((item) => item.value === coreId) ?? null;
 }
 
-function contextForDraft(countdowns: JobPlanCountdownOption[], draft: Pick<JobPlanV2PlannerDraft, "coreId" | "divisionId" | "carId" | "panelId">) {
+function contextForDraft(countdowns: JobPlanCountdownOption[], draft: Pick<JobPlanRuntimePlannerDraft, "coreId" | "divisionId" | "carId" | "panelId">) {
   return contextForCore(countdowns, draft.coreId)
     ?? countdowns.find((item) =>
       item.divisionId === draft.divisionId
@@ -112,7 +112,7 @@ function isOvertimeMode(workMode: WorkMode) {
 }
 
 function draftToDisplay(
-  draft: JobPlanV2PlannerDraft,
+  draft: JobPlanRuntimePlannerDraft,
   countdowns: JobPlanCountdownOption[],
   employees: JobPlanEmployeeOption[],
   divisions: JobPlanDivisionOption[],
@@ -631,9 +631,9 @@ export function JobPlanPlannerShell({
   panels,
   jobTypes,
 }: JobPlanPlannerShellProps) {
-  const [items, setItems] = useState<JobPlanV2ReadItem[]>([]);
-  const [drafts, setDrafts] = useState<JobPlanV2PlannerDraft[]>([]);
-  const [editDrafts, setEditDrafts] = useState<Array<JobPlanV2PlannerDraft & { editPlanId: string; editVersion: number }>>([]);
+  const [items, setItems] = useState<JobPlanRuntimeReadItem[]>([]);
+  const [drafts, setDrafts] = useState<JobPlanRuntimePlannerDraft[]>([]);
+  const [editDrafts, setEditDrafts] = useState<Array<JobPlanRuntimePlannerDraft & { editPlanId: string; editVersion: number }>>([]);
   const [gridApi, setGridApi] = useState<GridApi<PlannerRow> | null>(null);
   const [mode, setMode] = useState<PlannerMode>(() => initialPlannerMode(initialMode));
   const [isLoading, setIsLoading] = useState(true);
@@ -675,31 +675,31 @@ export function JobPlanPlannerShell({
     return technicalDivisionOptions;
   }
 
-  function rowDivisionId(row: Partial<PlannerRow> | Partial<JobPlanV2PlannerDraft> | null | undefined) {
+  function rowDivisionId(row: Partial<PlannerRow> | Partial<JobPlanRuntimePlannerDraft> | null | undefined) {
     return numberValue(row?.divisionId);
   }
 
-  function rowCarId(row: Partial<PlannerRow> | Partial<JobPlanV2PlannerDraft> | null | undefined) {
+  function rowCarId(row: Partial<PlannerRow> | Partial<JobPlanRuntimePlannerDraft> | null | undefined) {
     return String(row?.carId ?? "");
   }
 
-  function rowPanelId(row: Partial<PlannerRow> | Partial<JobPlanV2PlannerDraft> | null | undefined) {
+  function rowPanelId(row: Partial<PlannerRow> | Partial<JobPlanRuntimePlannerDraft> | null | undefined) {
     return numberValue(row?.panelId);
   }
 
-  function personOptions(row: Partial<PlannerRow> | Partial<JobPlanV2PlannerDraft> | null | undefined) {
+  function personOptions(row: Partial<PlannerRow> | Partial<JobPlanRuntimePlannerDraft> | null | undefined) {
     const divisionId = rowDivisionId(row);
     const source = divisionId === null ? employees : employees.filter((item) => item.divisionId === divisionId);
     return toOptions(source);
   }
 
-  function unitOptions(row: Partial<PlannerRow> | Partial<JobPlanV2PlannerDraft> | null | undefined) {
+  function unitOptions(row: Partial<PlannerRow> | Partial<JobPlanRuntimePlannerDraft> | null | undefined) {
     const divisionId = rowDivisionId(row);
     const scoped = countdowns.filter((item) => divisionId === null || item.divisionId === divisionId);
     return uniqueByValue((scoped.length > 0 ? scoped : countdowns).map((item) => ({ value: item.carId, label: item.unitName })));
   }
 
-  function panelOptions(row: Partial<PlannerRow> | Partial<JobPlanV2PlannerDraft> | null | undefined) {
+  function panelOptions(row: Partial<PlannerRow> | Partial<JobPlanRuntimePlannerDraft> | null | undefined) {
     const divisionId = rowDivisionId(row);
     const carId = rowCarId(row);
     const countdownPanels = countdowns
@@ -711,7 +711,7 @@ export function JobPlanPlannerShell({
     return uniqueByValue([...countdownPanels, ...masterPanels]);
   }
 
-  function additionalJobOptions(row: Partial<PlannerRow> | Partial<JobPlanV2PlannerDraft> | null | undefined) {
+  function additionalJobOptions(row: Partial<PlannerRow> | Partial<JobPlanRuntimePlannerDraft> | null | undefined) {
     const divisionId = rowDivisionId(row);
     return jobTypes
       .filter((item) =>
@@ -727,7 +727,7 @@ export function JobPlanPlannerShell({
       }));
   }
 
-  function jobOptions(row: Partial<PlannerRow> | Partial<JobPlanV2PlannerDraft> | null | undefined) {
+  function jobOptions(row: Partial<PlannerRow> | Partial<JobPlanRuntimePlannerDraft> | null | undefined) {
     const divisionId = rowDivisionId(row);
     const carId = rowCarId(row);
     const panelId = rowPanelId(row);
@@ -786,7 +786,7 @@ export function JobPlanPlannerShell({
     { value: "holiday_overtime", label: "Lembur Libur 08:00-16:00" },
   ], []);
 
-  function normalizeDraftSelection(row: JobPlanV2PlannerDraft): JobPlanV2PlannerDraft {
+  function normalizeDraftSelection(row: JobPlanRuntimePlannerDraft): JobPlanRuntimePlannerDraft {
     let next = { ...row };
     const divisionOptionsForRow = teamOptions();
     if (next.divisionId !== null && !divisionOptionsForRow.some((option) => option.value === String(next.divisionId))) {
@@ -844,7 +844,7 @@ export function JobPlanPlannerShell({
 
   async function load() {
     setIsLoading(true);
-    const result = await fetchJobPlanV2List({
+    const result = await fetchJobPlanRuntimeList({
       userId,
       view: viewForMode(mode),
       date: dateFilter,
@@ -875,7 +875,7 @@ export function JobPlanPlannerShell({
   }, [drafts.length, editDrafts.length]);
 
   const rows = useMemo<PlannerRow[]>(() => [
-    ...toJobPlanV2DisplayRows(items, countdowns, employees).map((row) => {
+    ...toJobPlanRuntimeDisplayRows(items, countdowns, employees).map((row) => {
       const draft = editDrafts.find((item) => item.editPlanId === row.planId);
       return draft ? { ...draftToDisplay(draft, countdowns, employees, divisions, panels, jobTypes), editPlanId: draft.editPlanId, editVersion: draft.editVersion } : row;
     }),
@@ -1065,7 +1065,7 @@ export function JobPlanPlannerShell({
   ], [countdowns, employees, jobTypes, panels, technicalDivisionOptions]);
 
   function addDraft() {
-    const draft = createJobPlanV2Draft(selectedContext);
+    const draft = createJobPlanRuntimeDraft(selectedContext);
     const nextDraft = {
       ...draft,
       taskDate: initialDate ?? draft.taskDate,
@@ -1097,7 +1097,7 @@ export function JobPlanPlannerShell({
       return;
     }
     const draft = normalizeDraftSelection({
-      ...createJobPlanV2Draft(null),
+      ...createJobPlanRuntimeDraft(null),
       sourceType: "additional",
       workMode: draftWorkMode,
       divisionId,
@@ -1159,7 +1159,7 @@ export function JobPlanPlannerShell({
     const selectedCoreId = String(row.coreId ?? "");
     const selectedJobTypeId = parseAdditionalJobValue(selectedCoreId);
     const next = {
-      sourceType: (selectedJobTypeId ? "additional" : "countdown") as JobPlanV2PlannerDraft["sourceType"],
+      sourceType: (selectedJobTypeId ? "additional" : "countdown") as JobPlanRuntimePlannerDraft["sourceType"],
       workMode: (String(row.workMode ?? "normal") as WorkMode),
       coreId: selectedCoreId,
       divisionId: numberValue(row.divisionId),
@@ -1210,7 +1210,7 @@ export function JobPlanPlannerShell({
     if (row.editPlanId) {
       const currentDraft = editDrafts.find((draft) => draft.clientId === row.clientId);
       const normalized = normalizeDraftSelection({
-        ...(currentDraft ?? createJobPlanV2Draft(contextForCore(countdowns, row.coreId))),
+        ...(currentDraft ?? createJobPlanRuntimeDraft(contextForCore(countdowns, row.coreId))),
         ...next,
       });
       setEditDrafts((current) => current.map((draft) => draft.clientId === row.clientId ? { ...draft, ...normalized } : draft));
@@ -1218,7 +1218,7 @@ export function JobPlanPlannerShell({
     }
     const currentDraft = drafts.find((draft) => draft.clientId === row.clientId);
     const normalized = normalizeDraftSelection({
-      ...(currentDraft ?? createJobPlanV2Draft(contextForCore(countdowns, row.coreId))),
+      ...(currentDraft ?? createJobPlanRuntimeDraft(contextForCore(countdowns, row.coreId))),
       ...next,
     });
     setDrafts((current) => current.map((draft) => draft.clientId === row.clientId ? {
@@ -1267,8 +1267,8 @@ export function JobPlanPlannerShell({
 
     for (let rowOffset = 0; rowOffset < matrix.length; rowOffset += 1) {
       const draftIndex = (baseDraftIndex < 0 ? drafts.length : baseDraftIndex) + rowOffset;
-      if (!nextDrafts[draftIndex]) nextDrafts[draftIndex] = normalizeDraftSelection(createJobPlanV2Draft(countdownContext));
-      let draft: JobPlanV2PlannerDraft = { ...nextDrafts[draftIndex], error: null };
+      if (!nextDrafts[draftIndex]) nextDrafts[draftIndex] = normalizeDraftSelection(createJobPlanRuntimeDraft(countdownContext));
+      let draft: JobPlanRuntimePlannerDraft = { ...nextDrafts[draftIndex], error: null };
 
       for (let columnOffset = 0; columnOffset < matrix[rowOffset].length; columnOffset += 1) {
         const targetField = editableFields[startFieldIndex + columnOffset];
@@ -1345,8 +1345,8 @@ export function JobPlanPlannerShell({
   async function saveDrafts() {
     if ((drafts.length === 0 && editDrafts.length === 0) || isSaving) return;
 
-    const validated = drafts.map((row) => ({ ...row, error: validateJobPlanV2Draft(row) }));
-    const validatedEdits = editDrafts.map((row) => ({ ...row, error: validateJobPlanV2Draft(row) }));
+    const validated = drafts.map((row) => ({ ...row, error: validateJobPlanRuntimeDraft(row) }));
+    const validatedEdits = editDrafts.map((row) => ({ ...row, error: validateJobPlanRuntimeDraft(row) }));
     const firstError = [...validated, ...validatedEdits].find((row) => row.error);
     if (firstError) {
       setDrafts(validated);
@@ -1357,8 +1357,8 @@ export function JobPlanPlannerShell({
 
     setIsSaving(true);
     setError(null);
-    const failed: JobPlanV2PlannerDraft[] = [];
-    const failedEdits: Array<JobPlanV2PlannerDraft & { editPlanId: string; editVersion: number }> = [];
+    const failed: JobPlanRuntimePlannerDraft[] = [];
+    const failedEdits: Array<JobPlanRuntimePlannerDraft & { editPlanId: string; editVersion: number }> = [];
     let createdAdditionalCountdown = false;
 
     for (const row of validated) {
@@ -1395,13 +1395,13 @@ export function JobPlanPlannerShell({
         };
       }
 
-      const result = await createJobPlanV2(buildCreateJobPlanV2Payload(rowToCreate, userId, createJobPlanV2CommandId("web-job-plan")));
+      const result = await createJobPlan(buildCreateJobPlanRuntimePayload(rowToCreate, userId, createJobPlanCommandId("web-job-plan")));
       if (!result.success) {
         failed.push({ ...row, error: result.message });
       }
     }
     for (const row of validatedEdits) {
-      const result = await mutateJobPlanV2Approval(row.editPlanId, buildEditDraftJobPlanV2Payload(row, userId, createJobPlanV2CommandId("web-edit-draft"), row.editVersion));
+      const result = await mutateJobPlanApproval(row.editPlanId, buildEditDraftJobPlanRuntimePayload(row, userId, createJobPlanCommandId("web-edit-draft"), row.editVersion));
       if (!result.success) {
         failedEdits.push({ ...row, error: result.message });
       }
@@ -1438,10 +1438,10 @@ export function JobPlanPlannerShell({
     setIsSaving(true);
     let failed = 0;
     for (const row of validRows) {
-      const result = await mutateJobPlanV2Approval(row.planId as string, {
+      const result = await mutateJobPlanApproval(row.planId as string, {
         action,
         userId,
-        commandId: createJobPlanV2CommandId(`web-${action}`),
+        commandId: createJobPlanCommandId(`web-${action}`),
         expectedVersion: row.version as number,
         rejectReason: rejectReason || undefined,
       });
@@ -1474,10 +1474,10 @@ export function JobPlanPlannerShell({
     setIsSaving(true);
     let failed = 0;
     for (const row of validRows) {
-      const result = await mutateJobPlanV2Approval((row.planId ?? row.editPlanId) as string, {
+      const result = await mutateJobPlanApproval((row.planId ?? row.editPlanId) as string, {
         action: "submit",
         userId,
-        commandId: createJobPlanV2CommandId("web-submit"),
+        commandId: createJobPlanCommandId("web-submit"),
         expectedVersion: row.version as number,
       });
       if (!result.success) {
@@ -1527,10 +1527,10 @@ export function JobPlanPlannerShell({
     setIsSaving(true);
     let failed = 0;
     for (const row of validRows) {
-      const result = await mutateJobPlanV2Approval(row.planId as string, {
+      const result = await mutateJobPlanApproval(row.planId as string, {
         action: "cancel",
         userId,
-        commandId: createJobPlanV2CommandId("web-cancel-draft"),
+        commandId: createJobPlanCommandId("web-cancel-draft"),
         expectedVersion: (row.version ?? row.editVersion) as number,
         reason: "Dihapus dari Web Job Plan",
       });

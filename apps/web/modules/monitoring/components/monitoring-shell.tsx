@@ -14,7 +14,7 @@ import type { ColDef, ICellRendererParams, SelectionChangedEvent } from "ag-grid
 import { RefreshCcw, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { createJobPlanV2CommandId, mutateJobPlanV2Approval } from "@/shared/api/job-plan-v2";
+import { createJobPlanCommandId, mutateJobPlanApproval } from "@/shared/api/job-plan-runtime";
 import { SmsAgGrid } from "@/shared/datagrid/sms-ag-grid";
 import { DataGridStatusBadge } from "@/shared/datagrid/status-badge";
 import { ActionButton, CompactDateInput, CompactDateRangeInput, EmptyRow, MetricBar, PageHeader, SectionCard } from "@/shared/ui/compact";
@@ -618,10 +618,10 @@ export function MonitoringShell({
     setIsBulkApproving(true);
     const failures: string[] = [];
     for (const row of approvableSelectedRows) {
-      const result = await mutateJobPlanV2Approval(row.planId, {
+      const result = await mutateJobPlanApproval(row.planId, {
         action,
         userId: user.employeeId,
-        commandId: createJobPlanV2CommandId(`monitoring-${action}`),
+        commandId: createJobPlanCommandId(`monitoring-${action}`),
         expectedVersion: row.version ?? 0,
         rejectReason: rejectReason || undefined,
       });

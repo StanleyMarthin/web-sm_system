@@ -10,7 +10,7 @@
     "./grid": "./src/grid.ts",
     "./health": "./src/health.ts",
     "./job-plan": "./src/job-plan.ts",
-    "./job-plan-v2": "./src/job-plan-v2.ts",
+    "./job-plan-runtime": "./src/job-plan-runtime.ts",
     "./job-plan-schedule": "./src/job-plan-schedule.ts",
     "./monitoring": "./src/monitoring.ts",
     "./notification": "./src/notification.ts",

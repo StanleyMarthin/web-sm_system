@@ -4,11 +4,11 @@ import {
   gridQueryStateSchema,
 } from "./grid";
 import {
-  jobPlanV2ApprovalStateSchema,
-  jobPlanV2ExecutionStateSchema,
-  jobPlanV2LedgerStateSchema,
-  jobPlanV2SourceSchema,
-} from "./job-plan-v2";
+  jobPlanRuntimeApprovalStateSchema,
+  jobPlanRuntimeExecutionStateSchema,
+  jobPlanRuntimeLedgerStateSchema,
+  jobPlanRuntimeSourceSchema,
+} from "./job-plan-runtime";
 
 const optionSchema = z.object({
   label: z.string(),
@@ -41,7 +41,7 @@ export const monitoringSyncStatusSchema = z.enum([
 ]);
 
 export const monitoringDataSourceSchema = z.union([
-  jobPlanV2SourceSchema,
+  jobPlanRuntimeSourceSchema,
   z.literal("LEGACY_ONLY"),
 ]);
 
@@ -99,14 +99,14 @@ const monitoringTaskRecordBaseSchema = z.object({
   targetDailyHours: z.number().nullable().catch(null),
   targetTotalHours: z.number().nullable().catch(null),
   planStatus: z.string(),
-  approvalState: jobPlanV2ApprovalStateSchema.nullable().optional().default(null),
-  ledgerState: jobPlanV2LedgerStateSchema.nullable().optional().default(null),
+  approvalState: jobPlanRuntimeApprovalStateSchema.nullable().optional().default(null),
+  ledgerState: jobPlanRuntimeLedgerStateSchema.nullable().optional().default(null),
   version: z.number().int().nullable().optional().default(null),
   syncStatus: monitoringSyncStatusSchema.optional().default("UNAVAILABLE"),
   dataSource: monitoringDataSourceSchema.optional().default("LEGACY_ONLY"),
   actualStatus: z.string().nullable(),
   executionStatus: z.string().nullable().catch(null),
-  executionState: jobPlanV2ExecutionStateSchema.nullable().optional().default(null),
+  executionState: jobPlanRuntimeExecutionStateSchema.nullable().optional().default(null),
   countdownStatus: z.string().nullable(),
   countdownId: z.string().optional(),
   masterPanelId: z.number().int().nullable().optional().default(null),

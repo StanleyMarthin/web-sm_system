@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const jobPlanV2ApprovalStateSchema = z.enum([
+export const jobPlanRuntimeApprovalStateSchema = z.enum([
   "DRAFT",
   "DIVISION_REVIEW",
   "UNIT_REVIEW",
@@ -10,7 +10,7 @@ export const jobPlanV2ApprovalStateSchema = z.enum([
   "CANCELLED",
 ]);
 
-export const jobPlanV2ExecutionStateSchema = z.enum([
+export const jobPlanRuntimeExecutionStateSchema = z.enum([
   "NOT_STARTED",
   "RUNNING",
   "HOLD",
@@ -18,19 +18,19 @@ export const jobPlanV2ExecutionStateSchema = z.enum([
   "VALIDATED",
 ]);
 
-export const jobPlanV2LedgerStateSchema = z.enum([
+export const jobPlanRuntimeLedgerStateSchema = z.enum([
   "UNMATERIALIZED",
   "MATERIALIZED",
   "FINALIZED",
 ]);
 
-export const jobPlanV2SourceSchema = z.enum([
+export const jobPlanRuntimeSourceSchema = z.enum([
   "V2_REDIS",
   "MYSQL_LEGACY",
   "MYSQL_V2_PROJECTION",
 ]);
 
-export const jobPlanV2ViewSchema = z.enum([
+export const jobPlanRuntimeViewSchema = z.enum([
   "browse",
   "approval",
   "approval_queue",
@@ -38,7 +38,7 @@ export const jobPlanV2ViewSchema = z.enum([
   "history",
 ]);
 
-const jobPlanV2ReadItemBaseSchema = z.object({
+const jobPlanRuntimeReadItemBaseSchema = z.object({
   plan_id: z.string(),
   core_id: z.string(),
   car_id: z.string().nullable(),
@@ -49,9 +49,9 @@ const jobPlanV2ReadItemBaseSchema = z.object({
   planned_start_minute: z.number().int(),
   planned_finish_minute: z.number().int(),
   planned_work_minutes: z.number().int(),
-  approval_state: jobPlanV2ApprovalStateSchema,
-  execution_state: jobPlanV2ExecutionStateSchema,
-  ledger_state: jobPlanV2LedgerStateSchema,
+  approval_state: jobPlanRuntimeApprovalStateSchema,
+  execution_state: jobPlanRuntimeExecutionStateSchema,
+  ledger_state: jobPlanRuntimeLedgerStateSchema,
   legacy_status: z.string().nullable(),
   urgent: z.boolean(),
   is_rework: z.boolean(),
@@ -60,7 +60,7 @@ const jobPlanV2ReadItemBaseSchema = z.object({
   jobdescription: z.string().nullable().optional(),
   job_description: z.string().nullable().optional(),
   note: z.string().nullable(),
-  source: jobPlanV2SourceSchema,
+  source: jobPlanRuntimeSourceSchema,
   version: z.number().int().nullable().optional(),
   projection_ready: z.boolean().nullable().optional(),
   accumulated_work_minutes: z.number().int().default(0),
@@ -70,17 +70,17 @@ const jobPlanV2ReadItemBaseSchema = z.object({
   read_only: z.boolean().default(false),
 });
 
-export const jobPlanV2ReadItemSchema = jobPlanV2ReadItemBaseSchema.transform(({ job_description, ...row }) => ({
+export const jobPlanRuntimeReadItemSchema = jobPlanRuntimeReadItemBaseSchema.transform(({ job_description, ...row }) => ({
   ...row,
   jobdescription: row.jobdescription ?? job_description ?? null,
 }));
 
-export const jobPlanV2ListEnvelopeSchema = z.object({
+export const jobPlanRuntimeListEnvelopeSchema = z.object({
   statusCode: z.number().int(),
   success: z.boolean(),
   message: z.string(),
   data: z.object({
-    items: z.array(jobPlanV2ReadItemSchema),
+    items: z.array(jobPlanRuntimeReadItemSchema),
     count: z.number().int().nonnegative(),
   }),
 });
@@ -91,7 +91,7 @@ const planIdSchema = z.string().trim().min(1).max(100);
 const minuteSchema = z.number().int().min(0).max(24 * 60);
 const workMinuteSchema = z.number().int().positive().max(24 * 60);
 
-export const createJobPlanV2RequestSchema = z.object({
+export const createJobPlanRuntimeRequestSchema = z.object({
   userId: userIdSchema,
   coreId: z.string().trim().min(1).max(100),
   employeeId: z.string().trim().min(1).max(100),
@@ -106,7 +106,7 @@ export const createJobPlanV2RequestSchema = z.object({
   isPriority: z.boolean().default(false),
 });
 
-export const mutateJobPlanV2ApprovalRequestSchema = z.object({
+export const mutateJobPlanRuntimeApprovalRequestSchema = z.object({
   action: z.enum(["submit", "cancel", "edit_draft", "approve", "correct", "reject"]),
   userId: userIdSchema,
   commandId: commandIdSchema,
@@ -121,7 +121,7 @@ export const mutateJobPlanV2ApprovalRequestSchema = z.object({
   reason: z.string().trim().max(1000).nullable().optional(),
 });
 
-export const mutateJobPlanV2ExecutionRequestSchema = z.object({
+export const mutateJobPlanRuntimeExecutionRequestSchema = z.object({
   action: z.enum(["start", "hold", "resume", "finish"]),
   userId: userIdSchema,
   commandId: commandIdSchema,
@@ -133,7 +133,7 @@ export const mutateJobPlanV2ExecutionRequestSchema = z.object({
   plannedWorkMinutes: workMinuteSchema.optional(),
 });
 
-export const monitorJobPlanV2RequestSchema = z.object({
+export const monitorJobPlanRuntimeRequestSchema = z.object({
   userId: userIdSchema,
   commandId: commandIdSchema,
   expectedVersion: z.number().int().positive(),
@@ -142,9 +142,9 @@ export const monitorJobPlanV2RequestSchema = z.object({
   note: z.string().trim().max(1000).nullable().optional(),
 });
 
-export const validateJobPlanV2RequestSchema = monitorJobPlanV2RequestSchema;
+export const validateJobPlanRuntimeRequestSchema = monitorJobPlanRuntimeRequestSchema;
 
-export const manualExecutionJobPlanV2RequestSchema = z.object({
+export const manualExecutionJobPlanRuntimeRequestSchema = z.object({
   userId: userIdSchema,
   commandId: commandIdSchema,
   expectedVersion: z.number().int().positive(),
@@ -156,7 +156,7 @@ export const manualExecutionJobPlanV2RequestSchema = z.object({
   attachmentRef: z.string().trim().max(500).nullable().optional(),
 });
 
-export const jobPlanV2MutationEnvelopeSchema = z.object({
+export const jobPlanRuntimeMutationEnvelopeSchema = z.object({
   statusCode: z.number().int(),
   success: z.boolean(),
   message: z.string(),
@@ -164,9 +164,9 @@ export const jobPlanV2MutationEnvelopeSchema = z.object({
     planId: planIdSchema,
     version: z.number().int().positive(),
     reused: z.boolean().optional(),
-    approvalState: jobPlanV2ApprovalStateSchema.optional(),
-    executionState: jobPlanV2ExecutionStateSchema.optional(),
-    ledgerState: jobPlanV2LedgerStateSchema.optional(),
+    approvalState: jobPlanRuntimeApprovalStateSchema.optional(),
+    executionState: jobPlanRuntimeExecutionStateSchema.optional(),
+    ledgerState: jobPlanRuntimeLedgerStateSchema.optional(),
     schedulingGap: z.record(z.string(), z.unknown()).nullable().optional(),
     verifiedTotalMinutes: z.number().int().optional(),
     verifiedDeltaMinutes: z.number().int().optional(),
@@ -174,7 +174,7 @@ export const jobPlanV2MutationEnvelopeSchema = z.object({
   }),
 });
 
-export const jobPlanV2FailureSchema = z.object({
+export const jobPlanRuntimeFailureSchema = z.object({
   statusCode: z.number().int(),
   success: z.literal(false),
   message: z.string(),
@@ -182,14 +182,14 @@ export const jobPlanV2FailureSchema = z.object({
   data: z.record(z.string(), z.unknown()).default({}),
 });
 
-export type JobPlanV2ApprovalState = z.infer<typeof jobPlanV2ApprovalStateSchema>;
-export type JobPlanV2ExecutionState = z.infer<typeof jobPlanV2ExecutionStateSchema>;
-export type JobPlanV2LedgerState = z.infer<typeof jobPlanV2LedgerStateSchema>;
-export type JobPlanV2ReadItem = z.infer<typeof jobPlanV2ReadItemSchema>;
-export type JobPlanV2View = z.infer<typeof jobPlanV2ViewSchema>;
-export type CreateJobPlanV2Request = z.infer<typeof createJobPlanV2RequestSchema>;
-export type MutateJobPlanV2ApprovalRequest = z.infer<typeof mutateJobPlanV2ApprovalRequestSchema>;
-export type MutateJobPlanV2ExecutionRequest = z.infer<typeof mutateJobPlanV2ExecutionRequestSchema>;
-export type MonitorJobPlanV2Request = z.infer<typeof monitorJobPlanV2RequestSchema>;
-export type ValidateJobPlanV2Request = z.infer<typeof validateJobPlanV2RequestSchema>;
-export type ManualExecutionJobPlanV2Request = z.infer<typeof manualExecutionJobPlanV2RequestSchema>;
+export type JobPlanRuntimeApprovalState = z.infer<typeof jobPlanRuntimeApprovalStateSchema>;
+export type JobPlanRuntimeExecutionState = z.infer<typeof jobPlanRuntimeExecutionStateSchema>;
+export type JobPlanRuntimeLedgerState = z.infer<typeof jobPlanRuntimeLedgerStateSchema>;
+export type JobPlanRuntimeReadItem = z.infer<typeof jobPlanRuntimeReadItemSchema>;
+export type JobPlanRuntimeView = z.infer<typeof jobPlanRuntimeViewSchema>;
+export type CreateJobPlanRuntimeRequest = z.infer<typeof createJobPlanRuntimeRequestSchema>;
+export type MutateJobPlanRuntimeApprovalRequest = z.infer<typeof mutateJobPlanRuntimeApprovalRequestSchema>;
+export type MutateJobPlanRuntimeExecutionRequest = z.infer<typeof mutateJobPlanRuntimeExecutionRequestSchema>;
+export type MonitorJobPlanRuntimeRequest = z.infer<typeof monitorJobPlanRuntimeRequestSchema>;
+export type ValidateJobPlanRuntimeRequest = z.infer<typeof validateJobPlanRuntimeRequestSchema>;
+export type ManualExecutionJobPlanRuntimeRequest = z.infer<typeof manualExecutionJobPlanRuntimeRequestSchema>;

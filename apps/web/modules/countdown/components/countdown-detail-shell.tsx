@@ -14,7 +14,7 @@ import { SmsAgGrid } from "@/shared/datagrid/sms-ag-grid";
 import { parseClipboardTsv } from "@/shared/datagrid/clipboard";
 import { approveCountdownRevision, requestCountdownRevision } from "@/shared/api/countdown";
 import { fetchJobPlanGrid } from "@/shared/api/job-plan";
-import { createJobPlanV2, createJobPlanV2CommandId } from "@/shared/api/job-plan-v2";
+import { createJobPlan, createJobPlanCommandId } from "@/shared/api/job-plan-runtime";
 import { createPr } from "@/shared/api/pr";
 import { createVendor } from "@/shared/api/vendor";
 import { createWo } from "@/shared/api/wo";
@@ -709,7 +709,7 @@ export function CountdownDetailShell({
     setJobPlanDraftError(null);
     const failed: JobPlanDraftRow[] = [];
     for (const row of validated) {
-      const result = await createJobPlanV2({
+      const result = await createJobPlan({
         userId,
         coreId: countdown.countdownId,
         employeeId: row.employeeId,
@@ -717,7 +717,7 @@ export function CountdownDetailShell({
         plannedStartMinute: parseTimeMinutes(row.startTime) ?? 0,
         plannedWorkMinutes: parseDurationMinutes(row.durationText) ?? 1,
         jobDescription: row.jobDescription.trim(),
-        commandId: createJobPlanV2CommandId("countdown-job-plan"),
+        commandId: createJobPlanCommandId("countdown-job-plan"),
         note: row.note.trim() || null,
         isOvertime: false,
         isRework: false,

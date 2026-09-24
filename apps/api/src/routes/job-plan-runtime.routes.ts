@@ -4,12 +4,12 @@ import { errorResponse, withCors } from "@/http/response";
 import { requireSession } from "@/middleware/auth.middleware";
 import type { AuthService } from "@/services/auth/auth.service";
 
-const DEFAULT_JOB_PLAN_V2_BASE_URL = "http://108.136.189.225:8083";
+const DEFAULT_JOB_PLAN_RUNTIME_BASE_URL = "http://108.136.189.225:8083";
 
 type Fetcher = typeof fetch;
 
 function baseUrl(input?: string) {
-  return (input?.trim() || getApiEnv().JOB_PLAN_V2_BASE_URL || DEFAULT_JOB_PLAN_V2_BASE_URL).replace(/\/$/u, "");
+  return (input?.trim() || getApiEnv().JOB_PLAN_RUNTIME_BASE_URL || DEFAULT_JOB_PLAN_RUNTIME_BASE_URL).replace(/\/$/u, "");
 }
 
 async function bodyWithSessionUser(request: Request, userId: string) {
@@ -32,7 +32,7 @@ async function bodyWithSessionUser(request: Request, userId: string) {
   });
 }
 
-function hasJobPlanV2Access(permissions: readonly string[]) {
+function hasJobPlanRuntimeAccess(permissions: readonly string[]) {
   return (
     permissions.includes(permissionCodes.updatePlan) ||
     permissions.includes(permissionCodes.taskExecute) ||
@@ -41,7 +41,7 @@ function hasJobPlanV2Access(permissions: readonly string[]) {
   );
 }
 
-export async function handleJobPlanV2ProxyRoute(
+export async function handleJobPlanRuntimeProxyRoute(
   request: Request,
   path: string,
   authService: AuthService,
@@ -52,8 +52,8 @@ export async function handleJobPlanV2ProxyRoute(
   if ("response" in sessionResult) return sessionResult.response;
 
   const user = sessionResult.session.user;
-  if (!hasJobPlanV2Access(user.permissions)) {
-    return errorResponse(request, "Anda belum memiliki akses Job Plan V2.", 403, "JOB_PLAN_V2_FORBIDDEN");
+  if (!hasJobPlanRuntimeAccess(user.permissions)) {
+    return errorResponse(request, "Anda belum memiliki akses Job Plan.", 403, "JOB_PLAN_FORBIDDEN");
   }
 
   const url = new URL(request.url);

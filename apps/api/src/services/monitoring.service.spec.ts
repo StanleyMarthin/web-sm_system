@@ -157,8 +157,8 @@ describe("DefaultMonitoringService mobile notification", () => {
   });
 });
 
-describe("DefaultMonitoringService V2 monitoring enrichment", () => {
-  it("enriches monitoring rows from Job Plan V2 by planId", async () => {
+describe("DefaultMonitoringService runtime monitoring enrichment", () => {
+  it("enriches monitoring rows from Job Plan Runtime by planId", async () => {
     const repository = monitoringRepository([
       monitoringRow({ planId: "PLAN-1", coreId: "CORE-1" }),
     ]);
@@ -221,11 +221,11 @@ describe("DefaultMonitoringService V2 monitoring enrichment", () => {
     });
   });
 
-  it("falls back to legacy rows when Job Plan V2 is unavailable", async () => {
+  it("falls back to legacy rows when Job Plan Runtime is unavailable", async () => {
     const repository = monitoringRepository([monitoringRow()]);
     const readModel = {
       listByCoreIds: mock(async () => {
-        throw new Error("V2_DOWN");
+        throw new Error("RUNTIME_DOWN");
       }),
     };
 
@@ -247,7 +247,7 @@ describe("DefaultMonitoringService V2 monitoring enrichment", () => {
     });
   });
 
-  it("does not merge V2 data by coreId when planId differs", async () => {
+  it("does not merge runtime data by coreId when planId differs", async () => {
     const repository = monitoringRepository([monitoringRow({ planId: "PLAN-1", coreId: "CORE-1" })]);
     const readModel = {
       listByCoreIds: mock(async () => [

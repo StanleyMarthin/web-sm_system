@@ -1,29 +1,29 @@
-import type { JobPlanV2ReadItem } from "@smsystem/contracts/job-plan-v2";
-import { jobPlanV2ListEnvelopeSchema } from "@smsystem/contracts/job-plan-v2";
+import type { JobPlanRuntimeReadItem } from "@smsystem/contracts/job-plan-runtime";
+import { jobPlanRuntimeListEnvelopeSchema } from "@smsystem/contracts/job-plan-runtime";
 import { getApiEnv } from "@/config/env";
 
 type Fetcher = typeof fetch;
 
-export interface JobPlanV2ReadModel {
-  listByCoreIds(userId: string, coreIds: string[]): Promise<JobPlanV2ReadItem[]>;
+export interface JobPlanRuntimeReadModel {
+  listByCoreIds(userId: string, coreIds: string[]): Promise<JobPlanRuntimeReadItem[]>;
 }
 
 function baseUrl(input?: string) {
-  const value = input?.trim() || getApiEnv().JOB_PLAN_V2_BASE_URL;
+  const value = input?.trim() || getApiEnv().JOB_PLAN_RUNTIME_BASE_URL;
   if (!value) {
-    throw new Error("JOB_PLAN_V2_READ_MODEL_UNAVAILABLE");
+    throw new Error("JOB_PLAN_RUNTIME_READ_MODEL_UNAVAILABLE");
   }
 
   return value.replace(/\/$/u, "");
 }
 
-export class HttpJobPlanV2ReadModel implements JobPlanV2ReadModel {
+export class HttpJobPlanRuntimeReadModel implements JobPlanRuntimeReadModel {
   constructor(
     private readonly fetcher: Fetcher = fetch,
     private readonly upstreamBaseUrl?: string,
   ) {}
 
-  async listByCoreIds(userId: string, coreIds: string[]): Promise<JobPlanV2ReadItem[]> {
+  async listByCoreIds(userId: string, coreIds: string[]): Promise<JobPlanRuntimeReadItem[]> {
     const uniqueCoreIds = [...new Set(coreIds.map((coreId) => coreId.trim()).filter(Boolean))];
     if (uniqueCoreIds.length === 0) return [];
 
@@ -31,7 +31,7 @@ export class HttpJobPlanV2ReadModel implements JobPlanV2ReadModel {
     return itemGroups.flat();
   }
 
-  private async fetchCore(userId: string, coreId: string): Promise<JobPlanV2ReadItem[]> {
+  private async fetchCore(userId: string, coreId: string): Promise<JobPlanRuntimeReadItem[]> {
     const params = new URLSearchParams({
       userId,
       view: "browse",
@@ -42,10 +42,10 @@ export class HttpJobPlanV2ReadModel implements JobPlanV2ReadModel {
       { signal: AbortSignal.timeout(2_500) },
     );
     if (!response.ok) {
-      throw new Error("JOB_PLAN_V2_READ_MODEL_UNAVAILABLE");
+      throw new Error("JOB_PLAN_RUNTIME_READ_MODEL_UNAVAILABLE");
     }
 
-    const payload = jobPlanV2ListEnvelopeSchema.parse(await response.json());
+    const payload = jobPlanRuntimeListEnvelopeSchema.parse(await response.json());
     return payload.data.items;
   }
 }

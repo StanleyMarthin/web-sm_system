@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import type { AuthService } from "@/services/auth/auth.service";
 import type { WebSession } from "@/services/auth/session.service";
-import { handleJobPlanV2ProxyRoute } from "./job-plan-v2.routes";
+import { handleJobPlanRuntimeProxyRoute } from "../src/routes/job-plan-runtime.routes";
 
 const session = {
   user: {
@@ -16,11 +16,11 @@ function auth(currentSession: WebSession | null = session): AuthService {
   } as unknown as AuthService;
 }
 
-describe("Job Plan V2 API proxy", () => {
+describe("Job Plan API runtime proxy", () => {
   it("injects session userId into list query", async () => {
     let upstreamUrl = "";
-    const response = await handleJobPlanV2ProxyRoute(
-      new Request("http://api.test/api/job-plan-v2?userId=FAKE&view=approval_queue"),
+    const response = await handleJobPlanRuntimeProxyRoute(
+      new Request("http://api.test/api/job-plan-runtime?userId=FAKE&view=approval_queue"),
       "",
       auth(),
       async (request) => {
@@ -37,8 +37,8 @@ describe("Job Plan V2 API proxy", () => {
   it("injects session userId into mutation body and preserves subpath", async () => {
     let upstreamUrl = "";
     let upstreamBody: unknown;
-    const response = await handleJobPlanV2ProxyRoute(
-      new Request("http://api.test/api/job-plan-v2/PLAN-1/manual-execution", {
+    const response = await handleJobPlanRuntimeProxyRoute(
+      new Request("http://api.test/api/job-plan-runtime/PLAN-1/manual-execution", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -65,10 +65,10 @@ describe("Job Plan V2 API proxy", () => {
     expect(upstreamBody).toMatchObject({ userId: "EMP-007", commandId: "cmd-1" });
   });
 
-  it("rejects users without Job Plan V2 access", async () => {
+  it("rejects users without Job Plan Runtime access", async () => {
     let called = false;
-    const response = await handleJobPlanV2ProxyRoute(
-      new Request("http://api.test/api/job-plan-v2"),
+    const response = await handleJobPlanRuntimeProxyRoute(
+      new Request("http://api.test/api/job-plan-runtime"),
       "",
       auth({ ...session, user: { ...session.user, permissions: [] } }),
       async () => {

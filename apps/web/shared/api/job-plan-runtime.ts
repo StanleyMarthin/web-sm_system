@@ -1,17 +1,17 @@
 import type {
-  CreateJobPlanV2Request,
-  JobPlanV2View,
-  ManualExecutionJobPlanV2Request,
-  MonitorJobPlanV2Request,
-  MutateJobPlanV2ApprovalRequest,
-  MutateJobPlanV2ExecutionRequest,
-  ValidateJobPlanV2Request,
-} from "@smsystem/contracts/job-plan-v2";
+  CreateJobPlanRuntimeRequest,
+  JobPlanRuntimeView,
+  ManualExecutionJobPlanRuntimeRequest,
+  MonitorJobPlanRuntimeRequest,
+  MutateJobPlanRuntimeApprovalRequest,
+  MutateJobPlanRuntimeExecutionRequest,
+  ValidateJobPlanRuntimeRequest,
+} from "@smsystem/contracts/job-plan-runtime";
 import {
-  jobPlanV2FailureSchema,
-  jobPlanV2ListEnvelopeSchema,
-  jobPlanV2MutationEnvelopeSchema,
-} from "@smsystem/contracts/job-plan-v2";
+  jobPlanRuntimeFailureSchema,
+  jobPlanRuntimeListEnvelopeSchema,
+  jobPlanRuntimeMutationEnvelopeSchema,
+} from "@smsystem/contracts/job-plan-runtime";
 
 interface ApiFailure {
   success: false;
@@ -20,9 +20,9 @@ interface ApiFailure {
   data?: Record<string, unknown>;
 }
 
-export interface JobPlanV2ListParams {
+export interface JobPlanRuntimeListParams {
   userId: string;
-  view?: JobPlanV2View;
+  view?: JobPlanRuntimeView;
   date?: string;
   unitId?: string;
   divisionId?: string | number;
@@ -35,7 +35,7 @@ function appendParam(params: URLSearchParams, key: string, value: string | numbe
   params.set(key, String(value));
 }
 
-export function buildJobPlanV2QueryString(input: JobPlanV2ListParams): string {
+export function buildJobPlanRuntimeQueryString(input: JobPlanRuntimeListParams): string {
   const params = new URLSearchParams();
 
   appendParam(params, "userId", input.userId);
@@ -52,7 +52,7 @@ export function buildJobPlanV2QueryString(input: JobPlanV2ListParams): string {
 async function parseFailure(response: Response): Promise<ApiFailure> {
   const body = await response.json().catch(() => ({}));
   try {
-    const payload = jobPlanV2FailureSchema.parse(body);
+    const payload = jobPlanRuntimeFailureSchema.parse(body);
     return {
       success: false,
       message: payload.message,
@@ -68,14 +68,14 @@ async function parseFailure(response: Response): Promise<ApiFailure> {
         return {
           success: false,
           message,
-          errorCode: typeof record.errorCode === "string" ? record.errorCode : "JOB_PLAN_V2_ERROR",
+          errorCode: typeof record.errorCode === "string" ? record.errorCode : "JOB_PLAN_RUNTIME_ERROR",
           data: {},
         };
       }
     }
     return {
       success: false,
-      message: "Response Job Plan V2 tidak valid.",
+      message: "Response Job Plan Runtime tidak valid.",
       errorCode: "INVALID_RESPONSE",
       data: {},
     };
@@ -83,7 +83,7 @@ async function parseFailure(response: Response): Promise<ApiFailure> {
 }
 
 async function postJson<TInput>(path: string, input: TInput) {
-  const response = await fetch(`/api/job-plan-v2${path}`, {
+  const response = await fetch(`/api/job-plan-runtime${path}`, {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
@@ -92,41 +92,41 @@ async function postJson<TInput>(path: string, input: TInput) {
 
   if (!response.ok) return parseFailure(response);
 
-  const payload = jobPlanV2MutationEnvelopeSchema.parse(await response.json());
+  const payload = jobPlanRuntimeMutationEnvelopeSchema.parse(await response.json());
   return {
     success: true as const,
     result: payload.data,
   };
 }
 
-export function createJobPlanV2CommandId(prefix = "web") {
+export function createJobPlanCommandId(prefix = "web") {
   return `${prefix}-${crypto.randomUUID()}`;
 }
 
-export async function fetchJobPlanV2List(input: JobPlanV2ListParams) {
-  const queryString = buildJobPlanV2QueryString(input);
+export async function fetchJobPlanRuntimeList(input: JobPlanRuntimeListParams) {
+  const queryString = buildJobPlanRuntimeQueryString(input);
   const suffix = queryString ? `?${queryString}` : "";
 
-  const response = await fetch(`/api/job-plan-v2${suffix}`, {
+  const response = await fetch(`/api/job-plan-runtime${suffix}`, {
     credentials: "include",
     cache: "no-store",
   });
 
   if (!response.ok) return parseFailure(response);
 
-  const payload = jobPlanV2ListEnvelopeSchema.parse(await response.json());
+  const payload = jobPlanRuntimeListEnvelopeSchema.parse(await response.json());
   return {
     success: true as const,
     result: payload.data,
   };
 }
 
-export function createJobPlanV2(input: CreateJobPlanV2Request) {
+export function createJobPlan(input: CreateJobPlanRuntimeRequest) {
   return postJson("", input);
 }
 
-export async function mutateJobPlanV2Approval(planId: string, input: MutateJobPlanV2ApprovalRequest) {
-  const response = await fetch(`/api/job-plan-v2/${encodeURIComponent(planId)}`, {
+export async function mutateJobPlanApproval(planId: string, input: MutateJobPlanRuntimeApprovalRequest) {
+  const response = await fetch(`/api/job-plan-runtime/${encodeURIComponent(planId)}`, {
     method: "PUT",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
@@ -135,25 +135,25 @@ export async function mutateJobPlanV2Approval(planId: string, input: MutateJobPl
 
   if (!response.ok) return parseFailure(response);
 
-  const payload = jobPlanV2MutationEnvelopeSchema.parse(await response.json());
+  const payload = jobPlanRuntimeMutationEnvelopeSchema.parse(await response.json());
   return {
     success: true as const,
     result: payload.data,
   };
 }
 
-export function mutateJobPlanV2Execution(planId: string, input: MutateJobPlanV2ExecutionRequest) {
+export function mutateJobPlanExecution(planId: string, input: MutateJobPlanRuntimeExecutionRequest) {
   return postJson(`/${encodeURIComponent(planId)}/execution`, input);
 }
 
-export function manualExecuteJobPlanV2(planId: string, input: ManualExecutionJobPlanV2Request) {
+export function manualExecuteJobPlan(planId: string, input: ManualExecutionJobPlanRuntimeRequest) {
   return postJson(`/${encodeURIComponent(planId)}/manual-execution`, input);
 }
 
-export function monitorJobPlanV2(planId: string, input: MonitorJobPlanV2Request) {
+export function monitorJobPlan(planId: string, input: MonitorJobPlanRuntimeRequest) {
   return postJson(`/${encodeURIComponent(planId)}/monitor`, input);
 }
 
-export function validateJobPlanV2(planId: string, input: ValidateJobPlanV2Request) {
+export function validateJobPlan(planId: string, input: ValidateJobPlanRuntimeRequest) {
   return postJson(`/${encodeURIComponent(planId)}/validate`, input);
 }

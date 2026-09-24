@@ -16,9 +16,9 @@ import {
   type MonitoringRepository,
 } from "@/repositories/monitoring.repo";
 import {
-  HttpJobPlanV2ReadModel,
-  type JobPlanV2ReadModel,
-} from "@/services/job-plan-v2-read-model";
+  HttpJobPlanRuntimeReadModel,
+  type JobPlanRuntimeReadModel,
+} from "@/services/job-plan-runtime-read-model";
 import type { WebSession } from "@/services/auth/session.service";
 import { applyDefaultDivisionIdFilter } from "@/services/grid/division-default";
 import { TtlCache } from "@/lib/ttl-cache";
@@ -122,7 +122,7 @@ function monitoringScopeCacheKey(session: WebSession): string {
 export class DefaultMonitoringService implements MonitoringService {
   constructor(
     private readonly repository: MonitoringRepository = new MySqlMonitoringRepository(),
-    private readonly jobPlanV2ReadModel: JobPlanV2ReadModel = new HttpJobPlanV2ReadModel(),
+    private readonly jobPlanRuntimeReadModel: JobPlanRuntimeReadModel = new HttpJobPlanRuntimeReadModel(),
   ) {}
 
   async listToday(
@@ -373,11 +373,11 @@ export class DefaultMonitoringService implements MonitoringService {
     if (rows.length === 0) return rows;
 
     try {
-      const v2Items = await this.jobPlanV2ReadModel.listByCoreIds(
+      const runtimeItems = await this.jobPlanRuntimeReadModel.listByCoreIds(
         session.user.employeeId,
         rows.map((row) => row.coreId),
       );
-      const byPlanId = new Map(v2Items.map((item) => [item.plan_id, item]));
+      const byPlanId = new Map(runtimeItems.map((item) => [item.plan_id, item]));
 
       return rows.map((row) => {
         const item = byPlanId.get(row.planId);

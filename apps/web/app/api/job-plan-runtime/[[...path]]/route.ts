@@ -5,7 +5,7 @@ interface RouteProps {
 }
 
 function baseUrl() {
-  return (process.env.JOB_PLAN_V2_BASE_URL?.trim() || `${getApiBaseUrl()}/api/job-plan-v2`).replace(/\/$/u, "");
+  return (process.env.JOB_PLAN_RUNTIME_BASE_URL?.trim() || `${getApiBaseUrl()}/api/job-plan-runtime`).replace(/\/$/u, "");
 }
 
 async function proxy(request: Request, props: RouteProps) {
