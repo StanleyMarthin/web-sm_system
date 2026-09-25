@@ -91,6 +91,32 @@ describe("MySqlJobPlanRepository countdown alignment", () => {
     expect(countdownSql.includes("AND COALESCE(jc.remaining_hours, 0) > 0")).toBe(false);
   });
 
+  it("loads jobdesc options by hierarchy without the broad plan capacity scan", async () => {
+    const statements: string[] = [];
+    const repository = new MySqlJobPlanRepository(() => ({
+      query: async (sql: string) => {
+        statements.push(sql);
+        return [[]];
+      },
+    }) as never);
+
+    await repository.listOptions({
+      employeeId: "EMP-1",
+      scope,
+      kind: "jobdesc",
+      divisionId: 10,
+      unitId: "CAR-1",
+      panelId: 11,
+    });
+
+    const sql = statements[0] ?? "";
+    expect(sql).toContain("jc.car_id = ?");
+    expect(sql).toContain("jc.panel_id = ?");
+    expect(sql).toContain("jc.division_id = ?");
+    expect(sql).toContain("p2.core_id = jc.id");
+    expect(sql.includes("planCapacity")).toBe(false);
+  });
+
   it("rejects a job plan that only provides a panel name", async () => {
     const connection = {
       beginTransaction: async () => undefined,

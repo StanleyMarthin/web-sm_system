@@ -9,7 +9,7 @@ import {
   fetchJobPlanRuntimeList,
   mutateJobPlanApproval,
 } from "@/shared/api/job-plan-runtime";
-import { createJobPlanAdditionalCountdown } from "@/shared/api/job-plan";
+import { createJobPlanAdditionalCountdown, fetchJobPlanOptions } from "@/shared/api/job-plan";
 import { SmsAgGrid } from "@/shared/datagrid/sms-ag-grid";
 import { DataGridStatusBadge } from "@/shared/datagrid/status-badge";
 import { ActionButton, CompactDateInput, PageHeader } from "@/shared/ui/compact";
@@ -209,7 +209,7 @@ function formatReportDate(value: string) {
   }).format(new Date(`${value}T00:00:00`));
 }
 
-function uniqueByValue(options: Array<{ value: string; label: string }>) {
+function uniqueByValue<T extends { value: string; label: string }>(options: T[]): T[] {
   const seen = new Set<string>();
   return options.filter((option) => {
     if (!option.value || seen.has(option.value)) return false;
@@ -658,18 +658,26 @@ export function JobPlanPlannerShell({
     durationText: "01:00",
     note: "",
   });
+  const [lazyEmployees, setLazyEmployees] = useState<Record<string, JobPlanEmployeeOption[]>>({});
+  const [lazyUnitOptions, setLazyUnitOptions] = useState<Record<string, Array<{ value: string; label: string; unitName: string }>>>({});
+  const [lazyPanels, setLazyPanels] = useState<Record<string, JobPlanPanelOption[]>>({});
+  const [lazyJobs, setLazyJobs] = useState<Record<string, JobPlanCountdownOption[]>>({});
   const sweetAlert = useSweetAlert();
-  const selectedContext = useMemo(() => contextForCore(countdowns, initialCoreId), [countdowns, initialCoreId]);
+  const activeCountdowns = useMemo(
+    () => uniqueByValue([...countdowns, ...Object.values(lazyJobs).flat()]),
+    [countdowns, lazyJobs],
+  );
+  const selectedContext = useMemo(() => contextForCore(activeCountdowns, initialCoreId), [activeCountdowns, initialCoreId]);
   const technicalDivisionOptions = useMemo(() => {
     const fromReferences = divisions
       .filter((item) => item.isTechnical === true || item.isTeknis === true)
       .map((item) => ({ value: item.value, label: item.label }));
     const fallback = [
       ...employees.map((item) => ({ value: String(item.divisionId ?? ""), label: item.divisionName ?? "" })),
-      ...countdowns.map((item) => ({ value: String(item.divisionId ?? ""), label: item.divisionName })),
+      ...activeCountdowns.map((item) => ({ value: String(item.divisionId ?? ""), label: item.divisionName })),
     ];
     return uniqueByValue([...fromReferences, ...fallback].filter((item) => item.value && isOperationalDivisionLabel(item.label)));
-  }, [countdowns, divisions, employees]);
+  }, [activeCountdowns, divisions, employees]);
 
   function teamOptions() {
     return technicalDivisionOptions;
@@ -689,20 +697,27 @@ export function JobPlanPlannerShell({
 
   function personOptions(row: Partial<PlannerRow> | Partial<JobPlanRuntimePlannerDraft> | null | undefined) {
     const divisionId = rowDivisionId(row);
+    const cached = lazyEmployees[String(divisionId ?? "all")];
+    if (cached) return toOptions(cached);
     const source = divisionId === null ? employees : employees.filter((item) => item.divisionId === divisionId);
     return toOptions(source);
   }
 
   function unitOptions(row: Partial<PlannerRow> | Partial<JobPlanRuntimePlannerDraft> | null | undefined) {
     const divisionId = rowDivisionId(row);
-    const scoped = countdowns.filter((item) => divisionId === null || item.divisionId === divisionId);
-    return uniqueByValue((scoped.length > 0 ? scoped : countdowns).map((item) => ({ value: item.carId, label: item.unitName })));
+    const cached = lazyUnitOptions[String(divisionId ?? "all")];
+    if (cached) return cached;
+    const scoped = activeCountdowns.filter((item) => divisionId === null || item.divisionId === divisionId);
+    return uniqueByValue((scoped.length > 0 ? scoped : activeCountdowns).map((item) => ({ value: item.carId, label: item.unitName, unitName: item.unitName })));
   }
 
   function panelOptions(row: Partial<PlannerRow> | Partial<JobPlanRuntimePlannerDraft> | null | undefined) {
     const divisionId = rowDivisionId(row);
     const carId = rowCarId(row);
-    const countdownPanels = countdowns
+    const cacheKey = `${divisionId ?? "all"}:${carId}`;
+    const cached = lazyPanels[cacheKey];
+    if (cached) return cached.map((item) => ({ value: item.value, label: item.label, code: item.code }));
+    const countdownPanels = activeCountdowns
       .filter((item) => (divisionId === null || item.divisionId === divisionId) && (!carId || item.carId === carId))
       .map((item) => ({ value: String(item.panelId ?? ""), label: item.panelName ?? "-" }));
     const masterPanels = panels
@@ -733,7 +748,9 @@ export function JobPlanPlannerShell({
     const panelId = rowPanelId(row);
     const workMode = String(row?.workMode ?? "normal") as WorkMode;
     const modeLabel = workMode === "normal" ? "Normal" : workMode === "holiday_overtime" ? "Lembur Libur" : "Lembur";
-    const countdownOptions = countdowns
+    const cacheKey = `${divisionId ?? "all"}:${carId}:${panelId ?? "all"}`;
+    const sourceCountdowns = lazyJobs[cacheKey] ?? activeCountdowns;
+    const countdownOptions = sourceCountdowns
       .filter((item) =>
         (divisionId === null || item.divisionId === divisionId)
         && (!carId || item.carId === carId)
@@ -752,18 +769,23 @@ export function JobPlanPlannerShell({
 
   const additionalDialogUnitOptions = useMemo(
     () => unitOptions({ divisionId: additionalDialogDivisionId() }),
-    [additionalJobForm.divisionId, countdowns],
+    [additionalJobForm.divisionId, activeCountdowns, lazyUnitOptions],
   );
 
   const additionalDialogComponentOptions = useMemo(() => {
     const carId = additionalJobForm.carId;
-    return uniqueByValue(panels
+    const key = `${additionalDialogDivisionId() ?? "all"}:${carId}`;
+    const source = lazyPanels[key] ?? panels;
+    return uniqueByValue(source
       .filter((item) => (!carId || item.carId === carId) && item.componentName)
       .map((item) => ({ value: item.componentName ?? "", label: item.componentName ?? "" })));
-  }, [additionalJobForm.carId, panels]);
+  }, [additionalJobForm.carId, additionalJobForm.divisionId, lazyPanels, panels]);
 
   const additionalDialogPanelOptions = useMemo(
-    () => panels
+    () => {
+      const key = `${additionalDialogDivisionId() ?? "all"}:${additionalJobForm.carId}`;
+      const source = lazyPanels[key] ?? panels;
+      return source
       .filter((item) =>
         (!additionalJobForm.carId || item.carId === additionalJobForm.carId)
         && (!additionalJobForm.componentName || item.componentName === additionalJobForm.componentName)
@@ -771,8 +793,9 @@ export function JobPlanPlannerShell({
       .map((item) => ({
         value: item.value,
         label: [item.panelName, item.partName].filter(Boolean).join(" · ") || item.label,
-      })),
-    [additionalJobForm.carId, additionalJobForm.componentName, panels],
+      }));
+    },
+    [additionalJobForm.carId, additionalJobForm.componentName, additionalJobForm.divisionId, lazyPanels, panels],
   );
 
   const additionalDialogJobOptions = useMemo(
@@ -785,6 +808,72 @@ export function JobPlanPlannerShell({
     { value: "overtime", label: "Lembur 17:00-22:00" },
     { value: "holiday_overtime", label: "Lembur Libur 08:00-16:00" },
   ], []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const rowsForOptions = [
+      ...drafts,
+      ...editDrafts,
+      additionalJobForm,
+    ];
+
+    const divisionIds = uniqueByValue(rowsForOptions
+      .map((row) => ({ value: String(numberValue(row.divisionId) ?? ""), label: String(numberValue(row.divisionId) ?? "") }))
+      .filter((item) => item.value))
+      .map((item) => Number(item.value));
+    const panelKeys = uniqueByValue(rowsForOptions
+      .map((row) => {
+        const divisionId = numberValue(row.divisionId);
+        const carId = "carId" in row ? String(row.carId ?? "") : "";
+        return { value: carId ? `${divisionId ?? "all"}:${carId}` : "", label: carId };
+      })
+      .filter((item) => item.value));
+    const jobKeys = uniqueByValue(rowsForOptions
+      .map((row) => {
+        const divisionId = numberValue(row.divisionId);
+        const carId = "carId" in row ? String(row.carId ?? "") : "";
+        const panelId = numberValue(row.panelId);
+        return { value: carId && panelId ? `${divisionId ?? "all"}:${carId}:${panelId}` : "", label: carId };
+      })
+      .filter((item) => item.value));
+
+    for (const divisionId of divisionIds) {
+      const key = String(divisionId);
+      if (!lazyEmployees[key]) {
+        void fetchJobPlanOptions("employees", { divisionId }).then((result) => {
+          if (!cancelled && result.success) setLazyEmployees((current) => ({ ...current, [key]: result.data as JobPlanEmployeeOption[] }));
+        });
+      }
+      if (!lazyUnitOptions[key]) {
+        void fetchJobPlanOptions("units", { divisionId }).then((result) => {
+          if (!cancelled && result.success) setLazyUnitOptions((current) => ({ ...current, [key]: result.data as Array<{ value: string; label: string; unitName: string }> }));
+        });
+      }
+    }
+
+    for (const item of panelKeys) {
+      if (lazyPanels[item.value]) continue;
+      const [divisionText, unitId] = item.value.split(":");
+      const divisionId = divisionText === "all" ? null : Number(divisionText);
+      void fetchJobPlanOptions("panels", { divisionId, unitId }).then((result) => {
+        if (!cancelled && result.success) setLazyPanels((current) => ({ ...current, [item.value]: result.data as JobPlanPanelOption[] }));
+      });
+    }
+
+    for (const item of jobKeys) {
+      if (lazyJobs[item.value]) continue;
+      const [divisionText, unitId, panelText] = item.value.split(":");
+      const divisionId = divisionText === "all" ? null : Number(divisionText);
+      const panelId = Number(panelText);
+      void fetchJobPlanOptions("jobdesc", { divisionId, unitId, panelId }).then((result) => {
+        if (!cancelled && result.success) setLazyJobs((current) => ({ ...current, [item.value]: result.data as JobPlanCountdownOption[] }));
+      });
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [additionalJobForm, drafts, editDrafts, lazyEmployees, lazyJobs, lazyPanels, lazyUnitOptions]);
 
   function normalizeDraftSelection(row: JobPlanRuntimePlannerDraft): JobPlanRuntimePlannerDraft {
     let next = { ...row };
@@ -811,7 +900,7 @@ export function JobPlanPlannerShell({
       next = { ...next, sourceType: "countdown", coreId: "", jobTypeId: "", jobTypeName: "", jobDescription: "" };
     }
 
-    const countdown = contextForCore(countdowns, next.coreId);
+    const countdown = contextForCore(activeCountdowns, next.coreId);
     const additionalJobTypeId = parseAdditionalJobValue(next.coreId);
     if (additionalJobTypeId) {
       const jobType = jobTypes.find((item) => item.value === additionalJobTypeId);
@@ -875,12 +964,12 @@ export function JobPlanPlannerShell({
   }, [drafts.length, editDrafts.length]);
 
   const rows = useMemo<PlannerRow[]>(() => [
-    ...toJobPlanRuntimeDisplayRows(items, countdowns, employees).map((row) => {
+    ...toJobPlanRuntimeDisplayRows(items, activeCountdowns, employees).map((row) => {
       const draft = editDrafts.find((item) => item.editPlanId === row.planId);
-      return draft ? { ...draftToDisplay(draft, countdowns, employees, divisions, panels, jobTypes), editPlanId: draft.editPlanId, editVersion: draft.editVersion } : row;
+      return draft ? { ...draftToDisplay(draft, activeCountdowns, employees, divisions, panels, jobTypes), editPlanId: draft.editPlanId, editVersion: draft.editVersion } : row;
     }),
-    ...drafts.map((draft) => draftToDisplay(draft, countdowns, employees, divisions, panels, jobTypes)),
-  ], [countdowns, drafts, editDrafts, employees, divisions, items, jobTypes, panels]);
+    ...drafts.map((draft) => draftToDisplay(draft, activeCountdowns, employees, divisions, panels, jobTypes)),
+  ], [activeCountdowns, drafts, editDrafts, employees, divisions, items, jobTypes, panels]);
 
   const filteredRows = useMemo(() => rows.filter((row) => {
     if (dateFilter && row.taskDate !== dateFilter) return false;
@@ -891,15 +980,15 @@ export function JobPlanPlannerShell({
     return true;
   }), [dateFilter, divisionFilter, kpFilter, qaFilter, rows, statusFilter]);
 
-  const kpOptions = useMemo(() => uniqueByValue(countdowns.map((item) => ({
+  const kpOptions = useMemo(() => uniqueByValue(activeCountdowns.map((item) => ({
     value: item.kpId ?? "",
     label: item.kpName ?? item.kpId ?? "",
-  }))), [countdowns]);
+  }))), [activeCountdowns]);
 
-  const qaOptions = useMemo(() => uniqueByValue(countdowns.flatMap((item) => (item.qaIds ?? []).map((value, index) => ({
+  const qaOptions = useMemo(() => uniqueByValue(activeCountdowns.flatMap((item) => (item.qaIds ?? []).map((value, index) => ({
     value,
     label: item.qaNames?.[index] ?? value,
-  })))), [countdowns]);
+  })))), [activeCountdowns]);
 
   const divisionOptions = useMemo(() => uniqueByValue(rows.map((row) => ({
     value: row.divisionName,
@@ -1062,7 +1151,7 @@ export function JobPlanPlannerShell({
       ) : null,
       pinned: "right",
     },
-  ], [countdowns, employees, jobTypes, panels, technicalDivisionOptions]);
+  ], [activeCountdowns, employees, jobTypes, lazyEmployees, lazyJobs, lazyPanels, lazyUnitOptions, panels, technicalDivisionOptions]);
 
   function addDraft() {
     const draft = createJobPlanRuntimeDraft(selectedContext);
@@ -1210,7 +1299,7 @@ export function JobPlanPlannerShell({
     if (row.editPlanId) {
       const currentDraft = editDrafts.find((draft) => draft.clientId === row.clientId);
       const normalized = normalizeDraftSelection({
-        ...(currentDraft ?? createJobPlanRuntimeDraft(contextForCore(countdowns, row.coreId))),
+        ...(currentDraft ?? createJobPlanRuntimeDraft(contextForCore(activeCountdowns, row.coreId))),
         ...next,
       });
       setEditDrafts((current) => current.map((draft) => draft.clientId === row.clientId ? { ...draft, ...normalized } : draft));
@@ -1218,7 +1307,7 @@ export function JobPlanPlannerShell({
     }
     const currentDraft = drafts.find((draft) => draft.clientId === row.clientId);
     const normalized = normalizeDraftSelection({
-      ...(currentDraft ?? createJobPlanRuntimeDraft(contextForCore(countdowns, row.coreId))),
+      ...(currentDraft ?? createJobPlanRuntimeDraft(contextForCore(activeCountdowns, row.coreId))),
       ...next,
     });
     setDrafts((current) => current.map((draft) => draft.clientId === row.clientId ? {

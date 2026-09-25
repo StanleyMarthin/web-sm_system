@@ -5,6 +5,7 @@ import {
   createJobPlanWorkspaceRequestSchema,
   deleteJobPlanDraftRequestSchema,
   jobPlanExportFormatSchema,
+  jobPlanOptionKindSchema,
   saveJobPlanDraftRequestSchema,
   submitJobPlanDraftRequestSchema,
   updateJobPlanRequestSchema,
@@ -212,6 +213,51 @@ export async function handleJobPlanListRoute(
         references: result.references,
         query: result.query,
         summary: result.summary,
+      }),
+    );
+  } catch (error) {
+    return mapJobPlanError(request, error);
+  }
+}
+
+function parsePositiveIntParam(searchParams: URLSearchParams, key: string): number | null {
+  const value = searchParams.get(key);
+  if (!value) return null;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+export async function handleJobPlanOptionsRoute(
+  request: Request,
+  kindParam: string,
+  authService: AuthService,
+  jobPlanService: JobPlanService,
+): Promise<Response> {
+  const sessionResult = await requireJobPlanSession(request, authService);
+  if ("response" in sessionResult) {
+    return sessionResult.response;
+  }
+
+  const kind = jobPlanOptionKindSchema.safeParse(kindParam);
+  if (!kind.success) {
+    return errorResponse(request, "Jenis opsi job plan tidak valid.", 400, "INVALID_JOB_PLAN_OPTION");
+  }
+
+  try {
+    const searchParams = new URL(request.url).searchParams;
+    const result = await jobPlanService.listOptions(sessionResult.session, {
+      kind: kind.data,
+      divisionId: parsePositiveIntParam(searchParams, "divisionId"),
+      unitId: searchParams.get("unitId") || null,
+      panelId: parsePositiveIntParam(searchParams, "panelId"),
+    });
+
+    return withCors(
+      request,
+      Response.json({
+        success: true,
+        message: "Opsi job plan siap",
+        data: result,
       }),
     );
   } catch (error) {

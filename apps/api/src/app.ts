@@ -112,6 +112,7 @@ import {
   handleJobPlanExportRoute,
   handleJobPlanListRoute,
   handleJobPlanMyDivisionRoute,
+  handleJobPlanOptionsRoute,
   handleJobPlanPicLoadRoute,
   handleJobPlanStatusRoute,
   handleJobPlanTodayRoute,
@@ -573,6 +574,7 @@ export function createApiFetchHandler(dependencies: AppDependencies = {}) {
 
     // Job Plan
     { method: "GET", pattern: "/api/job-plan", handler: (request) => handleJobPlanListRoute(request, getAuthService(), getJobPlanService()) },
+    { method: "GET", pattern: /^\/api\/job-plan\/options\/([^/]+)$/, handler: (request, match) => handleJobPlanOptionsRoute(request, match![1], getAuthService(), getJobPlanService()) },
     { method: "GET", pattern: "/api/job-plan-runtime", handler: (request) => handleJobPlanRuntimeProxyRoute(request, "", getAuthService()) },
     { method: "POST", pattern: "/api/job-plan-runtime", handler: (request) => handleJobPlanRuntimeProxyRoute(request, "", getAuthService()) },
 

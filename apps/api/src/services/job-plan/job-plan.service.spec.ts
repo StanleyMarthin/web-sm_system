@@ -161,6 +161,39 @@ describe("DefaultJobPlanService draft sync", () => {
     expect(result.meta.total).toBe(0);
   });
 
+  it("caches hierarchy options", async () => {
+    let calls = 0;
+    const repository = {
+      listOptions: async () => {
+        calls += 1;
+        return [{ value: "10", label: "BODY WORK" }];
+      },
+    };
+    const store = new Map<string, string>();
+    const redis = {
+      get: async (key: string) => store.get(key) ?? null,
+      set: async (key: string, value: string) => {
+        store.set(key, value);
+      },
+    };
+    const service = new DefaultJobPlanService(
+      repository as never,
+      { log: async () => undefined } as never,
+      async () => redis as never,
+    );
+    const session = {
+      user: {
+        employeeId: "EMP-1",
+        scope,
+      },
+    } as never;
+
+    await service.listOptions(session, { kind: "divisions" });
+    await service.listOptions(session, { kind: "divisions" });
+
+    expect(calls).toBe(1);
+  });
+
   it("writes web drafts to the mobile Redis key", async () => {
     const repository = {
       listReferences: async () => ({

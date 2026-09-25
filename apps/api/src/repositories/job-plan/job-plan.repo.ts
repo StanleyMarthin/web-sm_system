@@ -6,6 +6,7 @@ import type {
   JobPlanDraftRecord,
   JobPlanGridQuery,
   JobPlanGridReference,
+  JobPlanOptionKind,
   JobPlanPicLoad,
   JobPlanRecord,
   JobPlanStatus,
@@ -35,6 +36,20 @@ interface JobPlanListParams extends ScopeParams {
 interface JobPlanMutationParams extends ScopeParams {
   planId: string;
 }
+
+interface JobPlanOptionsParams extends ScopeParams {
+  kind: JobPlanOptionKind;
+  divisionId?: number | null;
+  unitId?: string | null;
+  panelId?: number | null;
+}
+
+type JobPlanOption =
+  | JobPlanGridReference["divisions"][number]
+  | JobPlanGridReference["employees"][number]
+  | JobPlanGridReference["units"][number]
+  | JobPlanGridReference["panels"][number]
+  | JobPlanGridReference["countdowns"][number];
 
 interface CountdownContextRow extends RowDataPacket {
   coreId: string;
@@ -1174,6 +1189,7 @@ export interface JobPlanRepository {
     mode: JobPlanGridQuery["mode"];
     countdownIds?: string[];
   }): Promise<JobPlanGridReference>;
+  listOptions(params: JobPlanOptionsParams): Promise<JobPlanOption[]>;
   getPicLoad(
     employeeId: string,
     taskDate: string,
@@ -1815,6 +1831,258 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
         { value: "REJECTED", label: "REJECTED" },
       ],
     };
+  }
+
+  async listOptions(params: JobPlanOptionsParams): Promise<JobPlanOption[]> {
+    const pool = this.poolFactory();
+
+    if (params.kind === "divisions") {
+      const queryParams: unknown[] = [];
+      const scopeSql = params.scope.canViewAllUnits
+        ? ""
+        : params.scope.divisionIds.length > 0
+          ? `AND d.id IN (${params.scope.divisionIds.map(() => "?").join(", ")})`
+          : "AND 1 = 0";
+      queryParams.push(...(params.scope.canViewAllUnits ? [] : params.scope.divisionIds));
+      const [rows] = (await pool.query(
+        `
+          SELECT
+            CAST(d.id AS CHAR) AS value,
+            d.name AS label,
+            d.code AS code,
+            d.isteknis AS isTeknis,
+            d.parent_id AS parentId,
+            parent.name AS parentName,
+            parent.code AS parentCode
+          FROM sm_divisi d
+          LEFT JOIN sm_divisi parent ON parent.id = d.parent_id
+          WHERE 1 = 1
+            ${scopeSql}
+          ORDER BY d.name ASC
+        `,
+        queryParams,
+      )) as [ReferenceRow[], unknown];
+
+      return rows.map((row) => ({
+        value: row.value,
+        label: row.label,
+        code: row.code ?? null,
+        isTeknis: row.isTeknis === null || row.isTeknis === undefined ? null : toBoolean(row.isTeknis),
+        isTechnical: row.isTeknis === null || row.isTeknis === undefined ? null : toBoolean(row.isTeknis),
+        parentId: row.parentId ?? null,
+        parentName: row.parentName ?? null,
+        parentCode: row.parentCode ?? null,
+      }));
+    }
+
+    if (params.kind === "employees") {
+      const queryParams: unknown[] = [];
+      const divisionSql = params.divisionId ? "AND e.division_id = ?" : "";
+      if (params.divisionId) queryParams.push(params.divisionId);
+      const scopeSql = params.scope.canViewAllUnits
+        ? ""
+        : params.scope.divisionIds.length > 0
+          ? `AND e.division_id IN (${params.scope.divisionIds.map(() => "?").join(", ")})`
+          : "AND e.employee_id = ?";
+      queryParams.push(...(params.scope.canViewAllUnits ? [] : params.scope.divisionIds.length > 0 ? params.scope.divisionIds : [params.employeeId]));
+      const [rows] = (await pool.query(
+        `
+          SELECT
+            e.employee_id AS value,
+            CONCAT(e.employee_id, ' · ', e.full_name) AS label,
+            e.division_id AS divisionId,
+            d.name AS divisionName
+          FROM sm_employee e
+          LEFT JOIN sm_divisi d ON d.id = e.division_id
+          WHERE e.is_active = 1
+            ${divisionSql}
+            ${scopeSql}
+          ORDER BY e.full_name ASC
+          LIMIT 200
+        `,
+        queryParams,
+      )) as [ReferenceRow[], unknown];
+
+      return rows.map((row) => ({
+        value: row.value,
+        label: row.label,
+        divisionId: row.divisionId ?? null,
+        divisionName: row.divisionName ?? null,
+      }));
+    }
+
+    const countdownParams: unknown[] = [];
+    const scopeSql = buildScopeWhereClause(params.scope, params.employeeId, countdownParams, "jc", "p_scope");
+    const scopeJoin = scopeSql ? "LEFT JOIN sm_jobdesc_plan p_scope ON p_scope.core_id = jc.id" : "";
+    const commonWhere = `
+      COALESCE(jc.status, 'PLAN') NOT IN ('DONE', 'CANCEL')
+      ${scopeSql ? `AND ${scopeSql}` : ""}
+    `;
+
+    if (params.kind === "units") {
+      const queryParams = [...countdownParams];
+      const divisionSql = params.divisionId ? "AND jc.division_id = ?" : "";
+      if (params.divisionId) queryParams.push(params.divisionId);
+      const [rows] = (await pool.query(
+        `
+          SELECT DISTINCT
+            jc.car_id AS value,
+            COALESCE(c.unit_name, jc.car_id) AS label,
+            COALESCE(c.unit_name, jc.car_id) AS unitName
+          FROM sm_jobdesc_countdown jc
+          ${scopeJoin}
+          LEFT JOIN cars c ON c.id = jc.car_id
+          WHERE ${commonWhere}
+            ${divisionSql}
+          ORDER BY label ASC
+          LIMIT 200
+        `,
+        queryParams,
+      )) as [UnitReferenceRow[], unknown];
+
+      return rows.map((row) => ({
+        value: row.value,
+        label: row.label,
+        unitName: row.unitName,
+      }));
+    }
+
+    if (params.kind === "panels") {
+      if (!params.unitId) return [];
+      const queryParams = [...countdownParams, params.unitId];
+      const divisionSql = params.divisionId ? "AND jc.division_id = ?" : "";
+      if (params.divisionId) queryParams.push(params.divisionId);
+      const [rows] = (await pool.query(
+        `
+          SELECT DISTINCT
+            CAST(mp.id AS CHAR) AS value,
+            COALESCE(mp.panel_name, mp.name_part, jc.section_name) AS label,
+            jc.car_id AS carId,
+            COALESCE(mp.panel_name, mp.name_part, jc.section_name) AS panelName,
+            mp.component_name AS componentName,
+            mp.name_part AS partName
+          FROM sm_jobdesc_countdown jc
+          ${scopeJoin}
+          LEFT JOIN master_panels mp ON mp.id = jc.panel_id
+          WHERE ${commonWhere}
+            AND jc.car_id = ?
+            ${divisionSql}
+            AND jc.panel_id IS NOT NULL
+          ORDER BY label ASC
+          LIMIT 300
+        `,
+        queryParams,
+      )) as [PanelReferenceRow[], unknown];
+
+      return rows.map((row) => ({
+        value: row.value,
+        label: row.label,
+        carId: row.carId,
+        panelName: row.panelName,
+        componentName: row.componentName,
+        partName: row.partName,
+      }));
+    }
+
+    if (params.kind === "jobdesc") {
+      if (!params.unitId || !params.panelId) return [];
+      const queryParams = [...countdownParams, params.unitId, params.panelId];
+      const divisionSql = params.divisionId ? "AND jc.division_id = ?" : "";
+      if (params.divisionId) queryParams.push(params.divisionId);
+      const [rows] = (await pool.query(
+        `
+          SELECT
+            jc.id AS value,
+            COALESCE(mjt.job_name, mp.name_part, mp.panel_name, jc.section_name) AS label,
+            jc.car_id AS carId,
+            jc.panel_id AS panelId,
+            jc.division_id AS divisionId,
+            COALESCE(c.unit_name, jc.car_id) AS unitName,
+            COALESCE(d.name, '-') AS divisionName,
+            COALESCE(mp.panel_name, mp.name_part, jc.section_name) AS panelName,
+            mjt.job_name AS jobName,
+            cpa.kp_id AS kpId,
+            kp.full_name AS kpName,
+            GROUP_CONCAT(DISTINCT qa.employee_id ORDER BY qa.employee_id SEPARATOR '||') AS qaIds,
+            GROUP_CONCAT(DISTINCT qa.full_name ORDER BY qa.employee_id SEPARATOR '||') AS qaNames,
+            ROUND(COALESCE(jc.target_hours, jc.target_hours_initial, 0), 2) AS targetTotalHours,
+            ROUND(COALESCE(jc.remaining_hours, 0), 2) AS remainingHours,
+            ROUND(GREATEST(
+              COALESCE(jc.remaining_hours, 0) - COALESCE((
+                SELECT SUM(TIME_TO_SEC(p2.dailyTargetHours) / 3600)
+                FROM sm_jobdesc_plan p2
+                WHERE p2.core_id = jc.id
+                  AND p2.status NOT IN ('REJECTED', 'READY_QC', 'CANCEL')
+                  AND NOT EXISTS (
+                    SELECT 1
+                    FROM sm_jobdesc_actual a2
+                    WHERE a2.plandaily_id = p2.id
+                      AND a2.finish_time IS NOT NULL
+                  )
+              ), 0),
+              0
+            ), 2) AS availablePlanHours,
+            ROUND(COALESCE(jc.actual_progress_percent, 0), 2) AS progressPercent
+          FROM sm_jobdesc_countdown jc
+          ${scopeJoin}
+          LEFT JOIN cars c ON c.id = jc.car_id
+          LEFT JOIN car_project_assignment cpa ON cpa.car_id = jc.car_id AND cpa.ended_at IS NULL
+          LEFT JOIN sm_employee kp ON kp.employee_id = cpa.kp_id
+          LEFT JOIN employee_managed_divisions emd ON emd.division_id = jc.division_id
+          LEFT JOIN sm_employee qa ON qa.employee_id = emd.employee_id AND qa.is_active = 1
+          LEFT JOIN master_panels mp ON mp.id = jc.panel_id
+          LEFT JOIN sm_divisi d ON d.id = jc.division_id
+          LEFT JOIN master_job_types mjt ON mjt.id = jc.job_type_id
+          WHERE ${commonWhere}
+            AND jc.car_id = ?
+            AND jc.panel_id = ?
+            ${divisionSql}
+          GROUP BY
+            jc.id,
+            jc.car_id,
+            jc.panel_id,
+            jc.division_id,
+            c.unit_name,
+            cpa.kp_id,
+            kp.full_name,
+            mp.panel_name,
+            mp.name_part,
+            jc.section_name,
+            d.name,
+            mjt.job_name,
+            jc.target_hours,
+            jc.target_hours_initial,
+            jc.remaining_hours,
+            jc.actual_progress_percent
+          HAVING availablePlanHours > 0
+          ORDER BY jc.updated_at DESC, jc.created_at DESC
+          LIMIT 200
+        `,
+        queryParams,
+      )) as [CountdownReferenceRow[], unknown];
+
+      return rows.map((row) => ({
+        value: row.value,
+        label: row.label,
+        carId: row.carId,
+        divisionId: row.divisionId,
+        panelId: row.panelId ?? null,
+        unitName: row.unitName,
+        divisionName: row.divisionName,
+        panelName: row.panelName,
+        jobName: row.jobName,
+        kpId: row.kpId ?? null,
+        kpName: row.kpName ?? null,
+        qaIds: row.qaIds ? row.qaIds.split("||").filter(Boolean) : [],
+        qaNames: row.qaNames ? row.qaNames.split("||").filter(Boolean) : [],
+        targetTotalHours: row.targetTotalHours === null ? null : Number(row.targetTotalHours),
+        remainingHours: Number(row.remainingHours ?? 0),
+        availablePlanHours: row.availablePlanHours === null ? null : Number(row.availablePlanHours),
+        progressPercent: row.progressPercent === null ? null : Number(row.progressPercent),
+      }));
+    }
+
+    return [];
   }
 
   async getPicLoad(

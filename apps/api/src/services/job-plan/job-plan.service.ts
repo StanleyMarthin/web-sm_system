@@ -7,6 +7,7 @@ import type {
   JobPlanExportFormat,
   JobPlanDraftRecord,
   JobPlanGridQuery,
+  JobPlanOptionKind,
   JobPlanPicLoad,
   JobPlanRecord,
   JobPlanStatus,
@@ -71,6 +72,13 @@ interface JobPlanExportResult {
   body: string | Uint8Array;
 }
 
+interface JobPlanOptionsQuery {
+  kind: JobPlanOptionKind;
+  divisionId?: number | null;
+  unitId?: string | null;
+  panelId?: number | null;
+}
+
 function expandPlanDraftForSchedule(plan: CreateJobPlanRequest) {
   const scheduleSegments = buildJobPlanScheduleSegments({
     taskDate: plan.taskDate,
@@ -104,8 +112,27 @@ function expandPlanDraftForSchedule(plan: CreateJobPlanRequest) {
 }
 
 const JOB_PLAN_DRAFT_TTL_SECONDS = 60 * 60 * 24 * 30;
+const JOB_PLAN_OPTION_TTL_SECONDS: Record<JobPlanOptionKind, number> = {
+  divisions: 60 * 60 * 24,
+  employees: 60 * 30,
+  units: 60 * 60 * 12,
+  panels: 60 * 60 * 12,
+  jobdesc: 60 * 60,
+};
 
 type JobPlanReferences = Awaited<ReturnType<JobPlanRepository["listReferences"]>>;
+
+function buildOptionCacheKey(employeeId: string, query: JobPlanOptionsQuery): string {
+  return [
+    "jobplan",
+    "options",
+    employeeId,
+    query.kind,
+    query.divisionId ?? "",
+    query.unitId ?? "",
+    query.panelId ?? "",
+  ].join(":");
+}
 
 function buildLegacyWebDraftKey(employeeId: string): string {
   return `jobplan:web:draft:${employeeId}`;
@@ -311,6 +338,10 @@ function resolveApprovedStatus(currentStatus: JobPlanStatus): JobPlanStatus {
 
 export interface JobPlanService {
   list(session: WebSession, query: JobPlanGridQuery): Promise<JobPlanListResult>;
+  listOptions(
+    session: WebSession,
+    query: JobPlanOptionsQuery,
+  ): Promise<Awaited<ReturnType<JobPlanRepository["listOptions"]>>>;
   listToday(session: WebSession, query: JobPlanGridQuery): Promise<JobPlanListResult>;
   listMyDivision(session: WebSession, query: JobPlanGridQuery): Promise<JobPlanListResult>;
   saveDraft(
@@ -793,6 +824,36 @@ export class DefaultJobPlanService implements JobPlanService {
     } catch {
       await new Promise((resolve) => setTimeout(resolve, 100));
       await this.writeDrafts(session, divisionIds, drafts);
+    }
+  }
+
+  async listOptions(
+    session: WebSession,
+    query: JobPlanOptionsQuery,
+  ): Promise<Awaited<ReturnType<JobPlanRepository["listOptions"]>>> {
+    const cacheKey = buildOptionCacheKey(session.user.employeeId, query);
+
+    try {
+      const redis = await this.redisFactory();
+      const cached = await redis.get(cacheKey);
+      if (cached) return JSON.parse(cached) as Awaited<ReturnType<JobPlanRepository["listOptions"]>>;
+
+      const options = await this.repository.listOptions({
+        employeeId: session.user.employeeId,
+        scope: session.user.scope,
+        ...query,
+      });
+      await redis.set(cacheKey, JSON.stringify(options), {
+        EX: JOB_PLAN_OPTION_TTL_SECONDS[query.kind],
+      });
+      return options;
+    } catch (error) {
+      console.warn("[job-plan] option cache unavailable; querying database", error);
+      return this.repository.listOptions({
+        employeeId: session.user.employeeId,
+        scope: session.user.scope,
+        ...query,
+      });
     }
   }
 

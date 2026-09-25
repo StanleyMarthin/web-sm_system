@@ -1,12 +1,14 @@
 import type {
   CreateJobPlanAdditionalCountdownRequest,
   JobPlanMode,
+  JobPlanOptionKind,
   SaveJobPlanDraftRequest,
 } from "@smsystem/contracts/job-plan";
 import {
   createJobPlanAdditionalCountdownResponseSchema,
   jobPlanGridEnvelopeSchema,
   jobPlanMutationEnvelopeSchema,
+  jobPlanOptionsEnvelopeSchema,
 } from "@smsystem/contracts/job-plan";
 import { getApiBaseUrl } from "@/shared/api/config";
 
@@ -16,6 +18,8 @@ interface ApiFailure {
   errorCode?: string;
   data?: Record<string, unknown>;
 }
+
+const optionCache = new Map<string, unknown[]>();
 
 function getTodayIsoDate(): string {
   const today = new Date();
@@ -140,6 +144,42 @@ export async function createJobPlanAdditionalCountdown(input: CreateJobPlanAddit
   return {
     success: true as const,
     result: createJobPlanAdditionalCountdownResponseSchema.parse(payload.data),
+  };
+}
+
+export async function fetchJobPlanOptions(kind: JobPlanOptionKind, params: {
+  divisionId?: number | null;
+  unitId?: string | null;
+  panelId?: number | null;
+}) {
+  const searchParams = new URLSearchParams();
+  if (params.divisionId) searchParams.set("divisionId", String(params.divisionId));
+  if (params.unitId) searchParams.set("unitId", params.unitId);
+  if (params.panelId) searchParams.set("panelId", String(params.panelId));
+  const query = searchParams.toString();
+  const cacheKey = `${kind}:${query}`;
+  const cached = optionCache.get(cacheKey);
+  if (cached) return { success: true as const, data: cached };
+
+  const response = await fetch(`${getApiBaseUrl()}/api/job-plan/options/${kind}${query ? `?${query}` : ""}`, {
+    credentials: "include",
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    const failure = await parseFailure(response);
+    return {
+      ...failure,
+      success: false as const,
+      data: [] as unknown[],
+    };
+  }
+
+  const payload = jobPlanOptionsEnvelopeSchema.parse(await response.json());
+  optionCache.set(cacheKey, payload.data);
+  return {
+    success: true as const,
+    data: payload.data,
   };
 }
 

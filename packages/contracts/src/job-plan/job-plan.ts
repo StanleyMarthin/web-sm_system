@@ -176,6 +176,26 @@ export const jobPlanGridEnvelopeSchema = z.object({
   summary: jobPlanSummarySchema,
 });
 
+export const jobPlanOptionKindSchema = z.enum([
+  "divisions",
+  "employees",
+  "units",
+  "panels",
+  "jobdesc",
+]);
+
+export const jobPlanOptionsEnvelopeSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+  data: z.array(z.union([
+    jobPlanCountdownOptionSchema,
+    jobPlanEmployeeOptionSchema,
+    jobPlanUnitOptionSchema,
+    jobPlanPanelOptionSchema,
+    jobPlanReferenceOptionSchema,
+  ])),
+});
+
 export const jobPlanPicLoadSchema = z.object({
   normal: z.object({
     used: z.number(),
@@ -357,6 +377,7 @@ export type JobPlanExportFormat = z.infer<typeof jobPlanExportFormatSchema>;
 export type JobPlanCreateMode = z.infer<typeof jobPlanCreateModeSchema>;
 export type JobPlanWindow = z.infer<typeof jobPlanWindowSchema>;
 export type JobPlanWorkspaceSource = z.infer<typeof jobPlanWorkspaceSourceSchema>;
+export type JobPlanOptionKind = z.infer<typeof jobPlanOptionKindSchema>;
 export type JobPlanRecord = z.infer<typeof jobPlanRecordSchema>;
 export type JobPlanSummary = z.infer<typeof jobPlanSummarySchema>;
 export type JobPlanGridQuery = z.infer<typeof jobPlanGridQuerySchema>;
