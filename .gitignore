@@ -93,6 +93,7 @@ nginx/
 # Local docs, notes, and generated analysis reports
 *.md
 !/README.md
+!/AI_HANDOFF.md
 /SYSTEM_MAP_WEB.md
 /MOBILE_*.md
 /PLAN_*.md
