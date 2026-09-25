@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Search } from "lucide-react";
 import { CompactInput, FieldLabel } from "@/shared/ui/compact";
-import { getApiBaseUrl } from "@/shared/api/config";
+import { getApiBaseUrl } from "@/shared/api/config/config";
 
 export interface VehicleOption {
   value: string;

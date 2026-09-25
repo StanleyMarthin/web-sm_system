@@ -3,7 +3,7 @@
 /* eslint-disable @next/next/no-img-element */
 
 import type { BubutInvoiceSnapshot } from "@smsystem/contracts/bubut-invoice";
-import { getProxiedImageUrl } from "@/shared/api/config";
+import { getProxiedImageUrl } from "@/shared/api/config/config";
 import { Printer } from "lucide-react";
 import { useState } from "react";
 

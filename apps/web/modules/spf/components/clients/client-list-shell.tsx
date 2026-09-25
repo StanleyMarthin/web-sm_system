@@ -7,7 +7,7 @@ import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowRight, Copy, Eye, Plus, Search } from "lucide-react";
-import { mutateSpf } from "@/shared/api/spf";
+import { mutateSpf } from "@/shared/api/spf/spf";
 import { ActionButton, CompactInput, PageHeader, SectionCard } from "@/shared/ui/compact";
 import { useSweetAlert } from "@/shared/ui/sweet-alert";
 import { SpfDataTable } from "../spf-data-table";

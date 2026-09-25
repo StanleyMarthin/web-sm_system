@@ -4,8 +4,8 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { UnitWorkspaceShell } from "@/modules/units/components/unit-workspace-shell";
 import { fetchCurrentUser } from "@/shared/auth/server";
-import { fetchCountdownBoard } from "@/shared/api/countdown";
-import { fetchUnitBom, fetchUnitDetail, fetchUnitPanels, fetchUnitWorkspace } from "@/shared/api/units";
+import { fetchCountdownBoard } from "@/shared/api/countdown/countdown";
+import { fetchUnitBom, fetchUnitDetail, fetchUnitPanels, fetchUnitWorkspace } from "@/shared/api/units/units";
 import { ModuleUnavailableState } from "@/shared/ui/module-unavailable-state";
 
 const unitCatalogPermissions = new Set<string>([

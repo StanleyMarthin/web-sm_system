@@ -3,12 +3,12 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import type { CalendarDayOverride } from "@smsystem/contracts/calendar";
 import { DashboardShell } from "@/modules/dashboard/components/dashboard-shell";
-import { fetchCalendarDayOverrides } from "@/shared/api/calendar";
-import { fetchDashboardSummary } from "@/shared/api/dashboard";
-import { fetchIssueGrid } from "@/shared/api/issues";
-import { fetchJobPlanGrid } from "@/shared/api/job-plan";
-import { fetchPlanningWorkspaceSummary } from "@/shared/api/planning";
-import { fetchQcQueue, fetchQcRework } from "@/shared/api/qc";
+import { fetchCalendarDayOverrides } from "@/shared/api/calendar/calendar";
+import { fetchDashboardSummary } from "@/shared/api/dashboard/dashboard";
+import { fetchIssueGrid } from "@/shared/api/issues/issues";
+import { fetchJobPlanGrid } from "@/shared/api/job-plan/job-plan";
+import { fetchPlanningWorkspaceSummary } from "@/shared/api/planning/planning";
+import { fetchQcQueue, fetchQcRework } from "@/shared/api/qc/qc";
 import { fetchCurrentUser } from "@/shared/auth/server";
 import { ModuleUnavailableState } from "@/shared/ui/module-unavailable-state";
 

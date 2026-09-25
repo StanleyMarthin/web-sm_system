@@ -3,8 +3,8 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { CheckSquare, Square } from "lucide-react";
-import type { SpfPagination, SpfSource } from "@/shared/api/spf-contracts";
-import { mutateSpf, mutateSpfCollect } from "@/shared/api/spf";
+import type { SpfPagination, SpfSource } from "@/shared/api/spf/spf-contracts";
+import { mutateSpf, mutateSpfCollect } from "@/shared/api/spf/spf";
 import { ActionButton, EmptyRow } from "@/shared/ui/compact";
 import { useSweetAlert } from "@/shared/ui/sweet-alert";
 import { SpfDataTable } from "./spf-data-table";

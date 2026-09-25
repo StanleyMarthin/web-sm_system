@@ -73,7 +73,7 @@ import {
   updateWarehouseStorageLocation,
   deleteWarehouseStorageLocation,
   rejectWarehouseRequest,
-} from "@/shared/api/warehouse";
+} from "@/shared/api/warehouse/warehouse";
 import { WarehouseReturnForm, type ReturnFormValues } from "./forms/warehouse-return-form";
 import { WarehouseStoreForm, type StoreFormValues } from "./forms/warehouse-store-form";
 import { WarehouseLocationForm, type LocationFormValues } from "./forms/warehouse-location-form";

@@ -13,7 +13,7 @@ import {
   type WorkflowJobCreateFormState,
   type WorkflowJobCreateReferences,
 } from "@/modules/workflow-job/workflow-job-create";
-import { requestPrUploadTicket } from "@/shared/api/pr";
+import { requestPrUploadTicket } from "@/shared/api/pr/pr";
 
 interface WorkflowJobCreateFormProps {
   context: WorkflowJobCreateContext;

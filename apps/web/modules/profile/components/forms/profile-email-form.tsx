@@ -6,7 +6,7 @@ import { z } from "zod";
 import { useTransition, useState } from "react";
 import { CheckCircle2, Loader2, Pencil, X } from "lucide-react";
 import type { AuthUser } from "@smsystem/contracts/auth";
-import { getApiBaseUrl } from "@/shared/api/config";
+import { getApiBaseUrl } from "@/shared/api/config/config";
 
 const emailSchema = z.object({
   email: z.string().email("Email tidak valid").or(z.literal("")).optional(),

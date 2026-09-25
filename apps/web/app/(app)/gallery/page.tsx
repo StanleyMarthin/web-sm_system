@@ -2,7 +2,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { permissionCodes } from "@smsystem/permissions";
 import { GalleryShell } from "@/modules/gallery/components/gallery-shell";
-import { fetchGalleryGrid } from "@/shared/api/gallery";
+import { fetchGalleryGrid } from "@/shared/api/gallery/gallery";
 import { fetchCurrentUser } from "@/shared/auth/server";
 import { ModuleUnavailableState } from "@/shared/ui/module-unavailable-state";
 

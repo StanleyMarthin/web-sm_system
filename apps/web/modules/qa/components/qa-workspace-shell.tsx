@@ -20,7 +20,7 @@ import type {
   SmartDataGridFilterDefinition,
   SmartDataGridSortOption,
 } from "@/shared/datagrid/types";
-import { updateQaInspection } from "@/shared/api/qa";
+import { updateQaInspection } from "@/shared/api/qa/qa";
 import { QaInspectionForm } from "./forms/qa-inspection-form";
 
 interface QaWorkspaceShellProps {

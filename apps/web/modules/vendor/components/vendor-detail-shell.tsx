@@ -10,7 +10,7 @@ import {
   cancelVendor,
   receiveVendor,
   updateVendorStatus,
-} from "@/shared/api/vendor";
+} from "@/shared/api/vendor/vendor";
 import { humanizeCodeLabel } from "@/shared/format/humanize";
 
 interface VendorDetailShellProps {

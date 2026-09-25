@@ -5,7 +5,7 @@
 
 import { RefreshCcw } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import type { PlanningSplRecommendation } from "@/shared/api/work-control";
+import type { PlanningSplRecommendation } from "@/shared/api/work-control/work-control";
 import { ActionButton, CompactDateInput, MetricBar, SectionCard } from "@/shared/ui/compact";
 
 interface PlanningSplShellProps {

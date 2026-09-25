@@ -20,7 +20,7 @@ import { UnitProgressStep } from "./unit-progress-step";
 import { applyWarrantyImpact, buildAssessmentCase, buildDeliveryPrediction, buildRecalculationLog, buildSpkSplDecision, computeReadyBlockedHours, type AssessmentOverrideState, type ReadyBlockedHours } from "@/modules/planning/helpers/adaptive-planner";
 import { buildBomPlanningSnapshots, buildLabourSummary, calculateCriticalPath, summarizeLabourByDivision, type CriticalPathJobInput } from "@/modules/planning/helpers/operational-planning";
 import type { AssessmentItemKey, CriticalPathResult, DeliveryPrediction, RecalculationLog } from "@/modules/planning/types/planning.types";
-import { saveCriticalPathSnapshot, saveLabourOverride } from "@/shared/api/work-control";
+import { saveCriticalPathSnapshot, saveLabourOverride } from "@/shared/api/work-control/work-control";
 import type { DivisionCapacityData } from "./division-capacity-step";
 import type { ReviewUnit } from "./review-release-step";
 import type { TargetWorkEntry } from "./target-work-step";

@@ -2,7 +2,7 @@ import { headers } from "next/headers";
 import dynamic from "next/dynamic";
 import { redirect } from "next/navigation";
 import { QaDashboardFilterBar } from "@/modules/qa/components/qa-filter-bars";
-import { fetchQaPortal } from "@/shared/api/qa";
+import { fetchQaPortal } from "@/shared/api/qa/qa";
 import { fetchCurrentUser } from "@/shared/auth/server";
 import { ModuleUnavailableState } from "@/shared/ui/module-unavailable-state";
 import { PageDataSkeleton } from "@/shared/ui/page-data-skeleton";

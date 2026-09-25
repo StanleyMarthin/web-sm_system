@@ -8,7 +8,7 @@ import {
   fetchMonitoringNoStart,
   fetchMonitoringNoSubmit,
   fetchMonitoringToday,
-} from "@/shared/api/monitoring";
+} from "@/shared/api/monitoring/monitoring";
 import { ModuleUnavailableState } from "@/shared/ui/module-unavailable-state";
 import { PageDataSkeleton } from "@/shared/ui/page-data-skeleton";
 

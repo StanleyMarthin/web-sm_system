@@ -21,7 +21,7 @@ import {
 import {
   fetchCatalogPanelsByComponent,
   saveCatalogPanels,
-} from "@/shared/api/unit-catalog";
+} from "@/shared/api/units/unit-catalog";
 import { ActionButton, SectionCard } from "@/shared/ui/compact";
 import { useSweetAlert } from "@/shared/ui/sweet-alert";
 

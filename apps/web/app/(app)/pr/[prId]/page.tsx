@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { permissionCodes } from "@smsystem/permissions";
 import { PrDetailShell } from "@/modules/pr/components/pr-detail-shell";
 import { fetchCurrentUser } from "@/shared/auth/server";
-import { fetchPrDetail } from "@/shared/api/pr";
+import { fetchPrDetail } from "@/shared/api/pr/pr";
 import { ModuleUnavailableState } from "@/shared/ui/module-unavailable-state";
 
 interface PrDetailPageProps {

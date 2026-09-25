@@ -1,4 +1,4 @@
-import type { SpfPeriod } from "@/shared/api/spf-contracts";
+import type { SpfPeriod } from "@/shared/api/spf/spf-contracts";
 
 const EVENTS: Array<{
   key: keyof SpfPeriod;

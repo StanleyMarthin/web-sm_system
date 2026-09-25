@@ -15,7 +15,7 @@ import type {
   SmartDataGridSavedView,
   SmartDataGridSortOption,
 } from "@/shared/datagrid/types";
-import { createUnit, deleteUnit, updateUnit } from "@/shared/api/units";
+import { createUnit, deleteUnit, updateUnit } from "@/shared/api/units/units";
 import { useSweetAlert } from "@/shared/ui/sweet-alert";
 
 interface UnitBoardShellProps {

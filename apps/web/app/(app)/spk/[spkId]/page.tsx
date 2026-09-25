@@ -4,7 +4,7 @@ import Link from "next/link";
 import { permissionCodes } from "@smsystem/permissions";
 import { SpkDetailShell } from "@/modules/spk/components/spk-detail-shell";
 import { fetchCurrentUser } from "@/shared/auth/server";
-import { fetchSpkDetail } from "@/shared/api/spk";
+import { fetchSpkDetail } from "@/shared/api/spk/spk";
 
 interface SpkDetailPageProps {
   params: Promise<{

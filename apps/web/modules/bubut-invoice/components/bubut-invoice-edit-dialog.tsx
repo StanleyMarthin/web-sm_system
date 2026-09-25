@@ -12,8 +12,8 @@ import {
   fetchBubutInvoicePreview,
   getBubutInvoice,
   updateBubutInvoice,
-} from "@/shared/api/bubut-invoice";
-import { getProxiedImageUrl } from "@/shared/api/config";
+} from "@/shared/api/bubut-invoice/bubut-invoice";
+import { getProxiedImageUrl } from "@/shared/api/config/config";
 
 function rupiah(value: number | null | undefined) {
   return new Intl.NumberFormat("id-ID", {

@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { CountdownDetailShell } from "@/modules/countdown/components/countdown-detail-shell";
-import { fetchCountdownDetail } from "@/shared/api/countdown";
+import { fetchCountdownDetail } from "@/shared/api/countdown/countdown";
 import { fetchCurrentUser } from "@/shared/auth/server";
 import { ModuleUnavailableState } from "@/shared/ui/module-unavailable-state";
 

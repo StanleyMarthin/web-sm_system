@@ -20,7 +20,7 @@ import type {
 import { ChevronLeft, ChevronRight, RefreshCw, Settings2, Save, Car } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { syncNationalHolidays, upsertWeeklyConfig } from "@/shared/api/calendar";
+import { syncNationalHolidays, upsertWeeklyConfig } from "@/shared/api/calendar/calendar";
 import { ActionButton, PageHeader, SectionCard, Toast } from "@/shared/ui/compact";
 import { CalendarDayModal } from "./calendar-day-modal";
 

@@ -6,7 +6,7 @@ import { fetchCurrentUser } from "@/shared/auth/server";
 import {
   fetchWoGrid,
   fetchWoUrgent,
-} from "@/shared/api/wo";
+} from "@/shared/api/wo/wo";
 import { ModuleUnavailableState } from "@/shared/ui/module-unavailable-state";
 import { PageDataSkeleton } from "@/shared/ui/page-data-skeleton";
 

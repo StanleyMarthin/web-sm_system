@@ -7,7 +7,7 @@ import { buildServiceIntake } from "@/modules/planning/helpers/operational-plann
 import {
   createServiceIntake,
   fetchServiceTemplates,
-} from "@/shared/api/work-control";
+} from "@/shared/api/work-control/work-control";
 import type { DivisionCapacityData } from "./division-capacity-step";
 import type { UnitPriorityItem } from "./unit-priority-step";
 

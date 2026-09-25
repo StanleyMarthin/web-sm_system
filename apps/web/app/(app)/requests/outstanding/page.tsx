@@ -1,9 +1,9 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { fetchCurrentUser } from "@/shared/auth/server";
-import { fetchWoGrid } from "@/shared/api/wo";
-import { fetchPrGrid } from "@/shared/api/pr";
-import { fetchVendorGrid } from "@/shared/api/vendor";
+import { fetchWoGrid } from "@/shared/api/wo/wo";
+import { fetchPrGrid } from "@/shared/api/pr/pr";
+import { fetchVendorGrid } from "@/shared/api/vendor/vendor";
 import { RequestsDashboardShell } from "@/modules/requests/components/requests-dashboard-shell";
 
 async function RequestsOutstandingPageContent() {

@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight, Save } from "lucide-react";
-import { mutateSpf } from "@/shared/api/spf";
-import type { SpfItem, SpfPeriod, SpfSource } from "@/shared/api/spf-contracts";
+import { mutateSpf } from "@/shared/api/spf/spf";
+import type { SpfItem, SpfPeriod, SpfSource } from "@/shared/api/spf/spf-contracts";
 import { ActionButton, CompactInput, CompactTextarea, FieldLabel, PageHeader, SectionCard, Toast } from "@/shared/ui/compact";
 import { VehicleCombobox } from "../vehicle-combobox";
 import { TechnicalJobdescSelector } from "../source-collector";

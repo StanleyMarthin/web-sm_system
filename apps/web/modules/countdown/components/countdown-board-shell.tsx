@@ -10,7 +10,7 @@ import {
   downloadCountdownWorkbook,
   updateCountdownRecord,
   uploadCountdownWorkbook,
-} from "@/shared/api/countdown";
+} from "@/shared/api/countdown/countdown";
 import { SmsAgGrid } from "@/shared/datagrid/sms-ag-grid";
 import {
   ActionButton, CompactSelect, FieldLabel, PageHeader,

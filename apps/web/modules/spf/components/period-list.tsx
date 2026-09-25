@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Download, Eye } from "lucide-react";
-import type { SpfPagination, SpfPeriod } from "@/shared/api/spf-contracts";
+import type { SpfPagination, SpfPeriod } from "@/shared/api/spf/spf-contracts";
 import { ActionButton } from "@/shared/ui/compact";
 import { SpfDataTable } from "./spf-data-table";
 import { SpfStatusBadge } from "./spf-status-badge";

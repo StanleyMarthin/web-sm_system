@@ -4,7 +4,7 @@ import type { UnitPanelActivity, UnitPanelDetail } from "@smsystem/contracts/uni
 import type { WoCreateRequest } from "@smsystem/contracts/wo";
 import type { CellValueChangedEvent, ColDef, ICellRendererParams } from "ag-grid-community";
 import { useMemo, useState } from "react";
-import { createWo } from "@/shared/api/wo";
+import { createWo } from "@/shared/api/wo/wo";
 import { SmsAgGrid, SmsGridDraftActions } from "@/shared/datagrid/sms-ag-grid";
 import { SmartSelectCellEditor, type SmartSelectOption } from "./master-panel-smart-select-editor";
 

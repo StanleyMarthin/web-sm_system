@@ -1,7 +1,7 @@
 import "server-only";
 import { NextResponse, type NextRequest } from "next/server";
 import { CSRF_COOKIE_NAME, SESSION_COOKIE_NAME } from "@smsystem/contracts/auth";
-import { requestSchemas, type SpfResource } from "@/shared/api/spf-contracts";
+import { requestSchemas, type SpfResource } from "@/shared/api/spf/spf-contracts";
 
 const ALLOWED_RESOURCES = new Set<SpfResource>(["source", "item", "period", "client"]);
 

@@ -27,7 +27,7 @@ import {
   fetchRolePermissions,
   saveRolePermissions,
   updateRole,
-} from "@/shared/api/roles";
+} from "@/shared/api/roles/roles";
 
 interface RoleMatrixShellProps {
   roles: RoleRecord[];

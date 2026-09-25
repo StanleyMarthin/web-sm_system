@@ -70,7 +70,7 @@ import {
   type ReactFlowInstance,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { getProxiedImageUrl } from "@/shared/api/config";
+import { getProxiedImageUrl } from "@/shared/api/config/config";
 import { GalleryUploadForm, type UploadFormValues } from "@/modules/gallery/components/forms/gallery-upload-form";
 import { GalleryPhotoEditForm, type EditFormValues } from "@/modules/gallery/components/forms/gallery-photo-edit-form";
 import {
@@ -79,20 +79,20 @@ import {
   fetchGalleryPhotos,
   requestGalleryUploadTicket,
   updateGalleryPhoto,
-} from "@/shared/api/gallery";
-import { fetchCountdownBoard } from "@/shared/api/countdown";
+} from "@/shared/api/gallery/gallery";
+import { fetchCountdownBoard } from "@/shared/api/countdown/countdown";
 import {
   fetchWorkflowLayout,
   saveWorkflowLayout,
-} from "@/shared/api/units";
+} from "@/shared/api/units/units";
 import {
   fetchJobPlanGrid,
   saveJobPlanDraft,
-} from "@/shared/api/job-plan";
-import { fetchCountdownDetail } from "@/shared/api/countdown";
-import { fetchWoDetail } from "@/shared/api/wo";
-import { fetchPrDetail } from "@/shared/api/pr";
-import { fetchVendorDetail } from "@/shared/api/vendor";
+} from "@/shared/api/job-plan/job-plan";
+import { fetchCountdownDetail } from "@/shared/api/countdown/countdown";
+import { fetchWoDetail } from "@/shared/api/wo/wo";
+import { fetchPrDetail } from "@/shared/api/pr/pr";
+import { fetchVendorDetail } from "@/shared/api/vendor/vendor";
 import { SearchableField, type SearchOption } from "@/modules/units/components/shared/SearchableField";
 import { fmtDateTime } from "@/shared/format/humanize";
 import { useSweetAlert } from "@/shared/ui/sweet-alert";

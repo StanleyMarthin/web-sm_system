@@ -12,7 +12,7 @@ import { AlertTriangle, Plus, RefreshCcw } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
-import { createIssue } from "@/shared/api/issues";
+import { createIssue } from "@/shared/api/issues/issues";
 import { SmartDataGrid } from "@/shared/datagrid/smart-data-grid";
 import type {
   SmartDataGridColumn,

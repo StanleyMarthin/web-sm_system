@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { permissionCodes } from "@smsystem/permissions";
 import { VendorDetailShell } from "@/modules/vendor/components/vendor-detail-shell";
 import { fetchCurrentUser } from "@/shared/auth/server";
-import { fetchVendorDetail } from "@/shared/api/vendor";
+import { fetchVendorDetail } from "@/shared/api/vendor/vendor";
 import { ModuleUnavailableState } from "@/shared/ui/module-unavailable-state";
 
 interface VendorDetailPageProps {

@@ -5,9 +5,9 @@ import { useState } from "react";
 import { Eye, ClipboardList, ShoppingBag, Truck, RotateCcw, Loader2, UploadCloud, Plus, Trash2, Info } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { RequestDetailDialog } from "./request-detail-dialog";
-import { createWo } from "@/shared/api/wo";
-import { createPr, requestPrUploadTicket } from "@/shared/api/pr";
-import { createVendor } from "@/shared/api/vendor";
+import { createWo } from "@/shared/api/wo/wo";
+import { createPr, requestPrUploadTicket } from "@/shared/api/pr/pr";
+import { createVendor } from "@/shared/api/vendor/vendor";
 import { SearchSelect, StrictSearchSelect, useMasterPanelOptions } from "./forms/master-panel-search";
 
 interface ReferenceOption {

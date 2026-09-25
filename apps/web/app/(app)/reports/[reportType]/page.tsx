@@ -3,7 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { permissionCodes } from "@smsystem/permissions";
 import { reportTypeSchema } from "@smsystem/contracts/reports";
 import { ReportsShell } from "@/modules/reports/components/reports-shell";
-import { fetchReportGrid } from "@/shared/api/reports";
+import { fetchReportGrid } from "@/shared/api/reports/reports";
 import { fetchCurrentUser } from "@/shared/auth/server";
 import { ModuleUnavailableState } from "@/shared/ui/module-unavailable-state";
 

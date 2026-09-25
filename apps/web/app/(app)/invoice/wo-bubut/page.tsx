@@ -2,7 +2,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { permissionCodes } from "@smsystem/permissions";
 import { BubutInvoiceShell } from "@/modules/bubut-invoice/components/bubut-invoice-shell";
-import { fetchBubutInvoiceWorkOrders } from "@/shared/api/bubut-invoice";
+import { fetchBubutInvoiceWorkOrders } from "@/shared/api/bubut-invoice/bubut-invoice";
 import { fetchCurrentUser } from "@/shared/auth/server";
 import { ModuleUnavailableState } from "@/shared/ui/module-unavailable-state";
 

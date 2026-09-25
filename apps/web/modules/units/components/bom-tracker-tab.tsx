@@ -51,7 +51,7 @@ import {
   fetchUnitPanels,
   renameUnitPanelCategory,
   updateUnitPanel,
-} from "@/shared/api/units";
+} from "@/shared/api/units/units";
 import { useSweetAlert } from "@/shared/ui/sweet-alert";
 import {
   buildPayload,

@@ -1,8 +1,8 @@
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { requireAdminSession } from "@/shared/auth/admin-session";
-import { fetchSpfItemDetail } from "@/shared/api/spf";
-import { fetchCountdownBoard } from "@/shared/api/countdown";
+import { fetchSpfItemDetail } from "@/shared/api/spf/spf";
+import { fetchCountdownBoard } from "@/shared/api/countdown/countdown";
 import { ModuleUnavailableState } from "@/shared/ui/module-unavailable-state";
 import { ItemDetailShell } from "@/modules/spf/components/item-detail-shell";
 

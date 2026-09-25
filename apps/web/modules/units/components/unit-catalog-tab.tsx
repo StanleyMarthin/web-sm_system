@@ -39,8 +39,8 @@ import {
   saveUnitCatalogSurvey,
   saveUnitCatalogPanelWorkspace,
   searchUnitCatalog,
-} from "@/shared/api/unit-catalog";
-import { getApiBaseUrl, getProxiedImageUrl } from "@/shared/api/config";
+} from "@/shared/api/units/unit-catalog";
+import { getApiBaseUrl, getProxiedImageUrl } from "@/shared/api/config/config";
 import { useSweetAlert } from "@/shared/ui/sweet-alert";
 import { ActionButton, CompactInput, CompactTextarea, FieldLabel, PageHeader, SectionCard } from "@/shared/ui/compact";
 

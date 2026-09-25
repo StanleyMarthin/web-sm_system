@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { UnitBoardShell } from "@/modules/units/components/unit-board-shell";
-import { fetchUnitBoard } from "@/shared/api/units";
+import { fetchUnitBoard } from "@/shared/api/units/units";
 import { fetchCurrentUser } from "@/shared/auth/server";
 import { ModuleUnavailableState } from "@/shared/ui/module-unavailable-state";
 

@@ -24,7 +24,7 @@ import {
   approveQcFinalChecklist,
   passQc,
   rejectQc,
-} from "@/shared/api/qc";
+} from "@/shared/api/qc/qc";
 import { humanizeCodeLabel } from "@/shared/format/humanize";
 import { SmartDataGrid } from "@/shared/datagrid/smart-data-grid";
 import type {

@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
 import { redirect, notFound } from "next/navigation";
 import { MasterPanelDetailHub } from "@/modules/units/components/master-panel-detail-hub";
-import { fetchUnitPanelDetail } from "@/shared/api/units";
+import { fetchUnitPanelDetail } from "@/shared/api/units/units";
 
 interface PanelDetailPageRouteProps {
   params: Promise<{ unitId: string; actualId: string }>;

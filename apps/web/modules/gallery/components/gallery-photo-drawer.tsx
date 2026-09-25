@@ -13,8 +13,8 @@ import {
   fetchGalleryPhotos,
   requestGalleryUploadTicket,
   updateGalleryPhoto,
-} from "@/shared/api/gallery";
-import { getProxiedImageUrl } from "@/shared/api/config";
+} from "@/shared/api/gallery/gallery";
+import { getProxiedImageUrl } from "@/shared/api/config/config";
 import { fmtDateTime } from "@/shared/format/humanize";
 import { GalleryUploadForm, type UploadFormValues } from "./forms/gallery-upload-form";
 import { GalleryPhotoEditForm, type EditFormValues } from "./forms/gallery-photo-edit-form";

@@ -2,7 +2,7 @@ import dynamic from "next/dynamic";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { requireAdminSession } from "@/shared/auth/admin-session";
-import { fetchSpfItems } from "@/shared/api/spf";
+import { fetchSpfItems } from "@/shared/api/spf/spf";
 import { ModuleUnavailableState } from "@/shared/ui/module-unavailable-state";
 import { PageDataSkeleton } from "@/shared/ui/page-data-skeleton";
 

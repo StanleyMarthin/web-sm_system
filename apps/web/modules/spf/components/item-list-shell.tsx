@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ItemList } from "./item-list";
 import { ItemForm } from "./forms/item-form";
-import type { SpfItem, SpfPagination } from "@/shared/api/spf-contracts";
+import type { SpfItem, SpfPagination } from "@/shared/api/spf/spf-contracts";
 import { ActionButton, CompactInput, PageHeader } from "@/shared/ui/compact";
 
 interface ItemListShellProps {

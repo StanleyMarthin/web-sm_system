@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { permissionCodes } from "@smsystem/permissions";
 import { WoDetailShell } from "@/modules/wo/components/wo-detail-shell";
 import { fetchCurrentUser } from "@/shared/auth/server";
-import { fetchWoDetail } from "@/shared/api/wo";
+import { fetchWoDetail } from "@/shared/api/wo/wo";
 import { ModuleUnavailableState } from "@/shared/ui/module-unavailable-state";
 
 interface WoDetailPageProps {

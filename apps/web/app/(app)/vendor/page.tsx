@@ -3,7 +3,7 @@ import dynamic from "next/dynamic";
 import { redirect } from "next/navigation";
 import { permissionCodes } from "@smsystem/permissions";
 import { fetchCurrentUser } from "@/shared/auth/server";
-import { fetchVendorGrid } from "@/shared/api/vendor";
+import { fetchVendorGrid } from "@/shared/api/vendor/vendor";
 import { ModuleUnavailableState } from "@/shared/ui/module-unavailable-state";
 import { PageDataSkeleton } from "@/shared/ui/page-data-skeleton";
 

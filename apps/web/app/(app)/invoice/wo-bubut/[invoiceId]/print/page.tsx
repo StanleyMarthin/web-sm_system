@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { BubutInvoicePrintView } from "@/modules/bubut-invoice/components/bubut-invoice-print-view";
-import { fetchBubutInvoiceDetail } from "@/shared/api/bubut-invoice";
+import { fetchBubutInvoiceDetail } from "@/shared/api/bubut-invoice/bubut-invoice";
 import { ModuleUnavailableState } from "@/shared/ui/module-unavailable-state";
 
 interface PageProps {

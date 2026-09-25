@@ -15,8 +15,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
-import type { DashboardFilterParams } from "@/shared/api/dashboard";
-import type { PlanningWorkspacePayload } from "@/shared/api/planning";
+import type { DashboardFilterParams } from "@/shared/api/dashboard/dashboard";
+import type { PlanningWorkspacePayload } from "@/shared/api/planning/planning";
 import { SearchableSelect } from "@/shared/ui/compact";
 import { getCalendarDayState } from "./dashboard-calendar";
 

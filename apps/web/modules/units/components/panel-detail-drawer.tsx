@@ -29,7 +29,7 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { getProxiedImageUrl } from "@/shared/api/config";
+import { getProxiedImageUrl } from "@/shared/api/config/config";
 import { GalleryUploadForm, type UploadFormValues } from "@/modules/gallery/components/forms/gallery-upload-form";
 import { GalleryPhotoEditForm, type EditFormValues } from "@/modules/gallery/components/forms/gallery-photo-edit-form";
 import {
@@ -38,7 +38,7 @@ import {
   fetchGalleryPhotos,
   requestGalleryUploadTicket,
   updateGalleryPhoto,
-} from "@/shared/api/gallery";
+} from "@/shared/api/gallery/gallery";
 import { fmtDateTime } from "@/shared/format/humanize";
 
 type DrawerTab = "timeline" | "photos" | "documents";

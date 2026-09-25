@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import {
   buildUserGridQueryString,
   fetchUserGrid,
-} from "@/shared/api/users";
+} from "@/shared/api/users/users";
 import { ModuleUnavailableState } from "@/shared/ui/module-unavailable-state";
 import { PageDataSkeleton } from "@/shared/ui/page-data-skeleton";
 

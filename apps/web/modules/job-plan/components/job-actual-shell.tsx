@@ -10,7 +10,7 @@ import {
   manualExecuteJobPlan,
   monitorJobPlan,
   validateJobPlan,
-} from "@/shared/api/job-plan-runtime";
+} from "@/shared/api/job-plan/job-plan-runtime";
 import { SmsAgGrid } from "@/shared/datagrid/sms-ag-grid";
 import { DataGridStatusBadge } from "@/shared/datagrid/status-badge";
 import { ActionButton, CompactDateInput, PageHeader } from "@/shared/ui/compact";

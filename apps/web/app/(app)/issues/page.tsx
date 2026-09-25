@@ -6,7 +6,7 @@ import { fetchCurrentUser } from "@/shared/auth/server";
 import {
   fetchIssueGrid,
   fetchUrgentIssues,
-} from "@/shared/api/issues";
+} from "@/shared/api/issues/issues";
 import { ModuleUnavailableState } from "@/shared/ui/module-unavailable-state";
 import { PageDataSkeleton } from "@/shared/ui/page-data-skeleton";
 

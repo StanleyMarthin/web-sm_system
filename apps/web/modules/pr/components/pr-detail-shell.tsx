@@ -13,7 +13,7 @@ import {
   cancelPr,
   orderPr,
   receivePr,
-} from "@/shared/api/pr";
+} from "@/shared/api/pr/pr";
 import { humanizeCodeLabel } from "@/shared/format/humanize";
 
 interface PrDetailShellProps {

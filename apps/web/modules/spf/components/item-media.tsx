@@ -3,8 +3,8 @@
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { EyeOff, Trash2, Upload } from "lucide-react";
-import type { SpfMedia } from "@/shared/api/spf-contracts";
-import { mutateSpf, uploadSpfItemMedia } from "@/shared/api/spf";
+import type { SpfMedia } from "@/shared/api/spf/spf-contracts";
+import { mutateSpf, uploadSpfItemMedia } from "@/shared/api/spf/spf";
 import { ActionButton, EmptyRow, Toast } from "@/shared/ui/compact";
 import { useSweetAlert } from "@/shared/ui/sweet-alert";
 import { SpfSourceBadge } from "./spf-source-badge";

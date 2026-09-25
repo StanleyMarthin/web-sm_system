@@ -19,7 +19,7 @@ import {
   fetchWarehouseStockOpnames,
   fetchWarehouseStorageLocations,
   fetchWarehouseTransactions,
-} from "@/shared/api/warehouse";
+} from "@/shared/api/warehouse/warehouse";
 import { fetchCurrentUser } from "@/shared/auth/server";
 import { ModuleUnavailableState } from "@/shared/ui/module-unavailable-state";
 import { PageDataSkeleton } from "@/shared/ui/page-data-skeleton";

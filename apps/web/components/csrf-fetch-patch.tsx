@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { CSRF_COOKIE_NAME } from "@smsystem/contracts/auth";
-import { getApiBaseUrl } from "@/shared/api/config";
+import { getApiBaseUrl } from "@/shared/api/config/config";
 
 const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const pendingMutations = new Map<string, Promise<Response>>();

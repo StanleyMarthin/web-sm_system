@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
 import dynamic from "next/dynamic";
 import { redirect } from "next/navigation";
-import { fetchPlanningSplRecommendations } from "@/shared/api/work-control";
+import { fetchPlanningSplRecommendations } from "@/shared/api/work-control/work-control";
 import { resolvePlanningWorkspaceState } from "@/shared/planning/workspace";
 import { ModuleUnavailableState } from "@/shared/ui/module-unavailable-state";
 import { PageDataSkeleton } from "@/shared/ui/page-data-skeleton";

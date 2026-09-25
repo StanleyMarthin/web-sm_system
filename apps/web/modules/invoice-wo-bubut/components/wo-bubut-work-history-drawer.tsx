@@ -10,14 +10,14 @@ import { CameraOff, ExternalLink, Loader2, PackageX, Pencil, Printer, X } from "
 import Link from "next/link";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { BubutInvoiceStatusBadge } from "@/modules/bubut-invoice/components/bubut-invoice-status-badge";
-import { getProxiedImageUrl } from "@/shared/api/config";
+import { getProxiedImageUrl } from "@/shared/api/config/config";
 import {
   fetchBubutInvoicePreview,
   fetchBubutInvoiceWorkHistory,
   getBubutInvoice,
   updateBubutInvoice,
   fetchBubutInvoiceWorkOrdersClient,
-} from "@/shared/api/bubut-invoice";
+} from "@/shared/api/bubut-invoice/bubut-invoice";
 import { fmtTime } from "@/shared/format/humanize";
 
 function rupiah(value: number) {

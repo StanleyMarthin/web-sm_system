@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { SpfItem, SpfPeriod } from "@/shared/api/spf-contracts";
+import type { SpfItem, SpfPeriod } from "@/shared/api/spf/spf-contracts";
 import { SpfStatusBadge } from "./spf-status-badge";
 
 interface PortalPreviewProps {

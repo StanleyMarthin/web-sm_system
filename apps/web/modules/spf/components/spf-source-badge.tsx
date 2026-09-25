@@ -1,4 +1,4 @@
-import type { SpfItem, SpfMedia, SpfSource } from "@/shared/api/spf-contracts";
+import type { SpfItem, SpfMedia, SpfSource } from "@/shared/api/spf/spf-contracts";
 
 type SourceCarrier = Pick<SpfItem | SpfSource | SpfMedia, "source_type">;
 

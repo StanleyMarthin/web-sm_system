@@ -1,7 +1,7 @@
 import "server-only";
 import { NextResponse, type NextRequest } from "next/server";
 import { CSRF_COOKIE_NAME, SESSION_COOKIE_NAME } from "@smsystem/contracts/auth";
-import { generateUrlRequestSchema } from "@/shared/api/spf-contracts";
+import { generateUrlRequestSchema } from "@/shared/api/spf/spf-contracts";
 
 function errorResponse(status: number, code: string, message: string) {
   return NextResponse.json({ error: { code, message } }, { status });

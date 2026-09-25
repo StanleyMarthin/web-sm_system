@@ -5,7 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useTransition } from "react";
 import { RefreshCcw } from "lucide-react";
-import { resetUserPassword } from "@/shared/api/users";
+import { resetUserPassword } from "@/shared/api/users/users";
 import type { UserRecord } from "@smsystem/contracts/user";
 
 const resetPasswordSchema = z.object({

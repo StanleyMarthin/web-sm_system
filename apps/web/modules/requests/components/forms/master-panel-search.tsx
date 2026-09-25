@@ -3,7 +3,7 @@
 import type { UnitPanelRecord } from "@smsystem/contracts/unit-panel";
 import { ChevronDown, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { fetchUnitPanels } from "@/shared/api/units";
+import { fetchUnitPanels } from "@/shared/api/units/units";
 
 export interface RequestPanelOption {
   value: string;

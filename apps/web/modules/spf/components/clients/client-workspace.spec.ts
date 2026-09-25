@@ -1,4 +1,4 @@
-import type { SpfClient } from "@/shared/api/spf-contracts";
+import type { SpfClient } from "@/shared/api/spf/spf-contracts";
 import type { UnitBoardRow } from "@smsystem/contracts/unit";
 import { describe, expect, it } from "bun:test";
 import { buildClientWorkspaceRows, clientUnitsFromBoard, clientWorkspaceCapabilities, findClientProfile, unitClientsFromBoard } from "./client-workspace";

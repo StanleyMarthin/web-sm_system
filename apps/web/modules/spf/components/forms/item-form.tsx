@@ -5,8 +5,8 @@ import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { mutateSpf, uploadSpfItemMedia } from "@/shared/api/spf";
-import type { SpfItem } from "@/shared/api/spf-contracts";
+import { mutateSpf, uploadSpfItemMedia } from "@/shared/api/spf/spf";
+import type { SpfItem } from "@/shared/api/spf/spf-contracts";
 import { ActionButton, CompactInput, CompactTextarea, FieldLabel, Toast } from "@/shared/ui/compact";
 import { Upload } from "lucide-react";
 

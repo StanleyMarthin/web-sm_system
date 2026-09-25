@@ -10,7 +10,7 @@ import { AlertTriangle, PackageSearch, RefreshCcw, Loader2, UploadCloud, X, File
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { createPr, requestPrUploadTicket } from "@/shared/api/pr";
+import { createPr, requestPrUploadTicket } from "@/shared/api/pr/pr";
 import { SmartDataGrid } from "@/shared/datagrid/smart-data-grid";
 import type {
   SmartDataGridColumn,

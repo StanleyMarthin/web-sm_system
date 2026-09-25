@@ -10,7 +10,7 @@ import { AlertTriangle, ClipboardPlus, RefreshCcw } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
-import { createWo } from "@/shared/api/wo";
+import { createWo } from "@/shared/api/wo/wo";
 import { SmartDataGrid } from "@/shared/datagrid/smart-data-grid";
 import type {
   SmartDataGridColumn,

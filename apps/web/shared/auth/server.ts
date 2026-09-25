@@ -1,6 +1,6 @@
 import { cache } from "react";
 import { authEnvelopeSchema, type AuthUser } from "@smsystem/contracts/auth";
-import { getApiBaseUrl } from "@/shared/api/config";
+import { getApiBaseUrl } from "@/shared/api/config/config";
 
 interface DashboardBootstrap {
   welcome: string;

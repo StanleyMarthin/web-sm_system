@@ -5,7 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useTransition, useState } from "react";
 import { Eye, EyeOff, Loader2, Lock, X } from "lucide-react";
-import { getApiBaseUrl } from "@/shared/api/config";
+import { getApiBaseUrl } from "@/shared/api/config/config";
 
 const passwordSchema = z.object({
   currentPassword: z.string().min(1, "Password saat ini wajib diisi"),

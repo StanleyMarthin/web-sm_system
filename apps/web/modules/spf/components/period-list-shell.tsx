@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Plus, RotateCcw, Search } from "lucide-react";
 import { PeriodList } from "./period-list";
-import type { SpfPagination, SpfPeriod, SpfPeriodStatus } from "@/shared/api/spf-contracts";
+import type { SpfPagination, SpfPeriod, SpfPeriodStatus } from "@/shared/api/spf/spf-contracts";
 import { ActionButton, CompactInput, PageHeader, SectionCard } from "@/shared/ui/compact";
 
 interface PeriodListShellProps {

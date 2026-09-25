@@ -4,7 +4,7 @@ import type { CreatePrInput } from "@smsystem/contracts/pr";
 import type { UnitPanelActivity, UnitPanelDetail } from "@smsystem/contracts/unit-panel";
 import type { CellValueChangedEvent, ColDef, ICellRendererParams } from "ag-grid-community";
 import { useMemo, useState } from "react";
-import { createPr } from "@/shared/api/pr";
+import { createPr } from "@/shared/api/pr/pr";
 import { SmsAgGrid, SmsGridDraftActions } from "@/shared/datagrid/sms-ag-grid";
 import { SmartSelectCellEditor, type SmartSelectOption } from "./master-panel-smart-select-editor";
 

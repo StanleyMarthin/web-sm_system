@@ -7,8 +7,8 @@ import {
   fetchIssueDetail,
   fetchIssueGrid,
   fetchIssuesByUnit,
-} from "@/shared/api/issues";
-import { fetchUnitEta } from "@/shared/api/calendar";
+} from "@/shared/api/issues/issues";
+import { fetchUnitEta } from "@/shared/api/calendar/calendar";
 import { ModuleUnavailableState } from "@/shared/ui/module-unavailable-state";
 import { PageDataSkeleton } from "@/shared/ui/page-data-skeleton";
 

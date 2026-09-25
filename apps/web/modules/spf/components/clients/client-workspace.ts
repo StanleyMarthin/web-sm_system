@@ -1,5 +1,5 @@
 import type { UnitBoardRow, UnitClient, UnitClientUnit } from "@smsystem/contracts/unit";
-import type { SpfClient } from "@/shared/api/spf-contracts";
+import type { SpfClient } from "@/shared/api/spf/spf-contracts";
 
 export type ClientWorkspaceRow = SpfClient & { portalConfigured: boolean };
 

@@ -5,7 +5,7 @@ import { ArrowLeft, Play, Save, CheckCircle2, User, Clock } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { activateSpk, updateSpkDraftDetails } from "@/shared/api/spk";
+import { activateSpk, updateSpkDraftDetails } from "@/shared/api/spk/spk";
 
 interface SpkDetailShellProps {
   header: SpkHeaderRecord;

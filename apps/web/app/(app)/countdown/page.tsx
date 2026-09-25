@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
 import dynamic from "next/dynamic";
 import { redirect } from "next/navigation";
-import { fetchCountdownBoard } from "@/shared/api/countdown";
+import { fetchCountdownBoard } from "@/shared/api/countdown/countdown";
 import { ModuleUnavailableState } from "@/shared/ui/module-unavailable-state";
 import { PageDataSkeleton } from "@/shared/ui/page-data-skeleton";
 

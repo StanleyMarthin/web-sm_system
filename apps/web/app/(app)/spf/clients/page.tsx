@@ -1,9 +1,9 @@
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { requireAdminSession } from "@/shared/auth/admin-session";
-import { fetchSpfClientDetail, fetchSpfClients } from "@/shared/api/spf";
-import type { SpfClient } from "@/shared/api/spf-contracts";
-import { fetchUnitBoard, fetchUnitClients } from "@/shared/api/units";
+import { fetchSpfClientDetail, fetchSpfClients } from "@/shared/api/spf/spf";
+import type { SpfClient } from "@/shared/api/spf/spf-contracts";
+import { fetchUnitBoard, fetchUnitClients } from "@/shared/api/units/units";
 import type { UnitBoardRow } from "@smsystem/contracts/unit";
 import { ModuleUnavailableState } from "@/shared/ui/module-unavailable-state";
 import { ClientListShell } from "@/modules/spf/components/clients/client-list-shell";

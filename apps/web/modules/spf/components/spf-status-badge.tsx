@@ -1,4 +1,4 @@
-import type { SpfPeriodStatus, SpfSourceStatus } from "@/shared/api/spf-contracts";
+import type { SpfPeriodStatus, SpfSourceStatus } from "@/shared/api/spf/spf-contracts";
 
 const PERIOD_STATUS_STYLES: Record<SpfPeriodStatus, string> = {
   DRAFT: "border-border bg-muted text-muted-foreground dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-foreground/55",

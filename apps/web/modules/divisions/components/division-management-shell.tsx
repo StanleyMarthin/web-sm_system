@@ -1,6 +1,6 @@
 "use client";
 
-import type { DivisionManagementRecord, MasterJobTypeRecord } from "@/shared/api/divisions";
+import type { DivisionManagementRecord, MasterJobTypeRecord } from "@/shared/api/divisions/divisions";
 import {
   createDivision,
   createDivisionMasterJobdesc,
@@ -8,7 +8,7 @@ import {
   deleteDivisionMasterJobdesc,
   updateDivision,
   updateDivisionMasterJobdesc,
-} from "@/shared/api/divisions";
+} from "@/shared/api/divisions/divisions";
 import { Pencil, Plus, Search, Trash2, X } from "lucide-react";
 import { useMemo, useState } from "react";
 

@@ -6,7 +6,7 @@ import { fetchCurrentUser } from "@/shared/auth/server";
 import {
   fetchPrCritical,
   fetchPrGrid,
-} from "@/shared/api/pr";
+} from "@/shared/api/pr/pr";
 import { ModuleUnavailableState } from "@/shared/ui/module-unavailable-state";
 import { PageDataSkeleton } from "@/shared/ui/page-data-skeleton";
 

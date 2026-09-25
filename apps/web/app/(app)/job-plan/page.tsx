@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { permissionCodes } from "@smsystem/permissions";
-import { fetchJobPlanGrid } from "@/shared/api/job-plan";
+import { fetchJobPlanGrid } from "@/shared/api/job-plan/job-plan";
 import { fetchCurrentUser } from "@/shared/auth/server";
 import { JobPlanPlannerShell } from "@/modules/job-plan/components/job-plan-planner-shell";
 import { ModuleUnavailableState } from "@/shared/ui/module-unavailable-state";

@@ -14,7 +14,7 @@ import {
   resolveIssue,
   startIssue,
   waiveIssue,
-} from "@/shared/api/issues";
+} from "@/shared/api/issues/issues";
 import { humanizeCodeLabel, fmtDateTime } from "@/shared/format/humanize";
 
 interface IssueDetailShellProps {

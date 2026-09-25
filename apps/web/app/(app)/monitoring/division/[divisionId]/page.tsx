@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { MonitoringDivisionDetailShell } from "@/modules/monitoring/components/monitoring-division-detail-shell";
-import { fetchMonitoringDivisionDetail } from "@/shared/api/monitoring";
+import { fetchMonitoringDivisionDetail } from "@/shared/api/monitoring/monitoring";
 import { ModuleUnavailableState } from "@/shared/ui/module-unavailable-state";
 
 interface MonitoringDivisionDetailPageProps {

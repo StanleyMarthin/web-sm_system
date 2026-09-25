@@ -8,8 +8,8 @@ import {
   createJobPlanCommandId,
   fetchJobPlanRuntimeList,
   mutateJobPlanApproval,
-} from "@/shared/api/job-plan-runtime";
-import { createJobPlanAdditionalCountdown, fetchJobPlanOptions } from "@/shared/api/job-plan";
+} from "@/shared/api/job-plan/job-plan-runtime";
+import { createJobPlanAdditionalCountdown, fetchJobPlanOptions } from "@/shared/api/job-plan/job-plan";
 import { SmsAgGrid } from "@/shared/datagrid/sms-ag-grid";
 import { DataGridStatusBadge } from "@/shared/datagrid/status-badge";
 import { ActionButton, CompactDateInput, PageHeader } from "@/shared/ui/compact";

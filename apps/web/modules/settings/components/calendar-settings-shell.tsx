@@ -13,7 +13,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
-import { simulateCapacity, upsertWeeklyConfig } from "@/shared/api/calendar";
+import { simulateCapacity, upsertWeeklyConfig } from "@/shared/api/calendar/calendar";
 
 interface CalendarSettingsShellProps {
   weeklyConfigs: WeeklyWorkConfigRecord[];

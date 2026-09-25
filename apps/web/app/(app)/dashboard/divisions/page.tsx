@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
 import dynamic from "next/dynamic";
 import { redirect } from "next/navigation";
-import { fetchDivisionManagement } from "@/shared/api/divisions";
+import { fetchDivisionManagement } from "@/shared/api/divisions/divisions";
 import { ModuleUnavailableState } from "@/shared/ui/module-unavailable-state";
 import { PageDataSkeleton } from "@/shared/ui/page-data-skeleton";
 

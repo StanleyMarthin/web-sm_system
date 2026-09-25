@@ -2,8 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { Copy, ExternalLink, Eye, Link2, Mail, MessageCircle, RotateCcw } from "lucide-react";
-import { generateSpfPortalUrl, mutateSpf } from "@/shared/api/spf";
-import type { SpfClient } from "@/shared/api/spf-contracts";
+import { generateSpfPortalUrl, mutateSpf } from "@/shared/api/spf/spf";
+import type { SpfClient } from "@/shared/api/spf/spf-contracts";
 import { ActionButton, CompactInput, SectionCard } from "@/shared/ui/compact";
 import { useSweetAlert } from "@/shared/ui/sweet-alert";
 

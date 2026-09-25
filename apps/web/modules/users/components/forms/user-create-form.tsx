@@ -5,7 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useTransition } from "react";
 import { UserCog } from "lucide-react";
-import { createUser } from "@/shared/api/users";
+import { createUser } from "@/shared/api/users/users";
 import type { UserGridReference } from "@smsystem/contracts/user";
 import { useRouter } from "next/navigation";
 import { groupDivisionOptions } from "../../division-options";

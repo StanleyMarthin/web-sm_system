@@ -8,7 +8,7 @@ import { ArrowLeft, CheckCheck, Link2, XCircle } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { approveWo, markWoDone, rejectWo } from "@/shared/api/wo";
+import { approveWo, markWoDone, rejectWo } from "@/shared/api/wo/wo";
 import { humanizeCodeLabel, fmtDateTime } from "@/shared/format/humanize";
 
 interface WoDetailShellProps {

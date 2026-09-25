@@ -3,7 +3,7 @@
 import { Bell, History, LoaderCircle, RefreshCw } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { getApiBaseUrl } from "@/shared/api/config";
+import { getApiBaseUrl } from "@/shared/api/config/config";
 import { parseNotifications, type WebNotification } from "./notification-mapper";
 
 const dateFormatter = new Intl.DateTimeFormat("id-ID", {

@@ -10,7 +10,7 @@ import { RefreshCcw, SendToBack, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { createVendor } from "@/shared/api/vendor";
+import { createVendor } from "@/shared/api/vendor/vendor";
 import { SmartDataGrid } from "@/shared/datagrid/smart-data-grid";
 import type {
   SmartDataGridColumn,

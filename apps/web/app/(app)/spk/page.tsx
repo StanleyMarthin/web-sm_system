@@ -5,7 +5,7 @@ import { SpkListShell } from "@/modules/spk/components/spk-list-shell";
 import { fetchCurrentUser } from "@/shared/auth/server";
 import {
   fetchSpkGrid,
-} from "@/shared/api/spk";
+} from "@/shared/api/spk/spk";
 
 interface SpkPageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;

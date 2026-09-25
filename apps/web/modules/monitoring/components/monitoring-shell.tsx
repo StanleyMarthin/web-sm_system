@@ -14,7 +14,7 @@ import type { ColDef, ICellRendererParams, SelectionChangedEvent } from "ag-grid
 import { RefreshCcw, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { createJobPlanCommandId, mutateJobPlanApproval } from "@/shared/api/job-plan-runtime";
+import { createJobPlanCommandId, mutateJobPlanApproval } from "@/shared/api/job-plan/job-plan-runtime";
 import { SmsAgGrid } from "@/shared/datagrid/sms-ag-grid";
 import { DataGridStatusBadge } from "@/shared/datagrid/status-badge";
 import { ActionButton, CompactDateInput, CompactDateRangeInput, EmptyRow, MetricBar, PageHeader, SectionCard } from "@/shared/ui/compact";

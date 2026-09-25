@@ -11,8 +11,8 @@ import {
   releaseSpk,
   createOvertimeRecommendation,
   type WorkControlUnit,
-} from "@/shared/api/work-control";
-import { fetchUnitBom } from "@/shared/api/units";
+} from "@/shared/api/work-control/work-control";
+import { fetchUnitBom } from "@/shared/api/units/units";
 import { PlanningWorkControlShell } from "./planning-work-control-shell";
 import type { UnitPriorityItem } from "./unit-priority-step";
 import type { UnitProgressData } from "./unit-progress-step";

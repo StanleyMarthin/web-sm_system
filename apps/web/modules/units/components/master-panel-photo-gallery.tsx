@@ -3,7 +3,7 @@
 import type { UnitPanelDetail } from "@smsystem/contracts/unit-panel";
 import { ChevronLeft, ChevronRight, Maximize2, X } from "lucide-react";
 import { useState } from "react";
-import { getProxiedImageUrl } from "@/shared/api/config";
+import { getProxiedImageUrl } from "@/shared/api/config/config";
 
 const ICON_STROKE_WIDTH = 2.4;
 

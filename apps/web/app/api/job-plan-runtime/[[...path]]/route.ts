@@ -1,4 +1,4 @@
-import { getApiBaseUrl } from "@/shared/api/config";
+import { getApiBaseUrl } from "@/shared/api/config/config";
 
 interface RouteProps {
   params: Promise<{ path?: string[] }>;

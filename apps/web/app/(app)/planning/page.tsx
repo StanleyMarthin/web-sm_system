@@ -2,7 +2,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { PlanningCalendarView } from "@/modules/planning/components/planning-calendar-view";
 import { PlanningWorkControlPage } from "@/modules/planning/components/work-control/planning-work-control-page";
-import { fetchPlanningWorkspaceSummary } from "@/shared/api/planning";
+import { fetchPlanningWorkspaceSummary } from "@/shared/api/planning/planning";
 import { resolvePlanningWorkspaceState } from "@/shared/planning/workspace";
 import { ModuleUnavailableState } from "@/shared/ui/module-unavailable-state";
 

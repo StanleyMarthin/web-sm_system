@@ -17,7 +17,7 @@ import {
   X,
 } from "lucide-react";
 import type { AuthUser } from "@smsystem/contracts/auth";
-import { getApiBaseUrl } from "@/shared/api/config";
+import { getApiBaseUrl } from "@/shared/api/config/config";
 import { ProfileEmailForm } from "./forms/profile-email-form";
 import { ProfilePasswordForm } from "./forms/profile-password-form";
 

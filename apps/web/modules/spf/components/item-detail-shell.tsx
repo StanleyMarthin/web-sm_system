@@ -7,10 +7,10 @@ import { Camera } from "lucide-react";
 import type { CountdownBoardRow } from "@smsystem/contracts/countdown";
 import { ItemForm } from "./forms/item-form";
 import { ItemMedia } from "./item-media";
-import type { SpfItem, SpfMedia } from "@/shared/api/spf-contracts";
+import type { SpfItem, SpfMedia } from "@/shared/api/spf/spf-contracts";
 import { ActionButton, PageHeader, SectionCard } from "@/shared/ui/compact";
 import { useSweetAlert } from "@/shared/ui/sweet-alert";
-import { mutateSpf } from "@/shared/api/spf";
+import { mutateSpf } from "@/shared/api/spf/spf";
 import { DataGridStatusBadge } from "@/shared/datagrid/status-badge";
 
 interface ItemDetailShellProps {

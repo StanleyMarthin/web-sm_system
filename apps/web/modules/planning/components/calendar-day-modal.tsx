@@ -14,8 +14,8 @@ import type {
 } from "@smsystem/contracts/calendar";
 import { useRouter } from "next/navigation";
 import { X, Car, FileText, AlertTriangle, Loader2, Save } from "lucide-react";
-import { fetchSpkGrid } from "@/shared/api/spk";
-import { upsertCalendarDayOverride } from "@/shared/api/calendar";
+import { fetchSpkGrid } from "@/shared/api/spk/spk";
+import { upsertCalendarDayOverride } from "@/shared/api/calendar/calendar";
 import type { SpkHeaderRecord } from "@smsystem/contracts/spk";
 
 interface CalendarDayModalProps {

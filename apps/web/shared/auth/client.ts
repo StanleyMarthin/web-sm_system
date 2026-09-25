@@ -1,7 +1,7 @@
 "use client";
 
 import { CSRF_COOKIE_NAME, authEnvelopeSchema } from "@smsystem/contracts/auth";
-import { getApiBaseUrl } from "@/shared/api/config";
+import { getApiBaseUrl } from "@/shared/api/config/config";
 
 interface ApiEnvelope {
   success: boolean;

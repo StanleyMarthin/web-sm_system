@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { SourceCollector } from "./source-collector";
-import type { SpfSource, SpfPagination } from "@/shared/api/spf-contracts";
+import type { SpfSource, SpfPagination } from "@/shared/api/spf/spf-contracts";
 import { PageHeader } from "@/shared/ui/compact";
 
 interface SourceCollectorShellProps {

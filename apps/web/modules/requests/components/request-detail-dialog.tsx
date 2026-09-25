@@ -5,10 +5,10 @@ import Image from "next/image";
 import { useState } from "react";
 import { X, Printer, CheckCircle, AlertTriangle, HelpCircle, Eye } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { approveWo, markWoDone, rejectWo } from "@/shared/api/wo";
+import { approveWo, markWoDone, rejectWo } from "@/shared/api/wo/wo";
 import { permissionCodes } from "@smsystem/permissions";
-import { approvePr } from "@/shared/api/pr";
-import { approveVendor } from "@/shared/api/vendor";
+import { approvePr } from "@/shared/api/pr/pr";
+import { approveVendor } from "@/shared/api/vendor/vendor";
 import { humanizeCodeLabel } from "@/shared/format/humanize";
 
 interface RequestDetailDialogProps {

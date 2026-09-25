@@ -4,7 +4,7 @@ import type { CreateVendorRequest } from "@smsystem/contracts/vendor";
 import type { UnitPanelActivity, UnitPanelDetail } from "@smsystem/contracts/unit-panel";
 import type { CellValueChangedEvent, ColDef, ICellRendererParams } from "ag-grid-community";
 import { useMemo, useState } from "react";
-import { createVendor } from "@/shared/api/vendor";
+import { createVendor } from "@/shared/api/vendor/vendor";
 import { SmsAgGrid, SmsGridDraftActions } from "@/shared/datagrid/sms-ag-grid";
 import { SmartSelectCellEditor, type SmartSelectOption } from "./master-panel-smart-select-editor";
 

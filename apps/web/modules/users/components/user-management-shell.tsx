@@ -5,7 +5,7 @@ import type { UserGridReference, UserRecord } from "@smsystem/contracts/user";
 import { Plus, RefreshCcw, UserCog } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
-import { deactivateUser } from "@/shared/api/users";
+import { deactivateUser } from "@/shared/api/users/users";
 import { UserCreateForm } from "./forms/user-create-form";
 import { UserEditForm } from "./forms/user-edit-form";
 import { UserResetPasswordForm } from "./forms/user-reset-password-form";

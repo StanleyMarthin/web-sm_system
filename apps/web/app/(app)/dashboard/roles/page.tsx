@@ -6,7 +6,7 @@ import {
   fetchPermissions,
   fetchRoleReferences,
   fetchRoles,
-} from "@/shared/api/roles";
+} from "@/shared/api/roles/roles";
 import { ModuleUnavailableState } from "@/shared/ui/module-unavailable-state";
 import { PageDataSkeleton } from "@/shared/ui/page-data-skeleton";
 
