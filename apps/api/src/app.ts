@@ -1,4 +1,6 @@
 import { handleHealthRequest, type HealthDependencies } from "@/health/service";
+import { runWithRequestContext } from "@/observability/context";
+import { logger } from "@/observability/logger";
 import { MySqlAuthContextRepository } from "@/repositories/auth-context/auth-context.repo";
 import { MySqlAuditRepository } from "@/repositories/audit/audit.repo";
 import { DefaultAuditService } from "@/services/audit/audit.service";
@@ -436,6 +438,14 @@ interface AppRoute {
 
 function buildRequestId(request: Request): string {
   return request.headers.get("x-request-id") ?? crypto.randomUUID();
+}
+
+function requestPath(request: Request): string {
+  try {
+    return new URL(request.url).pathname;
+  } catch {
+    return "[invalid-url]";
+  }
 }
 
 function internalErrorResponse(request: Request, requestId: string): Response {
@@ -883,54 +893,68 @@ export function createApiFetchHandler(dependencies: AppDependencies = {}) {
 
   return async function fetchHandler(request: Request): Promise<Response> {
     const requestId = buildRequestId(request);
+    const startedAt = Date.now();
+    const path = requestPath(request);
 
-    try {
-      const url = new URL(request.url);
+    return await runWithRequestContext({ requestId }, async () => {
+      const respond = (response: Response): Response => {
+        response.headers.set("x-request-id", requestId);
+        logger.info("request completed", {
+          method: request.method,
+          path,
+          status: response.status,
+          durationMs: Date.now() - startedAt,
+        });
+        return response;
+      };
 
-      if (request.method === "OPTIONS") {
-        return preflightResponse(request);
-      }
+      try {
+        const url = new URL(request.url);
 
-      if (request.method === "GET" && url.pathname === "/health") {
-        return handleHealthRequest(dependencies);
-      }
-
-      let matchedRoute: { route: AppRoute; match: RegExpMatchArray | null } | null = null;
-      for (const route of routes) {
-        if (route.method !== request.method) {
-          continue;
+        if (request.method === "OPTIONS") {
+          return respond(preflightResponse(request));
         }
 
-        const match = matchRoute(route.pattern, url.pathname);
-        if (match !== undefined) {
-          matchedRoute = { route, match };
-          break;
+        if (request.method === "GET" && url.pathname === "/health") {
+          return respond(await handleHealthRequest(dependencies));
         }
-      }
 
-      if (!matchedRoute) {
-        return jsonResponse({ message: "Not Found" }, 404);
-      }
+        let matchedRoute: { route: AppRoute; match: RegExpMatchArray | null } | null = null;
+        for (const route of routes) {
+          if (route.method !== request.method) {
+            continue;
+          }
 
-      const rateLimitResponse = await enforceSecurityRateLimit(request, getAuthService());
-      if (rateLimitResponse) {
-        return rateLimitResponse;
-      }
+          const match = matchRoute(route.pattern, url.pathname);
+          if (match !== undefined) {
+            matchedRoute = { route, match };
+            break;
+          }
+        }
 
-      const csrfResponse = await enforceCsrfProtection(request, getAuthService());
-      if (csrfResponse) {
-        return csrfResponse;
-      }
+        if (!matchedRoute) {
+          return respond(jsonResponse({ message: "Not Found" }, 404));
+        }
 
-      return await matchedRoute.route.handler(request, matchedRoute.match);
-    } catch (error) {
-      console.error("[api] unhandled request error", {
-        requestId,
-        method: request.method,
-        url: request.url,
-        error,
-      });
-      return internalErrorResponse(request, requestId);
-    }
+        const rateLimitResponse = await enforceSecurityRateLimit(request, getAuthService());
+        if (rateLimitResponse) {
+          return respond(rateLimitResponse);
+        }
+
+        const csrfResponse = await enforceCsrfProtection(request, getAuthService());
+        if (csrfResponse) {
+          return respond(csrfResponse);
+        }
+
+        return respond(await matchedRoute.route.handler(request, matchedRoute.match));
+      } catch (error) {
+        logger.error("unhandled request error", {
+          method: request.method,
+          path,
+          error,
+        });
+        return respond(internalErrorResponse(request, requestId));
+      }
+    });
   };
 }

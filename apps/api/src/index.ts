@@ -1,6 +1,9 @@
 import { createApiFetchHandler } from "@/app";
 import { getApiEnv } from "@/config/env";
+import { registerProcessErrorHooks } from "@/observability/process-hooks";
 import { assertSessionCryptoKeyConfigured } from "@/services/auth/session.service";
+
+registerProcessErrorHooks();
 
 const env = getApiEnv();
 assertSessionCryptoKeyConfigured(env);
