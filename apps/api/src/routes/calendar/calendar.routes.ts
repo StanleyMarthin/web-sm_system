@@ -6,6 +6,7 @@ import {
 } from "@smsystem/contracts/calendar";
 import { parseGridQueryParams } from "@smsystem/contracts/grid";
 import { permissionCodes } from "@smsystem/permissions";
+import { fetchWithTimeout } from "@/http/fetch-with-timeout";
 import { parseJsonBody } from "@/http/request";
 import { errorResponse, withCors } from "@/http/response";
 import { requireSession } from "@/middleware/auth.middleware";
@@ -294,9 +295,7 @@ export async function handleHolidaySyncRoute(
 
   let holidays: unknown;
   try {
-    const response = await fetch(HOLIDAY_SOURCE_URL, {
-      signal: AbortSignal.timeout(20_000),
-    });
+    const response = await fetchWithTimeout(HOLIDAY_SOURCE_URL, { timeoutMs: 20_000 });
     if (!response.ok) {
       throw new Error("SOURCE_UNAVAILABLE");
     }

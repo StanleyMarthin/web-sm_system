@@ -1,9 +1,10 @@
-import { S3Client, GetObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
+import { GetObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import { getApiEnv } from "@/config/env";
 import { errorResponse, withCors } from "@/http/response";
 import { requireSession } from "@/middleware/auth.middleware";
 import type { AuthService } from "@/services/auth/auth.service";
 import { MAX_IMAGE_UPLOAD_BYTES } from "@/security/upload-ticket";
+import { getR2Client } from "@/services/storage/r2.client";
 
 function stripTrailingSlash(value: string): string {
   return value.replace(/\/$/u, "");
@@ -68,15 +69,7 @@ export async function handleImageProxyRoute(
     return withCors(request, new Response("Invalid key", { status: 400 }));
   }
 
-  const s3 = new S3Client({
-    endpoint: env.R2_ENDPOINT_URL,
-    region: "auto",
-    credentials: {
-      accessKeyId: env.R2_ACCESS_KEY_ID!,
-      secretAccessKey: env.R2_SECRET_ACCESS_KEY!,
-    },
-    forcePathStyle: true,
-  });
+  const s3 = getR2Client(env);
 
   try {
     const head = await s3.send(

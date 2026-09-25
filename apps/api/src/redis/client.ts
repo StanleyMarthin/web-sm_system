@@ -16,6 +16,7 @@ function createRedisConnection(env: ApiEnv): RedisClientType {
     disableOfflineQueue: true,
     socket: {
       connectTimeout: 1_000,
+      socketTimeout: 3_000,
       host: env.REDIS_HOST,
       port: env.REDIS_PORT,
       reconnectStrategy: (retries) => (retries > 3 ? false : Math.min(retries * 200, 500)),

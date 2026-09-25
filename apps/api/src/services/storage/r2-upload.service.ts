@@ -1,8 +1,9 @@
-import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { PutObjectCommand, type S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import type { ApiEnv } from "@/config/env";
 import { MAX_IMAGE_UPLOAD_BYTES, MAX_VIDEO_UPLOAD_BYTES } from "@/security/upload-ticket";
 import type { GalleryUploadTicketProvider } from "@/services/gallery/gallery.service";
+import { getR2Client } from "@/services/storage/r2.client";
 
 function stripTrailingSlash(value: string): string {
   return value.replace(/\/$/u, "");
@@ -27,15 +28,7 @@ export class S3GalleryUploadTicketProvider implements GalleryUploadTicketProvide
       return;
     }
 
-    this.client = new S3Client({
-      endpoint: env.R2_ENDPOINT_URL,
-      region: "auto",
-      credentials: {
-        accessKeyId: env.R2_ACCESS_KEY_ID!,
-        secretAccessKey: env.R2_SECRET_ACCESS_KEY!,
-      },
-      forcePathStyle: true,
-    });
+    this.client = getR2Client(env);
   }
 
   async createTicket(input: {

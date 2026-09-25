@@ -117,6 +117,50 @@ describe("DefaultJobPlanService draft sync", () => {
     expect(result.summary.totalHours).toBe(2);
   });
 
+  it("keeps list available when Redis draft cache is down", async () => {
+    const repository = {
+      list: async () => ({
+        rows: [],
+        total: 0,
+        summary: {
+          totalHours: 0,
+          pendingCount: 0,
+          approvedCount: 0,
+          overtimeCount: 0,
+        },
+      }),
+      listReferences: async () => ({
+        employees: [],
+        divisions: [{ value: 7, label: "Divisi A" }],
+        units: [],
+        countdowns: [],
+        workOrders: [],
+        panels: [],
+        jobTypes: [],
+        statuses: [],
+      }),
+    };
+    const service = new DefaultJobPlanService(
+      repository as never,
+      { log: async () => undefined } as never,
+      async () => {
+        throw new Error("REDIS_DOWN");
+      },
+    );
+
+    const result = await service.list({
+      user: {
+        employeeId: "EMP-1",
+        fullName: "Planner",
+        divisionId: null,
+        scope,
+      },
+    } as never, query);
+
+    expect(result.data).toEqual([]);
+    expect(result.meta.total).toBe(0);
+  });
+
   it("writes web drafts to the mobile Redis key", async () => {
     const repository = {
       listReferences: async () => ({

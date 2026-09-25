@@ -235,6 +235,16 @@ export interface CalendarOverrideStore {
   upsert(input: CalendarDayOverrideRequest & { updatedBy: string }): Promise<CalendarDayOverride>;
 }
 
+async function scanKeys(client: RedisClientType, pattern: string): Promise<string[]> {
+  const keys: string[] = [];
+  for await (const key of client.scanIterator({ MATCH: pattern, COUNT: 100 })) {
+    if (typeof key === "string") {
+      keys.push(key);
+    }
+  }
+  return keys;
+}
+
 class RedisEtaCacheStore implements EtaCacheStore {
   constructor(
     private readonly clientFactory: () => Promise<RedisClientType> = getRedisClient,
@@ -257,7 +267,7 @@ class RedisEtaCacheStore implements EtaCacheStore {
 
   async deleteByPattern(pattern: string): Promise<void> {
     const client = await this.clientFactory();
-    const keys = await client.keys(pattern);
+    const keys = await scanKeys(client, pattern);
     if (keys.length > 0) {
       await client.del(keys);
     }
@@ -280,7 +290,7 @@ class RedisCalendarOverrideStore implements CalendarOverrideStore {
       return [];
     }
 
-    const keys = await client.keys("planning:calendar:day-override:*");
+    const keys = await scanKeys(client, "planning:calendar:day-override:*");
     if (keys.length === 0) {
       return [];
     }

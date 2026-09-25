@@ -704,13 +704,20 @@ export class DefaultJobPlanService implements JobPlanService {
     employeeId: string,
     divisionIds: number[],
   ): Promise<JobPlanDraftRecord[]> {
-    const redis = await this.redisFactory();
-    const keys = [
-      ...divisionIds.map((divisionId) => buildDivisionDraftKey(divisionId)),
-      buildLegacyMobileDraftKey(employeeId),
-      buildLegacyWebDraftKey(employeeId),
-    ];
-    const rows = await Promise.all(keys.map(async (key) => this.parseDrafts(await redis.get(key))));
+    let rows: JobPlanDraftRecord[][];
+    try {
+      const redis = await this.redisFactory();
+      const keys = [
+        ...divisionIds.map((divisionId) => buildDivisionDraftKey(divisionId)),
+        buildLegacyMobileDraftKey(employeeId),
+        buildLegacyWebDraftKey(employeeId),
+      ];
+      rows = await Promise.all(keys.map(async (key) => this.parseDrafts(await redis.get(key))));
+    } catch (error) {
+      console.warn("[job-plan] draft cache unavailable; continuing without drafts", error);
+      return [];
+    }
+
     const draftsById = new Map<string, JobPlanDraftRecord>();
 
     for (const drafts of rows) {
@@ -772,6 +779,20 @@ export class DefaultJobPlanService implements JobPlanService {
       }), {
         EX: JOB_PLAN_DRAFT_TTL_SECONDS,
       });
+    }
+  }
+
+  private async writeDraftsWithRetry(
+    session: WebSession,
+    divisionIds: number[],
+    drafts: JobPlanDraftRecord[],
+  ): Promise<void> {
+    try {
+      await this.writeDrafts(session, divisionIds, drafts);
+      return;
+    } catch {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      await this.writeDrafts(session, divisionIds, drafts);
     }
   }
 
@@ -981,9 +1002,14 @@ export class DefaultJobPlanService implements JobPlanService {
       }
     }
 
+    const loads = await this.repository.getPicLoadBatch([...groupedHours.keys()].map((key) => {
+      const [employeeId, taskDate, overtimeFlag] = key.split("|");
+      return { employeeId: employeeId!, taskDate: taskDate!, overtimeFlag };
+    }));
+
     for (const [key, requestedHours] of groupedHours) {
       const [employeeId, taskDate, overtimeFlag] = key.split("|");
-      const capacity = await this.repository.getPicLoad(employeeId!, taskDate!);
+      const capacity = loads.get(`${employeeId}|${taskDate}`) ?? await this.repository.getPicLoad(employeeId!, taskDate!);
       const remaining =
         overtimeFlag === "1"
           ? capacity.overtime.remaining
@@ -1004,11 +1030,12 @@ export class DefaultJobPlanService implements JobPlanService {
       draftRows,
     );
 
-    await this.writeDrafts(
-      session,
-      draftDivisionIds,
-      drafts.filter((draft) => !input.draftItemIds.includes(draft.draftItemId)),
-    );
+    const remainingDrafts = drafts.filter((draft) => !input.draftItemIds.includes(draft.draftItemId));
+    try {
+      await this.writeDraftsWithRetry(session, draftDivisionIds, remainingDrafts);
+    } catch (error) {
+      console.error("[job-plan] draft cleanup failed after submit", error);
+    }
 
     await this.auditService.log({
       actorId: session.user.employeeId,
@@ -1215,9 +1242,14 @@ export class DefaultJobPlanService implements JobPlanService {
       groupedHours.set(key, (groupedHours.get(key) ?? 0) + plan.targetHours);
     }
 
+    const loads = await this.repository.getPicLoadBatch([...groupedHours.keys()].map((key) => {
+      const [employeeId, taskDate, overtimeFlag] = key.split("|");
+      return { employeeId, taskDate, overtimeFlag };
+    }));
+
     for (const [key, requestedHours] of groupedHours) {
       const [employeeId, taskDate, overtimeFlag] = key.split("|");
-      const capacity = await this.repository.getPicLoad(employeeId, taskDate);
+      const capacity = loads.get(`${employeeId}|${taskDate}`) ?? await this.repository.getPicLoad(employeeId, taskDate);
       const remaining =
         overtimeFlag === "1"
           ? capacity.overtime.remaining

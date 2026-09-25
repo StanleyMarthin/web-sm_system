@@ -20,7 +20,7 @@ import {
   type DivisionTechnicalReference,
 } from "@smsystem/contracts/division";
 import { buildJobPlanScheduleSegments } from "@smsystem/contracts/job-plan-schedule";
-import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
+import type { Pool, PoolConnection, ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { getMySqlPool } from "@/db/mysql";
 
 interface ScopeParams {
@@ -166,6 +166,11 @@ interface JobTypeReferenceRow extends RowDataPacket {
 interface PicLoadRow extends RowDataPacket {
   normalHours: number | null;
   overtimeHours: number | null;
+}
+
+interface PicLoadBatchRow extends PicLoadRow {
+  employeeId: string;
+  taskDate: string;
 }
 
 interface LockStateRow extends RowDataPacket {
@@ -1174,6 +1179,9 @@ export interface JobPlanRepository {
     taskDate: string,
     excludePlanId?: string,
   ): Promise<JobPlanPicLoad>;
+  getPicLoadBatch(
+    requests: Array<{ employeeId: string; taskDate: string }>,
+  ): Promise<Map<string, JobPlanPicLoad>>;
   createMany(
     params: ScopeParams & { actorId: string; actorName: string },
     plans: JobPlanDraftItem[],
@@ -1850,6 +1858,66 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
     };
   }
 
+  async getPicLoadBatch(
+    requests: Array<{ employeeId: string; taskDate: string }>,
+  ): Promise<Map<string, JobPlanPicLoad>> {
+    const uniqueRequests = [...new Map(requests.map((request) => [
+      `${request.employeeId}|${request.taskDate}`,
+      request,
+    ])).values()];
+    const result = new Map<string, JobPlanPicLoad>();
+
+    for (const request of uniqueRequests) {
+      const overtimeMax = getOvertimeLimit(request.taskDate);
+      result.set(`${request.employeeId}|${request.taskDate}`, {
+        normal: { used: 0, max: 8, remaining: 8 },
+        overtime: { used: 0, max: overtimeMax, remaining: overtimeMax },
+      });
+    }
+
+    if (uniqueRequests.length === 0) {
+      return result;
+    }
+
+    const pool = this.poolFactory();
+    const params = uniqueRequests.flatMap((request) => [request.employeeId, request.taskDate]);
+    const conditions = uniqueRequests.map(() => "(assigned_user_id = ? AND task_date = ?)").join(" OR ");
+    const [rows] = (await pool.query(
+      `
+        SELECT
+          assigned_user_id AS employeeId,
+          DATE_FORMAT(task_date, '%Y-%m-%d') AS taskDate,
+          SUM(CASE WHEN is_overtime = 0 THEN TIME_TO_SEC(dailyTargetHours) / 3600 ELSE 0 END) AS normalHours,
+          SUM(CASE WHEN is_overtime = 1 THEN TIME_TO_SEC(dailyTargetHours) / 3600 ELSE 0 END) AS overtimeHours
+        FROM sm_jobdesc_plan
+        WHERE status != 'REJECTED'
+          AND (${conditions})
+        GROUP BY assigned_user_id, task_date
+      `,
+      params,
+    )) as [PicLoadBatchRow[], unknown];
+
+    for (const row of rows) {
+      const normalUsed = Number(row.normalHours ?? 0);
+      const overtimeUsed = Number(row.overtimeHours ?? 0);
+      const overtimeMax = getOvertimeLimit(row.taskDate);
+      result.set(`${row.employeeId}|${row.taskDate}`, {
+        normal: {
+          used: normalUsed,
+          max: 8,
+          remaining: Math.max(0, Number((8 - normalUsed).toFixed(2))),
+        },
+        overtime: {
+          used: overtimeUsed,
+          max: overtimeMax,
+          remaining: Math.max(0, Number((overtimeMax - overtimeUsed).toFixed(2))),
+        },
+      });
+    }
+
+    return result;
+  }
+
   async createMany(
     params: ScopeParams & { actorId: string; actorName: string },
     plans: JobPlanDraftItem[],
@@ -2062,6 +2130,51 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
     }
   }
 
+  private async findMatchingSubmittedPlanId(
+    connection: PoolConnection,
+    input: {
+      coreId: string;
+      taskDate: string;
+      jobDescription: string;
+      assignedUserId: string;
+      startTime: string;
+      finishTime: string;
+      targetHours: number;
+      isOvertime: boolean;
+      note: string | null;
+    },
+  ): Promise<string | null> {
+    const [rows] = (await connection.query(
+      `
+        SELECT id
+        FROM sm_jobdesc_plan
+        WHERE core_id = ?
+          AND task_date = ?
+          AND jobdescription = ?
+          AND assigned_user_id = ?
+          AND target_start_hours = ?
+          AND target_finish_hours = ?
+          AND TIME_TO_SEC(dailyTargetHours) = ?
+          AND is_overtime = ?
+          AND note <=> ?
+        LIMIT 1
+      `,
+      [
+        input.coreId,
+        input.taskDate,
+        input.jobDescription,
+        input.assignedUserId,
+        input.startTime,
+        input.finishTime,
+        Math.round(input.targetHours * 3_600),
+        input.isOvertime ? 1 : 0,
+        input.note,
+      ],
+    )) as [Array<RowDataPacket & { id: string }>, unknown];
+
+    return rows[0]?.id ?? null;
+  }
+
   async submitDrafts(
     params: ScopeParams & { actorId: string; actorName: string },
     drafts: JobPlanDraftRecord[],
@@ -2107,11 +2220,55 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
             requestedMode: draft.isOvertime ? "overtime" : "normal",
             targetHours: draft.targetHours,
           });
+          const existingIdsBySegment = new Map<string, string>();
+
+          for (const segment of scheduleSegments) {
+            const existingPlanId = await this.findMatchingSubmittedPlanId(connection, {
+              coreId: countdown.coreId,
+              taskDate: draft.taskDate,
+              jobDescription: draft.jobDescription,
+              assignedUserId: draft.assignedUserId,
+              startTime: segment.startTime,
+              finishTime: segment.finishTime,
+              targetHours: segment.targetHours,
+              isOvertime: segment.mode === "overtime",
+              note: draft.note ?? null,
+            });
+            if (existingPlanId) {
+              existingIdsBySegment.set(`${segment.startTime}|${segment.finishTime}|${segment.targetHours}`, existingPlanId);
+            }
+          }
+
+          if (existingIdsBySegment.size === scheduleSegments.length) {
+            createdIds.push(...existingIdsBySegment.values());
+            continue;
+          }
 
           await checkPanelLock(connection, countdown);
           await assertCountdownCapacity(connection, countdown, draft.targetHours);
 
           for (const segment of scheduleSegments) {
+            const segmentKey = `${segment.startTime}|${segment.finishTime}|${segment.targetHours}`;
+            if (existingIdsBySegment.has(segmentKey)) {
+              createdIds.push(existingIdsBySegment.get(segmentKey)!);
+              continue;
+            }
+            const existingPlanId = await this.findMatchingSubmittedPlanId(connection, {
+              coreId: countdown.coreId,
+              taskDate: draft.taskDate,
+              jobDescription: draft.jobDescription,
+              assignedUserId: draft.assignedUserId,
+              startTime: segment.startTime,
+              finishTime: segment.finishTime,
+              targetHours: segment.targetHours,
+              isOvertime: segment.mode === "overtime",
+              note: draft.note ?? null,
+            });
+            if (existingPlanId) {
+              createdIds.push(existingPlanId);
+              continue;
+            }
+
             const planId = `PLAN-${randomUUID().replace(/-/gu, "").slice(0, 20).toUpperCase()}`;
             await connection.execute(
               `
@@ -2169,11 +2326,55 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
           requestedMode: draft.isOvertime ? "overtime" : "normal",
           targetHours: draft.targetHours,
         });
+        const existingIdsBySegment = new Map<string, string>();
+
+        for (const segment of scheduleSegments) {
+          const existingPlanId = await this.findMatchingSubmittedPlanId(connection, {
+            coreId: draft.coreId,
+            taskDate: draft.taskDate,
+            jobDescription: draft.jobDescription,
+            assignedUserId: draft.assignedUserId,
+            startTime: segment.startTime,
+            finishTime: segment.finishTime,
+            targetHours: segment.targetHours,
+            isOvertime: segment.mode === "overtime",
+            note: draft.note ?? null,
+          });
+          if (existingPlanId) {
+            existingIdsBySegment.set(`${segment.startTime}|${segment.finishTime}|${segment.targetHours}`, existingPlanId);
+          }
+        }
+
+        if (existingIdsBySegment.size === scheduleSegments.length) {
+          createdIds.push(...existingIdsBySegment.values());
+          continue;
+        }
 
         await checkPanelLock(connection, countdown);
         await assertCountdownCapacity(connection, countdown, draft.targetHours);
 
         for (const segment of scheduleSegments) {
+          const segmentKey = `${segment.startTime}|${segment.finishTime}|${segment.targetHours}`;
+          if (existingIdsBySegment.has(segmentKey)) {
+            createdIds.push(existingIdsBySegment.get(segmentKey)!);
+            continue;
+          }
+          const existingPlanId = await this.findMatchingSubmittedPlanId(connection, {
+            coreId: draft.coreId,
+            taskDate: draft.taskDate,
+            jobDescription: draft.jobDescription,
+            assignedUserId: draft.assignedUserId,
+            startTime: segment.startTime,
+            finishTime: segment.finishTime,
+            targetHours: segment.targetHours,
+            isOvertime: segment.mode === "overtime",
+            note: draft.note ?? null,
+          });
+          if (existingPlanId) {
+            createdIds.push(existingPlanId);
+            continue;
+          }
+
           const planId = `PLAN-${randomUUID().replace(/-/gu, "").slice(0, 20).toUpperCase()}`;
           await connection.execute(
             `
@@ -2227,6 +2428,13 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
 
   async findById(params: JobPlanMutationParams): Promise<JobPlanRecord | null> {
     const pool = this.poolFactory();
+    return this.findByIdWithConnection(pool, params);
+  }
+
+  async findByIdWithConnection(
+    connection: Pick<Pool | PoolConnection, "query">,
+    params: JobPlanMutationParams,
+  ): Promise<JobPlanRecord | null> {
     const queryParams: unknown[] = [params.planId];
     const scopeSql = buildScopeWhereClause(
       params.scope,
@@ -2234,7 +2442,7 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
       queryParams,
     );
 
-    const [rows] = (await pool.query(
+    const [rows] = (await connection.query(
       `
         ${buildListSelectSql()}
         WHERE p.id = ?
@@ -2257,9 +2465,12 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
     try {
       await connection.beginTransaction();
 
-      const existing = await this.findById(params);
+      const existing = await this.findByIdWithConnection(connection, params);
       if (!existing) {
         throw new Error("PLAN_NOT_FOUND");
+      }
+      if (existing.divisionId === null) {
+        throw new Error("PLAN_SCOPE_INCOMPLETE");
       }
 
       if (await isPlanLocked(connection, params.planId)) {
@@ -2271,7 +2482,7 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
       await checkPanelLock(connection, countdown);
       await assertCountdownCapacity(connection, countdown, nextTargetHours, params.planId);
 
-      await connection.execute(
+      const [updateResult] = (await connection.execute(
         `
           UPDATE sm_jobdesc_plan
           SET
@@ -2285,6 +2496,12 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
             isPriority = COALESCE(?, isPriority),
             note = COALESCE(?, note)
           WHERE id = ?
+            AND EXISTS (
+              SELECT 1
+              FROM sm_jobdesc_countdown scope_countdown
+              WHERE scope_countdown.id = sm_jobdesc_plan.core_id
+                AND scope_countdown.division_id = ?
+            )
         `,
         [
           input.taskDate ?? null,
@@ -2297,8 +2514,12 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
           typeof input.isPriority === "boolean" ? (input.isPriority ? 1 : 0) : null,
           input.note ?? null,
           params.planId,
+          existing.divisionId,
         ],
-      );
+      )) as [ResultSetHeader, unknown];
+      if (updateResult.affectedRows === 0) {
+        throw new Error("PLAN_NOT_FOUND");
+      }
 
       await connection.commit();
       return { updatedPlanId: params.planId };
@@ -2320,19 +2541,31 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
     try {
       await connection.beginTransaction();
 
-      const existing = await this.findById(params);
+      const existing = await this.findByIdWithConnection(connection, params);
       if (!existing) {
         throw new Error("PLAN_NOT_FOUND");
       }
+      if (existing.divisionId === null) {
+        throw new Error("PLAN_SCOPE_INCOMPLETE");
+      }
 
-      await connection.execute(
+      const [updateResult] = (await connection.execute(
         `
           UPDATE sm_jobdesc_plan
           SET status = ?, note = COALESCE(?, note)
           WHERE id = ?
+            AND EXISTS (
+              SELECT 1
+              FROM sm_jobdesc_countdown scope_countdown
+              WHERE scope_countdown.id = sm_jobdesc_plan.core_id
+                AND scope_countdown.division_id = ?
+            )
         `,
-        [input.status, input.note ?? null, params.planId],
-      );
+        [input.status, input.note ?? null, params.planId, existing.divisionId],
+      )) as [ResultSetHeader, unknown];
+      if (updateResult.affectedRows === 0) {
+        throw new Error("PLAN_NOT_FOUND");
+      }
 
       const countdown = await getCountdownContext(connection, existing.coreId);
       if (countdown && input.status === "REJECTED") {
@@ -2359,9 +2592,12 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
     try {
       await connection.beginTransaction();
 
-      const existing = await this.findById(params);
+      const existing = await this.findByIdWithConnection(connection, params);
       if (!existing) {
         throw new Error("PLAN_NOT_FOUND");
+      }
+      if (existing.divisionId === null) {
+        throw new Error("PLAN_SCOPE_INCOMPLETE");
       }
 
       if (await isPlanLocked(connection, params.planId)) {
@@ -2369,7 +2605,22 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
       }
 
       const countdown = await getCountdownContext(connection, existing.coreId);
-      await connection.execute("DELETE FROM sm_jobdesc_plan WHERE id = ?", [params.planId]);
+      const [deleteResult] = (await connection.execute(
+        `
+          DELETE FROM sm_jobdesc_plan
+          WHERE id = ?
+            AND EXISTS (
+              SELECT 1
+              FROM sm_jobdesc_countdown scope_countdown
+              WHERE scope_countdown.id = sm_jobdesc_plan.core_id
+                AND scope_countdown.division_id = ?
+            )
+        `,
+        [params.planId, existing.divisionId],
+      )) as [ResultSetHeader, unknown];
+      if (deleteResult.affectedRows === 0) {
+        throw new Error("PLAN_NOT_FOUND");
+      }
       if (countdown) {
         await syncPanelLock(connection, countdown);
       }

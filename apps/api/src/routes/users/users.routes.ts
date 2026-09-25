@@ -9,6 +9,7 @@ import { z } from "zod";
 import { parseJsonBody } from "@/http/request";
 import { getApiEnv } from "@/config/env";
 import { getMySqlPool } from "@/db/mysql";
+import { fetchWithTimeout } from "@/http/fetch-with-timeout";
 import {
   errorResponse,
   successResponse,
@@ -65,7 +66,7 @@ async function requestTaskUploadTicket(objectKey: string): Promise<{
   const ticketUrl = new URL(`${resolveTasksBaseUrl()}/sm/tasks/upload-ticket`);
   ticketUrl.searchParams.set("filename", objectKey);
 
-  const response = await fetch(ticketUrl);
+  const response = await fetchWithTimeout(ticketUrl);
   const payload = (await response.json().catch(() => null)) as UploadTicketEnvelope | null;
   const data = payload?.data ?? {};
   const uploadUrl = data.upload_url ?? data.uploadUrl;
@@ -385,12 +386,13 @@ export async function handleProfileAvatarUploadRoute(
     assertImageMagicBytes(mimeType, new Uint8Array(arrayBuffer));
     const ticket = await requestTaskUploadTicket(objectKey);
 
-    const uploadResponse = await fetch(ticket.uploadUrl, {
+    const uploadResponse = await fetchWithTimeout(ticket.uploadUrl, {
       method: "PUT",
       headers: {
         "Content-Type": mimeType,
       },
       body: new Uint8Array(arrayBuffer),
+      timeoutMs: 15_000,
     });
 
     if (!uploadResponse.ok) {

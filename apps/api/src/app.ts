@@ -16,7 +16,7 @@ import {
   handleDashboardBootstrapRoute,
   handleDashboardSummaryRoute,
 } from "@/routes/dashboard/dashboard.routes";
-import { preflightResponse, withSecurityHeaders } from "@/http/response";
+import { preflightResponse, withCors, withSecurityHeaders } from "@/http/response";
 import {
   handleUsersCreateRoute,
   handleUsersDeactivateRoute,
@@ -431,6 +431,22 @@ interface AppRoute {
   method: string;
   pattern: string | RegExp;
   handler: Handler;
+}
+
+function buildRequestId(request: Request): string {
+  return request.headers.get("x-request-id") ?? crypto.randomUUID();
+}
+
+function internalErrorResponse(request: Request, requestId: string): Response {
+  return withCors(request, Response.json(
+    {
+      success: false,
+      code: "INTERNAL_ERROR",
+      message: "Internal server error",
+      requestId,
+    },
+    { status: 500 },
+  ));
 }
 
 function matchRoute(
@@ -864,37 +880,55 @@ export function createApiFetchHandler(dependencies: AppDependencies = {}) {
   ];
 
   return async function fetchHandler(request: Request): Promise<Response> {
-    const url = new URL(request.url);
+    const requestId = buildRequestId(request);
 
-    if (request.method === "OPTIONS") {
-      return preflightResponse(request);
-    }
+    try {
+      const url = new URL(request.url);
 
-    if (request.method === "GET" && url.pathname === "/health") {
-      return handleHealthRequest(dependencies);
-    }
-
-    const rateLimitResponse = await enforceSecurityRateLimit(request, getAuthService());
-    if (rateLimitResponse) {
-      return rateLimitResponse;
-    }
-
-    const csrfResponse = await enforceCsrfProtection(request, getAuthService());
-    if (csrfResponse) {
-      return csrfResponse;
-    }
-
-    for (const route of routes) {
-      if (route.method !== request.method) {
-        continue;
+      if (request.method === "OPTIONS") {
+        return preflightResponse(request);
       }
 
-      const match = matchRoute(route.pattern, url.pathname);
-      if (match !== undefined) {
-        return route.handler(request, match);
+      if (request.method === "GET" && url.pathname === "/health") {
+        return handleHealthRequest(dependencies);
       }
-    }
 
-    return jsonResponse({ message: "Not Found" }, 404);
+      let matchedRoute: { route: AppRoute; match: RegExpMatchArray | null } | null = null;
+      for (const route of routes) {
+        if (route.method !== request.method) {
+          continue;
+        }
+
+        const match = matchRoute(route.pattern, url.pathname);
+        if (match !== undefined) {
+          matchedRoute = { route, match };
+          break;
+        }
+      }
+
+      if (!matchedRoute) {
+        return jsonResponse({ message: "Not Found" }, 404);
+      }
+
+      const rateLimitResponse = await enforceSecurityRateLimit(request, getAuthService());
+      if (rateLimitResponse) {
+        return rateLimitResponse;
+      }
+
+      const csrfResponse = await enforceCsrfProtection(request, getAuthService());
+      if (csrfResponse) {
+        return csrfResponse;
+      }
+
+      return await matchedRoute.route.handler(request, matchedRoute.match);
+    } catch (error) {
+      console.error("[api] unhandled request error", {
+        requestId,
+        method: request.method,
+        url: request.url,
+        error,
+      });
+      return internalErrorResponse(request, requestId);
+    }
   };
 }

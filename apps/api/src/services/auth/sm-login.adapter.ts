@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { getApiEnv } from "@/config/env";
+import { fetchWithTimeout } from "@/http/fetch-with-timeout";
 
 const mobileEnvelopeSchema = z.object({
   success: z.boolean(),
@@ -74,7 +75,7 @@ function buildSuccess(payload: z.infer<typeof loginSuccessSchema>): MobileAuthSu
 export class HttpSmLoginAdapter implements SmLoginAdapter {
   async loginWeb(params: LoginWebParams): Promise<MobileAuthSuccess> {
     const env = getApiEnv();
-    const response = await fetch(`${env.SM_LOGIN_BASE_URL}/api/v1/auth/login-web`, {
+    const response = await fetchWithTimeout(`${env.SM_LOGIN_BASE_URL}/api/v1/auth/login-web`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -97,7 +98,7 @@ export class HttpSmLoginAdapter implements SmLoginAdapter {
 
   async refresh(params: RefreshWebParams): Promise<MobileAuthSuccess> {
     const env = getApiEnv();
-    const response = await fetch(`${env.SM_LOGIN_BASE_URL}/api/v1/auth/refresh`, {
+    const response = await fetchWithTimeout(`${env.SM_LOGIN_BASE_URL}/api/v1/auth/refresh`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

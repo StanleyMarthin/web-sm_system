@@ -1,6 +1,7 @@
 import type { RowDataPacket } from "mysql2";
 import { getMySqlPool } from "@/db/mysql";
 import { getApiEnv } from "@/config/env";
+import { fetchWithTimeout } from "@/http/fetch-with-timeout";
 
 interface DeviceRow extends RowDataPacket {
   fcm_token: string;
@@ -87,7 +88,7 @@ export async function sendPushNotification(
   };
 
   try {
-    const response = await fetch("https://fcm.googleapis.com/fcm/send", {
+    const response = await fetchWithTimeout("https://fcm.googleapis.com/fcm/send", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

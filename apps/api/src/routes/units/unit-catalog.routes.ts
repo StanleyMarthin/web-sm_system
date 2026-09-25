@@ -10,6 +10,7 @@ import {
 } from "@smsystem/contracts/unit-catalog";
 import { permissionCodes } from "@smsystem/permissions";
 import { getApiEnv } from "@/config/env";
+import { fetchWithTimeout } from "@/http/fetch-with-timeout";
 import { parseJsonBody } from "@/http/request";
 import { errorResponse, successResponse, withCors } from "@/http/response";
 import { requireSession } from "@/middleware/auth.middleware";
@@ -83,7 +84,7 @@ async function requestTaskUploadTicket(objectKey: string, contentType: string): 
   ticketUrl.searchParams.set("filename", objectKey);
   ticketUrl.searchParams.set("contentType", contentType);
 
-  const response = await fetch(ticketUrl);
+  const response = await fetchWithTimeout(ticketUrl);
   const payload = (await response.json().catch(() => null)) as UploadTicketEnvelope | null;
   const data = payload?.data ?? {};
   const uploadUrl = data.upload_url ?? data.uploadUrl;
@@ -400,10 +401,11 @@ export async function handleUnitCatalogPanelImageUploadRoute(request: Request, u
 
     const objectKey = `catalog-panels/${unitId}/${sessionResult.session.employeeId}/${createUploadNonce()}.${extension}`;
     const ticket = await requestTaskUploadTicket(objectKey, contentType);
-    const uploadResponse = await fetch(ticket.uploadUrl, {
+    const uploadResponse = await fetchWithTimeout(ticket.uploadUrl, {
       method: "PUT",
       headers: { "Content-Type": contentType },
       body: bytes,
+      timeoutMs: 15_000,
     });
     if (!uploadResponse.ok) {
       const body = await uploadResponse.text().catch(() => "");
