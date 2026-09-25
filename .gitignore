@@ -9,6 +9,7 @@ node_modules/
 !.yarn/versions/
 infra
 packages/*/dist
+*.scratch.ts
 # Build output and caches
 .next/
 **/.next/
