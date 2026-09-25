@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { gridMetaSchema, gridQueryStateSchema } from "./grid";
+import { gridMetaSchema, gridQueryStateSchema } from "../grid/grid";
 
 export const prApprovalStageSchema = z.enum([
   "PENDING_ADV",

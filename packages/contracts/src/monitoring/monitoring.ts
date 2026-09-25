@@ -2,13 +2,13 @@ import { z } from "zod";
 import {
   gridMetaSchema,
   gridQueryStateSchema,
-} from "./grid";
+} from "../grid/grid";
 import {
   jobPlanRuntimeApprovalStateSchema,
   jobPlanRuntimeExecutionStateSchema,
   jobPlanRuntimeLedgerStateSchema,
   jobPlanRuntimeSourceSchema,
-} from "./job-plan-runtime";
+} from "../job-plan/job-plan-runtime";
 
 const optionSchema = z.object({
   label: z.string(),

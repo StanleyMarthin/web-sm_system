@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { gridMetaSchema, gridQueryStateSchema } from "./grid";
+import { gridMetaSchema, gridQueryStateSchema } from "../grid/grid";
 
 export const galleryPhotoTypeSchema = z.enum([
   "BEFORE",

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { gridFilterSchema, gridMetaSchema } from "./grid";
+import { gridFilterSchema, gridMetaSchema } from "../grid/grid";
 
 export const bubutInvoiceTypeSchema = z.enum(["DIREKSI", "CUSTOMER"]);
 export const bubutInvoiceStatusSchema = z.enum(["RELEASED", "CANCELLED"]);

@@ -2,7 +2,7 @@ import { z } from "zod";
 import {
   gridMetaSchema,
   gridQueryStateSchema,
-} from "./grid";
+} from "../grid/grid";
 
 export const woStatusSchema = z.enum([
   "OPEN",

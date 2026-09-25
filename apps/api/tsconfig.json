@@ -4,7 +4,6 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"],
-      "@smsystem/contracts/*": ["../../packages/contracts/src/*"],
       "@smsystem/permissions": ["../../packages/permissions/src/index.ts"]
     }
   },

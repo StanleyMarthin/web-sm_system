@@ -1,5 +1,5 @@
 import { gridMetaSchema, gridQueryStateSchema } from "@smsystem/contracts/grid";
-import { galleryPhotoTypeSchema } from "./gallery";
+import { galleryPhotoTypeSchema } from "../gallery/gallery";
 import { z } from "zod";
 
 export const countdownTaskCategorySchema = z.enum([
