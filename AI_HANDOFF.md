@@ -2,7 +2,7 @@
 
 > **Milestone: SMSYSTEM Production Foundation v1.0**
 > Status: **REINITIALIZED FROM CURRENT WORKTREE**
-> Tanggal: 2026-09-28 · Branch: `main` · Commit terakhir: `61592e2`
+> Tanggal: 2026-09-28 · Branch: `main` · Commit terakhir: `c8b0a8f`
 > Dokumen ini titik masuk untuk sesi berikutnya. Arsip sesi lama ada di bagian bawah.
 
 ## 0. Reinitialization checkpoint (2026-09-28)
@@ -14,7 +14,7 @@ Initialization ini dibuat setelah local Codex context/session history hilang. So
 - Root: `/home/sahrulr/Documents/SM-MIS/smsystem`
 - Remote: `origin https://github.com/StanleyMarthin/web-sm_system.git`
 - Branch: `main`
-- HEAD: `61592e2 docs(repo): add engineering handoff`
+- HEAD: `c8b0a8f fix(job-plan): align hierarchy references`
 - Primary tracked reference docs: `README.md`, `SYSTEM_MAP_WEB.md`, `docs/job-plan-reference-architecture.md`, `RUN_PROJECT.md`, `MODUL_GUIDE.md`, and this `AI_HANDOFF.md`.
 - Related repo, jangan diedit tanpa task eksplisit:
   - Mobile: `/home/sahrulr/StudioProjects/sm_workshop`
@@ -36,7 +36,10 @@ Worktree dirty sebelum ada edit handoff ini. Treat semua perubahan existing seba
 - Web: Next.js 16.3.1, React 19, Tailwind 4, ESLint 9.
 - API: Bun runtime, TypeScript ESM, MySQL, Redis, R2/S3-compatible storage.
 - Contracts: `packages/contracts` exported by subpath through `package.json exports`; do not restore old tsconfig wildcard contract imports.
-- RTK: available at `/home/sahrulr/.local/bin/rtk`; use for high-output commands. `/home/sahrulr/.codex/RTK.md` was missing during initialization.
+- RTK: available at `/home/sahrulr/.local/bin/rtk`; use for high-output commands. `/home/sahrulr/.codex/RTK.md` has been regenerated with `rtk init --global --codex`.
+- ECC: native Codex plugin installed and enabled as `ecc@ecc` version `2.2.2` from `https://github.com/affaan-m/ECC.git`.
+- Codex project baseline: `.codex/config.toml`, `.codex/agents/*.toml`, and `docs/CODEX-NAVIGATION-GUIDE.md` are present for future sessions.
+- Active Codex MCP list from project config: `chrome-devtools`, `github`, `context7`, `exa`, `memory`, `playwright`, `sequential-thinking`.
 
 ### Architecture map
 
@@ -154,14 +157,14 @@ Commands run:
 
 ### Current risks
 
-- Worktree dirty and contains untracked recovery folders. Do not delete or revert without explicit user instruction.
+- Worktree may be dirty only with current ECC/Codex documentation and config changes until they are committed.
 - Web build baseline is not green in this environment because Turbopack/PostCSS cannot bind a port. Treat as baseline failure until reproduced outside this execution sandbox.
-- Existing Job Plan and Unit Catalog changes appear active in worktree; continue from them, do not restart or rewrite the module.
+- Job Plan hierarchy fix has been committed and pushed at `c8b0a8f`; continue from current implementation, do not restart or rewrite the module.
 - Keep Catalog as reference/staging. Master Panel is operational data. Countdown/Job Plan should depend on operational references, not direct Catalog rows.
 
 ### Next safe action
 
-For the next coding task, first read this checkpoint plus only the touched feature files. If the task touches current dirty Job Plan/Catalog work, inspect the relevant diffs before editing:
+For the next coding task, first read this checkpoint plus only the touched feature files. If the task touches Job Plan/Catalog, inspect the relevant current implementation before editing:
 
 ```bash
 git diff -- apps/api/src/repositories/job-plan/job-plan.repo.ts apps/api/src/repositories/units/unit-catalog.repo.ts packages/contracts/src/job-plan/job-plan.ts apps/web/modules/job-plan/components/job-plan-planner-shell.tsx

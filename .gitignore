@@ -55,6 +55,10 @@ src/config/secrets/
 # Local editor and AI-agent state
 .vscode/
 .codex/
+!.codex/
+!.codex/config.toml
+!.codex/agents/
+!.codex/agents/*.toml
 .agents/
 .agent/
 .claude/
@@ -94,6 +98,9 @@ nginx/
 *.md
 !/README.md
 !/AI_HANDOFF.md
+!/AGENTS.md
+!/docs/
+!/docs/CODEX-NAVIGATION-GUIDE.md
 /SYSTEM_MAP_WEB.md
 /MOBILE_*.md
 /PLAN_*.md
