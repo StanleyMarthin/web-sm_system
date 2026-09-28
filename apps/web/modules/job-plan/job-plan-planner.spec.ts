@@ -6,8 +6,14 @@ import {
   buildManualExecutionJobPlanRuntimePayload,
   createEditDraftFromRow,
   createManualExecutionDraft,
+  findJobPlanPanelValue,
   formatJobPlanRuntimeApproval,
   formatJobPlanRuntimeExecution,
+  jobPlanComponentNames,
+  jobPlanBreakMinutesForWindow,
+  jobPlanPanelNames,
+  jobPlanPartNames,
+  jobPlanWindowMinutes,
   minutesToDuration,
   minutesToTime,
   toLocalDateValue,
@@ -72,7 +78,9 @@ describe("Job Plan planner helpers", () => {
   });
 
   test("formats runtime states without collapsing domains", () => {
-    expect(formatJobPlanRuntimeApproval("DIVISION_REVIEW")).toBe("Review Divisi");
+    expect(formatJobPlanRuntimeApproval("DIVISION_REVIEW")).toBe("Review QA");
+    expect(formatJobPlanRuntimeApproval("UNIT_REVIEW")).toBe("Review KP");
+    expect(formatJobPlanRuntimeApproval("MANAGEMENT_REVIEW")).toBe("Review PM");
     expect(formatJobPlanRuntimeExecution("FINISHED_PENDING_VALIDATION")).toBe("Menunggu Validasi");
   });
 
@@ -123,7 +131,7 @@ describe("Job Plan planner helpers", () => {
       unitName: "MB 220S",
       panelName: "Front Bumper",
       employeeName: "Asep",
-      approval: "Review Divisi",
+      approval: "Review QA",
       execution: "Belum Mulai",
       ledger: "Belum Diproses",
       sync: "Synced",
@@ -265,6 +273,34 @@ describe("Job Plan planner helpers", () => {
     };
 
     expect(validateJobPlanRuntimeDraft(draft)).toBeNull();
+  });
+
+  test("derives component, panel, and part options from one unit panel list", () => {
+    const panels = [
+      { value: "11", label: "Front Bumper", panelName: "Front Bumper", componentName: "Bumper", partName: "Bracket", carId: "220S" },
+      { value: "12", label: "Front Bumper", panelName: "Front Bumper", componentName: "Bumper", partName: null, carId: "220S" },
+      { value: "13", label: "Rear Door", panelName: "Rear Door", componentName: "Door", partName: "Handle", carId: "220S" },
+    ];
+
+    expect(jobPlanComponentNames(panels)).toEqual(["Bumper", "Door"]);
+    expect(jobPlanPanelNames(panels, "Bumper")).toEqual(["Front Bumper"]);
+    expect(jobPlanPartNames(panels, "Front Bumper")).toEqual(["Bracket", "Tanpa part"]);
+    expect(findJobPlanPanelValue(panels, "Front Bumper", "Bracket")).toBe("11");
+    expect(findJobPlanPanelValue(panels, "Front Bumper", "")).toBe("12");
+    expect(findJobPlanPanelValue(panels, "Rear Door", "Bracket")).toBeNull();
+  });
+
+  test("derives the daily target from the work window minus the weekday break", () => {
+    // 2026-09-02 Rabu, 2026-09-04 Jumat, 2026-09-05 Sabtu, 2026-09-06 Minggu.
+    expect(jobPlanWindowMinutes("08:00", "17:00")).toBe(540);
+    expect(jobPlanBreakMinutesForWindow("2026-09-02", "08:00", "17:00")).toBe(60);
+    expect(jobPlanBreakMinutesForWindow("2026-09-04", "08:00", "17:00")).toBe(90);
+    expect(jobPlanBreakMinutesForWindow("2026-09-05", "08:00", "14:00")).toBe(60);
+    expect(jobPlanBreakMinutesForWindow("2026-09-06", "08:00", "17:00")).toBe(0);
+    // Window yang tidak melewati jam istirahat tidak memotong apa pun.
+    expect(jobPlanBreakMinutesForWindow("2026-09-02", "08:00", "12:00")).toBe(0);
+    expect(jobPlanBreakMinutesForWindow("2026-09-02", "17:00", "22:00")).toBe(0);
+    expect(jobPlanBreakMinutesForWindow("2026-09-04", "11:00", "11:30")).toBe(0);
   });
 
   test("builds edit draft mutation payload", () => {

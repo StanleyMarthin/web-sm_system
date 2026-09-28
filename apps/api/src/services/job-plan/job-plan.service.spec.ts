@@ -194,6 +194,40 @@ describe("DefaultJobPlanService draft sync", () => {
     expect(calls).toBe(1);
   });
 
+  it("keeps component-scoped and unit-wide panel options under separate cache keys", async () => {
+    const calls: Array<string | null | undefined> = [];
+    const repository = {
+      listOptions: async (params: { componentName?: string | null }) => {
+        calls.push(params.componentName);
+        return [{ value: String(calls.length), label: `panel-${calls.length}` }];
+      },
+    };
+    const store = new Map<string, string>();
+    const redis = {
+      get: async (key: string) => store.get(key) ?? null,
+      set: async (key: string, value: string) => {
+        store.set(key, value);
+      },
+    };
+    const service = new DefaultJobPlanService(
+      repository as never,
+      { log: async () => undefined } as never,
+      async () => redis as never,
+    );
+    const session = {
+      user: {
+        employeeId: "EMP-1",
+        scope,
+      },
+    } as never;
+
+    await service.listOptions(session, { kind: "panels", unitId: "CAR-1", componentName: " RUANG MESIN " });
+    await service.listOptions(session, { kind: "panels", unitId: "CAR-1", componentName: null });
+    await service.listOptions(session, { kind: "panels", unitId: "CAR-1", componentName: "ruang mesin" });
+
+    expect(calls).toEqual([" RUANG MESIN ", null]);
+  });
+
   it("writes web drafts to the mobile Redis key", async () => {
     const repository = {
       listReferences: async () => ({

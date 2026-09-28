@@ -1,6 +1,7 @@
 "use client";
 
 import type { JobPlanRuntimeReadItem } from "@smsystem/contracts/job-plan-runtime";
+import type { JobPlanMode } from "@smsystem/contracts/job-plan";
 import type { CellKeyDownEvent, CellValueChangedEvent, ColDef, GridApi, GridReadyEvent, ICellRendererParams, SelectionChangedEvent, TabToNextCellParams } from "ag-grid-community";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -20,6 +21,12 @@ import {
   buildEditDraftJobPlanRuntimePayload,
   createJobPlanRuntimeDraft,
   createEditDraftFromRow,
+  findJobPlanPanelValue,
+  jobPlanBreakMinutesForWindow,
+  jobPlanComponentNames,
+  jobPlanPanelNames,
+  jobPlanPartNames,
+  jobPlanWindowMinutes,
   minutesToDuration,
   minutesToTime,
   toLocalDateValue,
@@ -36,17 +43,24 @@ import { parseClipboardTsv } from "@/shared/datagrid/clipboard";
 import { parseSmsDurationMinutes, parseSmsReference } from "@/shared/datagrid/parsers";
 
 type PlannerMode = "planner" | "approval";
-type WorkMode = "normal" | "overtime" | "holiday_overtime";
+type WorkMode = "normal" | "overtime";
 type PlannerRow = JobPlanRuntimeDisplayRow | (JobPlanRuntimeDisplayRow & JobPlanRuntimePlannerDraft & { editPlanId?: string; editVersion?: number });
 
 interface AdditionalJobFormState {
   divisionId: string;
   carId: string;
   componentName: string;
+  panelName: string;
+  partName: string;
   panelId: string;
   jobTypeText: string;
+  employeeId: string;
   jobDescription: string;
-  durationText: string;
+  targetText: string;
+  breakText: string;
+  startTime: string;
+  finishTime: string;
+  initialFinding: string;
   note: string;
 }
 
@@ -65,6 +79,7 @@ interface JobPlanPlannerShellProps {
   initialCoreId: string | null;
   initialDate: string | null;
   initialMode: string | null;
+  initialWorkMode: string | null;
   countdowns: JobPlanCountdownOption[];
   employees: JobPlanEmployeeOption[];
   divisions: JobPlanDivisionOption[];
@@ -147,7 +162,9 @@ function draftToDisplay(
     jobDescription: draft.jobDescription || jobType?.jobName || draft.jobDescription,
     finishTime: minutesToTime(startMinute + duration),
     durationText: draft.durationText,
-    targetTotalText: minutesToDuration(Math.round((countdown?.targetTotalHours ?? duration / 60) * 60)),
+    targetTotalText: countdown?.targetTotalHours
+      ? minutesToDuration(Math.round(countdown.targetTotalHours * 60))
+      : draft.targetTotalText?.trim() || minutesToDuration(duration),
     remainingText: minutesToDuration(Math.round((countdown?.remainingHours ?? 0) * 60)),
     approval: "Belum Disimpan",
     approvalState: "DRAFT",
@@ -193,6 +210,13 @@ function viewForMode(mode: PlannerMode) {
 function initialPlannerMode(value: string | null): PlannerMode {
   if (value === "approval") return "approval";
   return "planner";
+}
+
+function initialWorkModeFilter(value: string | null): JobPlanMode {
+  const normalized = value?.trim().toLowerCase();
+  if (normalized === "normal") return "normal";
+  if (normalized === "overtime" || normalized === "lembur") return "overtime";
+  return "all";
 }
 
 function isReviewState(value: string) {
@@ -246,7 +270,7 @@ function joinDistinct(values: Array<string | null | undefined>) {
 function optionDisplayName(option: SmartSelectOption | undefined) {
   if (!option) return "";
   const parts = option.label.split(" · ");
-  if (parts[0] === "Normal" || parts[0] === "Lembur" || parts[0] === "Lembur Libur") return parts[1] ?? option.label;
+  if (parts[0] === "Normal" || parts[0] === "Lembur") return parts[1] ?? option.label;
   if (parts[0] === "Tambahan") return parts[1] ?? option.label;
   return option.label;
 }
@@ -430,6 +454,8 @@ function SearchSelectField({
   placeholder,
   onChange,
   allowCustom = false,
+  disabled = false,
+  className = "",
 }: {
   label: string;
   value: string;
@@ -437,6 +463,8 @@ function SearchSelectField({
   placeholder: string;
   onChange: (value: string) => void;
   allowCustom?: boolean;
+  disabled?: boolean;
+  className?: string;
 }) {
   const selectedLabel = allowCustom ? value : options.find((option) => option.value === value)?.label ?? "";
   const [query, setQuery] = useState(selectedLabel);
@@ -446,61 +474,55 @@ function SearchSelectField({
     if (!open) setQuery(selectedLabel);
   }, [open, selectedLabel]);
 
-  if (options.length <= 3 && !allowCustom) {
-    return (
-      <div className="text-[11px] text-muted-foreground">
-        <span>{label}</span>
-        <div className="mt-1 flex min-h-9 flex-wrap gap-1 border border-border bg-background p-1">
-          {options.length === 0 ? <span className="px-2 py-1.5 text-[12px] text-muted-foreground">{placeholder}</span> : null}
-          {options.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => onChange(option.value)}
-              className={`px-2 py-1.5 text-[12px] ${value === option.value ? "bg-primary/15 text-app-accent-ink" : "text-foreground hover:bg-muted"}`}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
-      </div>
-    );
-  }
+  useEffect(() => {
+    if (disabled) setOpen(false);
+  }, [disabled]);
 
   const normalizedQuery = query.trim().toLowerCase();
   const visibleOptions = options
     .filter((option) => !normalizedQuery || option.label.toLowerCase().includes(normalizedQuery) || option.value.toLowerCase().includes(normalizedQuery))
     .slice(0, 12);
 
+  const selectOption = (option: SmartSelectOption) => {
+    onChange(allowCustom ? option.label : option.value);
+    setQuery(option.label);
+    setOpen(false);
+  };
+
   return (
-    <label className="relative text-[11px] text-muted-foreground">
+    <label className={`relative block text-[11px] text-muted-foreground ${className}`}>
       {label}
       <input
         value={open ? query : selectedLabel}
+        disabled={disabled}
         onFocus={() => {
+          if (disabled) return;
           setOpen(true);
           setQuery(selectedLabel);
         }}
         onBlur={() => window.setTimeout(() => setOpen(false), 120)}
         onChange={(event) => {
+          if (disabled) return;
           setQuery(event.target.value);
           if (allowCustom) onChange(event.target.value);
         }}
-        className="mt-1 h-9 w-full border border-border bg-background px-2 text-[13px] text-foreground outline-none focus:border-primary/45"
+        onKeyDown={(event) => {
+          if (disabled) return;
+          if (event.key === "Tab" && open && visibleOptions[0]) {
+            selectOption(visibleOptions[0]);
+          }
+        }}
+        className="mt-1 h-9 w-full border border-border bg-background px-2 text-[13px] text-foreground outline-none focus:border-primary/45 disabled:cursor-not-allowed disabled:opacity-40"
         placeholder={placeholder}
       />
-      {open ? (
+      {open && !disabled ? (
         <div className="absolute left-0 right-0 top-full z-[95] mt-1 max-h-56 overflow-y-auto border border-border bg-card shadow-xl">
           {visibleOptions.map((option) => (
             <button
               key={option.value}
               type="button"
               onMouseDown={(event) => event.preventDefault()}
-              onClick={() => {
-                onChange(allowCustom ? option.label : option.value);
-                setQuery(option.label);
-                setOpen(false);
-              }}
+              onClick={() => selectOption(option)}
               className="block w-full border-b border-border px-2 py-2 text-left text-[12px] text-foreground last:border-b-0 hover:bg-muted"
             >
               {option.label}
@@ -518,9 +540,17 @@ function AdditionalJobDialog({
   divisionOptions,
   unitOptions,
   componentOptions,
+  componentDisabled,
   panelOptions,
+  partOptions,
   jobTypeOptions,
+  employeeOptions,
   onChange,
+  onDivisionChange,
+  onUnitChange,
+  onPanelChange,
+  onPartChange,
+  onTimeChange,
   onCancel,
   onSubmit,
 }: {
@@ -528,48 +558,79 @@ function AdditionalJobDialog({
   divisionOptions: SmartSelectOption[];
   unitOptions: SmartSelectOption[];
   componentOptions: SmartSelectOption[];
+  componentDisabled: boolean;
   panelOptions: SmartSelectOption[];
+  partOptions: SmartSelectOption[];
   jobTypeOptions: SmartSelectOption[];
+  employeeOptions: SmartSelectOption[];
   onChange: (value: AdditionalJobFormState) => void;
+  onDivisionChange: (divisionId: string) => void;
+  onUnitChange: (carId: string) => void;
+  onPanelChange: (panelName: string) => void;
+  onPartChange: (partName: string) => void;
+  onTimeChange: (patch: { startTime?: string; finishTime?: string }) => void;
   onCancel: () => void;
   onSubmit: () => void;
 }) {
   const update = (patch: Partial<AdditionalJobFormState>) => onChange({ ...value, ...patch });
+  const windowMinutes = jobPlanWindowMinutes(value.startTime, value.finishTime);
+  const breakMinutes = parseSmsDurationMinutes(value.breakText || "00:00", "Jam istirahat").value ?? 0;
+  const dailyMinutes = windowMinutes === null ? null : windowMinutes - breakMinutes;
+  const dailyText = dailyMinutes !== null && dailyMinutes > 0 ? minutesToDuration(dailyMinutes) : "";
+  const breakTooLong = windowMinutes !== null && dailyMinutes !== null && dailyMinutes <= 0;
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/45 px-4">
-      <div className="w-full max-w-xl border border-border bg-background shadow-2xl">
-        <div className="border-b border-border px-4 py-3">
-          <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground">Jobdesc Tambahan</p>
-          <h2 className="mt-1 text-[16px] font-semibold text-foreground">Tambah pekerjaan ke grid</h2>
+    <div className="fixed inset-0 z-[80] flex items-start justify-center overflow-y-auto bg-black/55 px-4 py-5 sm:items-center">
+      <div className="flex max-h-[calc(100vh-2.5rem)] w-full max-w-3xl flex-col border border-border bg-background shadow-2xl">
+        <div className="shrink-0 border-b border-border px-4 py-3">
+          <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground">Pekerjaan Tambahan</p>
+          <h2 className="mt-1 text-[16px] font-semibold text-foreground">Tambah pekerjaan baru</h2>
         </div>
-        <div className="grid gap-3 p-4 sm:grid-cols-2">
+        <div className="min-h-0 overflow-y-auto p-4">
+          <div className="grid gap-x-3 gap-y-2 sm:grid-cols-2">
           <SearchSelectField
             label="Team"
             value={value.divisionId}
             options={divisionOptions}
             placeholder="Cari team"
-            onChange={(divisionId) => update({ divisionId, carId: "", componentName: "", panelId: "", jobTypeText: "" })}
+            onChange={onDivisionChange}
+          />
+          <SearchSelectField
+            label="PIC"
+            value={value.employeeId}
+            options={employeeOptions}
+            placeholder="Cari PIC"
+            onChange={(employeeId) => update({ employeeId })}
           />
           <SearchSelectField
             label="Unit"
             value={value.carId}
             options={unitOptions}
-            placeholder="Cari unit"
-            onChange={(carId) => update({ carId, componentName: "", panelId: "" })}
+            placeholder={value.divisionId ? "Cari unit di team ini" : "Cari unit"}
+            onChange={onUnitChange}
           />
           <SearchSelectField
             label="Component"
             value={value.componentName}
             options={componentOptions}
-            placeholder="Cari component"
-            onChange={(componentName) => update({ componentName, panelId: "" })}
+            placeholder={componentDisabled ? "Pilih unit dulu" : "Cari component"}
+            disabled={componentDisabled}
+            onChange={(componentName) => update({ componentName, panelName: "", partName: "", panelId: "" })}
           />
           <SearchSelectField
-            label="Panel / Part"
-            value={value.panelId}
+            label="Panel"
+            value={value.panelName}
             options={panelOptions}
-            placeholder="Cari panel atau part"
-            onChange={(panelId) => update({ panelId })}
+            placeholder={value.carId ? "Cari panel" : "Pilih unit dulu"}
+            disabled={!value.carId || panelOptions.length === 0}
+            onChange={onPanelChange}
+          />
+          <SearchSelectField
+            label="Part"
+            value={value.partName}
+            options={partOptions}
+            placeholder={value.panelName ? "Cari part" : "Pilih panel dulu"}
+            disabled={!value.panelName || partOptions.length === 0}
+            onChange={onPartChange}
           />
           <div className="sm:col-span-2">
             <SearchSelectField
@@ -582,7 +643,7 @@ function AdditionalJobDialog({
             />
           </div>
           <label className="sm:col-span-2 text-[11px] text-muted-foreground">
-            Detail pekerjaan
+            Instruksi / detail pekerjaan
             <input
               value={value.jobDescription}
               onChange={(event) => update({ jobDescription: event.target.value })}
@@ -590,17 +651,58 @@ function AdditionalJobDialog({
               placeholder="Contoh: repair list bawah pintu"
             />
           </label>
-          <label className="text-[11px] text-muted-foreground">
-            Estimasi
-            <input
-              value={value.durationText}
-              onChange={(event) => update({ durationText: event.target.value })}
-              className="mt-1 h-9 w-full border border-border bg-background px-2 text-[13px] text-foreground outline-none focus:border-primary/45"
-              placeholder="HH:MM"
+          <label className="sm:col-span-2 text-[11px] text-muted-foreground">
+            Temuan awal
+            <textarea
+              value={value.initialFinding}
+              onChange={(event) => update({ initialFinding: event.target.value })}
+              className="mt-1 min-h-16 w-full resize-y border border-border bg-background px-2 py-2 text-[13px] text-foreground outline-none focus:border-primary/45"
+              placeholder="Opsional, contoh: retak halus di panel bawah"
             />
           </label>
           <label className="text-[11px] text-muted-foreground">
-            Catatan
+            Target awal (total sampai beres)
+            <input
+              value={value.targetText}
+              onChange={(event) => update({ targetText: event.target.value })}
+              className="mt-1 h-9 w-full border border-border bg-background px-2 font-mono text-[13px] text-foreground outline-none focus:border-primary/45"
+              placeholder="Contoh: 16:00"
+            />
+          </label>
+          <label className="text-[11px] text-muted-foreground">
+            Jam mulai
+            <input
+              value={value.startTime}
+              onChange={(event) => onTimeChange({ startTime: event.target.value })}
+              className="mt-1 h-9 w-full border border-border bg-background px-2 font-mono text-[13px] text-foreground outline-none focus:border-primary/45"
+              placeholder="08:00"
+            />
+          </label>
+          <label className="text-[11px] text-muted-foreground">
+            Jam selesai
+            <input
+              value={value.finishTime}
+              onChange={(event) => onTimeChange({ finishTime: event.target.value })}
+              className="mt-1 h-9 w-full border border-border bg-background px-2 font-mono text-[13px] text-foreground outline-none focus:border-primary/45"
+              placeholder="09:00"
+            />
+          </label>
+          <label className="text-[11px] text-muted-foreground">
+            Jam istirahat
+            <input
+              value={value.breakText}
+              onChange={(event) => update({ breakText: event.target.value })}
+              className="mt-1 h-9 w-full border border-border bg-background px-2 font-mono text-[13px] text-foreground outline-none focus:border-primary/45"
+              placeholder="01:00"
+            />
+          </label>
+          <div className="border border-border bg-card px-3 py-2 text-[11px] text-muted-foreground">
+            Total target hari ini
+            <div className="mt-1 font-mono text-[16px] font-semibold text-foreground">{dailyText || "-"}</div>
+            {breakTooLong ? <div className="mt-1 text-destructive">Jam istirahat melebihi rentang jam kerja.</div> : null}
+          </div>
+          <label className="text-[11px] text-muted-foreground">
+            Keterangan
             <input
               value={value.note}
               onChange={(event) => update({ note: event.target.value })}
@@ -608,10 +710,11 @@ function AdditionalJobDialog({
               placeholder="Opsional"
             />
           </label>
+          </div>
         </div>
-        <div className="flex justify-end gap-2 border-t border-border px-4 py-3">
+        <div className="flex shrink-0 justify-end gap-2 border-t border-border bg-background px-4 py-3">
           <ActionButton onClick={onCancel}>Batal</ActionButton>
-          <ActionButton variant="primary" onClick={onSubmit}>Tambah Jobdesc</ActionButton>
+          <ActionButton variant="primary" onClick={onSubmit}>Tambah ke Rencana</ActionButton>
         </div>
       </div>
     </div>
@@ -625,6 +728,7 @@ export function JobPlanPlannerShell({
   initialCoreId,
   initialDate,
   initialMode,
+  initialWorkMode,
   countdowns,
   employees,
   divisions,
@@ -646,16 +750,23 @@ export function JobPlanPlannerShell({
   const [qaFilter, setQaFilter] = useState("");
   const [divisionFilter, setDivisionFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
-  const [draftWorkMode, setDraftWorkMode] = useState<WorkMode>(initialMode === "overtime" ? "overtime" : "normal");
+  const [workModeFilter, setWorkModeFilter] = useState<JobPlanMode>(() => initialWorkModeFilter(initialWorkMode));
   const [additionalJobOpen, setAdditionalJobOpen] = useState(false);
   const [additionalJobForm, setAdditionalJobForm] = useState<AdditionalJobFormState>({
     divisionId: "",
     carId: "",
     componentName: "",
+    panelName: "",
+    partName: "",
     panelId: "",
     jobTypeText: "",
+    employeeId: "",
     jobDescription: "",
-    durationText: "01:00",
+    targetText: "",
+    breakText: "00:00",
+    startTime: "08:00",
+    finishTime: "09:00",
+    initialFinding: "",
     note: "",
   });
   const [lazyEmployees, setLazyEmployees] = useState<Record<string, JobPlanEmployeeOption[]>>({});
@@ -683,6 +794,33 @@ export function JobPlanPlannerShell({
     return technicalDivisionOptions;
   }
 
+  function updateAdditionalJobForm(patch: Partial<AdditionalJobFormState>) {
+    setAdditionalJobForm((current) => ({ ...current, ...patch }));
+  }
+
+  function unitsForDivision(divisionId: number | null) {
+    const cached = lazyUnitOptions[String(divisionId ?? "all")];
+    if (cached) return cached;
+    return uniqueByValue(
+      activeCountdowns
+        .filter((item) => divisionId === null || item.divisionId === divisionId)
+        .map((item) => ({ value: item.carId, label: item.unitName, unitName: item.unitName })),
+    );
+  }
+
+  function divisionsForUnit(carId: string) {
+    const divisions = new Set<number>();
+    for (const item of activeCountdowns) {
+      if (item.carId === carId && item.divisionId) divisions.add(item.divisionId);
+    }
+    for (const [key, units] of Object.entries(lazyUnitOptions)) {
+      if (key === "all" || !units.some((unit) => unit.value === carId)) continue;
+      const divisionId = numberValue(key);
+      if (divisionId) divisions.add(divisionId);
+    }
+    return [...divisions];
+  }
+
   function rowDivisionId(row: Partial<PlannerRow> | Partial<JobPlanRuntimePlannerDraft> | null | undefined) {
     return numberValue(row?.divisionId);
   }
@@ -704,11 +842,7 @@ export function JobPlanPlannerShell({
   }
 
   function unitOptions(row: Partial<PlannerRow> | Partial<JobPlanRuntimePlannerDraft> | null | undefined) {
-    const divisionId = rowDivisionId(row);
-    const cached = lazyUnitOptions[String(divisionId ?? "all")];
-    if (cached) return cached;
-    const scoped = activeCountdowns.filter((item) => divisionId === null || item.divisionId === divisionId);
-    return uniqueByValue((scoped.length > 0 ? scoped : activeCountdowns).map((item) => ({ value: item.carId, label: item.unitName, unitName: item.unitName })));
+    return unitsForDivision(rowDivisionId(row));
   }
 
   function panelOptions(row: Partial<PlannerRow> | Partial<JobPlanRuntimePlannerDraft> | null | undefined) {
@@ -737,7 +871,7 @@ export function JobPlanPlannerShell({
       )
       .map((item) => ({
         value: additionalJobValue(item.value),
-        label: `Tambahan · ${item.jobName ?? item.label}`,
+        label: item.jobName ?? item.label,
         code: item.value,
       }));
   }
@@ -747,7 +881,7 @@ export function JobPlanPlannerShell({
     const carId = rowCarId(row);
     const panelId = rowPanelId(row);
     const workMode = String(row?.workMode ?? "normal") as WorkMode;
-    const modeLabel = workMode === "normal" ? "Normal" : workMode === "holiday_overtime" ? "Lembur Libur" : "Lembur";
+    const modeLabel = workMode === "normal" ? "Normal" : "Lembur";
     const cacheKey = `${divisionId ?? "all"}:${carId}:${panelId ?? "all"}`;
     const sourceCountdowns = lazyJobs[cacheKey] ?? activeCountdowns;
     const countdownOptions = sourceCountdowns
@@ -767,50 +901,121 @@ export function JobPlanPlannerShell({
     return numberValue(additionalJobForm.divisionId);
   }
 
+  function additionalDialogPanelRows() {
+    const carId = additionalJobForm.carId;
+    if (!carId) return [];
+    const perUnit = lazyPanels[`all:${carId}`];
+    if (perUnit) return perUnit;
+    const perComponent = additionalJobForm.componentName ? lazyPanels[`all:${carId}:${additionalJobForm.componentName}`] : null;
+    return perComponent ?? [];
+  }
+
+  function changeAdditionalTeam(divisionId: string) {
+    const nextDivisionId = numberValue(divisionId);
+    const unit = additionalJobForm.carId;
+    const unitDivisions = unit ? divisionsForUnit(unit) : [];
+    const unitFits = !unit || unitDivisions.length === 0 || (nextDivisionId !== null && unitDivisions.includes(nextDivisionId));
+
+    updateAdditionalJobForm(unitFits
+      ? { divisionId, employeeId: "", jobTypeText: "" }
+      : { divisionId, employeeId: "", jobTypeText: "", carId: "", componentName: "", panelName: "", partName: "", panelId: "" });
+  }
+
+  function changeAdditionalUnit(carId: string) {
+    const candidates = divisionsForUnit(carId)
+      .filter((divisionId) => teamOptions().some((option) => option.value === String(divisionId)));
+    const inferredDivision = !additionalJobForm.divisionId && candidates.length === 1 ? String(candidates[0]) : "";
+
+    updateAdditionalJobForm({
+      carId,
+      componentName: "",
+      panelName: "",
+      partName: "",
+      panelId: "",
+      ...(inferredDivision ? { divisionId: inferredDivision, employeeId: "", jobTypeText: "" } : {}),
+    });
+  }
+
+  function changeAdditionalPanel(panelName: string) {
+    const rows = additionalDialogPanelRows();
+    const partNames = jobPlanPartNames(rows, panelName);
+    const partName = partNames.length === 1 ? partNames[0] : "";
+    const panelId = partName ? findJobPlanPanelValue(rows, panelName, partName) : null;
+    setAdditionalJobForm((current) => ({ ...current, panelName, partName, panelId: panelId ?? "" }));
+  }
+
+  function changeAdditionalPart(partName: string) {
+    const rows = additionalDialogPanelRows();
+    const panelId = findJobPlanPanelValue(rows, additionalJobForm.panelName, partName);
+    setAdditionalJobForm((current) => ({ ...current, partName, panelId: panelId ?? "" }));
+  }
+
+  function changeAdditionalTime(patch: { startTime?: string; finishTime?: string }) {
+    const next = { ...additionalJobForm, ...patch };
+    setAdditionalJobForm({
+      ...next,
+      breakText: minutesToDuration(jobPlanBreakMinutesForWindow(dateFilter, next.startTime, next.finishTime)),
+    });
+  }
+
   const additionalDialogUnitOptions = useMemo(
-    () => unitOptions({ divisionId: additionalDialogDivisionId() }),
+    () => unitsForDivision(additionalDialogDivisionId()),
     [additionalJobForm.divisionId, activeCountdowns, lazyUnitOptions],
   );
 
   const additionalDialogComponentOptions = useMemo(() => {
     const carId = additionalJobForm.carId;
-    const key = `${additionalDialogDivisionId() ?? "all"}:${carId}`;
-    const source = lazyPanels[key] ?? panels;
-    return uniqueByValue(source
-      .filter((item) => (!carId || item.carId === carId) && item.componentName)
-      .map((item) => ({ value: item.componentName ?? "", label: item.componentName ?? "" })));
-  }, [additionalJobForm.carId, additionalJobForm.divisionId, lazyPanels, panels]);
+    const source = carId ? lazyPanels[`all:${carId}`] : null;
+    return toOptions(jobPlanComponentNames(source ?? []).map((name) => ({ value: name, label: name })));
+  }, [additionalJobForm.carId, lazyPanels]);
+
+  const additionalDialogComponentDisabled = !additionalJobForm.carId || !lazyPanels[`all:${additionalJobForm.carId}`];
 
   const additionalDialogPanelOptions = useMemo(
-    () => {
-      const key = `${additionalDialogDivisionId() ?? "all"}:${additionalJobForm.carId}`;
-      const source = lazyPanels[key] ?? panels;
-      return source
-      .filter((item) =>
-        (!additionalJobForm.carId || item.carId === additionalJobForm.carId)
-        && (!additionalJobForm.componentName || item.componentName === additionalJobForm.componentName)
-      )
-      .map((item) => ({
-        value: item.value,
-        label: [item.panelName, item.partName].filter(Boolean).join(" · ") || item.label,
-      }));
-    },
-    [additionalJobForm.carId, additionalJobForm.componentName, additionalJobForm.divisionId, lazyPanels, panels],
+    () => toOptions(jobPlanPanelNames(additionalDialogPanelRows(), additionalJobForm.componentName).map((name) => ({ value: name, label: name }))),
+    [additionalJobForm.carId, additionalJobForm.componentName, lazyPanels],
+  );
+
+  const additionalDialogPartOptions = useMemo(
+    () => toOptions(jobPlanPartNames(additionalDialogPanelRows(), additionalJobForm.panelName).map((name) => ({ value: name, label: name }))),
+    [additionalJobForm.carId, additionalJobForm.componentName, additionalJobForm.panelName, lazyPanels],
   );
 
   const additionalDialogJobOptions = useMemo(
     () => additionalJobOptions({ divisionId: additionalDialogDivisionId() }),
     [additionalJobForm.divisionId, jobTypes],
   );
+  const additionalDialogEmployeeOptions = useMemo(
+    () => personOptions({ divisionId: additionalDialogDivisionId() }),
+    [additionalJobForm.divisionId, employees, lazyEmployees],
+  );
 
   const workModeOptions = useMemo<SmartSelectOption[]>(() => [
     { value: "normal", label: "Normal 08:00-17:00" },
     { value: "overtime", label: "Lembur 17:00-22:00" },
-    { value: "holiday_overtime", label: "Lembur Libur 08:00-16:00" },
   ], []);
 
   useEffect(() => {
     let cancelled = false;
+    if (additionalJobOpen && !lazyUnitOptions.all) {
+      void fetchJobPlanOptions("units", {}).then((result) => {
+        if (!cancelled && result.success) setLazyUnitOptions((current) => ({ ...current, all: result.data as Array<{ value: string; label: string; unitName: string }> }));
+      });
+    }
+    if (additionalJobOpen && additionalJobForm.carId && !lazyPanels[`all:${additionalJobForm.carId}`]) {
+      void fetchJobPlanOptions("panels", { unitId: additionalJobForm.carId }).then((result) => {
+        if (!cancelled && result.success) setLazyPanels((current) => ({ ...current, [`all:${additionalJobForm.carId}`]: result.data as JobPlanPanelOption[] }));
+      });
+    }
+    const componentPanelKey = `all:${additionalJobForm.carId}:${additionalJobForm.componentName}`;
+    if (additionalJobOpen && additionalJobForm.carId && additionalJobForm.componentName && !lazyPanels[componentPanelKey]) {
+      void fetchJobPlanOptions("panels", {
+        unitId: additionalJobForm.carId,
+        componentName: additionalJobForm.componentName,
+      }).then((result) => {
+        if (!cancelled && result.success) setLazyPanels((current) => ({ ...current, [componentPanelKey]: result.data as JobPlanPanelOption[] }));
+      });
+    }
     const rowsForOptions = [
       ...drafts,
       ...editDrafts,
@@ -873,13 +1078,13 @@ export function JobPlanPlannerShell({
     return () => {
       cancelled = true;
     };
-  }, [additionalJobForm, drafts, editDrafts, lazyEmployees, lazyJobs, lazyPanels, lazyUnitOptions]);
+  }, [additionalJobForm, additionalJobOpen, drafts, editDrafts, lazyEmployees, lazyJobs, lazyPanels, lazyUnitOptions]);
 
   function normalizeDraftSelection(row: JobPlanRuntimePlannerDraft): JobPlanRuntimePlannerDraft {
     let next = { ...row };
     const divisionOptionsForRow = teamOptions();
     if (next.divisionId !== null && !divisionOptionsForRow.some((option) => option.value === String(next.divisionId))) {
-      next = { ...next, divisionId: null, carId: "", panelId: null, coreId: "", employeeId: "", jobDescription: "" };
+      next = { ...next, divisionId: null, carId: "", panelId: null, coreId: "", employeeId: "", jobDescription: "", initialFinding: "" };
     }
 
     const availableEmployees = personOptions(next);
@@ -887,17 +1092,17 @@ export function JobPlanPlannerShell({
 
     const availableUnits = unitOptions(next);
     if (next.carId && !availableUnits.some((option) => option.value === next.carId)) {
-      next = { ...next, carId: "", panelId: null, coreId: "", jobDescription: "" };
+      next = { ...next, carId: "", panelId: null, coreId: "", jobDescription: "", initialFinding: "" };
     }
 
     const availablePanels = panelOptions(next);
     if (next.panelId !== null && !availablePanels.some((option) => option.value === String(next.panelId))) {
-      next = { ...next, panelId: null, coreId: "", jobDescription: "" };
+      next = { ...next, panelId: null, coreId: "", jobDescription: "", initialFinding: "" };
     }
 
     const availableJobs = jobOptions(next);
     if (next.coreId && !availableJobs.some((option) => option.value === next.coreId)) {
-      next = { ...next, sourceType: "countdown", coreId: "", jobTypeId: "", jobTypeName: "", jobDescription: "" };
+      next = { ...next, sourceType: "countdown", coreId: "", jobTypeId: "", jobTypeName: "", jobDescription: "", initialFinding: "" };
     }
 
     const countdown = contextForCore(activeCountdowns, next.coreId);
@@ -938,6 +1143,7 @@ export function JobPlanPlannerShell({
       view: viewForMode(mode),
       date: dateFilter,
       coreId: initialCoreId ?? undefined,
+      workMode: workModeFilter,
     });
     if (!result.success) {
       setError(result.message);
@@ -951,7 +1157,7 @@ export function JobPlanPlannerShell({
 
   useEffect(() => {
     void load();
-  }, [userId, initialCoreId, dateFilter, mode]);
+  }, [userId, initialCoreId, dateFilter, mode, workModeFilter]);
 
   useEffect(() => {
     function beforeUnload(event: BeforeUnloadEvent) {
@@ -977,8 +1183,9 @@ export function JobPlanPlannerShell({
     if (qaFilter && !row.qaIds.includes(qaFilter)) return false;
     if (divisionFilter && row.divisionName !== divisionFilter) return false;
     if (statusFilter && row.approvalState !== statusFilter && row.executionState !== statusFilter) return false;
+    if (workModeFilter !== "all" && row.workMode !== workModeFilter) return false;
     return true;
-  }), [dateFilter, divisionFilter, kpFilter, qaFilter, rows, statusFilter]);
+  }), [dateFilter, divisionFilter, kpFilter, qaFilter, rows, statusFilter, workModeFilter]);
 
   const kpOptions = useMemo(() => uniqueByValue(activeCountdowns.map((item) => ({
     value: item.kpId ?? "",
@@ -997,15 +1204,16 @@ export function JobPlanPlannerShell({
 
   const statusOptions = [
     ["DRAFT", "Draft"],
-    ["DIVISION_REVIEW", "Review Divisi"],
-    ["UNIT_REVIEW", "Review Unit"],
-    ["MANAGEMENT_REVIEW", "Review Manajemen"],
+    ["DIVISION_REVIEW", "Review QA"],
+    ["UNIT_REVIEW", "Review KP"],
+    ["MANAGEMENT_REVIEW", "Review PM"],
     ["APPROVED", "Disetujui"],
     ["RUNNING", "Berjalan"],
     ["HOLD", "Ditahan"],
     ["FINISHED_PENDING_VALIDATION", "Selesai"],
     ["VALIDATED", "Tervalidasi"],
   ] as const;
+  const defaultDraftWorkMode: WorkMode = workModeFilter === "overtime" ? "overtime" : "normal";
 
   const approvableSelectedRows = selectedRows.filter((row) => !row.isNew && !row.editPlanId && isReviewState(row.approvalState));
   const submittableSelectedRows = selectedRows.filter((row) => !row.isNew && !row.editPlanId && row.approvalState === "DRAFT" && row.planId && row.version);
@@ -1158,8 +1366,8 @@ export function JobPlanPlannerShell({
     const nextDraft = {
       ...draft,
       taskDate: initialDate ?? draft.taskDate,
-      workMode: draftWorkMode,
-      isOvertime: isOvertimeMode(draftWorkMode),
+      workMode: defaultDraftWorkMode,
+      isOvertime: isOvertimeMode(defaultDraftWorkMode),
     };
     setDrafts((current) => [...current, normalizeDraftSelection(nextDraft)]);
     window.setTimeout(() => gridApi?.deselectAll(), 0);
@@ -1176,32 +1384,50 @@ export function JobPlanPlannerShell({
     );
     const jobName = matchedJobType ? optionDisplayName(matchedJobType) : jobText;
     const description = additionalJobForm.jobDescription.trim() || jobName;
-    if (!divisionId || !additionalJobForm.carId || !panelId || !jobName || !description) {
-      setError("Team, unit, panel, dan jobdesc tambahan wajib diisi.");
+    if (!divisionId || !additionalJobForm.employeeId || !additionalJobForm.carId || !panelId || !jobName || !description) {
+      setError("Team, PIC, unit, panel/part, dan jobdesc tambahan wajib diisi.");
       return;
     }
-    const duration = parseSmsDurationMinutes(additionalJobForm.durationText, "Estimasi");
-    if (duration.error) {
-      setError(duration.error);
+    const target = parseSmsDurationMinutes(additionalJobForm.targetText.trim(), "Target awal");
+    if (!additionalJobForm.targetText.trim() || target.error || !target.value) {
+      setError(target.error ?? "Target awal wajib diisi.");
       return;
     }
+    const windowMinutes = jobPlanWindowMinutes(additionalJobForm.startTime, additionalJobForm.finishTime);
+    if (windowMinutes === null) {
+      setError("Jam selesai harus lebih besar dari jam mulai.");
+      return;
+    }
+    const breakMinutes = parseSmsDurationMinutes(additionalJobForm.breakText.trim() || "00:00", "Jam istirahat").value ?? 0;
+    const dailyMinutes = windowMinutes - breakMinutes;
+    if (dailyMinutes <= 0) {
+      setError("Jam istirahat melebihi rentang jam kerja.");
+      return;
+    }
+    if (target.value < dailyMinutes) {
+      setError("Target awal tidak boleh lebih kecil dari total target hari ini.");
+      return;
+    }
+    const durationText = minutesToDuration(dailyMinutes);
     const draft = normalizeDraftSelection({
       ...createJobPlanRuntimeDraft(null),
       sourceType: "additional",
-      workMode: draftWorkMode,
+      workMode: defaultDraftWorkMode,
       divisionId,
       carId: additionalJobForm.carId,
       panelId,
       coreId: matchedJobType?.value ?? "",
       jobTypeId: matchedJobType ? parseAdditionalJobValue(matchedJobType.value) : "",
       jobTypeName: matchedJobType ? "" : jobName,
-      employeeId: "",
+      employeeId: additionalJobForm.employeeId,
       taskDate: dateFilter,
-      startTime: startTimeForWorkMode(draftWorkMode),
-      durationText: additionalJobForm.durationText.trim(),
+      startTime: additionalJobForm.startTime,
+      durationText,
+      targetTotalText: minutesToDuration(target.value),
       jobDescription: description,
+      initialFinding: additionalJobForm.initialFinding.trim(),
       note: additionalJobForm.note.trim(),
-      isOvertime: isOvertimeMode(draftWorkMode),
+      isOvertime: isOvertimeMode(defaultDraftWorkMode),
     });
     setDrafts((current) => [...current, draft]);
     setAdditionalJobOpen(false);
@@ -1209,10 +1435,17 @@ export function JobPlanPlannerShell({
       divisionId: "",
       carId: "",
       componentName: "",
+      panelName: "",
+      partName: "",
       panelId: "",
       jobTypeText: "",
+      employeeId: "",
       jobDescription: "",
-      durationText: "01:00",
+      targetText: "",
+      breakText: "00:00",
+      startTime: "08:00",
+      finishTime: "09:00",
+      initialFinding: "",
       note: "",
     });
     setError(null);
@@ -1260,7 +1493,9 @@ export function JobPlanPlannerShell({
       taskDate: String(row.taskDate ?? ""),
       startTime: String(row.startTime ?? ""),
       durationText: String(row.durationText ?? ""),
+      targetTotalText: String(row.targetTotalText ?? ""),
       jobDescription: String(row.jobDescription ?? ""),
+      initialFinding: String(row.initialFinding ?? ""),
       note: String(row.note ?? ""),
       isOvertime: isOvertimeMode(String(row.workMode ?? "normal") as WorkMode),
       isRework: false,
@@ -1373,6 +1608,7 @@ export function JobPlanPlannerShell({
             coreId: "",
             employeeId: "",
             jobDescription: "",
+            initialFinding: "",
           };
         }
         if (targetField === "carId") {
@@ -1383,6 +1619,7 @@ export function JobPlanPlannerShell({
             panelId: null,
             coreId: "",
             jobDescription: "",
+            initialFinding: "",
           };
         }
         if (targetField === "panelId") {
@@ -1392,6 +1629,7 @@ export function JobPlanPlannerShell({
             panelId: numberValue(parsed.value),
             coreId: "",
             jobDescription: "",
+            initialFinding: "",
           };
         }
         if (targetField === "coreId") {
@@ -1454,7 +1692,8 @@ export function JobPlanPlannerShell({
       let rowToCreate = row;
       if (row.sourceType === "additional") {
         const durationMinutes = parseSmsDurationMinutes(row.durationText, "Durasi").value;
-        const countdownResult = durationMinutes == null
+        const targetMinutes = parseSmsDurationMinutes(row.targetTotalText?.trim() || row.durationText, "Target awal").value ?? durationMinutes;
+        const countdownResult = durationMinutes == null || targetMinutes == null
           ? { success: false as const, message: "Durasi tidak valid." }
           : await createJobPlanAdditionalCountdown({
             carId: row.carId,
@@ -1464,8 +1703,9 @@ export function JobPlanPlannerShell({
             jobTypeName: row.jobTypeName.trim() || null,
             taskDate: row.taskDate,
             deadlineDate: row.taskDate,
-            targetHours: durationMinutes / 60,
+            targetHours: targetMinutes / 60,
             jobDescription: row.jobDescription,
+            initialFinding: row.initialFinding.trim() || null,
             note: row.note.trim() || null,
             picPlan: row.employeeId,
             requiredGrade: null,
@@ -1556,7 +1796,7 @@ export function JobPlanPlannerShell({
     }
     const confirmed = await sweetAlert.confirm({
       title: `Ajukan ${validRows.length} rencana?`,
-      description: "Rencana akan masuk ke Review Divisi.",
+      description: "Rencana akan masuk ke Review QA.",
       confirmLabel: "Ajukan",
     });
     if (!confirmed) return;
@@ -1577,7 +1817,7 @@ export function JobPlanPlannerShell({
     await load();
     setIsSaving(false);
     if (failed === 0) {
-      sweetAlert.notifySuccess("Rencana diajukan", `${validRows.length} draft masuk Review Divisi.`);
+      sweetAlert.notifySuccess("Rencana diajukan", `${validRows.length} draft masuk Review QA.`);
       setSelectedRows([]);
     }
   }
@@ -1680,20 +1920,20 @@ export function JobPlanPlannerShell({
           title="Rencana Pekerjaan"
           actions={(
             <div className="flex flex-wrap items-center gap-2">
-              {mode === "planner" && canCreate ? (
-                <div className="inline-flex h-9 border border-border bg-background">
+              {mode === "planner" ? (
+                <div className="inline-flex h-9 border border-border bg-background" aria-label="Mode pekerjaan">
                   {([
+                    ["all", "Semua", "Tampilkan semua mode"],
                     ["normal", "Normal", "Normal 08-17"],
                     ["overtime", "Lembur", "Lembur 17-22"],
-                    ["holiday_overtime", "Libur", "Libur 08-16"],
                   ] as const).map(([value, label, title]) => (
                     <button
                       key={value}
                       type="button"
-                      onClick={() => setDraftWorkMode(value)}
+                      onClick={() => setWorkModeFilter((current) => current === value && value !== "all" ? "all" : value)}
                       title={title}
                       className={`border-r border-border px-2.5 font-mono text-[11px] uppercase tracking-[0.08em] last:border-r-0 ${
-                        draftWorkMode === value
+                        workModeFilter === value
                           ? "bg-primary/15 text-app-accent-ink"
                           : "text-muted-foreground hover:bg-muted hover:text-foreground"
                       }`}
@@ -1777,6 +2017,7 @@ export function JobPlanPlannerShell({
           setQaFilter("");
           setDivisionFilter("");
           setStatusFilter("");
+          setWorkModeFilter("all");
         }}>Reset</ActionButton>
         <ActionButton onClick={openReportPrint}>Print</ActionButton>
       </div>
@@ -1788,7 +2029,15 @@ export function JobPlanPlannerShell({
               <button type="button" onClick={addDraft} className="border-r border-border px-3 py-2 font-mono text-[12px] uppercase text-foreground hover:bg-muted">
                 + Row
               </button>
-              <button type="button" onClick={() => setAdditionalJobOpen(true)} className="px-3 py-2 font-mono text-[12px] uppercase text-app-accent-ink hover:bg-primary/10">
+              <button
+                type="button"
+                onClick={() => {
+                  const startTime = startTimeForWorkMode(defaultDraftWorkMode);
+                  setAdditionalJobForm((current) => ({ ...current, startTime, finishTime: minutesToTime((Number(startTime.slice(0, 2)) * 60) + 60) }));
+                  setAdditionalJobOpen(true);
+                }}
+                className="px-3 py-2 font-mono text-[12px] uppercase text-app-accent-ink hover:bg-primary/10"
+              >
                 + Jobdesc Tambahan
               </button>
             </div>
@@ -1836,9 +2085,17 @@ export function JobPlanPlannerShell({
           divisionOptions={teamOptions()}
           unitOptions={additionalDialogUnitOptions}
           componentOptions={additionalDialogComponentOptions}
+          componentDisabled={additionalDialogComponentDisabled}
           panelOptions={additionalDialogPanelOptions}
+          partOptions={additionalDialogPartOptions}
           jobTypeOptions={additionalDialogJobOptions}
-          onChange={setAdditionalJobForm}
+          employeeOptions={additionalDialogEmployeeOptions}
+          onChange={updateAdditionalJobForm}
+          onDivisionChange={changeAdditionalTeam}
+          onUnitChange={changeAdditionalUnit}
+          onPanelChange={changeAdditionalPanel}
+          onPartChange={changeAdditionalPart}
+          onTimeChange={changeAdditionalTime}
           onCancel={() => setAdditionalJobOpen(false)}
           onSubmit={addAdditionalJobDraft}
         />

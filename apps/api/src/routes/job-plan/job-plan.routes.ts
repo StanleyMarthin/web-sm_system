@@ -250,6 +250,7 @@ export async function handleJobPlanOptionsRoute(
       divisionId: parsePositiveIntParam(searchParams, "divisionId"),
       unitId: searchParams.get("unitId") || null,
       panelId: parsePositiveIntParam(searchParams, "panelId"),
+      componentName: searchParams.get("componentName")?.trim() || null,
     });
 
     return withCors(

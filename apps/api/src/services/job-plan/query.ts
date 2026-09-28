@@ -37,6 +37,14 @@ function parseIsoDate(value: string | null | undefined): string {
   return value.trim();
 }
 
+function parseJobPlanMode(value: string | null, defaultMode: JobPlanMode): JobPlanMode {
+  const normalized = value?.trim().toLowerCase();
+  if (normalized === "normal") return "normal";
+  if (normalized === "overtime" || normalized === "lembur") return "overtime";
+  if (normalized === "all" || normalized === "semua") return "all";
+  return defaultMode;
+}
+
 function getUtcDate(value: string): Date {
   return new Date(`${value}T00:00:00.000Z`);
 }
@@ -85,7 +93,7 @@ export function sanitizeJobPlanGridQuery(
   const dateStartInput = parseIsoDate(searchParams.get("dateStart"));
   const dateEndInput = parseIsoDate(searchParams.get("dateEnd"));
   const window = jobPlanWindowSchema.parse(searchParams.get("window") ?? "daily");
-  const mode = jobPlanModeSchema.parse(searchParams.get("mode") ?? defaultMode);
+  const mode = jobPlanModeSchema.parse(parseJobPlanMode(searchParams.get("workMode") ?? searchParams.get("mode"), defaultMode));
   const dateRange =
     window === "weekly"
       ? resolveEditableWeekRange(date, dateStartInput, dateEndInput)

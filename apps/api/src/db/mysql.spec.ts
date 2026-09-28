@@ -74,4 +74,18 @@ describe("instrumentMySqlPool", () => {
 
     expect(lines.length).toBe(0);
   });
+
+  it("preserves mysql pool method context", async () => {
+    const pool = instrumentMySqlPool({
+      marker: "pool-context",
+      query(this: { marker: string }) {
+        return Promise.resolve([[this.marker]]);
+      },
+      getConnection: async () => ({ query: async () => [[]], execute: async () => [[]], release: () => undefined }),
+    } as unknown as Pool);
+
+    const [rows] = await pool.query("SELECT 1");
+
+    expect(rows).toEqual(["pool-context"]);
+  });
 });

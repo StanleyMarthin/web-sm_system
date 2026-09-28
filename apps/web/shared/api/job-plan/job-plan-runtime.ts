@@ -7,6 +7,7 @@ import type {
   MutateJobPlanRuntimeExecutionRequest,
   ValidateJobPlanRuntimeRequest,
 } from "@smsystem/contracts/job-plan-runtime";
+import type { JobPlanMode } from "@smsystem/contracts/job-plan";
 import {
   jobPlanRuntimeFailureSchema,
   jobPlanRuntimeListEnvelopeSchema,
@@ -28,6 +29,7 @@ export interface JobPlanRuntimeListParams {
   divisionId?: string | number;
   employeeId?: string;
   coreId?: string;
+  workMode?: JobPlanMode;
 }
 
 function appendParam(params: URLSearchParams, key: string, value: string | number | undefined) {
@@ -45,6 +47,8 @@ export function buildJobPlanRuntimeQueryString(input: JobPlanRuntimeListParams):
   appendParam(params, "divisionId", input.divisionId);
   appendParam(params, "employeeId", input.employeeId);
   appendParam(params, "coreId", input.coreId);
+  appendParam(params, "workMode", input.workMode);
+  appendParam(params, "mode", input.workMode);
 
   return params.toString();
 }

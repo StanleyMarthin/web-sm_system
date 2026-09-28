@@ -612,23 +612,62 @@ export class UnitCatalogRepository {
   }
 
   async createAdditionalItem(unitId: string, actorId: string, input: CreateAdditionalCatalogItemRequest) {
-    const [result] = await this.poolFactory(this.env).execute<ResultSetHeader>(
-      `
-        INSERT INTO unit_additional_items (
-          car_id, component_name, panel_name, item_name, part_number, deskription, created_by
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)
-      `,
-      [
-        unitId,
-        input.componentName ? normalizeSpaces(input.componentName) : null,
-        input.panelName ? normalizeSpaces(input.panelName) : null,
-        normalizeSpaces(input.itemName),
-        input.partNumber ? normalizeSpaces(input.partNumber) : null,
-        input.deskription ? input.deskription.trim() : null,
-        actorId,
-      ],
-    );
+    const pool = this.poolFactory(this.env);
+    const values = [
+      unitId,
+      input.componentName ? normalizeSpaces(input.componentName) : null,
+      input.panelName ? normalizeSpaces(input.panelName) : null,
+      normalizeSpaces(input.itemName),
+      input.partNumber ? normalizeSpaces(input.partNumber) : null,
+      input.deskription ? input.deskription.trim() : null,
+      actorId,
+    ] as const;
+    let result: ResultSetHeader;
+    try {
+      [result] = await pool.execute<ResultSetHeader>(
+        `
+          INSERT INTO unit_additional_items (
+            car_id, component_name, panel_name, item_name, part_number, deskription, created_by
+          ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        `,
+        [...values],
+      );
+    } catch (error) {
+      const mysqlError = error as { code?: string; sqlMessage?: string };
+      if (mysqlError.code !== "ER_NO_DEFAULT_FOR_FIELD" || !mysqlError.sqlMessage?.includes("component_id")) throw error;
+      const componentId = await this.resolveLegacyAdditionalComponentId(pool, input.componentName);
+      [result] = await pool.execute<ResultSetHeader>(
+        `
+          INSERT INTO unit_additional_items (
+            car_id, component_id, component_name, panel_name, item_name, part_number, deskription, created_by
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `,
+        [unitId, componentId, ...values.slice(1)],
+      );
+    }
     return this.getAdditionalItem(unitId, Number(result.insertId));
+  }
+
+  private async resolveLegacyAdditionalComponentId(db: Queryable, componentName: string | null | undefined) {
+    const normalized = componentName ? normalizeSpaces(componentName) : "";
+    const [rows] = await db.query<Array<RowDataPacket & { id: number }>>(
+      `
+        SELECT id
+        FROM catalog_components
+        WHERE UPPER(code) = UPPER(?)
+           OR UPPER(component_name) = UPPER(?)
+        ORDER BY id
+        LIMIT 1
+      `,
+      [normalized, normalized],
+    );
+    if (rows[0]?.id) return Number(rows[0].id);
+
+    const [fallbackRows] = await db.query<Array<RowDataPacket & { id: number }>>(
+      "SELECT id FROM catalog_components WHERE code = 'BODY' ORDER BY id LIMIT 1",
+    );
+    if (fallbackRows[0]?.id) return Number(fallbackRows[0].id);
+    throw new Error("CATALOG_COMPONENT_NOT_FOUND");
   }
 
   async promoteAdditionalItem(unitId: string, itemId: number, actorId: string) {
@@ -647,29 +686,52 @@ export class UnitCatalogRepository {
       const item = await this.getAdditionalItem(unitId, itemId, connection);
       if (!item) throw new Error("ADDITIONAL_ITEM_NOT_FOUND");
 
-      const [result] = await connection.execute<ResultSetHeader>(
-        `
-          INSERT INTO master_panels (
-            car_id, part_id, source_part, component_id, panel_id, component_name, panel_name,
-            name_part, alias_name, part_number, qty, initial_condition, current_status, location, notes,
-            created_at, created_by, updated_at, updated_by
-          ) VALUES (?, ?, 'ADDITIONAL', ?, ?, ?, ?, ?, NULL, ?, 1, 'UNKNOWN', 'UNKNOWN', 'UNIT', ?, NOW(), ?, NOW(), ?)
-        `,
-        [
-          unitId,
-          itemId,
-          null,
-          null,
-          item.componentName ?? null,
-          item.panelName ?? null,
-          item.itemName,
-          item.partNumber,
-          item.deskription,
-          actorId,
-          actorId,
-        ],
-      );
-      const panelId = Number(result.insertId);
+      const masterPanelValues = [
+        unitId,
+        itemId,
+        null,
+        null,
+        item.componentName ?? null,
+        item.panelName ?? null,
+        item.itemName,
+        item.partNumber,
+        item.deskription,
+        actorId,
+        actorId,
+      ] as const;
+      let panelId: number;
+      try {
+        const [result] = await connection.execute<ResultSetHeader>(
+          `
+            INSERT INTO master_panels (
+              car_id, part_id, source_part, component_id, panel_id, component_name, panel_name,
+              name_part, alias_name, part_number, qty, initial_condition, current_status, location, notes,
+              created_at, created_by, updated_at, updated_by
+            ) VALUES (?, ?, 'ADDITIONAL', ?, ?, ?, ?, ?, NULL, ?, 1, 'BEKAS', 'INSTALLED', 'UNIT', ?, NOW(), ?, NOW(), ?)
+          `,
+          [...masterPanelValues],
+        );
+        panelId = Number(result.insertId);
+      } catch (error) {
+        const mysqlError = error as { code?: string; sqlMessage?: string };
+        if (mysqlError.code !== "ER_NO_DEFAULT_FOR_FIELD" || !mysqlError.sqlMessage?.includes("'id'")) throw error;
+        const [idRows] = await connection.query<Array<RowDataPacket & { nextId: number }>>(
+          "SELECT COALESCE(MAX(id), 0) + 1 AS nextId FROM master_panels FOR UPDATE",
+        );
+        const nextId = Number(idRows[0]?.nextId);
+        if (!nextId) throw new Error("MASTER_PANEL_ID_UNAVAILABLE");
+        await connection.execute(
+          `
+            INSERT INTO master_panels (
+              id, car_id, part_id, source_part, component_id, panel_id, component_name, panel_name,
+              name_part, alias_name, part_number, qty, initial_condition, current_status, location, notes,
+              created_at, created_by, updated_at, updated_by
+            ) VALUES (?, ?, ?, 'ADDITIONAL', ?, ?, ?, ?, ?, NULL, ?, 1, 'BEKAS', 'INSTALLED', 'UNIT', ?, NOW(), ?, NOW(), ?)
+          `,
+          [nextId, ...masterPanelValues],
+        );
+        panelId = nextId;
+      }
       await this.refreshPanelStatus(connection, unitId, panelId);
       await connection.commit();
       return { panelId, alreadyPromoted: false };

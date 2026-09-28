@@ -151,6 +151,61 @@ describe("UnitCatalogRepository savePanelWorkspace", () => {
   });
 });
 
+describe("UnitCatalogRepository createAdditionalItem", () => {
+  it("retries with legacy component_id when production schema requires it", async () => {
+    const statements: Array<{ sql: string; params: unknown[] }> = [];
+    let insertAttempts = 0;
+    const pool = {
+      query: async (sql: string, params: unknown[] = []) => {
+        statements.push({ sql, params });
+        if (sql.includes("FROM catalog_components") && sql.includes("code = 'BODY'")) return [[{ id: 4 }]];
+        if (sql.includes("FROM unit_additional_items")) {
+          return [[{
+            id: 77,
+            carId: "CAR-1",
+            componentName: "BAGIAN BAWAH",
+            panelName: "BUMPER",
+            itemName: "BUMPER",
+            partNumber: null,
+            deskription: null,
+          }]];
+        }
+        return [[]];
+      },
+      execute: async (sql: string, params: unknown[] = []) => {
+        statements.push({ sql, params });
+        insertAttempts += 1;
+        if (insertAttempts === 1) {
+          throw { code: "ER_NO_DEFAULT_FOR_FIELD", sqlMessage: "Field 'component_id' doesn't have a default value" };
+        }
+        return [{ insertId: 77 }];
+      },
+    };
+    const repository = new UnitCatalogRepository(() => pool as never, {} as never) as any;
+
+    const item = await repository.createAdditionalItem("CAR-1", "EMP-1", {
+      componentName: "BAGIAN BAWAH",
+      panelName: "BUMPER",
+      itemName: "BUMPER",
+      partNumber: null,
+      deskription: null,
+    });
+
+    const retryInsert = statements.find(({ sql }) => sql.includes("component_id"));
+    expect(item.id).toBe(77);
+    expect(retryInsert?.params).toEqual([
+      "CAR-1",
+      4,
+      "BAGIAN BAWAH",
+      "BUMPER",
+      "BUMPER",
+      null,
+      null,
+      "EMP-1",
+    ]);
+  });
+});
+
 describe("UnitCatalogRepository promoteAdditionalItem", () => {
   function createAdditionalRepository(additionalItem: {
     componentName: string | null;
@@ -158,8 +213,9 @@ describe("UnitCatalogRepository promoteAdditionalItem", () => {
     itemName: string;
     partNumber: string | null;
     deskription: string | null;
-  }) {
+  }, options: { masterInsertRequiresId?: boolean } = {}) {
     const statements: Array<{ sql: string; params: unknown[] }> = [];
+    let masterInsertAttempts = 0;
     const connection = {
       beginTransaction: async () => undefined,
       commit: async () => undefined,
@@ -168,6 +224,7 @@ describe("UnitCatalogRepository promoteAdditionalItem", () => {
       query: async (sql: string, params: unknown[] = []) => {
         statements.push({ sql, params });
         if (sql.includes("SELECT id FROM master_panels")) return [[]];
+        if (sql.includes("COALESCE(MAX(id)")) return [[{ nextId: 1 }]];
         if (sql.includes("FROM unit_additional_items")) {
           return [[{
             id: 77,
@@ -183,6 +240,12 @@ describe("UnitCatalogRepository promoteAdditionalItem", () => {
       },
       execute: async (sql: string, params: unknown[] = []) => {
         statements.push({ sql, params });
+        if (sql.includes("INSERT INTO master_panels")) {
+          masterInsertAttempts += 1;
+          if (options.masterInsertRequiresId && masterInsertAttempts === 1) {
+            throw { code: "ER_NO_DEFAULT_FOR_FIELD", sqlMessage: "Field 'id' doesn't have a default value" };
+          }
+        }
         return [{ insertId: 901 }];
       },
     };
@@ -217,6 +280,7 @@ describe("UnitCatalogRepository promoteAdditionalItem", () => {
       "Bracket Bumper",
       "ADD-001",
     ]);
+    expect(masterInsert?.sql).toContain("'BEKAS', 'INSTALLED'");
     expect(masterInsert?.sql.includes("'ADDITIONAL'")).toBe(true);
     expect(statements.some(({ sql }) => sql.includes("FROM catalog_panels"))).toBe(false);
     expect(statements.some(({ sql }) => sql.includes("FROM catalog_components"))).toBe(false);
@@ -248,6 +312,25 @@ describe("UnitCatalogRepository promoteAdditionalItem", () => {
     ]);
     expect(statements.some(({ sql }) => sql.includes("FROM catalog_panels"))).toBe(false);
     expect(statements.some(({ sql }) => sql.includes("FROM catalog_components"))).toBe(false);
+  });
+
+  it("retries master panel insert with an explicit id for the legacy VPS schema", async () => {
+    const { repository, statements } = createAdditionalRepository({
+      componentName: "BODY",
+      panelName: "FRONT BUMPER",
+      itemName: "Custom Bumper",
+      partNumber: null,
+      deskription: null,
+    }, { masterInsertRequiresId: true });
+
+    const connectionStatements = statements;
+    await repository.promoteAdditionalItem("CAR-1", 77, "EMP-1");
+
+    const idLookup = connectionStatements.find(({ sql }) => sql.includes("COALESCE(MAX(id)"));
+    const retryInsert = connectionStatements.filter(({ sql }) => sql.includes("INSERT INTO master_panels"))[1];
+    expect(Boolean(idLookup)).toBe(true);
+    expect(retryInsert?.sql).toContain("id, car_id");
+    expect(retryInsert?.params?.slice(0, 3)).toEqual([1, "CAR-1", 77]);
   });
 });
 

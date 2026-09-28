@@ -59,7 +59,7 @@ function instrumentQueryable<T extends object>(target: T, slowQueryThresholdMs: 
     // ponytail: assumes the promise API; a callback-style call would be timed until the
     // query object is returned. Every call site in this repo awaits, so upgrade only if that changes.
     queryable[method] = ((...args: QueryArgs) =>
-      withQueryTiming(String(args[0]), () => Promise.resolve(original(...args)), slowQueryThresholdMs)) as never;
+      withQueryTiming(String(args[0]), () => Promise.resolve(original.apply(target, args)), slowQueryThresholdMs)) as never;
   }
 
   return target;

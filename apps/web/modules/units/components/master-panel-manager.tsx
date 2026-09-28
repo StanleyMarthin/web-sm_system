@@ -382,6 +382,7 @@ export function MasterPanelManager({ unitId, canManage, canCreateWo, canCreatePr
   const [additionalForm, setAdditionalForm] = useState<AdditionalFormState>(EMPTY_ADDITIONAL_FORM);
   const flatRows = useMemo(() => flattenPanelRecords(rows), [rows]);
   const hierarchy = useMemo(() => buildMasterPanelHierarchy(flatRows), [flatRows]);
+  const componentOptions = useMemo(() => hierarchy.map((component) => component.componentName), [hierarchy]);
   const searchTerm = search.trim().toLowerCase();
 
   const rootCount = hierarchy.reduce((total, component) => total + component.totalPanel, 0);
@@ -1244,9 +1245,13 @@ export function MasterPanelManager({ unitId, canManage, canCreateWo, canCreatePr
                 <input
                   value={additionalForm.componentName}
                   onChange={(event) => setAdditionalForm((current) => ({ ...current, componentName: event.target.value }))}
+                  list="unit-master-panel-components"
                   className="h-9 w-full border border-border bg-background px-3 text-[14px] text-foreground outline-none focus:border-primary/45"
-                  placeholder="Contoh: BODY"
+                  placeholder="Pilih atau cari bagian"
                 />
+                <datalist id="unit-master-panel-components">
+                  {componentOptions.map((component) => <option key={component} value={component} />)}
+                </datalist>
               </label>
               <label className="block space-y-1">
                 <span className="text-[13px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Nama Panel</span>

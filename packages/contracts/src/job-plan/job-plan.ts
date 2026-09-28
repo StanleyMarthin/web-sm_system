@@ -270,6 +270,7 @@ export const jobPlanWorkspaceDraftRowSchema = z.object({
   divisionId: z.number().int().positive().nullable().optional(),
   panelId: z.number().int().positive().nullable().optional().default(null),
   jobTypeId: z.string().trim().max(100).nullable().optional().default(null),
+  jobTypeName: z.string().trim().max(150).nullable().optional().default(null),
   assignedUserId: z.string().trim().min(1).max(50),
   targetHours: z.number().positive().max(12),
   startTime: timeSchema.default(null),
@@ -299,8 +300,10 @@ export const createJobPlanAdditionalCountdownRequestSchema = z.object({
   jobTypeName: z.string().trim().max(150).nullable().optional().default(null),
   taskDate: isoDateSchema,
   deadlineDate: isoDateSchema,
-  targetHours: z.number().positive().max(24),
+  // targetHours di sini adalah target total pekerjaan (bisa lintas hari), bukan target harian.
+  targetHours: z.number().positive().max(24 * 30),
   jobDescription: z.string().trim().min(1).max(500),
+  initialFinding: z.string().trim().max(1000).nullable().optional().default(null),
   note: z.string().trim().max(500).nullable().optional().default(null),
   picPlan: z.string().trim().max(50).nullable().optional(),
   requiredGrade: optionalNullableTextSchema,
@@ -308,11 +311,14 @@ export const createJobPlanAdditionalCountdownRequestSchema = z.object({
 
 export const createJobPlanAdditionalCountdownResponseSchema = z.object({
   coreId: z.string(),
+  jobTypeId: z.string(),
   carId: z.string(),
   divisionId: z.number().int().nullable(),
   panelId: z.number().int().nullable(),
   unitName: z.string().nullable(),
   divisionName: z.string().nullable(),
+  isNewJobType: z.boolean(),
+  isNewCore: z.boolean(),
 });
 
 export const updateJobPlanRequestSchema = jobPlanDraftItemSchema.omit({

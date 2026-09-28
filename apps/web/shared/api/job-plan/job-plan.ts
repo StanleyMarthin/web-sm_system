@@ -28,6 +28,14 @@ function getTodayIsoDate(): string {
   return `${today.getFullYear()}-${month}-${day}`;
 }
 
+function resolveJobPlanMode(value: string | null, fallback: JobPlanMode): JobPlanMode {
+  const normalized = value?.trim().toLowerCase();
+  if (normalized === "normal") return "normal";
+  if (normalized === "overtime" || normalized === "lembur") return "overtime";
+  if (normalized === "all" || normalized === "semua") return "all";
+  return fallback;
+}
+
 function toUrlSearchParams(
   searchParams: Record<string, string | string[] | undefined>,
 ): URLSearchParams {
@@ -66,8 +74,10 @@ export function buildJobPlanGridQueryString(
   mode: JobPlanMode,
 ): string {
   const params = toUrlSearchParams(searchParams);
+  const effectiveMode = resolveJobPlanMode(params.get("workMode") ?? params.get("mode"), mode);
 
-  params.set("mode", mode);
+  params.set("mode", effectiveMode);
+  params.set("workMode", effectiveMode);
 
   if (!params.has("date")) {
     params.set("date", getTodayIsoDate());
@@ -151,11 +161,13 @@ export async function fetchJobPlanOptions(kind: JobPlanOptionKind, params: {
   divisionId?: number | null;
   unitId?: string | null;
   panelId?: number | null;
+  componentName?: string | null;
 }) {
   const searchParams = new URLSearchParams();
   if (params.divisionId) searchParams.set("divisionId", String(params.divisionId));
   if (params.unitId) searchParams.set("unitId", params.unitId);
   if (params.panelId) searchParams.set("panelId", String(params.panelId));
+  if (params.componentName) searchParams.set("componentName", params.componentName);
   const query = searchParams.toString();
   const cacheKey = `${kind}:${query}`;
   const cached = optionCache.get(cacheKey);

@@ -117,6 +117,55 @@ describe("MySqlJobPlanRepository countdown alignment", () => {
     expect(sql.includes("planCapacity")).toBe(false);
   });
 
+  it("loads every master panel for a unit, including panels without a countdown", async () => {
+    const statements: string[] = [];
+    const repository = new MySqlJobPlanRepository(() => ({
+      query: async (sql: string) => {
+        statements.push(sql);
+        return [[]];
+      },
+    }) as never);
+
+    await repository.listOptions({
+      employeeId: "EMP-1",
+      scope,
+      kind: "panels",
+      unitId: "CAR-1",
+      componentName: "RUANG MESIN",
+    });
+
+    const sql = statements[0] ?? "";
+    expect(sql).toContain("FROM master_panels mp");
+    expect(sql).toContain("mp.car_id = ?");
+    expect(sql).toContain("UPPER(TRIM(mp.component_name)) = UPPER(?)");
+    expect(sql.includes("FROM sm_jobdesc_countdown jc\n")).toBe(false);
+    expect(sql.includes("LIMIT 300")).toBe(false);
+  });
+
+  it("exposes every panel of a car even when no countdown points at that panel yet", async () => {
+    const statements: string[] = [];
+    const repository = new MySqlJobPlanRepository(() => ({
+      query: async (sql: string) => {
+        statements.push(sql);
+        return [[]];
+      },
+    }) as never);
+
+    await repository.listOptions({
+      employeeId: "EMP-1",
+      scope: { ...scope, canViewAllUnits: false, divisionIds: [10] },
+      kind: "panels",
+      divisionId: 10,
+      unitId: "CAR-1",
+    });
+
+    const sql = statements[0] ?? "";
+    expect(sql).toContain("FROM master_panels mp");
+    expect(sql).toContain("jc_panel.car_id = mp.car_id");
+    expect(sql.includes("jc_panel.panel_id = mp.id")).toBe(false);
+    expect(sql).toContain("jc_panel.division_id = ?");
+  });
+
   it("rejects a job plan that only provides a panel name", async () => {
     const connection = {
       beginTransaction: async () => undefined,
@@ -145,6 +194,7 @@ describe("MySqlJobPlanRepository countdown alignment", () => {
             divisionId: 1,
             panelId: null,
             jobTypeId: "JOB-1",
+            jobTypeName: null,
             assignedUserId: "EXECUTOR-1",
             targetHours: 2,
             startTime: "08:00",
@@ -197,6 +247,7 @@ describe("MySqlJobPlanRepository countdown alignment", () => {
             divisionId: null,
             panelId: null,
             jobTypeId: null,
+            jobTypeName: null,
             assignedUserId: "EXECUTOR-1",
             targetHours: 2,
             startTime: "08:00",
@@ -216,6 +267,94 @@ describe("MySqlJobPlanRepository countdown alignment", () => {
 
     expect(message).toBe("WORK_ORDER_COUNTDOWN_NOT_FOUND");
     expect(statements.some((sql) => sql.includes("INSERT INTO sm_jobdesc_plan"))).toBe(false);
+  });
+
+  it("resolves an additional job name and reuses an open countdown in one workspace transaction", async () => {
+    const queries: Array<{ sql: string; params?: unknown[] }> = [];
+    const executed: Array<{ sql: string; params?: unknown[] }> = [];
+    const connection = {
+      beginTransaction: async () => undefined,
+      commit: async () => undefined,
+      rollback: async () => undefined,
+      release: () => undefined,
+      query: async (sql: string, params?: unknown[]) => {
+        queries.push({ sql, params });
+        if (sql.includes("UPPER(job_name)")) return [[]];
+        if (sql.includes("INSERT INTO master_job_types")) return [{}];
+        if (sql.includes("FROM master_job_types mjt")) return [[{ id: "JOB-NEW" }]];
+        if (sql.includes("FROM cars c")) {
+          return [[{
+            carId: "CAR-1",
+            unitName: "Unit A",
+            panelId: 11,
+            panelName: "Panel A",
+            divisionId: 10,
+            divisionName: "BODY WORK",
+            jobTypeId: "JOB-NEW",
+            jobName: "Repair baru",
+          }]];
+        }
+        if (sql.includes("FROM sm_jobdesc_countdown") && sql.includes("job_type_id = ?")) {
+          return [[{ coreId: "CD-OPEN" }]];
+        }
+        if (sql.includes("FROM sm_jobdesc_countdown jc") && sql.includes("WHERE jc.id = ?")) {
+          return [[{
+            coreId: "CD-OPEN",
+            carId: "CAR-1",
+            unitName: "Unit A",
+            divisionId: 10,
+            divisionName: "BODY WORK",
+            panelId: 11,
+            remainingHours: 8,
+            progressPercent: 0,
+            currentStatus: "PLAN",
+          }]];
+        }
+        if (sql.includes("FROM sm_car_panel_status")) return [[]];
+        if (sql.includes("FROM sm_jobdesc_plan p")) return [[{ total: 0 }]];
+        if (sql.includes("FROM car_project_assignment")) return [[]];
+        return [[]];
+      },
+      execute: async (sql: string, params?: unknown[]) => {
+        executed.push({ sql, params });
+        return [{}];
+      },
+    };
+    const repository = new MySqlJobPlanRepository(() => ({ getConnection: async () => connection }) as never);
+
+    await repository.createWorkspace(
+      { employeeId: "EMP-1", actorId: "EMP-1", actorName: "Tester", scope },
+      {
+        mode: "normal",
+        taskDate: "2026-09-01",
+        deadlineDate: "2026-09-01",
+        projectTargetHours: "02:00",
+        isRework: false,
+        rows: [{
+          source: "additional",
+          referenceId: null,
+          carId: "CAR-1",
+          divisionId: 10,
+          panelId: 11,
+          jobTypeId: null,
+          jobTypeName: "Repair baru",
+          assignedUserId: "EXECUTOR-1",
+          targetHours: 2,
+          startTime: "08:00",
+          finishTime: "10:00",
+          jobDescription: "Repair baru",
+          note: null,
+          isPriority: false,
+          isNonTechnicalJob: false,
+          picPlan: "EXECUTOR-1",
+          requiredGrade: null,
+        }],
+      },
+    );
+
+    expect(queries.some(({ sql }) => sql.includes("INSERT INTO master_job_types"))).toBe(true);
+    expect(executed.some(({ sql }) => sql.includes("INSERT INTO sm_jobdesc_countdown"))).toBe(false);
+    expect(executed.some(({ sql, params }) => sql.includes("INSERT INTO sm_jobdesc_plan") && params?.[1] === "CD-OPEN")).toBe(true);
   });
 
   it("allows 1 requested hour when 1 countdown hour remains and none is reserved", async () => {

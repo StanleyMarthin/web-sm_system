@@ -22,9 +22,10 @@ async function JobPlanPageContent({ searchParams }: JobPlanPageProps) {
   const coreId = resolveSingleSearchParam(resolvedSearchParams.coreId);
   const requestedDate = resolveSingleSearchParam(resolvedSearchParams.date);
   const requestedModeParam = resolveSingleSearchParam(resolvedSearchParams.mode);
+  const requestedWorkModeParam = resolveSingleSearchParam(resolvedSearchParams.workMode) ?? requestedModeParam;
 
   const [{ payload, status }, { user, status: userStatus }] = await Promise.all([
-    fetchJobPlanGrid(cookieHeader, resolvedSearchParams, "normal"),
+    fetchJobPlanGrid(cookieHeader, resolvedSearchParams, "all"),
     fetchCurrentUser(cookieHeader),
   ]);
 
@@ -49,6 +50,7 @@ async function JobPlanPageContent({ searchParams }: JobPlanPageProps) {
       initialCoreId={coreId}
       initialDate={requestedDate}
       initialMode={requestedModeParam}
+      initialWorkMode={requestedWorkModeParam}
       countdowns={payload.references.countdowns}
       employees={payload.references.employees}
       divisions={payload.references.divisions}

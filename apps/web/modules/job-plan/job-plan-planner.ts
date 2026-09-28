@@ -8,6 +8,7 @@ import type {
   MutateJobPlanRuntimeApprovalRequest,
 } from "@smsystem/contracts/job-plan-runtime";
 import { jobPlanCountdownOptionSchema, jobPlanEmployeeOptionSchema, jobPlanJobTypeOptionSchema, jobPlanPanelOptionSchema } from "@smsystem/contracts/job-plan";
+import { breakMinutesForJobPlanDate, breakStartMinutesForJobPlanDate } from "@smsystem/contracts/job-plan-schedule";
 import type { z } from "zod";
 import { parseSmsDate, parseSmsDurationMinutes, parseSmsTime } from "@/shared/datagrid/parsers";
 
@@ -20,7 +21,7 @@ export interface JobPlanRuntimePlannerDraft {
   clientId: string;
   isNew: true;
   sourceType: "countdown" | "additional";
-  workMode: "normal" | "overtime" | "holiday_overtime";
+  workMode: "normal" | "overtime";
   coreId: string;
   divisionId: number | null;
   carId: string;
@@ -31,7 +32,9 @@ export interface JobPlanRuntimePlannerDraft {
   taskDate: string;
   startTime: string;
   durationText: string;
+  targetTotalText?: string;
   jobDescription: string;
+  initialFinding: string;
   note: string;
   isOvertime: boolean;
   isRework: boolean;
@@ -55,7 +58,7 @@ export interface JobPlanRuntimeManualExecutionDraft {
 export interface JobPlanRuntimeDisplayRow {
   clientId: string;
   isNew: boolean;
-  workMode: "normal" | "overtime" | "holiday_overtime";
+  workMode: "normal" | "overtime";
   planId: string | null;
   coreId: string;
   divisionId: number | null;
@@ -68,6 +71,7 @@ export interface JobPlanRuntimeDisplayRow {
   unitName: string;
   panelName: string;
   jobDescription: string;
+  initialFinding: string;
   instructionText: string;
   employeeId: string;
   employeeName: string;
@@ -98,9 +102,9 @@ export interface JobPlanRuntimeDisplayRow {
 
 const approvalLabels: Record<JobPlanRuntimeApprovalState, string> = {
   DRAFT: "Draft",
-  DIVISION_REVIEW: "Review Divisi",
-  UNIT_REVIEW: "Review Unit",
-  MANAGEMENT_REVIEW: "Review Manajemen",
+  DIVISION_REVIEW: "Review QA",
+  UNIT_REVIEW: "Review KP",
+  MANAGEMENT_REVIEW: "Review PM",
   APPROVED: "Disetujui",
   REJECTED: "Ditolak",
   CANCELLED: "Dibatalkan",
@@ -166,6 +170,68 @@ export function resolveJobPlanRuntimeSync(row: JobPlanRuntimeReadItem) {
   return "Synced";
 }
 
+export const JOB_PLAN_PARTLESS_PART_NAME = "Tanpa part";
+
+export function jobPlanPartName(partName: string | null | undefined) {
+  return partName?.trim() || JOB_PLAN_PARTLESS_PART_NAME;
+}
+
+function sortedUniqueText(values: string[]) {
+  return [...new Set(values.map((value) => value.trim()).filter(Boolean))].sort((left, right) => left.localeCompare(right, "id"));
+}
+
+export function jobPlanComponentNames(panels: JobPlanPanelOption[]) {
+  return sortedUniqueText(panels.map((panel) => panel.componentName ?? ""));
+}
+
+export function jobPlanPanelNames(panels: JobPlanPanelOption[], componentName?: string | null) {
+  const component = componentName?.trim();
+  return sortedUniqueText(
+    panels
+      .filter((panel) => !component || (panel.componentName ?? "").trim() === component)
+      .map((panel) => panel.panelName),
+  );
+}
+
+export function jobPlanPartNames(panels: JobPlanPanelOption[], panelName: string) {
+  const panel = panelName.trim();
+  if (!panel) return [];
+  return sortedUniqueText(
+    panels
+      .filter((row) => row.panelName.trim() === panel)
+      .map((row) => jobPlanPartName(row.partName)),
+  );
+}
+
+export function findJobPlanPanelValue(panels: JobPlanPanelOption[], panelName: string, partName: string) {
+  const panel = panelName.trim();
+  const part = jobPlanPartName(partName);
+  const match = panels.find((row) => row.panelName.trim() === panel && jobPlanPartName(row.partName) === part);
+  return match?.value ?? null;
+}
+
+export function parseClockMinutes(value: string) {
+  const match = value.trim().match(/^([01]\d|2[0-3]):([0-5]\d)$/u);
+  return match ? (Number(match[1]) * 60) + Number(match[2]) : null;
+}
+
+export function jobPlanWindowMinutes(startTime: string, finishTime: string) {
+  const start = parseClockMinutes(startTime);
+  const finish = parseClockMinutes(finishTime);
+  if (start === null || finish === null || finish <= start) return null;
+  return finish - start;
+}
+
+export function jobPlanBreakMinutesForWindow(taskDate: string, startTime: string, finishTime: string) {
+  const start = parseClockMinutes(startTime);
+  const windowMinutes = jobPlanWindowMinutes(startTime, finishTime);
+  if (start === null || windowMinutes === null) return 0;
+
+  const breakStart = breakStartMinutesForJobPlanDate(taskDate);
+  const breakMinutes = breakMinutesForJobPlanDate(taskDate);
+  return start < breakStart + breakMinutes && start + windowMinutes > breakStart ? breakMinutes : 0;
+}
+
 export function createJobPlanRuntimeDraft(context: JobPlanCountdownOption | null): JobPlanRuntimePlannerDraft {
   return {
     clientId: `draft-${crypto.randomUUID()}`,
@@ -184,7 +250,9 @@ export function createJobPlanRuntimeDraft(context: JobPlanCountdownOption | null
     durationText: context?.availablePlanHours
       ? minutesToDuration(Math.round(context.availablePlanHours * 60))
       : "01:00",
+    targetTotalText: "",
     jobDescription: context?.jobName ?? context?.label ?? "",
+    initialFinding: "",
     note: "",
     isOvertime: false,
     isRework: false,
@@ -221,6 +289,7 @@ export function toJobPlanRuntimeDisplayRows(
       unitName: countdown?.unitName ?? item.car_id ?? "-",
       panelName: countdown?.panelName ?? "-",
       jobDescription: item.jobdescription ?? countdown?.jobName ?? countdown?.label ?? "-",
+      initialFinding: "",
       instructionText: item.note ?? "",
       employeeId: item.employee_id ?? "",
       employeeName: employee?.label ?? item.employee_id ?? "-",
@@ -265,6 +334,7 @@ export function createEditDraftFromRow(row: JobPlanRuntimeDisplayRow): JobPlanRu
     startTime: row.startTime,
     durationText: row.durationText,
     jobDescription: row.jobDescription,
+    initialFinding: "",
     note: row.note,
     isOvertime: row.workMode !== "normal",
     isRework: false,

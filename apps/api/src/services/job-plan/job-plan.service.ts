@@ -59,11 +59,14 @@ interface JobPlanMutationResult {
 
 interface JobPlanAdditionalCountdownResult {
   coreId: string;
+  jobTypeId: string;
   carId: string;
   unitName: string | null;
   divisionId: number | null;
   divisionName: string | null;
   panelId: number | null;
+  isNewJobType: boolean;
+  isNewCore: boolean;
 }
 
 interface JobPlanExportResult {
@@ -77,6 +80,7 @@ interface JobPlanOptionsQuery {
   divisionId?: number | null;
   unitId?: string | null;
   panelId?: number | null;
+  componentName?: string | null;
 }
 
 function expandPlanDraftForSchedule(plan: CreateJobPlanRequest) {
@@ -131,6 +135,7 @@ function buildOptionCacheKey(employeeId: string, query: JobPlanOptionsQuery): st
     query.divisionId ?? "",
     query.unitId ?? "",
     query.panelId ?? "",
+    (query.componentName ?? "").trim().toUpperCase(),
   ].join(":");
 }
 
@@ -1456,11 +1461,14 @@ export class DefaultJobPlanService implements JobPlanService {
 
     return {
       coreId: result.coreId,
+      jobTypeId: result.jobTypeId,
       carId: result.carId ?? input.carId,
       unitName: result.unitName,
       divisionId: result.divisionId,
       divisionName: result.divisionName,
       panelId: result.panelId,
+      isNewJobType: result.isNewJobType,
+      isNewCore: result.isNewCore,
     };
   }
 

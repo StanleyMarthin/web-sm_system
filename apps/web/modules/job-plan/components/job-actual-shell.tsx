@@ -149,9 +149,9 @@ export function JobActualShell({
   }))), [rows]);
   const statusOptions = [
     ["DRAFT", "Draft"],
-    ["DIVISION_REVIEW", "Review Divisi"],
-    ["UNIT_REVIEW", "Review Unit"],
-    ["MANAGEMENT_REVIEW", "Review Manajemen"],
+    ["DIVISION_REVIEW", "Review QA"],
+    ["UNIT_REVIEW", "Review KP"],
+    ["MANAGEMENT_REVIEW", "Review PM"],
     ["APPROVED", "Disetujui"],
     ["RUNNING", "Berjalan"],
     ["HOLD", "Ditahan"],

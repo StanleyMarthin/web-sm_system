@@ -42,6 +42,7 @@ interface JobPlanOptionsParams extends ScopeParams {
   divisionId?: number | null;
   unitId?: string | null;
   panelId?: number | null;
+  componentName?: string | null;
 }
 
 type JobPlanOption =
@@ -195,12 +196,23 @@ interface LockStateRow extends RowDataPacket {
 interface AdditionalContextRow extends RowDataPacket {
   carId: string;
   unitName: string;
-  panelId: number | null;
+  panelId: number;
   panelName: string | null;
-  divisionId: number | null;
+  divisionId: number;
   divisionName: string | null;
   jobTypeId: string;
   jobName: string | null;
+}
+
+interface ResolvedJobType {
+  jobTypeId: string;
+  isNewJobType: boolean;
+}
+
+interface AdditionalCountdownResult extends CountdownContextRow {
+  jobTypeId: string;
+  isNewJobType: boolean;
+  isNewCore: boolean;
 }
 
 interface DivisionTechnicalRow extends RowDataPacket {
@@ -968,8 +980,8 @@ async function resolveOrCreateJobType(
   divisionId: number,
   jobTypeId: string | null | undefined,
   jobTypeName: string | null | undefined,
-): Promise<string> {
-  if (jobTypeId) return jobTypeId;
+): Promise<ResolvedJobType> {
+  if (jobTypeId) return { jobTypeId, isNewJobType: false };
 
   const trimmedName = jobTypeName?.trim();
   if (!trimmedName) {
@@ -988,17 +1000,35 @@ async function resolveOrCreateJobType(
   )) as [Array<RowDataPacket & { id: string }>, unknown];
 
   const existing = existingRows[0]?.id;
-  if (existing) return existing;
+  if (existing) return { jobTypeId: existing, isNewJobType: false };
 
   const id = randomUUID();
-  await connection.query(
-    `
-      INSERT INTO master_job_types (id, division_id, job_name, is_teknis)
-      VALUES (?, ?, ?, 1)
-    `,
-    [id, divisionId, trimmedName],
-  );
-  return id;
+  try {
+    await connection.query(
+      `
+        INSERT INTO master_job_types (id, division_id, job_name, is_teknis)
+        VALUES (?, ?, ?, 1)
+      `,
+      [id, divisionId, trimmedName],
+    );
+    return { jobTypeId: id, isNewJobType: true };
+  } catch (error) {
+    const mysqlError = error as { code?: string };
+    if (mysqlError.code !== "ER_DUP_ENTRY") throw error;
+    const [retryRows] = (await connection.query(
+      `
+        SELECT id
+        FROM master_job_types
+        WHERE division_id = ?
+          AND UPPER(job_name) = UPPER(?)
+        LIMIT 1
+      `,
+      [divisionId, trimmedName],
+    )) as [Array<RowDataPacket & { id: string }>, unknown];
+    const retry = retryRows[0]?.id;
+    if (!retry) throw error;
+    return { jobTypeId: retry, isNewJobType: false };
+  }
 }
 
 async function findExistingWorkOrderCountdown(
@@ -1039,6 +1069,7 @@ async function createCountdownInTransaction(
     requiredGrade: string | null;
     startDate: string;
     deadlineDate: string;
+    initialFinding: string | null;
     refTaskId: string | null;
     note: string | null;
   },
@@ -1081,9 +1112,10 @@ async function createCountdownInTransaction(
         ref_rework_qc_id,
         updated_at,
         user_update,
+        temuan_awal,
         keterangan,
         last_qc_level
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, 0, ?, 0, 'PLAN', NULL, ?, ?, ?, NULL, NULL, ?, ?, ?, NULL)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, 0, ?, 0, 'PLAN', NULL, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, NULL)
     `,
     [
       countdownId,
@@ -1104,6 +1136,7 @@ async function createCountdownInTransaction(
       input.deadlineDate,
       now,
       params.employeeId,
+      input.initialFinding,
       input.note,
     ],
   );
@@ -1114,6 +1147,35 @@ async function createCountdownInTransaction(
   }
 
   return created;
+}
+
+async function findOpenAdditionalCountdown(
+  connection: Pick<PoolConnection, "query">,
+  input: {
+    carId: string;
+    divisionId: number;
+    panelId: number;
+    jobTypeId: string;
+  },
+): Promise<CountdownContextRow | null> {
+  const [rows] = (await connection.query(
+    `
+      SELECT id AS coreId
+      FROM sm_jobdesc_countdown
+      WHERE car_id = ?
+        AND division_id = ?
+        AND panel_id = ?
+        AND job_type_id = ?
+        AND COALESCE(status, 'PLAN') <> 'DONE'
+      ORDER BY updated_at DESC, created_at DESC
+      LIMIT 1
+      FOR UPDATE
+    `,
+    [input.carId, input.divisionId, input.panelId, input.jobTypeId],
+  )) as [Array<RowDataPacket & { coreId: string }>, unknown];
+
+  const coreId = rows[0]?.coreId;
+  return coreId ? getCountdownContext(connection, coreId, true) : null;
 }
 
 async function resolveWorkspaceCountdown(
@@ -1147,24 +1209,39 @@ async function resolveWorkspaceCountdown(
     return assertCountdownAccessible(connection, params, existingCountdown.coreId);
   }
 
-  if (!row.carId || !row.divisionId || !row.panelId || !row.jobTypeId) {
+  if (!row.carId || !row.divisionId || !row.panelId || (!row.jobTypeId && !row.jobTypeName)) {
     throw new Error("ADDITIONAL_REFERENCE_INCOMPLETE");
   }
 
+  const resolvedJobType = await resolveOrCreateJobType(
+    connection,
+    row.divisionId,
+    row.jobTypeId,
+    row.jobTypeName,
+  );
   const additional = await getAdditionalContext(
     connection,
     row.carId,
     row.divisionId,
     row.panelId,
-    row.jobTypeId,
+    resolvedJobType.jobTypeId,
   );
   if (!additional || !additional.divisionId) {
     throw new Error("ADDITIONAL_REFERENCE_INCOMPLETE");
   }
+  const divisionId = additional.divisionId;
+
+  const existing = await findOpenAdditionalCountdown(connection, {
+    carId: additional.carId,
+    divisionId,
+    panelId: additional.panelId,
+    jobTypeId: additional.jobTypeId,
+  });
+  if (existing) return existing;
 
   return createCountdownInTransaction(connection, params, {
     carId: additional.carId,
-    divisionId: additional.divisionId,
+    divisionId,
     panelId: additional.panelId,
     taskCategory: "ADDITIONAL",
     sectionName: `${additional.panelName ?? "Panel"} · ${additional.jobName ?? "Tambahan"}`,
@@ -1174,6 +1251,7 @@ async function resolveWorkspaceCountdown(
     requiredGrade: row.requiredGrade ?? null,
     startDate: workspaceMeta.taskDate,
     deadlineDate: workspaceMeta.deadlineDate,
+    initialFinding: null,
     refTaskId: null,
     note: row.note ?? null,
   });
@@ -1209,7 +1287,7 @@ export interface JobPlanRepository {
   createAdditionalCountdown(
     params: ScopeParams,
     input: CreateJobPlanAdditionalCountdownRequest,
-  ): Promise<CountdownContextRow>;
+  ): Promise<AdditionalCountdownResult>;
   submitDrafts(
     params: ScopeParams & { actorId: string; actorName: string },
     drafts: JobPlanDraftRecord[],
@@ -1949,27 +2027,53 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
 
     if (params.kind === "panels") {
       if (!params.unitId) return [];
-      const queryParams = [...countdownParams, params.unitId];
-      const divisionSql = params.divisionId ? "AND jc.division_id = ?" : "";
-      if (params.divisionId) queryParams.push(params.divisionId);
+      const panelParams: unknown[] = [];
+      let panelVisibilitySql = "";
+      if (params.divisionId || !params.scope.canViewAllUnits) {
+        const panelScopeParams: unknown[] = [];
+        const panelScopeSql = buildScopeWhereClause(
+          params.scope,
+          params.employeeId,
+          panelScopeParams,
+          "jc_panel",
+          "p_scope_panel",
+        );
+        // Panel visibility follows the car, not a previous job on that panel: a new panel must be
+        // pickable before its first countdown exists. Scope stays on the countdown row of the car.
+        panelVisibilitySql = `
+          AND EXISTS (
+            SELECT 1
+            FROM sm_jobdesc_countdown jc_panel
+            ${panelScopeSql ? "LEFT JOIN sm_jobdesc_plan p_scope_panel ON p_scope_panel.core_id = jc_panel.id" : ""}
+            WHERE jc_panel.car_id = mp.car_id
+              AND COALESCE(jc_panel.status, 'PLAN') NOT IN ('DONE', 'CANCEL')
+              ${panelScopeSql ? `AND ${panelScopeSql}` : ""}
+              ${params.divisionId ? "AND jc_panel.division_id = ?" : ""}
+          )
+        `;
+        panelParams.push(...panelScopeParams);
+        if (params.divisionId) panelParams.push(params.divisionId);
+      }
+      const componentSql = params.componentName?.trim() ? "AND UPPER(TRIM(mp.component_name)) = UPPER(?)" : "";
+      const queryParams = [
+        params.unitId,
+        ...(componentSql ? [params.componentName!.trim()] : []),
+        ...panelParams,
+      ];
       const [rows] = (await pool.query(
         `
           SELECT DISTINCT
             CAST(mp.id AS CHAR) AS value,
-            COALESCE(mp.panel_name, mp.name_part, jc.section_name) AS label,
-            jc.car_id AS carId,
-            COALESCE(mp.panel_name, mp.name_part, jc.section_name) AS panelName,
+            COALESCE(mp.panel_name, mp.name_part) AS label,
+            mp.car_id AS carId,
+            COALESCE(mp.panel_name, mp.name_part) AS panelName,
             mp.component_name AS componentName,
             mp.name_part AS partName
-          FROM sm_jobdesc_countdown jc
-          ${scopeJoin}
-          LEFT JOIN master_panels mp ON mp.id = jc.panel_id
-          WHERE ${commonWhere}
-            AND jc.car_id = ?
-            ${divisionSql}
-            AND jc.panel_id IS NOT NULL
+          FROM master_panels mp
+          WHERE mp.car_id = ?
+            ${componentSql}
+            ${panelVisibilitySql}
           ORDER BY label ASC
-          LIMIT 300
         `,
         queryParams,
       )) as [PanelReferenceRow[], unknown];
@@ -2354,7 +2458,7 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
 
     try {
       await connection.beginTransaction();
-      const jobTypeId = await resolveOrCreateJobType(
+      const resolvedJobType = await resolveOrCreateJobType(
         connection,
         input.divisionId,
         input.jobTypeId,
@@ -2366,15 +2470,32 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
         input.carId,
         input.divisionId,
         input.panelId,
-        jobTypeId,
+        resolvedJobType.jobTypeId,
       );
       if (!additional || !additional.divisionId) {
         throw new Error("ADDITIONAL_REFERENCE_INCOMPLETE");
       }
+      const divisionId = additional.divisionId;
+
+      const existing = await findOpenAdditionalCountdown(connection, {
+        carId: additional.carId,
+        divisionId,
+        panelId: additional.panelId,
+        jobTypeId: additional.jobTypeId,
+      });
+      if (existing) {
+        await connection.commit();
+        return {
+          ...existing,
+          jobTypeId: additional.jobTypeId,
+          isNewJobType: resolvedJobType.isNewJobType,
+          isNewCore: false,
+        };
+      }
 
       const countdown = await createCountdownInTransaction(connection, params, {
         carId: additional.carId,
-        divisionId: additional.divisionId,
+        divisionId,
         panelId: additional.panelId,
         taskCategory: "ADDITIONAL",
         sectionName: input.jobDescription.trim() || `${additional.panelName ?? "Panel"} · ${additional.jobName ?? "Tambahan"}`,
@@ -2384,12 +2505,18 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
         requiredGrade: input.requiredGrade ?? null,
         startDate: input.taskDate,
         deadlineDate: input.deadlineDate,
+        initialFinding: input.initialFinding ?? null,
         refTaskId: null,
         note: input.note ?? null,
       });
 
       await connection.commit();
-      return countdown;
+      return {
+        ...countdown,
+        jobTypeId: additional.jobTypeId,
+        isNewJobType: resolvedJobType.isNewJobType,
+        isNewCore: true,
+      };
     } catch (error) {
       await connection.rollback();
       throw error;
@@ -2463,6 +2590,7 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
             divisionId: draft.divisionId,
             panelId: draft.panelId,
             jobTypeId: draft.jobTypeId,
+            jobTypeName: draft.jobName ?? draft.jobDescription,
             assignedUserId: draft.assignedUserId,
             targetHours: draft.targetHours,
             startTime: draft.startTime,

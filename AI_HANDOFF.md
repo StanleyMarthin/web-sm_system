@@ -1,9 +1,171 @@
 # AI_HANDOFF — SMSYSTEM Engineering Handoff
 
 > **Milestone: SMSYSTEM Production Foundation v1.0**
-> Status: **READY FOR PRODUCTION OBSERVATION**
-> Tanggal: 2026-09-25 · Branch: `main` · Commit terakhir: `95a905a`
+> Status: **REINITIALIZED FROM CURRENT WORKTREE**
+> Tanggal: 2026-09-28 · Branch: `main` · Commit terakhir: `61592e2`
 > Dokumen ini titik masuk untuk sesi berikutnya. Arsip sesi lama ada di bagian bawah.
+
+## 0. Reinitialization checkpoint (2026-09-28)
+
+Initialization ini dibuat setelah local Codex context/session history hilang. Source of truth yang dipakai: current worktree, tracked docs, git history, tests, contracts, dan implementation existing. Tidak ada migration/database/secret/config external yang dijalankan atau diubah.
+
+### Repository
+
+- Root: `/home/sahrulr/Documents/SM-MIS/smsystem`
+- Remote: `origin https://github.com/StanleyMarthin/web-sm_system.git`
+- Branch: `main`
+- HEAD: `61592e2 docs(repo): add engineering handoff`
+- Primary tracked reference docs: `README.md`, `SYSTEM_MAP_WEB.md`, `docs/job-plan-reference-architecture.md`, `RUN_PROJECT.md`, `MODUL_GUIDE.md`, and this `AI_HANDOFF.md`.
+- Related repo, jangan diedit tanpa task eksplisit:
+  - Mobile: `/home/sahrulr/StudioProjects/sm_workshop`
+  - Backend/mobile services: `/home/sahrulr/Documents/SM-MIS/be_sms`
+
+### Worktree state at initialization
+
+Worktree dirty sebelum ada edit handoff ini. Treat semua perubahan existing sebagai user work.
+
+- Modified tracked files: Job Plan API/service/repository/query, Unit Catalog repository/spec, web Job Plan page/planner/runtime client, Monitoring shell, Master Panel manager, Job Plan contract, MySQL instrumentation/spec.
+- Untracked: `apps/api/src/services/job-plan/query.spec.ts`, `codex-current-before-force-restore-20260926-140944/`, `codex-recovery-restore-20260926-140727/`, `codex-thread-history-before-force-restore-20260926-141304/`.
+- Diff stat before handoff update: 20 tracked files, 1083 insertions, 214 deletions.
+
+### Toolchain
+
+- Node: `.nvmrc` = `20`; `package.json` engines `node >=18.18.0`, `npm >=9.0.0`.
+- Package manager: npm workspaces is official (`package-lock.json`, README says `npm install`). `bun.lock` exists because API runtime/tests use Bun.
+- Workspace: `apps/*`, `packages/*`.
+- Web: Next.js 16.3.1, React 19, Tailwind 4, ESLint 9.
+- API: Bun runtime, TypeScript ESM, MySQL, Redis, R2/S3-compatible storage.
+- Contracts: `packages/contracts` exported by subpath through `package.json exports`; do not restore old tsconfig wildcard contract imports.
+- RTK: available at `/home/sahrulr/.local/bin/rtk`; use for high-output commands. `/home/sahrulr/.codex/RTK.md` was missing during initialization.
+
+### Architecture map
+
+Primary flow remains:
+
+```text
+Next page / route
+  -> apps/web/modules/<feature>
+  -> apps/web/shared/api/<feature>
+  -> apps/api/src/routes/<feature>
+  -> apps/api/src/services/<feature>
+  -> apps/api/src/repositories/<feature>
+  -> MySQL / Redis / R2 / external service
+```
+
+Contracts flow:
+
+```text
+packages/contracts + packages/permissions
+  -> API
+  -> Web
+```
+
+Business rules belong in API service/repository. Route handlers should stay thin. Repository owns SQL/data access. Frontend owns UI, state, and client interaction, not duplicate backend business rules.
+
+### Important module paths
+
+| Module | Web | API route | Service | Repository | Contract |
+|---|---|---|---|---|---|
+| Units / Master Panel | `apps/web/modules/units`, `apps/web/app/(app)/units/page.tsx` | `apps/api/src/routes/units/units.routes.ts` | `apps/api/src/services/units/units.service.ts` | `apps/api/src/repositories/units/units.repo.ts` | `packages/contracts/src/units/unit.ts`, `unit-panel.ts` |
+| Catalog / Unit Catalog | `apps/web/modules/units`, `apps/web/shared/api/units/unit-catalog.ts` | `apps/api/src/routes/units/unit-catalog.routes.ts` | `apps/api/src/services/units/unit-catalog.service.ts` | `apps/api/src/repositories/units/unit-catalog.repo.ts` | `packages/contracts/src/units/unit-catalog.ts` |
+| Countdown | `apps/web/modules/countdown`, `apps/web/app/(app)/countdown/page.tsx` | `apps/api/src/routes/countdown/countdown.routes.ts` | `apps/api/src/services/countdown/countdown.service.ts` | `apps/api/src/repositories/countdown/countdown.repo.ts` | `packages/contracts/src/countdown/countdown.ts` |
+| Job Plan / Actual | `apps/web/modules/job-plan`, `apps/web/app/(app)/job-plan/page.tsx` | `apps/api/src/routes/job-plan/job-plan.routes.ts`, `job-plan-runtime.routes.ts` | `apps/api/src/services/job-plan/job-plan.service.ts`, `job-plan-runtime-read-model.ts` | `apps/api/src/repositories/job-plan/job-plan.repo.ts` | `packages/contracts/src/job-plan/*` |
+| WO / WOV | `apps/web/modules/wo`, `apps/web/modules/vendor`, `apps/web/modules/workflow-job` | `apps/api/src/routes/wo/wo.routes.ts`, `vendor.routes.ts` | `apps/api/src/services/wo/wo.service.ts`, `vendor.service.ts` | `apps/api/src/repositories/wo/wo.repo.ts`, `vendor.repo.ts` | `packages/contracts/src/wo/wo.ts`, `vendor/vendor.ts` |
+| PR | `apps/web/modules/pr`, `apps/web/modules/workflow-job` | `apps/api/src/routes/pr/pr.routes.ts` | `apps/api/src/services/pr/pr.service.ts` | `apps/api/src/repositories/pr/pr.repo.ts` | `packages/contracts/src/pr/pr.ts` |
+| QC / QA | `apps/web/modules/qc`, `apps/web/modules/qa` | `apps/api/src/routes/qc/qc.routes.ts`, `qa.routes.ts` | `apps/api/src/services/qc/qc.service.ts`, `qa.service.ts` | `apps/api/src/repositories/qc/qc.repo.ts`, `qa.repo.ts` | `packages/contracts/src/qc/qc.ts`, `qa/qa.ts` |
+| Warehouse | `apps/web/modules/warehouse` | `apps/api/src/routes/warehouse/warehouse.routes.ts` | `apps/api/src/services/warehouse/warehouse.service.ts` | `apps/api/src/repositories/warehouse/warehouse.repo.ts` | `packages/contracts/src/warehouse/warehouse.ts` |
+| SPF | `apps/web/modules/spf`, `apps/web/shared/api/spf` | BFF/client contracts in web, external backend boundary | external SPF backend boundary | external SPF backend boundary | `apps/web/shared/api/spf/spf-contracts.ts` |
+| Users/Auth/RBAC | `apps/web/modules/users`, `roles`, `auth`, `apps/web/shared/auth` | `apps/api/src/routes/auth`, `users`, `roles` | `apps/api/src/services/auth`, `users`, `roles`, `rbac` | `apps/api/src/repositories/auth-context`, `users`, `roles` | `packages/contracts/src/auth`, `user`, `rbac`; `packages/permissions` |
+
+### Database and migrations
+
+- Migration path: `apps/api/db/migrations`.
+- Newest migrations at initialization:
+  - `20260924_catalog_panels_unit_scope.sql`
+  - `20260909_add_wo_master_panel_id.sql`
+  - `20260904_catalog_final_erd_cutover.sql`
+  - `20260905_catalog_auto_increment_keys.sql`
+  - `20260905_master_panels_cleanup.sql`
+  - `20260904_catalog_schema_cleanup.sql`
+  - `20260901_seed_unit_catalog_permissions.sql`
+  - `20260831_unit_preparation_additive.sql`
+- Catalog architecture uses `catalog_components`, `catalog_panels`, `catalog_panel_images`, `unit_catalog`, `unit_catalog_item_media`, `unit_catalog_item_mappings`.
+- Operational unit data uses `master_panels`; Countdown/Job Plan should reference operational panel identity (`panel_id`/master panels), not raw catalog item names.
+- `20260904_catalog_final_erd_cutover.sql` contains cutover `DROP TABLE IF EXISTS` and `RENAME TABLE` statements. Do not run migrations during normal coding without explicit instruction and backup context.
+
+### Job Plan E2E trace
+
+Trace verified from current code:
+
+```text
+apps/web/app/(app)/job-plan/page.tsx
+  -> apps/web/modules/job-plan/components/job-plan-planner-shell.tsx
+  -> apps/web/shared/api/job-plan/job-plan.ts
+  -> GET /api/job-plan or /api/job-plan/options/:kind
+  -> apps/api/src/app.ts route registration
+  -> apps/api/src/routes/job-plan/job-plan.routes.ts
+  -> apps/api/src/services/job-plan/job-plan.service.ts
+  -> apps/api/src/repositories/job-plan/job-plan.repo.ts
+  -> sm_jobdesc_plan, sm_jobdesc_countdown, master_panels, master_job_types,
+     sm_jobdesc_actual, sm_jobdesc_validation, cars, sm_divisi, sm_employee,
+     car_project_assignment, employee_managed_divisions, sm_jobdesc_wo
+```
+
+`docs/job-plan-reference-architecture.md` documents current lazy options flow:
+
+```text
+Frontend -> lazy Options API -> Job Plan Service -> Redis cache -> indexed MySQL query
+```
+
+Current option endpoints:
+
+- `GET /api/job-plan/options/divisions`
+- `GET /api/job-plan/options/employees?divisionId=...`
+- `GET /api/job-plan/options/units?divisionId=...`
+- `GET /api/job-plan/options/panels?divisionId=...&unitId=...`
+- `GET /api/job-plan/options/jobdesc?divisionId=...&unitId=...&panelId=...`
+
+### Auth, permission, and scope
+
+- Web session comes through API auth service and Redis-backed session store.
+- API auth pattern: `requireSession`/`requirePermission` middleware or feature-specific guards such as `requireJobPlanSession`.
+- `WebSession` is defined in `apps/api/src/services/auth/session.service.ts`; `AuthScope` is shared from `packages/contracts/src/auth/auth.ts`.
+- Permission constants live in `packages/permissions/src/index.ts`.
+- Unit/division access is scope-driven via `buildUserScope` and repositories should apply scope filters, not hardcode employee/division bypasses.
+
+### External infrastructure
+
+- MySQL: `apps/api/src/db/mysql.ts`; includes bounded pool, `queueLimit`, `connectTimeout`, `MAX_EXECUTION_TIME`, slow query instrumentation.
+- Redis: `apps/api/src/redis/client.ts`; fail-fast connection, bounded reconnect, `disableOfflineQueue`.
+- R2/S3-compatible storage: `apps/api/src/services/storage/r2.client.ts`, `r2-upload.service.ts`, upload ticket security under `apps/api/src/security/upload-ticket.ts`.
+- External HTTP: `apps/api/src/http/fetch-with-timeout.ts`, used by auth/calendar/runtime integrations.
+- No production DB, Redis, R2, env, or secret was touched during initialization.
+
+### Baseline validation 2026-09-28
+
+Commands run:
+
+- `rtk bun test packages/contracts packages/permissions`: PASS, 22 pass.
+- `rtk npm run typecheck --workspace @smsystem/api`: PASS.
+- `rtk npm run test --workspace @smsystem/api`: PASS, 320 pass, 2 skip. Logs include expected best-effort warnings for missing local env/Redis/MySQL notification/audit paths, exit code 0.
+- `rtk npm run lint:web`: PASS.
+- `rtk npm run build:web`: FAIL in sandbox because Next could not fetch Google Fonts.
+- `npm run build:web` with escalation/network: FAIL with Turbopack internal error at `apps/web/app/globals.css [app-client] (css)`, caused by creating new process and binding to a port, `Operation not permitted (os error 1)`. Panic logs were written under `/tmp/next-panic-*.log`.
+
+### Current risks
+
+- Worktree dirty and contains untracked recovery folders. Do not delete or revert without explicit user instruction.
+- Web build baseline is not green in this environment because Turbopack/PostCSS cannot bind a port. Treat as baseline failure until reproduced outside this execution sandbox.
+- Existing Job Plan and Unit Catalog changes appear active in worktree; continue from them, do not restart or rewrite the module.
+- Keep Catalog as reference/staging. Master Panel is operational data. Countdown/Job Plan should depend on operational references, not direct Catalog rows.
+
+### Next safe action
+
+For the next coding task, first read this checkpoint plus only the touched feature files. If the task touches current dirty Job Plan/Catalog work, inspect the relevant diffs before editing:
+
+```bash
+git diff -- apps/api/src/repositories/job-plan/job-plan.repo.ts apps/api/src/repositories/units/unit-catalog.repo.ts packages/contracts/src/job-plan/job-plan.ts apps/web/modules/job-plan/components/job-plan-planner-shell.tsx
+```
 
 ## 1. Milestone status
 

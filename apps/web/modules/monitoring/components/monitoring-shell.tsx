@@ -122,9 +122,9 @@ const actualStatusOptions = [
 
 const approvalStateOptions = [
   { label: "Draft", value: "DRAFT" },
-  { label: "Review Divisi", value: "DIVISION_REVIEW" },
-  { label: "Review Unit", value: "UNIT_REVIEW" },
-  { label: "Review Management", value: "MANAGEMENT_REVIEW" },
+  { label: "Review QA", value: "DIVISION_REVIEW" },
+  { label: "Review KP", value: "UNIT_REVIEW" },
+  { label: "Review PM", value: "MANAGEMENT_REVIEW" },
   { label: "Approved", value: "APPROVED" },
   { label: "Rejected", value: "REJECTED" },
   { label: "Cancelled", value: "CANCELLED" },
