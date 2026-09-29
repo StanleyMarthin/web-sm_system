@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { jobPlanRuntimeReadItemSchema } from "@smsystem/contracts/job-plan-runtime";
 import {
+  buildCountdownPanelOptions,
   buildCreateJobPlanRuntimePayload,
   buildEditDraftJobPlanRuntimePayload,
   buildJobPlanDraftRecord,
@@ -15,6 +16,7 @@ import {
   jobPlanPanelNames,
   jobPlanPartNames,
   jobPlanWindowMinutes,
+  isJobPlanCountdownPlannable,
   minutesToDuration,
   minutesToTime,
   toJobPlanDraftDisplayRows,
@@ -224,6 +226,21 @@ describe("Job Plan planner helpers", () => {
       finishTime: "09:39",
       note: "Periksa sisi bawah",
     });
+  });
+
+  test("keeps normal plan panel choices limited to plannable countdown panels", () => {
+    expect(isJobPlanCountdownPlannable({ ...countdown, availablePlanHours: 0 })).toBe(false);
+    expect(isJobPlanCountdownPlannable({ ...countdown, status: "READY_QC" })).toBe(false);
+
+    expect(buildCountdownPanelOptions([
+      { ...countdown, panelId: 10, panelName: "Front Bumper", availablePlanHours: 1 },
+      { ...countdown, value: "CORE-2", panelId: 11, panelName: "Rear Door", availablePlanHours: 0 },
+      { ...countdown, value: "CORE-3", panelId: 12, panelName: "Hood", status: "REJECTED" },
+      { ...countdown, value: "CORE-4", panelId: 13, panelName: "Interior Trim", divisionId: 8, availablePlanHours: 1 },
+      { ...countdown, value: "CORE-5", panelId: null, panelName: "Tanpa Panel", availablePlanHours: 1 },
+    ], { divisionId: 7, carId: "220S" })).toEqual([
+      { value: "10", label: "Front Bumper" },
+    ]);
   });
 
   test("keeps legacy mobile draft remaining hours visible without countdown reference", () => {

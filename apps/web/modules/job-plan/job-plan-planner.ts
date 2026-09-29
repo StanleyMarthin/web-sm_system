@@ -120,6 +120,37 @@ export function resolveJobPlanDivisionName(
   })?.trim() ?? "-";
 }
 
+export function isJobPlanCountdownPlannable(item: JobPlanCountdownOption) {
+  const status = String(item.status ?? "PLAN").trim().toUpperCase();
+  const availableHours = item.availablePlanHours ?? item.remainingHours ?? 0;
+  return availableHours > 0 && !["DONE", "CANCEL", "READY_QC", "QC_READY", "REJECTED"].includes(status);
+}
+
+export function buildCountdownPanelOptions(
+  countdowns: JobPlanCountdownOption[],
+  filters: { divisionId: number | null; carId: string },
+) {
+  const seen = new Set<string>();
+  return countdowns
+    .filter((item) =>
+      isJobPlanCountdownPlannable(item)
+      && item.panelId !== null
+      && item.panelId !== undefined
+      && (filters.divisionId === null || item.divisionId === filters.divisionId)
+      && (!filters.carId || item.carId === filters.carId)
+    )
+    .map((item) => ({
+      value: String(item.panelId),
+      label: item.panelName?.trim() || "-",
+    }))
+    .filter((item) => {
+      if (!item.value || seen.has(item.value)) return false;
+      seen.add(item.value);
+      return true;
+    })
+    .sort((left, right) => left.label.localeCompare(right.label));
+}
+
 export function buildJobPlanDraftRecord(
   draft: JobPlanRuntimePlannerDraft,
   references: {

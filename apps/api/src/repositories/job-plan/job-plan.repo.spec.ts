@@ -89,6 +89,9 @@ describe("MySqlJobPlanRepository countdown alignment", () => {
     expect(countdownSql).toContain("availablePlanHours");
     expect(countdownSql).toContain("planCapacity.reservedPlanHours");
     expect(countdownSql).toContain("> 0");
+    expect(countdownSql).toContain("'READY_QC'");
+    expect(countdownSql).toContain("'QC_READY'");
+    expect(countdownSql).toContain("'REJECTED'");
     expect(countdownSql.includes("AND COALESCE(jc.remaining_hours, 0) > 0")).toBe(false);
   });
 

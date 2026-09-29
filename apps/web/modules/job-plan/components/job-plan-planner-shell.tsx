@@ -16,11 +16,13 @@ import { ActionButton, CompactDateInput, PageHeader } from "@/shared/ui/compact"
 import { useSweetAlert } from "@/shared/ui/sweet-alert";
 import { SmartSelectCellEditor, type SmartSelectOption } from "@/modules/units/components/master-panel-smart-select-editor";
 import {
+  buildCountdownPanelOptions,
   buildJobPlanDraftRecord,
   buildEditDraftJobPlanRuntimePayload,
   createJobPlanRuntimeDraft,
   createEditDraftFromRow,
   findJobPlanPanelValue,
+  isJobPlanCountdownPlannable,
   jobPlanBreakMinutesForWindow,
   jobPlanComponentNames,
   jobPlanPanelNames,
@@ -254,11 +256,6 @@ function numberValue(value: unknown) {
   if (value === null || value === undefined || value === "") return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
-}
-
-function isPlanableCountdownOption(item: JobPlanCountdownOption) {
-  const status = String(item.status ?? "PLAN").trim().toUpperCase();
-  return !["DONE", "CANCEL", "READY_QC", "QC_READY", "REJECTED"].includes(status);
 }
 
 function statusLabel(row: PlannerRow) {
@@ -792,7 +789,7 @@ export function JobPlanPlannerShell({
     [countdowns, lazyJobs],
   );
   const selectedContext = useMemo(() => contextForCore(activeCountdowns, initialCoreId), [activeCountdowns, initialCoreId]);
-  const planableCountdowns = useMemo(() => activeCountdowns.filter(isPlanableCountdownOption), [activeCountdowns]);
+  const planableCountdowns = useMemo(() => activeCountdowns.filter(isJobPlanCountdownPlannable), [activeCountdowns]);
   const technicalDivisionOptions = useMemo(() => {
     const fromReferences = divisions
       .filter((item) => item.isTechnical === true || item.isTeknis === true)
@@ -862,16 +859,7 @@ export function JobPlanPlannerShell({
   function panelOptions(row: Partial<PlannerRow> | Partial<JobPlanRuntimePlannerDraft> | null | undefined) {
     const divisionId = rowDivisionId(row);
     const carId = rowCarId(row);
-    const cacheKey = `${divisionId ?? "all"}:${carId}`;
-    const cached = lazyPanels[cacheKey];
-    if (cached) return cached.map((item) => ({ value: item.value, label: item.label, code: item.code }));
-    const countdownPanels = activeCountdowns
-      .filter((item) => (divisionId === null || item.divisionId === divisionId) && (!carId || item.carId === carId))
-      .map((item) => ({ value: String(item.panelId ?? ""), label: item.panelName ?? "-" }));
-    const masterPanels = panels
-      .filter((item) => !carId || item.carId === carId)
-      .map((item) => ({ value: item.value, label: item.panelName ?? item.label }));
-    return uniqueByValue([...countdownPanels, ...masterPanels]);
+    return buildCountdownPanelOptions(activeCountdowns, { divisionId, carId });
   }
 
   function additionalJobOptions(row: Partial<PlannerRow> | Partial<JobPlanRuntimePlannerDraft> | null | undefined) {
@@ -900,7 +888,7 @@ export function JobPlanPlannerShell({
     const sourceCountdowns = lazyJobs[cacheKey] ?? activeCountdowns;
     const countdownOptions = sourceCountdowns
       .filter((item) =>
-        isPlanableCountdownOption(item)
+        isJobPlanCountdownPlannable(item)
         && (divisionId === null || item.divisionId === divisionId)
         && (!carId || item.carId === carId)
         && (panelId === null || item.panelId === panelId)
@@ -1380,7 +1368,7 @@ export function JobPlanPlannerShell({
       setError("Belum ada countdown yang bisa dibuat plan. Countdown DONE, CANCEL, REJECTED, atau butuh QC tidak ditampilkan.");
       return;
     }
-    const draft = createJobPlanRuntimeDraft(selectedContext && isPlanableCountdownOption(selectedContext) ? selectedContext : null);
+    const draft = createJobPlanRuntimeDraft(selectedContext && isJobPlanCountdownPlannable(selectedContext) ? selectedContext : null);
     const nextDraft = {
       ...draft,
       taskDate: initialDate ?? draft.taskDate,

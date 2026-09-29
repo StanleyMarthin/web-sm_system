@@ -1734,7 +1734,7 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
             GROUP BY p.core_id
           ) planCapacity ON planCapacity.core_id = jc.id
           LEFT JOIN sm_jobdesc_plan p_scope ON p_scope.core_id = jc.id
-          WHERE COALESCE(jc.status, 'PLAN') NOT IN ('DONE', 'CANCEL')
+          WHERE COALESCE(jc.status, 'PLAN') NOT IN ('DONE', 'CANCEL', 'READY_QC', 'QC_READY', 'REJECTED')
             ${params.countdownIds?.length ? "" : "AND ROUND(GREATEST(COALESCE(jc.remaining_hours, 0) - COALESCE(planCapacity.reservedPlanHours, 0), 0), 2) > 0"}
             ${countdownScopeSql ? `AND ${countdownScopeSql}` : ""}
             ${countdownIdSql}
