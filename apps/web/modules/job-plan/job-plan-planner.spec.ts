@@ -16,6 +16,7 @@ import {
   jobPlanWindowMinutes,
   minutesToDuration,
   minutesToTime,
+  toJobPlanDraftDisplayRows,
   toLocalDateValue,
   toJobPlanRuntimeDisplayRows,
   validateJobPlanRuntimeDraft,
@@ -173,6 +174,49 @@ describe("Job Plan planner helpers", () => {
     ], [], [employee]);
 
     expect(rows[0]?.divisionName).toBe("BODY");
+  });
+
+  test("keeps legacy mobile draft remaining hours visible without countdown reference", () => {
+    const rows = toJobPlanDraftDisplayRows([
+      {
+        planId: "draft-1",
+        coreId: "CORE-MISSING",
+        taskDate: "2026-09-15",
+        unitName: "MB 220S",
+        divisionId: 7,
+        divisionName: "BODY",
+        panelName: "Panel Body",
+        panelSectionName: "Panel Body",
+        jobName: null,
+        masterJobName: "Repair",
+        assignedUserId: "EMP-1",
+        assignedUserName: "Asep",
+        targetHours: 1.65,
+        targetDailyHours: 1.65,
+        targetTotalHours: 1.65,
+        startTime: "08:00",
+        finishTime: "09:39",
+        isOvertime: false,
+        isPriority: false,
+        status: "DRAFT",
+        jobDescription: "Repair",
+        instructionText: "Repair part",
+        note: "Repair part",
+        draftSourceType: "COUNTDOWN",
+        draftCarId: "220S",
+        draftPanelId: 10,
+        draftJobTypeId: null,
+        draftDeadlineDate: null,
+        draftIsRework: false,
+        draftIsNonTechnicalJob: false,
+        availablePlanHours: null,
+        remainingHours: null,
+        progressPercent: null,
+      },
+    ], [], [employee]);
+
+    expect(rows[0]?.panelName).toBe("Panel Body");
+    expect(rows[0]?.remainingText).toBe("01:39");
   });
 
   test("hides cancelled rows from the operational grid", () => {

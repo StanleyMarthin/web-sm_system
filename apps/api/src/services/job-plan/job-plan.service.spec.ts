@@ -69,6 +69,29 @@ describe("DefaultJobPlanService draft sync", () => {
         jobTypes: [],
         statuses: [],
       }),
+      listDraftReferences: async () => ({
+        countdowns: new Map([
+          ["CORE-1", {
+            value: "CORE-1",
+            label: "Unit A · Panel A · 4j",
+            carId: "CAR-1",
+            panelId: 11,
+            divisionId: 7,
+            unitName: "Unit A",
+            divisionName: "Divisi A",
+            panelName: "Panel A",
+            panelSectionName: "Panel A",
+            jobName: "Pasang panel",
+            qaIds: [],
+            qaNames: [],
+            targetTotalHours: 4,
+            remainingHours: 4,
+            availablePlanHours: 4,
+            progressPercent: 0,
+          }],
+        ]),
+        panels: new Map([[11, { panelName: "Panel A", componentName: null, partName: "Panel A" }]]),
+      }),
     };
     const redis = {
       get: async (key: string) =>
@@ -80,10 +103,10 @@ describe("DefaultJobPlanService draft sync", () => {
               items: [{
                 draftItemId: "draft-mobile",
                 sourceType: "ADDITIONAL",
+                coreId: "CORE-1",
                 carId: "CAR-1",
                 divisionId: 7,
                 panelId: 11,
-                panelName: "Panel A",
                 jobTypeId: "JOB-1",
                 assignedUserId: "PIC-1",
                 assignedUserName: "PIC One",
@@ -115,6 +138,8 @@ describe("DefaultJobPlanService draft sync", () => {
     expect(result.data[0]?.planId).toBe("draft-mobile");
     expect(result.data[0]?.draftSourceType).toBe("ADDITIONAL");
     expect(result.data[0]?.divisionName).toBe("Divisi A");
+    expect(result.data[0]?.panelName).toBe("Panel A");
+    expect(result.data[0]?.remainingHours).toBe(4);
     expect(result.summary.totalHours).toBe(2);
   });
 

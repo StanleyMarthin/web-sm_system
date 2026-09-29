@@ -125,6 +125,7 @@ const JOB_PLAN_OPTION_TTL_SECONDS: Record<JobPlanOptionKind, number> = {
 };
 
 type JobPlanReferences = Awaited<ReturnType<JobPlanRepository["listReferences"]>>;
+type JobPlanDraftReferences = Awaited<ReturnType<NonNullable<JobPlanRepository["listDraftReferences"]>>>;
 
 function buildOptionCacheKey(employeeId: string, query: JobPlanOptionsQuery): string {
   return [
@@ -329,6 +330,20 @@ function resolveReferenceDivisionName(
   }
 
   return references.divisions.find((division) => String(division.value) === String(divisionId))?.label ?? null;
+}
+
+function buildReferenceCountdownMap(references: JobPlanReferences) {
+  return new Map(references.countdowns.map((countdown) => [countdown.value, countdown]));
+}
+
+function buildReferencePanelMap(references: JobPlanReferences) {
+  return new Map<number, { panelName: string | null; componentName: string | null; partName: string | null }>(
+    references.panels.map((panel) => [Number(panel.value), {
+      panelName: panel.panelName,
+      componentName: panel.componentName ?? null,
+      partName: panel.partName ?? null,
+    }]),
+  );
 }
 
 function pushPositiveInt(target: Set<number>, value: unknown) {
@@ -873,6 +888,35 @@ export class DefaultJobPlanService implements JobPlanService {
     }
   }
 
+  private async listMissingDraftReferences(
+    session: WebSession,
+    drafts: JobPlanDraftRecord[],
+    references: JobPlanReferences,
+  ): Promise<JobPlanDraftReferences> {
+    const countdownMap = buildReferenceCountdownMap(references);
+    const panelMap = buildReferencePanelMap(references);
+    const countdownIds = [...new Set(drafts
+      .map((draft) => draft.coreId)
+      .filter((value): value is string => typeof value === "string" && value.length > 0 && !countdownMap.has(value)))];
+    const panelIds = [...new Set(drafts
+      .map((draft) => draft.panelId)
+      .filter((value): value is number => value !== null && !panelMap.has(value)))];
+
+    if (!this.repository.listDraftReferences || (countdownIds.length === 0 && panelIds.length === 0)) {
+      return {
+        countdowns: new Map(),
+        panels: new Map(),
+      };
+    }
+
+    return this.repository.listDraftReferences({
+      employeeId: session.user.employeeId,
+      scope: session.user.scope,
+      countdownIds,
+      panelIds,
+    });
+  }
+
   async list(session: WebSession, query: JobPlanGridQuery): Promise<JobPlanListResult> {
     const [listResult, references] = await Promise.all([
       this.repository.list({
@@ -892,16 +936,31 @@ export class DefaultJobPlanService implements JobPlanService {
     );
 
     const visibleDrafts = allDrafts.filter((draft) => matchesDraftFilters(draft, query));
-    const countdownMap = new Map(references.countdowns.map((countdown) => [countdown.value, countdown]));
+    const draftReferences = await this.listMissingDraftReferences(session, visibleDrafts, references);
+    const countdownMap = buildReferenceCountdownMap(references);
+    const panelMap = buildReferencePanelMap(references);
+    draftReferences.countdowns.forEach((countdown, key) => countdownMap.set(key, countdown));
+    draftReferences.panels.forEach((panel, key) => panelMap.set(key, panel));
     const draftRows = visibleDrafts.map((draft) => {
       const record = mapDraftToRecord(draft);
       const countdown = draft.coreId ? countdownMap.get(draft.coreId) : null;
+      const panel = draft.panelId ? panelMap.get(draft.panelId) : null;
+      const panelName = countdown?.panelName
+        ?? countdown?.panelSectionName
+        ?? record.panelName
+        ?? panel?.panelName
+        ?? panel?.partName
+        ?? null;
       const referenceDivisionName = resolveReferenceDivisionName(references, record.divisionId);
 
       if (!countdown) {
         return {
           ...record,
           divisionName: record.divisionName === "-" ? referenceDivisionName ?? record.divisionName : record.divisionName,
+          panelName,
+          panelSectionName: panelName ?? record.panelSectionName,
+          remainingHours: record.remainingHours ?? record.availablePlanHours ?? record.targetHours,
+          availablePlanHours: record.availablePlanHours ?? record.targetHours,
         };
       }
 
@@ -910,8 +969,8 @@ export class DefaultJobPlanService implements JobPlanService {
         unitName: countdown.unitName ?? record.unitName,
         divisionId: countdown.divisionId ?? record.divisionId,
         divisionName: countdown.divisionName ?? referenceDivisionName ?? record.divisionName,
-        panelName: countdown.panelName ?? countdown.panelSectionName ?? record.panelName,
-        panelSectionName: countdown.panelSectionName ?? record.panelSectionName,
+        panelName,
+        panelSectionName: countdown.panelSectionName ?? panelName ?? record.panelSectionName,
         jobName: countdown.jobName ?? record.jobName,
         availablePlanHours: countdown.availablePlanHours ?? null,
         remainingHours: countdown.remainingHours,

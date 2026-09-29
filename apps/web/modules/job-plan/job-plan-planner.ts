@@ -330,6 +330,7 @@ export function toJobPlanDraftDisplayRows(
     const countdown = countdownByCore.get(draft.coreId);
     const employee = employeeById.get(draft.assignedUserId);
     const targetMinutes = Math.round(draft.targetHours * 60);
+    const remainingHours = draft.remainingHours ?? countdown?.remainingHours ?? draft.availablePlanHours ?? draft.targetHours;
     return {
       clientId: `legacy-draft-${draft.planId}`,
       isNew: false,
@@ -356,7 +357,7 @@ export function toJobPlanDraftDisplayRows(
       finishTime: draft.finishTime ?? "-",
       durationText: minutesToDuration(targetMinutes),
       targetTotalText: minutesToDuration(Math.round((draft.targetTotalHours ?? draft.targetHours) * 60)),
-      remainingText: minutesToDuration(Math.round((draft.remainingHours ?? countdown?.remainingHours ?? 0) * 60)),
+      remainingText: minutesToDuration(Math.round(remainingHours * 60)),
       approval: formatJobPlanRuntimeApproval("DRAFT"),
       approvalState: "DRAFT",
       execution: formatJobPlanRuntimeExecution("NOT_STARTED"),

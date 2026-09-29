@@ -131,6 +131,7 @@ interface CountdownReferenceRow extends RowDataPacket {
   unitName: string;
   divisionName: string;
   panelName?: string | null;
+  panelSectionName?: string | null;
   jobName?: string | null;
   kpId?: string | null;
   kpName?: string | null;
@@ -214,6 +215,15 @@ interface AdditionalCountdownResult extends CountdownContextRow {
   jobTypeId: string;
   isNewJobType: boolean;
   isNewCore: boolean;
+}
+
+export interface JobPlanDraftReferenceMaps {
+  countdowns: Map<string, JobPlanGridReference["countdowns"][number]>;
+  panels: Map<number, {
+    panelName: string | null;
+    componentName: string | null;
+    partName: string | null;
+  }>;
 }
 
 interface DivisionTechnicalRow extends RowDataPacket {
@@ -1277,6 +1287,10 @@ export interface JobPlanRepository {
     mode: JobPlanGridQuery["mode"];
     countdownIds?: string[];
   }): Promise<JobPlanGridReference>;
+  listDraftReferences?(params: ScopeParams & {
+    countdownIds: string[];
+    panelIds: number[];
+  }): Promise<JobPlanDraftReferenceMaps>;
   listOptions(params: JobPlanOptionsParams): Promise<JobPlanOption[]>;
   getPicLoad(
     employeeId: string,
@@ -1921,6 +1935,125 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
         { value: "DONE", label: "DONE" },
         { value: "REJECTED", label: "REJECTED" },
       ],
+    };
+  }
+
+  async listDraftReferences(
+    params: ScopeParams & { countdownIds: string[]; panelIds: number[] },
+  ): Promise<JobPlanDraftReferenceMaps> {
+    const pool = this.poolFactory();
+    const countdownRowsPromise = params.countdownIds.length > 0
+      ? pool.query<CountdownReferenceRow[]>(
+        `
+          SELECT
+            jc.id AS value,
+            CONCAT(
+              COALESCE(c.unit_name, jc.car_id),
+              ' · ',
+              COALESCE(mjt.job_name, mp.name_part, mp.panel_name, jc.section_name),
+              ' · ',
+              ROUND(COALESCE(jc.remaining_hours, 0), 2),
+              'j'
+            ) AS label,
+            jc.car_id AS carId,
+            jc.panel_id AS panelId,
+            jc.division_id AS divisionId,
+            COALESCE(c.unit_name, jc.car_id) AS unitName,
+            COALESCE(d.name, '-') AS divisionName,
+            COALESCE(mp.panel_name, mp.name_part, jc.section_name) AS panelName,
+            jc.section_name AS panelSectionName,
+            mjt.job_name AS jobName,
+            cpa.kp_id AS kpId,
+            kp.full_name AS kpName,
+            GROUP_CONCAT(DISTINCT qa.employee_id ORDER BY qa.employee_id SEPARATOR '||') AS qaIds,
+            GROUP_CONCAT(DISTINCT qa.full_name ORDER BY qa.employee_id SEPARATOR '||') AS qaNames,
+            ROUND(COALESCE(jc.target_hours, jc.target_hours_initial, 0), 2) AS targetTotalHours,
+            ROUND(COALESCE(jc.remaining_hours, 0), 2) AS remainingHours,
+            ROUND(COALESCE(jc.remaining_hours, 0), 2) AS availablePlanHours,
+            ROUND(COALESCE(jc.actual_progress_percent, 0), 2) AS progressPercent,
+            COALESCE(jc.status, 'PLAN') AS status
+          FROM sm_jobdesc_countdown jc
+          LEFT JOIN cars c ON c.id = jc.car_id
+          LEFT JOIN car_project_assignment cpa ON cpa.car_id = jc.car_id AND cpa.ended_at IS NULL
+          LEFT JOIN sm_employee kp ON kp.employee_id = cpa.kp_id
+          LEFT JOIN employee_managed_divisions emd ON emd.division_id = jc.division_id
+          LEFT JOIN sm_employee qa ON qa.employee_id = emd.employee_id AND qa.is_active = 1
+          LEFT JOIN master_panels mp ON mp.id = jc.panel_id
+          LEFT JOIN sm_divisi d ON d.id = jc.division_id
+          LEFT JOIN master_job_types mjt ON mjt.id = jc.job_type_id
+          WHERE jc.id IN (${params.countdownIds.map(() => "?").join(", ")})
+          GROUP BY
+            jc.id,
+            jc.car_id,
+            jc.panel_id,
+            jc.division_id,
+            c.unit_name,
+            d.name,
+            mp.panel_name,
+            mp.name_part,
+            jc.section_name,
+            mjt.job_name,
+            cpa.kp_id,
+            kp.full_name,
+            jc.target_hours,
+            jc.target_hours_initial,
+            jc.remaining_hours,
+            jc.actual_progress_percent,
+            jc.status
+        `,
+        params.countdownIds,
+      )
+      : Promise.resolve<[CountdownReferenceRow[], unknown]>([[], undefined]);
+
+    const panelRowsPromise = params.panelIds.length > 0
+      ? pool.query<PanelReferenceRow[]>(
+        `
+          SELECT
+            CAST(mp.id AS CHAR) AS value,
+            COALESCE(mp.panel_name, mp.name_part) AS label,
+            mp.car_id AS carId,
+            COALESCE(mp.panel_name, mp.name_part) AS panelName,
+            mp.component_name AS componentName,
+            mp.name_part AS partName
+          FROM master_panels mp
+          WHERE mp.id IN (${params.panelIds.map(() => "?").join(", ")})
+        `,
+        params.panelIds,
+      )
+      : Promise.resolve<[PanelReferenceRow[], unknown]>([[], undefined]);
+
+    const [[countdownRows], [panelRows]] = await Promise.all([
+      countdownRowsPromise,
+      panelRowsPromise,
+    ]);
+
+    return {
+      countdowns: new Map(countdownRows.map((row) => [row.value, {
+        value: row.value,
+        label: row.label,
+        carId: row.carId,
+        panelId: row.panelId,
+        divisionId: row.divisionId,
+        unitName: row.unitName,
+        divisionName: row.divisionName,
+        panelName: row.panelName ?? undefined,
+        panelSectionName: (row as CountdownReferenceRow & { panelSectionName?: string | null }).panelSectionName ?? undefined,
+        jobName: row.jobName ?? undefined,
+        kpId: row.kpId ?? undefined,
+        kpName: row.kpName ?? undefined,
+        qaIds: row.qaIds ? row.qaIds.split("||").filter(Boolean) : [],
+        qaNames: row.qaNames ? row.qaNames.split("||").filter(Boolean) : [],
+        targetTotalHours: row.targetTotalHours === null ? null : Number(row.targetTotalHours),
+        remainingHours: Number(row.remainingHours ?? 0),
+        availablePlanHours: row.availablePlanHours === null ? null : Number(row.availablePlanHours),
+        progressPercent: row.progressPercent === null ? null : Number(row.progressPercent),
+        status: row.status ?? undefined,
+      }])),
+      panels: new Map(panelRows.map((row) => [Number(row.value), {
+        panelName: row.panelName,
+        componentName: row.componentName,
+        partName: row.partName,
+      }])),
     };
   }
 
