@@ -78,6 +78,11 @@ export function LoginShell({ sessionMessage }: LoginShellProps) {
       return;
     }
 
+    function unlockSubmit() {
+      submitLockRef.current = false;
+      setIsSubmitting(false);
+    }
+
     submitLockRef.current = true;
     setIsSubmitting(true);
     setError(null);
@@ -104,9 +109,10 @@ export function LoginShell({ sessionMessage }: LoginShellProps) {
       }
 
       setError(result.message);
-    } finally {
-      submitLockRef.current = false;
-      setIsSubmitting(false);
+      unlockSubmit();
+    } catch {
+      setError("Layanan login tidak dapat dihubungi. Coba beberapa saat lagi.");
+      unlockSubmit();
     }
   }
 
@@ -169,6 +175,7 @@ export function LoginShell({ sessionMessage }: LoginShellProps) {
                 id="employeeId"
                 placeholder="SM-00.000"
                 {...register("employeeId")}
+                disabled={isSubmitting}
                 className="h-11 w-full rounded-lg border border-[#606062] bg-[#2b2b2c] pl-11 pr-4 text-[16px] text-[#efeff0] outline-none transition-colors placeholder:text-[#8e8d91] focus:border-[#fdb360] focus:bg-[#373739] disabled:cursor-not-allowed disabled:text-[#6f6f71]"
               />
             </div>
@@ -189,11 +196,13 @@ export function LoginShell({ sessionMessage }: LoginShellProps) {
                 type={showPassword ? "text" : "password"}
                 placeholder="••••••"
                 {...register("password")}
+                disabled={isSubmitting}
                 className="h-11 w-full rounded-lg border border-[#606062] bg-[#2b2b2c] pl-11 pr-11 text-[16px] text-[#efeff0] outline-none transition-colors placeholder:text-[#8e8d91] focus:border-[#fdb360] focus:bg-[#373739] disabled:cursor-not-allowed disabled:text-[#6f6f71]"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword((prev) => !prev)}
+                disabled={isSubmitting}
                 className="absolute right-3.5 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center text-[#a1a0a5] transition-colors hover:text-[#fdb360]"
                 tabIndex={-1}
               >
