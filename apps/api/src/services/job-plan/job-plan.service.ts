@@ -223,7 +223,7 @@ function mapDraftToRecord(draft: JobPlanDraftRecord): JobPlanRecord {
     isPriority: draft.isPriority,
     status: "DRAFT",
     jobDescription: draft.jobDescription,
-    instructionText: draft.note ?? draft.jobDescription,
+    instructionText: draft.note ?? "",
     note: draft.note ?? null,
     draftSourceType: draft.sourceType,
     draftCarId: draft.carId ?? null,

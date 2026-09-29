@@ -5,19 +5,18 @@ import type { JobPlanMode, JobPlanRecord } from "@smsystem/contracts/job-plan";
 import type { CellKeyDownEvent, CellValueChangedEvent, ColDef, GridApi, GridReadyEvent, ICellRendererParams, SelectionChangedEvent, TabToNextCellParams } from "ag-grid-community";
 import { useEffect, useMemo, useState } from "react";
 import {
-  createJobPlan,
   createJobPlanCommandId,
   fetchJobPlanRuntimeList,
   mutateJobPlanApproval,
 } from "@/shared/api/job-plan/job-plan-runtime";
-import { createJobPlanAdditionalCountdown, fetchJobPlanOptions } from "@/shared/api/job-plan/job-plan";
+import { createJobPlanAdditionalCountdown, fetchJobPlanOptions, saveJobPlanDraft } from "@/shared/api/job-plan/job-plan";
 import { SmsAgGrid } from "@/shared/datagrid/sms-ag-grid";
 import { DataGridStatusBadge } from "@/shared/datagrid/status-badge";
 import { ActionButton, CompactDateInput, PageHeader } from "@/shared/ui/compact";
 import { useSweetAlert } from "@/shared/ui/sweet-alert";
 import { SmartSelectCellEditor, type SmartSelectOption } from "@/modules/units/components/master-panel-smart-select-editor";
 import {
-  buildCreateJobPlanRuntimePayload,
+  buildJobPlanDraftRecord,
   buildEditDraftJobPlanRuntimePayload,
   createJobPlanRuntimeDraft,
   createEditDraftFromRow,
@@ -29,6 +28,7 @@ import {
   jobPlanWindowMinutes,
   minutesToDuration,
   minutesToTime,
+  resolveJobPlanDivisionName,
   toLocalDateValue,
   toJobPlanRuntimeDisplayRows,
   toJobPlanDraftDisplayRows,
@@ -141,7 +141,6 @@ function draftToDisplay(
   const employee = employees.find((item) => item.value === draft.employeeId);
   const panel = panels.find((item) => item.value === String(draft.panelId ?? "") && (!item.carId || item.carId === draft.carId));
   const jobType = jobTypes.find((item) => item.value === draft.jobTypeId);
-  const division = divisions.find((item) => item.value === String(draft.divisionId ?? ""));
   const startMinute = Number(draft.startTime.slice(0, 2)) * 60 + Number(draft.startTime.slice(3, 5));
   const durationHour = Number(draft.durationText.slice(0, 2));
   const durationMinute = Number(draft.durationText.slice(3, 5));
@@ -161,7 +160,7 @@ function draftToDisplay(
     panelName: countdown?.panelName ?? panel?.panelName ?? "-",
     instructionText: draft.note,
     employeeName: employee?.label ?? "",
-    divisionName: countdown?.divisionName ?? division?.label ?? jobType?.divisionName ?? "-",
+    divisionName: resolveJobPlanDivisionName(draft.divisionId, divisions, employees, countdowns, countdown?.divisionName ?? jobType?.divisionName),
     jobDescription: draft.jobDescription || jobType?.jobName || draft.jobDescription,
     finishTime: minutesToTime(startMinute + duration),
     durationText: draft.durationText,
@@ -338,7 +337,6 @@ function buildReportTableHtml(rows: PlannerRow[], meta: { date: string; kp: stri
       <td>${escapeHtml(`${row.taskDate} ${row.startTime}`)}</td>
       <td>${escapeHtml(`${row.taskDate} ${row.finishTime}`)}</td>
       <td>${escapeHtml(row.durationText)}</td>
-      <td>${escapeHtml(joinDistinct([row.note, row.instructionText]))}</td>
     </tr>
     `;
   }).join("");
@@ -396,10 +394,9 @@ function buildReportTableHtml(rows: PlannerRow[], meta: { date: string; kp: stri
         <th rowspan="2">NAMA UNIT</th>
         <th rowspan="2">NAMA PANEL / PART</th>
         <th rowspan="2">JOB DESCRIPTION</th>
-        <th rowspan="2">KETERANGAN</th>
+        <th rowspan="2">INSTRUKSI / SPOK</th>
         <th colspan="4" class="plan-group">PLAN</th>
         <th rowspan="2" class="target-today">TARGET</th>
-        <th rowspan="2">CATATAN / KETERANGAN</th>
       </tr>
       <tr>
         <th>TARGET AWAL</th>
@@ -716,12 +713,12 @@ function AdditionalJobDialog({
             {breakTooLong ? <div className="mt-1 text-destructive">Jam istirahat melebihi rentang jam kerja.</div> : null}
           </div>
           <label className="text-[11px] text-muted-foreground">
-            Keterangan
+            Instruksi / SPOK
             <input
               value={value.note}
               onChange={(event) => update({ note: event.target.value })}
               className="mt-1 h-9 w-full border border-border bg-background px-2 text-[13px] text-foreground outline-none focus:border-primary/45"
-              placeholder="Opsional"
+              placeholder="Opsional, contoh: cek dan ukur ulang"
             />
           </label>
           </div>
@@ -1366,15 +1363,6 @@ export function JobPlanPlannerShell({
       valueFormatter: ({ data }) => data?.finishTime ?? "",
     },
     {
-      headerName: "CATATAN / KETERANGAN",
-      field: "note",
-      editable: ({ data }) => Boolean(data?.isNew || data?.editPlanId),
-      minWidth: 190,
-      flex: 0.9,
-      filterValueGetter: ({ data }) => data ? joinDistinct([data.note, data.instructionText]) : "",
-      valueFormatter: ({ data }) => data ? joinDistinct([data.note, data.instructionText]) : "",
-    },
-    {
       headerName: "STATUS",
       field: "approval",
       editable: false,
@@ -1751,6 +1739,7 @@ export function JobPlanPlannerShell({
     const failed: JobPlanRuntimePlannerDraft[] = [];
     const failedEdits: Array<JobPlanRuntimePlannerDraft & { editPlanId: string; editVersion: number }> = [];
     let createdAdditionalCountdown = false;
+    let savedSharedDraft = false;
 
     for (const row of validated) {
       let rowToCreate = row;
@@ -1788,9 +1777,20 @@ export function JobPlanPlannerShell({
         };
       }
 
-      const result = await createJobPlan(buildCreateJobPlanRuntimePayload(rowToCreate, userId, createJobPlanCommandId("web-job-plan")));
+      const result = await saveJobPlanDraft({
+        replaceItems: false,
+        items: [buildJobPlanDraftRecord(rowToCreate, {
+          countdowns: activeCountdowns,
+          employees,
+          divisions,
+          panels,
+          jobTypes,
+        })],
+      });
       if (!result.success) {
         failed.push({ ...row, error: result.message });
+      } else {
+        savedSharedDraft = true;
       }
     }
     for (const row of validatedEdits) {
@@ -1804,7 +1804,7 @@ export function JobPlanPlannerShell({
     setEditDrafts(failedEdits);
     await load();
     setIsSaving(false);
-    if (createdAdditionalCountdown && failed.length + failedEdits.length === 0) {
+    if ((createdAdditionalCountdown || savedSharedDraft) && failed.length + failedEdits.length === 0) {
       window.location.reload();
       return;
     }

@@ -137,7 +137,7 @@ const jobPlanRecordBaseSchema = z.object({
 export const jobPlanRecordSchema = jobPlanRecordBaseSchema.transform((row) => ({
   ...row,
   masterJobName: row.masterJobName ?? row.jobName ?? row.jobDescription ?? row.panelName ?? null,
-  instructionText: row.instructionText || row.jobDescription,
+  instructionText: row.instructionText ?? row.note ?? "",
   targetDailyHours: row.targetDailyHours ?? row.targetHours,
 }));
 

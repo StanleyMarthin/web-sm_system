@@ -289,7 +289,7 @@ function mapJobPlanRow(row: JobPlanRow): JobPlanRecord {
     isPriority: toBoolean(row.isPriority),
     status: row.status as JobPlanStatus,
     jobDescription: row.jobDescription,
-    instructionText: row.note ?? row.jobDescription,
+    instructionText: row.note ?? "",
     note: row.note,
     availablePlanHours:
       row.availablePlanHours === null ? null : Number(row.availablePlanHours),

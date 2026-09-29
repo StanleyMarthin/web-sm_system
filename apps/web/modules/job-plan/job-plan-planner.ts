@@ -7,7 +7,7 @@ import type {
   ManualExecutionJobPlanRuntimeRequest,
   MutateJobPlanRuntimeApprovalRequest,
 } from "@smsystem/contracts/job-plan-runtime";
-import { jobPlanCountdownOptionSchema, jobPlanEmployeeOptionSchema, jobPlanJobTypeOptionSchema, jobPlanPanelOptionSchema, type JobPlanRecord } from "@smsystem/contracts/job-plan";
+import { jobPlanCountdownOptionSchema, jobPlanEmployeeOptionSchema, jobPlanJobTypeOptionSchema, jobPlanPanelOptionSchema, type JobPlanDraftRecord, type JobPlanRecord } from "@smsystem/contracts/job-plan";
 import { breakMinutesForJobPlanDate, breakStartMinutesForJobPlanDate } from "@smsystem/contracts/job-plan-schedule";
 import type { z } from "zod";
 import { parseSmsDate, parseSmsDurationMinutes, parseSmsTime } from "@/shared/datagrid/parsers";
@@ -98,6 +98,85 @@ export interface JobPlanRuntimeDisplayRow {
   error: string | null;
   editPlanId?: string;
   editVersion?: number;
+}
+
+export function resolveJobPlanDivisionName(
+  divisionId: number | null,
+  divisions: Array<{ value: string; label: string }>,
+  employees: JobPlanEmployeeOption[],
+  countdowns: JobPlanCountdownOption[],
+  preferredName?: string | null,
+) {
+  const candidates = [
+    preferredName,
+    divisions.find((item) => item.value === String(divisionId ?? ""))?.label,
+    employees.find((item) => item.divisionId === divisionId)?.divisionName,
+    countdowns.find((item) => item.divisionId === divisionId)?.divisionName,
+  ];
+
+  return candidates.find((value) => {
+    const normalized = value?.trim();
+    return Boolean(normalized && normalized !== "-");
+  })?.trim() ?? "-";
+}
+
+export function buildJobPlanDraftRecord(
+  draft: JobPlanRuntimePlannerDraft,
+  references: {
+    countdowns: JobPlanCountdownOption[];
+    employees: JobPlanEmployeeOption[];
+    divisions: Array<{ value: string; label: string }>;
+    panels: JobPlanPanelOption[];
+    jobTypes: JobPlanJobTypeOption[];
+  },
+): JobPlanDraftRecord {
+  const countdown = references.countdowns.find((item) => item.value === draft.coreId)
+    ?? references.countdowns.find((item) =>
+      item.divisionId === draft.divisionId
+      && item.carId === draft.carId
+      && item.panelId === draft.panelId,
+    );
+  const employee = references.employees.find((item) => item.value === draft.employeeId);
+  const panel = references.panels.find((item) => item.value === String(draft.panelId ?? "") && (!item.carId || item.carId === draft.carId));
+  const jobType = references.jobTypes.find((item) => item.value === draft.jobTypeId);
+  const divisionName = resolveJobPlanDivisionName(
+    draft.divisionId,
+    references.divisions,
+    references.employees,
+    references.countdowns,
+    countdown?.divisionName,
+  );
+  const targetMinutes = parseSmsDurationMinutes(draft.durationText, "Durasi").value ?? 0;
+  const startMinutes = parseTimeToMinutes(draft.startTime).value ?? 0;
+
+  return {
+    draftItemId: draft.clientId,
+    sourceType: "COUNTDOWN",
+    coreId: draft.coreId,
+    carId: draft.carId,
+    unitName: countdown?.unitName ?? draft.carId,
+    divisionId: draft.divisionId,
+    divisionName,
+    panelId: draft.panelId,
+    panelName: countdown?.panelName ?? panel?.panelName ?? null,
+    jobTypeId: draft.jobTypeId || null,
+    jobName: countdown?.jobName ?? jobType?.jobName ?? draft.jobDescription,
+    assignedUserId: draft.employeeId,
+    assignedUserName: employee?.label ?? draft.employeeId,
+    taskDate: draft.taskDate,
+    targetHours: targetMinutes / 60,
+    startTime: draft.startTime,
+    finishTime: minutesToTime(startMinutes + targetMinutes),
+    jobDescription: draft.jobDescription.trim(),
+    note: draft.note.trim() || null,
+    isOvertime: draft.isOvertime,
+    isPriority: draft.isPriority,
+    deadlineDate: draft.taskDate,
+    isRework: draft.isRework,
+    isNonTechnicalJob: false,
+    picPlan: draft.employeeId,
+    requiredGrade: null,
+  };
 }
 
 const approvalLabels: Record<JobPlanRuntimeApprovalState, string> = {

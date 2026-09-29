@@ -3,6 +3,7 @@ import { jobPlanRuntimeReadItemSchema } from "@smsystem/contracts/job-plan-runti
 import {
   buildCreateJobPlanRuntimePayload,
   buildEditDraftJobPlanRuntimePayload,
+  buildJobPlanDraftRecord,
   buildManualExecutionJobPlanRuntimePayload,
   createEditDraftFromRow,
   createManualExecutionDraft,
@@ -19,6 +20,7 @@ import {
   toJobPlanDraftDisplayRows,
   toLocalDateValue,
   toJobPlanRuntimeDisplayRows,
+  resolveJobPlanDivisionName,
   validateJobPlanRuntimeDraft,
 } from "./job-plan-planner";
 
@@ -174,6 +176,54 @@ describe("Job Plan planner helpers", () => {
     ], [], [employee]);
 
     expect(rows[0]?.divisionName).toBe("BODY");
+  });
+
+  test("resolves division labels from scoped employee references", () => {
+    expect(resolveJobPlanDivisionName(7, [], [employee], [])).toBe("BODY");
+  });
+
+  test("builds a shared mobile draft from a web planner row", () => {
+    const draft = {
+      clientId: "draft-web-1",
+      isNew: true as const,
+      sourceType: "countdown" as const,
+      workMode: "normal" as const,
+      coreId: "CORE-1",
+      divisionId: 7,
+      carId: "220S",
+      panelId: 10,
+      jobTypeId: "",
+      jobTypeName: "",
+      employeeId: "EMP-1",
+      taskDate: "2026-09-15",
+      startTime: "08:00",
+      durationText: "01:39",
+      jobDescription: "Repair bumper",
+      note: "Periksa sisi bawah",
+      isOvertime: false,
+      isRework: false,
+      isPriority: false,
+      error: null,
+    };
+
+    expect(buildJobPlanDraftRecord(draft, {
+      countdowns: [countdown],
+      employees: [employee],
+      divisions: [],
+      panels: [{ value: "10", label: "Front Bumper", panelName: "Front Bumper", carId: "220S" }],
+      jobTypes: [],
+    })).toMatchObject({
+      draftItemId: "draft-web-1",
+      sourceType: "COUNTDOWN",
+      coreId: "CORE-1",
+      divisionId: 7,
+      divisionName: "BODY",
+      panelName: "Front Bumper",
+      assignedUserId: "EMP-1",
+      targetHours: 1.65,
+      finishTime: "09:39",
+      note: "Periksa sisi bawah",
+    });
   });
 
   test("keeps legacy mobile draft remaining hours visible without countdown reference", () => {
