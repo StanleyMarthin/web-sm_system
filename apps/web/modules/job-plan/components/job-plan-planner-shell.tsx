@@ -1234,7 +1234,7 @@ export function JobPlanPlannerShell({
     && row.approvalState === "REJECTED"
     && row.planId
     && row.version
-    && row.createdBy === userId;
+    && (row.createdBy === userId || canApprove);
   const isEditablePersistedRow = (row: PlannerRow) =>
     !row.isNew
     && !row.editPlanId
@@ -1912,10 +1912,10 @@ export function JobPlanPlannerShell({
       row.planId
       && row.version
       && row.approvalState === "REJECTED"
-      && row.createdBy === userId
+      && (row.createdBy === userId || canApprove)
     );
     if (validRows.length !== rowsToEdit.length) {
-      setError("Hanya plan rejected milik pengaju yang bisa diedit.");
+      setError("Hanya plan rejected milik pengaju atau reviewer yang bisa diedit.");
       return;
     }
     setEditDrafts((current) => {
@@ -1934,7 +1934,7 @@ export function JobPlanPlannerShell({
     if (rowsToCancel.length === 0 || isSaving) return;
     const validRows = rowsToCancel.filter(isCancellablePlannerRow);
     if (validRows.length !== rowsToCancel.length) {
-      setError("Hanya draft tersimpan atau plan ditolak milik pengaju yang bisa dihapus.");
+      setError("Hanya draft tersimpan atau plan ditolak milik pengaju/reviewer yang bisa dihapus.");
       return;
     }
     const confirmed = await sweetAlert.confirm({
@@ -1973,10 +1973,10 @@ export function JobPlanPlannerShell({
       row.planId
       && row.version
       && row.approvalState === "REJECTED"
-      && row.createdBy === userId
+      && (row.createdBy === userId || canApprove)
     );
     if (validRows.length !== rowsToCancel.length) {
-      setError("Hanya plan rejected milik pengaju yang bisa dihapus.");
+      setError("Hanya plan rejected milik pengaju atau reviewer yang bisa dihapus.");
       return;
     }
     const confirmed = await sweetAlert.confirm({
