@@ -1228,17 +1228,29 @@ export function JobPlanPlannerShell({
   ] as const;
   const defaultDraftWorkMode: WorkMode = workModeFilter === "overtime" ? "overtime" : "normal";
 
-  const approvableSelectedRows = selectedRows.filter((row) => !row.isNew && !row.editPlanId && isReviewState(row.approvalState));
-  const submittableSelectedRows = selectedRows.filter((row) => !row.isNew && !row.editPlanId && row.approvalState === "DRAFT" && row.planId && row.version);
-  const editableSelectedRows = selectedRows.filter((row) => !row.isNew && !row.editPlanId && row.approvalState === "DRAFT" && row.planId && row.version);
-  const cancellableSelectedRows = selectedRows.filter((row) => row.approvalState === "DRAFT" && (row.planId || row.editPlanId) && (row.version || row.editVersion));
-  const rejectedOwnerSelectedRows = selectedRows.filter((row) =>
+  const isRejectedOwnerRow = (row: PlannerRow) =>
     !row.isNew
     && !row.editPlanId
     && row.approvalState === "REJECTED"
     && row.planId
     && row.version
-    && row.createdBy === userId
+    && row.createdBy === userId;
+  const isEditablePersistedRow = (row: PlannerRow) =>
+    !row.isNew
+    && !row.editPlanId
+    && row.planId
+    && row.version
+    && (row.approvalState === "DRAFT" || isRejectedOwnerRow(row));
+  const isCancellablePlannerRow = (row: PlannerRow) =>
+    (row.approvalState === "DRAFT" && (row.planId || row.editPlanId) && (row.version || row.editVersion))
+    || isRejectedOwnerRow(row);
+
+  const approvableSelectedRows = selectedRows.filter((row) => !row.isNew && !row.editPlanId && isReviewState(row.approvalState));
+  const submittableSelectedRows = selectedRows.filter((row) => !row.isNew && !row.editPlanId && row.approvalState === "DRAFT" && row.planId && row.version);
+  const editableSelectedRows = selectedRows.filter(isEditablePersistedRow);
+  const cancellableSelectedRows = selectedRows.filter(isCancellablePlannerRow);
+  const rejectedOwnerSelectedRows = selectedRows.filter((row) =>
+    isRejectedOwnerRow(row)
   );
   const canBulkReviewSelected = canApprove
     && approvableSelectedRows.length > 0
@@ -1588,13 +1600,7 @@ export function JobPlanPlannerShell({
       const selected = event.api.getSelectedRows();
       const targetRows = selected.length > 0 ? selected : event.data ? [event.data] : [];
       const localRows = targetRows.filter((row) => row.isNew || row.editPlanId);
-      const persistedDraftRows = targetRows.filter((row) =>
-        !row.isNew
-        && !row.editPlanId
-        && row.approvalState === "DRAFT"
-        && row.planId
-        && row.version
-      );
+      const persistedDraftRows = targetRows.filter((row) => !row.isNew && !row.editPlanId && isCancellablePlannerRow(row));
 
       if (localRows.length > 0 || persistedDraftRows.length > 0) {
         keyboardEvent.preventDefault();
@@ -1885,9 +1891,9 @@ export function JobPlanPlannerShell({
   }
 
   function editRows(rowsToEdit: PlannerRow[]) {
-    const validRows = rowsToEdit.filter((row) => row.planId && row.version && row.approvalState === "DRAFT");
+    const validRows = rowsToEdit.filter(isEditablePersistedRow);
     if (validRows.length !== rowsToEdit.length) {
-      setError("Pilih rencana draft yang sudah tersimpan.");
+      setError("Pilih draft tersimpan atau plan ditolak milik pengaju.");
       return;
     }
     setEditDrafts((current) => {
@@ -1926,14 +1932,14 @@ export function JobPlanPlannerShell({
 
   async function cancelDraftRows(rowsToCancel: PlannerRow[]) {
     if (rowsToCancel.length === 0 || isSaving) return;
-    const validRows = rowsToCancel.filter((row) => row.approvalState === "DRAFT" && (row.planId || row.editPlanId) && (row.version || row.editVersion));
+    const validRows = rowsToCancel.filter(isCancellablePlannerRow);
     if (validRows.length !== rowsToCancel.length) {
-      setError("Hanya draft tersimpan yang bisa dihapus.");
+      setError("Hanya draft tersimpan atau plan ditolak milik pengaju yang bisa dihapus.");
       return;
     }
     const confirmed = await sweetAlert.confirm({
-      title: `Hapus ${validRows.length} draft?`,
-      description: "Draft akan dibatalkan dan tidak tampil di daftar operasional.",
+      title: `Hapus ${validRows.length} draft/rejected?`,
+      description: "Draft/rejected akan dibatalkan dan tidak tampil di daftar operasional.",
       confirmLabel: "Hapus",
       tone: "error",
     });
@@ -1956,7 +1962,7 @@ export function JobPlanPlannerShell({
     await load();
     setIsSaving(false);
     if (failed === 0) {
-      sweetAlert.notifySuccess("Draft dihapus", `${validRows.length} draft dibatalkan.`);
+      sweetAlert.notifySuccess("Draft/rejected dihapus", `${validRows.length} rencana dibatalkan.`);
       setSelectedRows([]);
     }
   }
