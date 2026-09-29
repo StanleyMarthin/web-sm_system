@@ -89,6 +89,7 @@ export interface JobPlanRuntimeDisplayRow {
   ledger: string;
   ledgerState: JobPlanRuntimeLedgerState;
   sync: string;
+  createdBy: string | null;
   version: number | null;
   accumulatedWorkMinutes: number;
   persistedWorkMinutes: number;
@@ -417,6 +418,7 @@ export function toJobPlanRuntimeDisplayRows(
       ledger: formatJobPlanRuntimeLedger(item.ledger_state),
       ledgerState: item.ledger_state,
       sync: resolveJobPlanRuntimeSync(item),
+      createdBy: item.created_by ?? null,
       version: item.version ?? null,
       accumulatedWorkMinutes: item.accumulated_work_minutes,
       persistedWorkMinutes: item.persisted_work_minutes,
@@ -475,6 +477,7 @@ export function toJobPlanDraftDisplayRows(
       ledger: formatJobPlanRuntimeLedger("UNMATERIALIZED"),
       ledgerState: "UNMATERIALIZED",
       sync: "Draft Redis",
+      createdBy: null,
       version: 1,
       accumulatedWorkMinutes: 0,
       persistedWorkMinutes: 0,

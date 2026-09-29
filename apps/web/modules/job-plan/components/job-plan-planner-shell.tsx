@@ -177,6 +177,7 @@ function draftToDisplay(
     ledger: "Belum Diproses",
     ledgerState: "UNMATERIALIZED",
     sync: "Draft",
+    createdBy: null,
     version: null,
     accumulatedWorkMinutes: 0,
     persistedWorkMinutes: 0,
@@ -1219,6 +1220,7 @@ export function JobPlanPlannerShell({
     ["UNIT_REVIEW", "Review KP"],
     ["MANAGEMENT_REVIEW", "Review PM"],
     ["APPROVED", "Disetujui"],
+    ["REJECTED", "Ditolak"],
     ["RUNNING", "Berjalan"],
     ["HOLD", "Ditahan"],
     ["FINISHED_PENDING_VALIDATION", "Selesai"],
@@ -1230,6 +1232,14 @@ export function JobPlanPlannerShell({
   const submittableSelectedRows = selectedRows.filter((row) => !row.isNew && !row.editPlanId && row.approvalState === "DRAFT" && row.planId && row.version);
   const editableSelectedRows = selectedRows.filter((row) => !row.isNew && !row.editPlanId && row.approvalState === "DRAFT" && row.planId && row.version);
   const cancellableSelectedRows = selectedRows.filter((row) => row.approvalState === "DRAFT" && (row.planId || row.editPlanId) && (row.version || row.editVersion));
+  const rejectedOwnerSelectedRows = selectedRows.filter((row) =>
+    !row.isNew
+    && !row.editPlanId
+    && row.approvalState === "REJECTED"
+    && row.planId
+    && row.version
+    && row.createdBy === userId
+  );
   const canBulkReviewSelected = canApprove
     && approvableSelectedRows.length > 0
     && sameApprovalStage(approvableSelectedRows);
@@ -1891,6 +1901,29 @@ export function JobPlanPlannerShell({
     setError(null);
   }
 
+  function editRejectedRows(rowsToEdit: PlannerRow[]) {
+    const validRows = rowsToEdit.filter((row) =>
+      row.planId
+      && row.version
+      && row.approvalState === "REJECTED"
+      && row.createdBy === userId
+    );
+    if (validRows.length !== rowsToEdit.length) {
+      setError("Hanya plan rejected milik pengaju yang bisa diedit.");
+      return;
+    }
+    setEditDrafts((current) => {
+      const currentIds = new Set(current.map((row) => row.editPlanId));
+      return [
+        ...current,
+        ...validRows.filter((row) => !currentIds.has(row.planId as string)).map(createEditDraftFromRow),
+      ];
+    });
+    setMode("planner");
+    setSelectedRows([]);
+    setError(null);
+  }
+
   async function cancelDraftRows(rowsToCancel: PlannerRow[]) {
     if (rowsToCancel.length === 0 || isSaving) return;
     const validRows = rowsToCancel.filter((row) => row.approvalState === "DRAFT" && (row.planId || row.editPlanId) && (row.version || row.editVersion));
@@ -1924,6 +1957,48 @@ export function JobPlanPlannerShell({
     setIsSaving(false);
     if (failed === 0) {
       sweetAlert.notifySuccess("Draft dihapus", `${validRows.length} draft dibatalkan.`);
+      setSelectedRows([]);
+    }
+  }
+
+  async function cancelRejectedRows(rowsToCancel: PlannerRow[]) {
+    if (rowsToCancel.length === 0 || isSaving) return;
+    const validRows = rowsToCancel.filter((row) =>
+      row.planId
+      && row.version
+      && row.approvalState === "REJECTED"
+      && row.createdBy === userId
+    );
+    if (validRows.length !== rowsToCancel.length) {
+      setError("Hanya plan rejected milik pengaju yang bisa dihapus.");
+      return;
+    }
+    const confirmed = await sweetAlert.confirm({
+      title: `Hapus ${validRows.length} plan rejected?`,
+      description: "Plan akan dibatalkan dan tidak tampil di daftar approval.",
+      confirmLabel: "Hapus",
+      tone: "error",
+    });
+    if (!confirmed) return;
+    setIsSaving(true);
+    let failed = 0;
+    for (const row of validRows) {
+      const result = await mutateJobPlanApproval(row.planId as string, {
+        action: "cancel",
+        userId,
+        commandId: createJobPlanCommandId("web-cancel-rejected"),
+        expectedVersion: row.version as number,
+        reason: "Dihapus dari Web Job Plan",
+      });
+      if (!result.success) {
+        failed += 1;
+        setError(result.message);
+      }
+    }
+    await load();
+    setIsSaving(false);
+    if (failed === 0) {
+      sweetAlert.notifySuccess("Plan rejected dihapus", `${validRows.length} plan dibatalkan.`);
       setSelectedRows([]);
     }
   }
@@ -2120,6 +2195,13 @@ export function JobPlanPlannerShell({
             <ActionButton variant="success" disabled={!canBulkReviewSelected || isSaving} onClick={() => void reviewRows(approvableSelectedRows, "approve")}>Setujui</ActionButton>
             <ActionButton variant="danger" disabled={!canBulkReviewSelected || isSaving} onClick={() => setRejectDialogOpen(true)}>Tolak</ActionButton>
             {approvableSelectedRows.length > 0 && !sameApprovalStage(approvableSelectedRows) ? <span className="text-destructive">Tahap persetujuan harus sama.</span> : null}
+          </div>
+        ) : null}
+        {mode === "approval" && canCreate && rejectedOwnerSelectedRows.length > 0 ? (
+          <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+            <span>{rejectedOwnerSelectedRows.length} rejected dipilih</span>
+            <ActionButton disabled={isSaving} onClick={() => editRejectedRows(rejectedOwnerSelectedRows)}>Edit Draft</ActionButton>
+            <ActionButton variant="danger" disabled={isSaving} onClick={() => void cancelRejectedRows(rejectedOwnerSelectedRows)}>Hapus Rejected</ActionButton>
           </div>
         ) : null}
         {mode === "planner" && canCreate && selectedRows.length > 0 ? (

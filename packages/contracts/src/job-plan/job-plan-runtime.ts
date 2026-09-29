@@ -61,6 +61,7 @@ const jobPlanRuntimeReadItemBaseSchema = z.object({
   job_description: z.string().nullable().optional(),
   note: z.string().nullable(),
   source: jobPlanRuntimeSourceSchema,
+  created_by: z.string().nullable().optional(),
   version: z.number().int().nullable().optional(),
   projection_ready: z.boolean().nullable().optional(),
   accumulated_work_minutes: z.number().int().default(0),
