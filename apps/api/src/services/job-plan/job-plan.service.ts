@@ -320,6 +320,17 @@ function countDraftSummary(drafts: JobPlanDraftRecord[]) {
   );
 }
 
+function resolveReferenceDivisionName(
+  references: JobPlanReferences,
+  divisionId: number | null,
+): string | null {
+  if (divisionId === null) {
+    return null;
+  }
+
+  return references.divisions.find((division) => String(division.value) === String(divisionId))?.label ?? null;
+}
+
 function pushPositiveInt(target: Set<number>, value: unknown) {
   const parsed = toNullableInt(value);
   if (parsed !== null) target.add(parsed);
@@ -885,16 +896,20 @@ export class DefaultJobPlanService implements JobPlanService {
     const draftRows = visibleDrafts.map((draft) => {
       const record = mapDraftToRecord(draft);
       const countdown = draft.coreId ? countdownMap.get(draft.coreId) : null;
+      const referenceDivisionName = resolveReferenceDivisionName(references, record.divisionId);
 
       if (!countdown) {
-        return record;
+        return {
+          ...record,
+          divisionName: record.divisionName === "-" ? referenceDivisionName ?? record.divisionName : record.divisionName,
+        };
       }
 
       return {
         ...record,
         unitName: countdown.unitName ?? record.unitName,
         divisionId: countdown.divisionId ?? record.divisionId,
-        divisionName: countdown.divisionName ?? record.divisionName,
+        divisionName: countdown.divisionName ?? referenceDivisionName ?? record.divisionName,
         panelName: countdown.panelName ?? countdown.panelSectionName ?? record.panelName,
         panelSectionName: countdown.panelSectionName ?? record.panelSectionName,
         jobName: countdown.jobName ?? record.jobName,

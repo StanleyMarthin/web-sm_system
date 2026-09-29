@@ -114,6 +114,7 @@ describe("DefaultJobPlanService draft sync", () => {
 
     expect(result.data[0]?.planId).toBe("draft-mobile");
     expect(result.data[0]?.draftSourceType).toBe("ADDITIONAL");
+    expect(result.data[0]?.divisionName).toBe("Divisi A");
     expect(result.summary.totalHours).toBe(2);
   });
 
