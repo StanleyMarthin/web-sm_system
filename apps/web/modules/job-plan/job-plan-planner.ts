@@ -26,6 +26,7 @@ export interface JobPlanRuntimePlannerDraft {
   divisionId: number | null;
   carId: string;
   panelId: number | null;
+  panelName?: string | null;
   jobTypeId: string;
   jobTypeName: string;
   employeeId: string;
@@ -190,7 +191,7 @@ export function buildJobPlanDraftRecord(
     divisionId: draft.divisionId,
     divisionName,
     panelId: draft.panelId,
-    panelName: countdown?.panelName ?? panel?.panelName ?? null,
+    panelName: countdown?.panelName ?? draft.panelName ?? panel?.panelName ?? null,
     jobTypeId: draft.jobTypeId || null,
     jobName: countdown?.jobName ?? jobType?.jobName ?? draft.jobDescription,
     assignedUserId: draft.employeeId,

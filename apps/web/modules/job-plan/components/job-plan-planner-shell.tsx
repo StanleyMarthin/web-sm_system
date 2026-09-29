@@ -3,7 +3,7 @@
 import type { JobPlanRuntimeReadItem } from "@smsystem/contracts/job-plan-runtime";
 import type { JobPlanMode, JobPlanRecord } from "@smsystem/contracts/job-plan";
 import type { CellKeyDownEvent, CellValueChangedEvent, ColDef, GridApi, GridReadyEvent, ICellRendererParams, SelectionChangedEvent, TabToNextCellParams } from "ag-grid-community";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   createJobPlanCommandId,
   fetchJobPlanRuntimeList,
@@ -159,7 +159,7 @@ function draftToDisplay(
     qaIds: countdown?.qaIds ?? [],
     qaNames: countdown?.qaNames ?? [],
     unitName: countdown?.unitName ?? draft.carId ?? "-",
-    panelName: countdown?.panelName ?? panel?.panelName ?? "-",
+    panelName: countdown?.panelName ?? draft.panelName ?? panel?.panelName ?? "-",
     instructionText: draft.note,
     employeeName: employee?.label ?? "",
     divisionName: resolveJobPlanDivisionName(draft.divisionId, divisions, employees, countdowns, countdown?.divisionName ?? jobType?.divisionName),
@@ -652,21 +652,21 @@ function AdditionalJobDialog({
             />
           </div>
           <label className="sm:col-span-2 text-[11px] text-muted-foreground">
-            Instruksi / detail pekerjaan
-            <input
-              value={value.jobDescription}
-              onChange={(event) => update({ jobDescription: event.target.value })}
-              className="mt-1 h-9 w-full border border-border bg-background px-2 text-[13px] text-foreground outline-none focus:border-primary/45"
-              placeholder="Contoh: repair list bawah pintu"
-            />
-          </label>
-          <label className="sm:col-span-2 text-[11px] text-muted-foreground">
             Temuan awal
             <textarea
               value={value.initialFinding}
               onChange={(event) => update({ initialFinding: event.target.value })}
               className="mt-1 min-h-16 w-full resize-y border border-border bg-background px-2 py-2 text-[13px] text-foreground outline-none focus:border-primary/45"
               placeholder="Opsional, contoh: retak halus di panel bawah"
+            />
+          </label>
+          <label className="sm:col-span-2 text-[11px] text-muted-foreground">
+            detail pekerjaan
+            <input
+              value={value.jobDescription}
+              onChange={(event) => update({ jobDescription: event.target.value })}
+              className="mt-1 h-9 w-full border border-border bg-background px-2 text-[13px] text-foreground outline-none focus:border-primary/45"
+              placeholder="Contoh: repair list bawah pintu"
             />
           </label>
           <label className="text-[11px] text-muted-foreground">
@@ -785,6 +785,16 @@ export function JobPlanPlannerShell({
   const [lazyPanels, setLazyPanels] = useState<Record<string, JobPlanPanelOption[]>>({});
   const [lazyJobs, setLazyJobs] = useState<Record<string, JobPlanCountdownOption[]>>({});
   const sweetAlert = useSweetAlert();
+  const lastNotifiedErrorRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!error) {
+      lastNotifiedErrorRef.current = null;
+      return;
+    }
+    if (lastNotifiedErrorRef.current === error) return;
+    lastNotifiedErrorRef.current = error;
+    sweetAlert.notifyWarning("Job Plan belum lengkap", error);
+  }, [error, sweetAlert.notifyWarning]);
   const activeCountdowns = useMemo(
     () => uniqueByValue([...countdowns, ...Object.values(lazyJobs).flat()]),
     [countdowns, lazyJobs],
@@ -1455,6 +1465,7 @@ export function JobPlanPlannerShell({
       divisionId,
       carId: additionalJobForm.carId,
       panelId,
+      panelName: additionalJobForm.panelName.trim() || additionalJobForm.partName.trim() || null,
       coreId: matchedJobType?.value ?? "",
       jobTypeId: matchedJobType ? parseAdditionalJobValue(matchedJobType.value) : "",
       jobTypeName: matchedJobType ? "" : jobName,
@@ -1526,6 +1537,7 @@ export function JobPlanPlannerShell({
       divisionId: numberValue(row.divisionId),
       carId: String(row.carId ?? ""),
       panelId: numberValue(row.panelId),
+      panelName: String(row.panelName ?? ""),
       jobTypeId: selectedJobTypeId,
       jobTypeName: "",
       employeeId: String(row.employeeId ?? ""),
@@ -1548,6 +1560,7 @@ export function JobPlanPlannerShell({
     if (field === "divisionId") {
       next.carId = "";
       next.panelId = null;
+      next.panelName = "";
       next.coreId = "";
       next.sourceType = "countdown";
       next.jobTypeId = "";
@@ -1557,6 +1570,7 @@ export function JobPlanPlannerShell({
     }
     if (field === "carId") {
       next.panelId = null;
+      next.panelName = "";
       next.coreId = "";
       next.sourceType = "countdown";
       next.jobTypeId = "";
@@ -1564,6 +1578,7 @@ export function JobPlanPlannerShell({
       next.jobDescription = "";
     }
     if (field === "panelId") {
+      next.panelName = panelOptions(row).find((option) => option.value === String(row.panelId ?? ""))?.label ?? String(row.panelName ?? "");
       next.coreId = "";
       next.sourceType = "countdown";
       next.jobTypeId = "";
@@ -2154,7 +2169,6 @@ export function JobPlanPlannerShell({
         }}>Reset</ActionButton>
         <ActionButton onClick={openReportPrint}>Print</ActionButton>
       </div>
-      {error ? <p className="border border-destructive/25 bg-destructive/5 px-3 py-2 text-sm text-destructive">{error}</p> : null}
       <div className="flex flex-wrap items-center justify-between gap-2">
         {mode === "planner" && canCreate ? (
           <div className="flex flex-wrap items-center gap-2">

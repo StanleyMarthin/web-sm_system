@@ -228,6 +228,46 @@ describe("Job Plan planner helpers", () => {
     });
   });
 
+  test("keeps additional draft panel label when panel references are lazy", () => {
+    const draft = {
+      clientId: "draft-web-lazy-panel",
+      isNew: true as const,
+      sourceType: "additional" as const,
+      workMode: "normal" as const,
+      coreId: "",
+      divisionId: 7,
+      carId: "220S",
+      panelId: 99,
+      panelName: "Quarter Panel",
+      jobTypeId: "JOB-1",
+      jobTypeName: "",
+      employeeId: "EMP-1",
+      taskDate: "2026-09-15",
+      startTime: "08:00",
+      durationText: "02:00",
+      jobDescription: "Making pola",
+      note: "Ikuti bentuk panel",
+      isOvertime: false,
+      isRework: false,
+      isPriority: false,
+      error: null,
+    };
+
+    expect(buildJobPlanDraftRecord(draft, {
+      countdowns: [],
+      employees: [employee],
+      divisions: [],
+      panels: [],
+      jobTypes: [{ value: "JOB-1", label: "Making", jobName: "Making", divisionId: 7 }],
+    })).toMatchObject({
+      draftItemId: "draft-web-lazy-panel",
+      sourceType: "COUNTDOWN",
+      panelId: 99,
+      panelName: "Quarter Panel",
+      jobName: "Making",
+    });
+  });
+
   test("keeps normal plan panel choices limited to plannable countdown panels", () => {
     expect(isJobPlanCountdownPlannable({ ...countdown, availablePlanHours: 0 })).toBe(false);
     expect(isJobPlanCountdownPlannable({ ...countdown, status: "READY_QC" })).toBe(false);
