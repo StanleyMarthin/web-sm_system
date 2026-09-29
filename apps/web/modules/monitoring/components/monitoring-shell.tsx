@@ -444,6 +444,10 @@ export function MonitoringShell({
     : defaultFilters.map((filter) => filter.field === "divisionId"
       ? optionLabel(references.divisions, filter.value)
       : optionLabel(references.units, filter.value)).join(", ");
+  const linkableUnitIds = useMemo(
+    () => new Set(references.units.map((unit) => unit.value)),
+    [references.units],
+  );
 
   const columns = useMemo<ColDef<MonitoringTaskRecord>[]>(
     () => [
@@ -468,9 +472,16 @@ export function MonitoringShell({
         headerName: "Unit",
         field: "unitName",
         minWidth: 130,
-        cellRenderer: ({ value, data }: ICellRendererParams<MonitoringTaskRecord>) => (
-          data ? <Link href={`/units/${String(data.carId)}`} className="text-app-accent-ink hover:text-app-accent-ink">{String(value ?? "-")}</Link> : "-"
-        ),
+        cellRenderer: ({ value, data }: ICellRendererParams<MonitoringTaskRecord>) => {
+          const label = String(value ?? "-");
+          const carId = String(data?.carId ?? "");
+          if (!data || !carId || !linkableUnitIds.has(carId)) return label;
+          return (
+            <Link href={`/units/${encodeURIComponent(carId)}`} className="text-app-accent-ink hover:text-app-accent-ink">
+              {label}
+            </Link>
+          );
+        },
       },
       { headerName: "PIC", field: "employeeName", minWidth: 135 },
       { headerName: "Panel", field: "panelName", minWidth: 150, flex: 0.7 },
@@ -515,7 +526,7 @@ export function MonitoringShell({
         ) : null,
       },
     ],
-    [],
+    [linkableUnitIds],
   );
 
   function pushDate(value: string) {

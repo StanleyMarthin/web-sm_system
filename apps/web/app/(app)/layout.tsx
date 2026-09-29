@@ -11,9 +11,13 @@ export default async function ProtectedLayout({
 }>) {
   const requestHeaders = await headers();
   const cookieHeader = requestHeaders.get("cookie") ?? "";
-  const { user } = await fetchCurrentUser(cookieHeader);
+  const { user, errorCode } = await fetchCurrentUser(cookieHeader);
 
   if (!user) {
+    if (errorCode === "SESSION_REPLACED") {
+      redirect("/login?reason=session-replaced");
+    }
+
     redirect("/login");
   }
 

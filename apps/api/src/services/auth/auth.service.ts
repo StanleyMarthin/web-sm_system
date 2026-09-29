@@ -2,17 +2,18 @@ import { DEVICE_COOKIE_NAME, REFRESH_COOKIE_NAME } from "@smsystem/contracts/aut
 import type { AuthUser, LoginRequest } from "@smsystem/contracts/auth";
 import type { AuthContextRepository } from "@/repositories/auth-context/auth-context.repo";
 import type { AuditService } from "@/services/audit/audit.service";
-import type { SessionStore, WebSession } from "@/services/auth/session.service";
+import type {
+  SessionRevocation,
+  SessionStore,
+  WebSession,
+} from "@/services/auth/session.service";
 import type {
   RefreshWebParams,
   SmLoginAdapter,
 } from "@/services/auth/sm-login.adapter";
 import { getCookie } from "@/http/cookies";
 import { SmLoginAdapterError } from "@/services/auth/sm-login.adapter";
-import {
-  getLoginAttemptBlock,
-  recordActiveSessionWarning,
-} from "@/services/auth/login-attempts";
+import { getLoginAttemptBlock } from "@/services/auth/login-attempts";
 
 interface LoginResult {
   user: AuthUser;
@@ -24,6 +25,7 @@ export interface AuthService {
   logout(request: Request): Promise<string[]>;
   refresh(request: Request): Promise<LoginResult>;
   getCurrentSession(request: Request): Promise<WebSession | null>;
+  getSessionRevocation?(request: Request): Promise<SessionRevocation | null>;
   getCurrentUser(request: Request): Promise<AuthUser | null>;
   getCurrentPermissions(request: Request): Promise<string[] | null>;
   updateCurrentUserPhotoUrl?(request: Request, photoUrl: string): Promise<void>;
@@ -67,7 +69,7 @@ export class DefaultAuthService implements AuthService {
       employeeId: body.employeeId,
       password: body.password,
       deviceId,
-      force: body.force ?? false,
+      force: true,
     });
 
     const employeeId = mobileSession.employeeId.toUpperCase();
@@ -77,28 +79,10 @@ export class DefaultAuthService implements AuthService {
       activeSession !== null && activeSession.sessionKey !== existingSession?.sessionKey;
 
     if (isAnotherActiveSession) {
-      if (!body.force) {
-        const warningBlock = await recordActiveSessionWarning(employeeId);
-        if (warningBlock) {
-          throw new SmLoginAdapterError(
-            warningBlock.message,
-            warningBlock.errorCode === "ACCOUNT_DISABLED" ? 403 : 429,
-            warningBlock.errorCode,
-            {
-              retryAfterSeconds: warningBlock.retryAfterSeconds,
-            },
-          );
-        }
-
-        throw new SmLoginAdapterError(
-          "Akun ini sedang login di perangkat Web lain. Apakah Anda ingin melanjutkan dan logout dari perangkat tersebut?",
-          409,
-          "ACTIVE_SESSION_EXISTS",
-          {},
-        );
-      }
-
-      await this.sessionStore.deleteActiveSessionByEmployeeId(employeeId);
+      await this.sessionStore.deleteActiveSessionByEmployeeId(employeeId, {
+        reason: "SESSION_REPLACED",
+        message: "Anda login di tempat lain.",
+      });
     }
 
     if (existingSession) {
@@ -215,6 +199,10 @@ export class DefaultAuthService implements AuthService {
 
   async getCurrentSession(request: Request): Promise<WebSession | null> {
     return this.sessionStore.getSessionFromRequest(request);
+  }
+
+  async getSessionRevocation(request: Request): Promise<SessionRevocation | null> {
+    return this.sessionStore.getSessionRevocationFromRequest?.(request) ?? null;
   }
 
   async getCurrentUser(request: Request): Promise<AuthUser | null> {

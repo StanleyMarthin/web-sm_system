@@ -1,7 +1,7 @@
 "use client";
 
 import type { JobPlanRuntimeReadItem } from "@smsystem/contracts/job-plan-runtime";
-import type { JobPlanMode } from "@smsystem/contracts/job-plan";
+import type { JobPlanMode, JobPlanRecord } from "@smsystem/contracts/job-plan";
 import type { CellKeyDownEvent, CellValueChangedEvent, ColDef, GridApi, GridReadyEvent, ICellRendererParams, SelectionChangedEvent, TabToNextCellParams } from "ag-grid-community";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -31,6 +31,7 @@ import {
   minutesToTime,
   toLocalDateValue,
   toJobPlanRuntimeDisplayRows,
+  toJobPlanDraftDisplayRows,
   validateJobPlanRuntimeDraft,
   type JobPlanRuntimeDisplayRow,
   type JobPlanCountdownOption,
@@ -80,6 +81,8 @@ interface JobPlanPlannerShellProps {
   initialDate: string | null;
   initialMode: string | null;
   initialWorkMode: string | null;
+  initialDraftRows?: JobPlanRecord[];
+  defaultDivisionName?: string | null;
   countdowns: JobPlanCountdownOption[];
   employees: JobPlanEmployeeOption[];
   divisions: JobPlanDivisionOption[];
@@ -254,6 +257,11 @@ function numberValue(value: unknown) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function isPlanableCountdownOption(item: JobPlanCountdownOption) {
+  const status = String(item.status ?? "PLAN").trim().toUpperCase();
+  return !["DONE", "CANCEL", "READY_QC", "QC_READY", "REJECTED"].includes(status);
+}
+
 function statusLabel(row: PlannerRow) {
   if (row.isNew || row.editPlanId) return "Belum Disimpan";
   if (row.executionState === "RUNNING") return "Berjalan";
@@ -265,6 +273,12 @@ function statusLabel(row: PlannerRow) {
 
 function joinDistinct(values: Array<string | null | undefined>) {
   return [...new Set(values.map((value) => value?.trim()).filter(Boolean) as string[])].join(" · ");
+}
+
+function isTextEditingTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) return false;
+  const tagName = target.tagName.toLowerCase();
+  return target.isContentEditable || tagName === "input" || tagName === "textarea" || tagName === "select";
 }
 
 function optionDisplayName(option: SmartSelectOption | undefined) {
@@ -729,6 +743,8 @@ export function JobPlanPlannerShell({
   initialDate,
   initialMode,
   initialWorkMode,
+  initialDraftRows = [],
+  defaultDivisionName = null,
   countdowns,
   employees,
   divisions,
@@ -748,7 +764,7 @@ export function JobPlanPlannerShell({
   const [dateFilter, setDateFilter] = useState(initialDate ?? toLocalDateValue());
   const [kpFilter, setKpFilter] = useState("");
   const [qaFilter, setQaFilter] = useState("");
-  const [divisionFilter, setDivisionFilter] = useState("");
+  const [divisionFilter, setDivisionFilter] = useState(defaultDivisionName ?? "");
   const [statusFilter, setStatusFilter] = useState("");
   const [workModeFilter, setWorkModeFilter] = useState<JobPlanMode>(() => initialWorkModeFilter(initialWorkMode));
   const [additionalJobOpen, setAdditionalJobOpen] = useState(false);
@@ -779,6 +795,7 @@ export function JobPlanPlannerShell({
     [countdowns, lazyJobs],
   );
   const selectedContext = useMemo(() => contextForCore(activeCountdowns, initialCoreId), [activeCountdowns, initialCoreId]);
+  const planableCountdowns = useMemo(() => activeCountdowns.filter(isPlanableCountdownOption), [activeCountdowns]);
   const technicalDivisionOptions = useMemo(() => {
     const fromReferences = divisions
       .filter((item) => item.isTechnical === true || item.isTeknis === true)
@@ -886,7 +903,8 @@ export function JobPlanPlannerShell({
     const sourceCountdowns = lazyJobs[cacheKey] ?? activeCountdowns;
     const countdownOptions = sourceCountdowns
       .filter((item) =>
-        (divisionId === null || item.divisionId === divisionId)
+        isPlanableCountdownOption(item)
+        && (divisionId === null || item.divisionId === divisionId)
         && (!carId || item.carId === carId)
         && (panelId === null || item.panelId === panelId)
       )
@@ -1169,13 +1187,21 @@ export function JobPlanPlannerShell({
     return () => window.removeEventListener("beforeunload", beforeUnload);
   }, [drafts.length, editDrafts.length]);
 
-  const rows = useMemo<PlannerRow[]>(() => [
-    ...toJobPlanRuntimeDisplayRows(items, activeCountdowns, employees).map((row) => {
+  const rows = useMemo<PlannerRow[]>(() => {
+    const runtimeRows = toJobPlanRuntimeDisplayRows(items, activeCountdowns, employees).map((row) => {
       const draft = editDrafts.find((item) => item.editPlanId === row.planId);
       return draft ? { ...draftToDisplay(draft, activeCountdowns, employees, divisions, panels, jobTypes), editPlanId: draft.editPlanId, editVersion: draft.editVersion } : row;
-    }),
-    ...drafts.map((draft) => draftToDisplay(draft, activeCountdowns, employees, divisions, panels, jobTypes)),
-  ], [activeCountdowns, drafts, editDrafts, employees, divisions, items, jobTypes, panels]);
+    });
+    const runtimePlanIds = new Set(runtimeRows.map((row) => row.planId).filter(Boolean));
+    const legacyDraftRows = toJobPlanDraftDisplayRows(initialDraftRows, activeCountdowns, employees)
+      .filter((row) => !runtimePlanIds.has(row.planId));
+
+    return [
+      ...legacyDraftRows,
+      ...runtimeRows,
+      ...drafts.map((draft) => draftToDisplay(draft, activeCountdowns, employees, divisions, panels, jobTypes)),
+    ];
+  }, [activeCountdowns, drafts, editDrafts, employees, divisions, initialDraftRows, items, jobTypes, panels]);
 
   const filteredRows = useMemo(() => rows.filter((row) => {
     if (dateFilter && row.taskDate !== dateFilter) return false;
@@ -1362,7 +1388,11 @@ export function JobPlanPlannerShell({
   ], [activeCountdowns, employees, jobTypes, lazyEmployees, lazyJobs, lazyPanels, lazyUnitOptions, panels, technicalDivisionOptions]);
 
   function addDraft() {
-    const draft = createJobPlanRuntimeDraft(selectedContext);
+    if (planableCountdowns.length === 0) {
+      setError("Belum ada countdown yang bisa dibuat plan. Countdown DONE, CANCEL, REJECTED, atau butuh QC tidak ditampilkan.");
+      return;
+    }
+    const draft = createJobPlanRuntimeDraft(selectedContext && isPlanableCountdownOption(selectedContext) ? selectedContext : null);
     const nextDraft = {
       ...draft,
       taskDate: initialDate ?? draft.taskDate,
@@ -1371,6 +1401,17 @@ export function JobPlanPlannerShell({
     };
     setDrafts((current) => [...current, normalizeDraftSelection(nextDraft)]);
     window.setTimeout(() => gridApi?.deselectAll(), 0);
+  }
+
+  function removeLocalDraftRows(rowsToRemove: PlannerRow[]) {
+    const clientIds = new Set(rowsToRemove.map((row) => row.clientId).filter(Boolean));
+    if (clientIds.size === 0) return 0;
+    setDrafts((current) => current.filter((draft) => !clientIds.has(draft.clientId)));
+    setEditDrafts((current) => current.filter((draft) => !clientIds.has(draft.clientId)));
+    setSelectedRows([]);
+    setError(null);
+    window.setTimeout(() => gridApi?.deselectAll(), 0);
+    return clientIds.size;
   }
 
   function addAdditionalJobDraft() {
@@ -1556,6 +1597,29 @@ export function JobPlanPlannerShell({
     if (!keyboardEvent) return;
 
     const field = event.column.getColId();
+    const isDeleteKey = keyboardEvent.key === "Delete" || keyboardEvent.key === "Backspace";
+    if (isDeleteKey && !keyboardEvent.ctrlKey && !keyboardEvent.metaKey && !keyboardEvent.altKey && !isTextEditingTarget(keyboardEvent.target)) {
+      const selected = event.api.getSelectedRows();
+      const targetRows = selected.length > 0 ? selected : event.data ? [event.data] : [];
+      const localRows = targetRows.filter((row) => row.isNew || row.editPlanId);
+      const persistedDraftRows = targetRows.filter((row) =>
+        !row.isNew
+        && !row.editPlanId
+        && row.approvalState === "DRAFT"
+        && row.planId
+        && row.version
+      );
+
+      if (localRows.length > 0 || persistedDraftRows.length > 0) {
+        keyboardEvent.preventDefault();
+        removeLocalDraftRows(localRows);
+        if (persistedDraftRows.length > 0) {
+          await cancelDraftRows(persistedDraftRows);
+        }
+        return;
+      }
+    }
+
     const isDraftAppendKey = keyboardEvent.key === "Enter" || (keyboardEvent.key === "Tab" && !keyboardEvent.shiftKey);
     if (isDraftAppendKey && canCreate && mode === "planner" && event.data?.isNew && lastDraftEntryFields.has(field)) {
       keyboardEvent.preventDefault();
@@ -2027,7 +2091,7 @@ export function JobPlanPlannerShell({
           <div className="flex flex-wrap items-center gap-2">
             <div className="inline-flex border border-border bg-card">
               <button type="button" onClick={addDraft} className="border-r border-border px-3 py-2 font-mono text-[12px] uppercase text-foreground hover:bg-muted">
-                + Row
+                Buat Plan
               </button>
               <button
                 type="button"

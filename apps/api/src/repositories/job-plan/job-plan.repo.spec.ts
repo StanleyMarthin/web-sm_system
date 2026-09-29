@@ -14,6 +14,7 @@ describe("MySqlJobPlanRepository countdown alignment", () => {
     remainingHours: number;
     reservedPlanHours: number;
     targetHours: number;
+    currentStatus?: string;
   }) {
     const executed: string[] = [];
     const connection = {
@@ -32,7 +33,7 @@ describe("MySqlJobPlanRepository countdown alignment", () => {
             panelId: 11,
             remainingHours: input.remainingHours,
             progressPercent: 0,
-            currentStatus: "PLAN",
+            currentStatus: input.currentStatus ?? "PLAN",
           }]];
         }
         if (sql.includes("FROM master_panels")) return [[{ id: 11 }]];
@@ -113,6 +114,9 @@ describe("MySqlJobPlanRepository countdown alignment", () => {
     expect(sql).toContain("jc.car_id = ?");
     expect(sql).toContain("jc.panel_id = ?");
     expect(sql).toContain("jc.division_id = ?");
+    expect(sql).toContain("'READY_QC'");
+    expect(sql).toContain("'QC_READY'");
+    expect(sql).toContain("'REJECTED'");
     expect(sql).toContain("p2.core_id = jc.id");
     expect(sql.includes("planCapacity")).toBe(false);
   });
@@ -353,6 +357,10 @@ describe("MySqlJobPlanRepository countdown alignment", () => {
     );
 
     expect(queries.some(({ sql }) => sql.includes("INSERT INTO master_job_types"))).toBe(true);
+    const additionalLookupSql = queries.find(({ sql }) => sql.includes("FROM sm_jobdesc_countdown") && sql.includes("job_type_id = ?"))?.sql ?? "";
+    expect(additionalLookupSql).toContain("'READY_QC'");
+    expect(additionalLookupSql).toContain("'QC_READY'");
+    expect(additionalLookupSql).toContain("'REJECTED'");
     expect(executed.some(({ sql }) => sql.includes("INSERT INTO sm_jobdesc_countdown"))).toBe(false);
     expect(executed.some(({ sql, params }) => sql.includes("INSERT INTO sm_jobdesc_plan") && params?.[1] === "CD-OPEN")).toBe(true);
   });
@@ -380,6 +388,38 @@ describe("MySqlJobPlanRepository countdown alignment", () => {
     }
 
     expect(message).toBe("COUNTDOWN_CAPACITY_EXCEEDED");
+  });
+
+  it("rejects create when the countdown is waiting for QC", async () => {
+    let message = "";
+    try {
+      await createPlanWithCapacity({
+        remainingHours: 4,
+        reservedPlanHours: 0,
+        targetHours: 1,
+        currentStatus: "READY_QC",
+      });
+    } catch (error) {
+      message = (error as Error).message;
+    }
+
+    expect(message).toBe("COUNTDOWN_NOT_PLANABLE");
+  });
+
+  it("rejects create when the countdown is rejected", async () => {
+    let message = "";
+    try {
+      await createPlanWithCapacity({
+        remainingHours: 4,
+        reservedPlanHours: 0,
+        targetHours: 1,
+        currentStatus: "REJECTED",
+      });
+    } catch (error) {
+      message = (error as Error).message;
+    }
+
+    expect(message).toBe("COUNTDOWN_NOT_PLANABLE");
   });
 
   it("allows requested hours equal to remaining minus reserved plan hours", async () => {

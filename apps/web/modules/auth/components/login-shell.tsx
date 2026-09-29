@@ -18,13 +18,17 @@ const loginSchema = z.object({
 
 type LoginFormValues = z.infer<typeof loginSchema>;
 
-export function LoginShell() {
+interface LoginShellProps {
+  sessionMessage?: string;
+}
+
+export function LoginShell({ sessionMessage }: LoginShellProps) {
   const year = useMemo(() => new Date().getFullYear(), []);
   const router = useRouter();
   const {
     register,
     handleSubmit,
-    getValues,
+    watch,
     formState: { errors },
   } = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -36,8 +40,9 @@ export function LoginShell() {
 
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [confirmMessage, setConfirmMessage] = useState("");
-  const [showConfirm, setShowConfirm] = useState(false);
+  const [sessionNotice, setSessionNotice] = useState<string | null>(
+    sessionMessage ?? null,
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [retryAfterUntil, setRetryAfterUntil] = useState<number | null>(null);
   const [now, setNow] = useState(() => Date.now());
@@ -46,6 +51,11 @@ export function LoginShell() {
     retryAfterUntil === null
       ? 0
       : Math.max(0, Math.ceil((retryAfterUntil - now) / 1_000));
+  const watchedEmployeeId = watch("employeeId");
+  const watchedPassword = watch("password");
+  const canSubmit =
+    (watchedEmployeeId ?? "").trim().length > 0 &&
+    (watchedPassword ?? "").trim().length > 0;
 
   useEffect(() => {
     if (retryAfterUntil === null) {
@@ -63,7 +73,7 @@ export function LoginShell() {
     return () => window.clearInterval(intervalId);
   }, [retryAfterUntil]);
 
-  async function doLogin(data: LoginFormValues, force: boolean) {
+  async function doLogin(data: LoginFormValues) {
     if (submitLockRef.current || retryAfterSeconds > 0) {
       return;
     }
@@ -71,25 +81,19 @@ export function LoginShell() {
     submitLockRef.current = true;
     setIsSubmitting(true);
     setError(null);
+    setSessionNotice(null);
 
     try {
       const result = await loginWithPassword({
         employeeId: data.employeeId,
         password: data.password,
-        force,
+        force: true,
       });
 
       if (result.success) {
         setRetryAfterUntil(null);
-        setShowConfirm(false);
         router.replace("/dashboard");
         router.refresh();
-        return;
-      }
-
-      if (result.errorCode === "ACTIVE_SESSION_EXISTS") {
-        setConfirmMessage(result.message);
-        setShowConfirm(true);
         return;
       }
 
@@ -99,7 +103,6 @@ export function LoginShell() {
         setRetryAfterUntil(Date.now() + retryAfter * 1_000);
       }
 
-      setShowConfirm(false);
       setError(result.message);
     } finally {
       submitLockRef.current = false;
@@ -108,16 +111,12 @@ export function LoginShell() {
   }
 
   function submitLogin(data: LoginFormValues) {
-    void doLogin(data, false);
+    void doLogin(data);
   }
 
   function handleFormSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     void handleSubmit(submitLogin)(event);
-  }
-
-  function submitForceLogin() {
-    void doLogin(getValues(), true);
   }
 
   return (
@@ -204,15 +203,15 @@ export function LoginShell() {
             {errors.password && <p className="text-[13px] text-[#d16552]">{errors.password.message}</p>}
           </div>
 
-          {error ? (
+          {sessionNotice || error ? (
             <div className="rounded-lg border border-[#d16552]/30 bg-[#d16552]/10 px-3 py-2 text-[14px] text-[#d16552]">
-              {error}
+              {error ?? sessionNotice}
             </div>
           ) : null}
 
           <button
             type="submit"
-            disabled={isSubmitting || retryAfterSeconds > 0}
+            disabled={!canSubmit || isSubmitting || retryAfterSeconds > 0}
             className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#fdb360] text-[15px] font-semibold tracking-wide text-[#261910] transition-colors hover:bg-[#fda23d] active:bg-[#fc9119] disabled:cursor-not-allowed disabled:bg-[#606062] disabled:text-[#a1a0a5]"
           >
             {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <LogIn className="w-4 h-4" />}
@@ -229,34 +228,6 @@ export function LoginShell() {
         </p>
       </div>
 
-      {showConfirm ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#19191a]/90 p-4 backdrop-blur-[1px]">
-          <div className="w-full max-w-sm rounded-xl border border-[#606062] bg-[#2b2b2c] p-6 shadow-2xl">
-            <h3 className="mb-3 text-lg font-medium text-[#efeff0]">Konfirmasi Login</h3>
-            <p className="mb-6 text-[15px] leading-relaxed text-[#a1a0a5]">
-              {confirmMessage}
-            </p>
-            <div className="flex gap-3 justify-end">
-              <button
-                type="button"
-                onClick={() => setShowConfirm(false)}
-                disabled={isSubmitting}
-                className="rounded-lg px-4 py-2 text-[14px] font-medium text-[#a1a0a5] transition-colors hover:bg-[#444446] hover:text-[#efeff0] disabled:cursor-not-allowed disabled:text-[#6f6f71]"
-              >
-                Batal
-              </button>
-              <button
-                type="button"
-                onClick={submitForceLogin}
-                disabled={isSubmitting}
-                className="rounded-lg bg-[#fdb360] px-4 py-2 text-[14px] font-semibold text-[#261910] transition-colors hover:bg-[#fda23d] disabled:cursor-not-allowed disabled:bg-[#606062] disabled:text-[#a1a0a5]"
-              >
-                Login di sini
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }

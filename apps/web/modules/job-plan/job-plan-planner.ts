@@ -7,7 +7,7 @@ import type {
   ManualExecutionJobPlanRuntimeRequest,
   MutateJobPlanRuntimeApprovalRequest,
 } from "@smsystem/contracts/job-plan-runtime";
-import { jobPlanCountdownOptionSchema, jobPlanEmployeeOptionSchema, jobPlanJobTypeOptionSchema, jobPlanPanelOptionSchema } from "@smsystem/contracts/job-plan";
+import { jobPlanCountdownOptionSchema, jobPlanEmployeeOptionSchema, jobPlanJobTypeOptionSchema, jobPlanPanelOptionSchema, type JobPlanRecord } from "@smsystem/contracts/job-plan";
 import { breakMinutesForJobPlanDate, breakStartMinutesForJobPlanDate } from "@smsystem/contracts/job-plan-schedule";
 import type { z } from "zod";
 import { parseSmsDate, parseSmsDurationMinutes, parseSmsTime } from "@/shared/datagrid/parsers";
@@ -313,6 +313,63 @@ export function toJobPlanRuntimeDisplayRows(
       unverifiedWorkMinutes: item.unverified_work_minutes,
       note: item.note ?? "",
       isPriority: item.is_priority,
+      error: null,
+    };
+  });
+}
+
+export function toJobPlanDraftDisplayRows(
+  drafts: JobPlanRecord[],
+  countdowns: JobPlanCountdownOption[],
+  employees: JobPlanEmployeeOption[],
+): JobPlanRuntimeDisplayRow[] {
+  const countdownByCore = new Map(countdowns.map((item) => [item.value, item]));
+  const employeeById = new Map(employees.map((item) => [item.value, item]));
+
+  return drafts.filter((draft) => draft.status === "DRAFT").map((draft) => {
+    const countdown = countdownByCore.get(draft.coreId);
+    const employee = employeeById.get(draft.assignedUserId);
+    const targetMinutes = Math.round(draft.targetHours * 60);
+    return {
+      clientId: `legacy-draft-${draft.planId}`,
+      isNew: false,
+      planId: draft.planId,
+      workMode: draft.isOvertime ? "overtime" : "normal",
+      coreId: draft.coreId,
+      divisionId: countdown?.divisionId ?? draft.divisionId ?? null,
+      carId: countdown?.carId ?? draft.draftCarId ?? "",
+      panelId: countdown?.panelId ?? draft.draftPanelId ?? null,
+      kpId: countdown?.kpId ?? null,
+      kpName: countdown?.kpName ?? null,
+      qaIds: countdown?.qaIds ?? [],
+      qaNames: countdown?.qaNames ?? [],
+      unitName: countdown?.unitName ?? draft.unitName,
+      panelName: countdown?.panelName ?? draft.panelName ?? "-",
+      jobDescription: draft.jobDescription || countdown?.jobName || countdown?.label || "-",
+      initialFinding: "",
+      instructionText: draft.instructionText || draft.note || "",
+      employeeId: draft.assignedUserId,
+      employeeName: employee?.label ?? draft.assignedUserName,
+      divisionName: countdown?.divisionName ?? draft.divisionName,
+      taskDate: draft.taskDate,
+      startTime: draft.startTime ?? "-",
+      finishTime: draft.finishTime ?? "-",
+      durationText: minutesToDuration(targetMinutes),
+      targetTotalText: minutesToDuration(Math.round((draft.targetTotalHours ?? draft.targetHours) * 60)),
+      remainingText: minutesToDuration(Math.round((draft.remainingHours ?? countdown?.remainingHours ?? 0) * 60)),
+      approval: formatJobPlanRuntimeApproval("DRAFT"),
+      approvalState: "DRAFT",
+      execution: formatJobPlanRuntimeExecution("NOT_STARTED"),
+      executionState: "NOT_STARTED",
+      ledger: formatJobPlanRuntimeLedger("UNMATERIALIZED"),
+      ledgerState: "UNMATERIALIZED",
+      sync: "Draft Redis",
+      version: 1,
+      accumulatedWorkMinutes: 0,
+      persistedWorkMinutes: 0,
+      unverifiedWorkMinutes: 0,
+      note: draft.note ?? "",
+      isPriority: draft.isPriority,
       error: null,
     };
   });

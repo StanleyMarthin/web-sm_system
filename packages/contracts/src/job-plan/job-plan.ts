@@ -58,6 +58,7 @@ export const jobPlanCountdownOptionSchema = jobPlanReferenceOptionSchema.extend(
   remainingHours: z.number(),
   availablePlanHours: z.number().nullable().optional(),
   progressPercent: z.number().nullable().optional(),
+  status: z.string().nullable().optional(),
 });
 
 export const jobPlanUnitOptionSchema = jobPlanReferenceOptionSchema.extend({

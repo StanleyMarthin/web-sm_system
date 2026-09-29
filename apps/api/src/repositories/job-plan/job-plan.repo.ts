@@ -140,6 +140,7 @@ interface CountdownReferenceRow extends RowDataPacket {
   remainingHours: number | null;
   availablePlanHours: number | null;
   progressPercent: number | null;
+  status?: string | null;
 }
 
 interface UnitReferenceRow extends RowDataPacket {
@@ -229,6 +230,11 @@ function toBoolean(value: unknown): boolean {
 function toNumber(value: unknown, fallback = 0): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function isCountdownPlanableStatus(value: string | null | undefined): boolean {
+  const normalized = String(value ?? "PLAN").trim().toUpperCase();
+  return !["DONE", "CANCEL", "READY_QC", "QC_READY", "REJECTED"].includes(normalized);
 }
 
 function parseDurationHours(value: string): number {
@@ -759,6 +765,10 @@ async function assertCountdownAccessible(
     throw new Error("SCOPE_FORBIDDEN");
   }
 
+  if (!isCountdownPlanableStatus(countdown.currentStatus)) {
+    throw new Error("COUNTDOWN_NOT_PLANABLE");
+  }
+
   await assertCountdownHasMasterPanel(connection, countdown);
 
   return countdown;
@@ -1166,7 +1176,7 @@ async function findOpenAdditionalCountdown(
         AND division_id = ?
         AND panel_id = ?
         AND job_type_id = ?
-        AND COALESCE(status, 'PLAN') <> 'DONE'
+        AND COALESCE(status, 'PLAN') NOT IN ('DONE', 'CANCEL', 'READY_QC', 'QC_READY', 'REJECTED')
       ORDER BY updated_at DESC, created_at DESC
       LIMIT 1
       FOR UPDATE
@@ -1670,7 +1680,8 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
             ROUND(COALESCE(jc.target_hours, jc.target_hours_initial, 0), 2) AS targetTotalHours,
             ROUND(COALESCE(jc.remaining_hours, 0), 2) AS remainingHours,
             ROUND(GREATEST(COALESCE(jc.remaining_hours, 0) - COALESCE(planCapacity.reservedPlanHours, 0), 0), 2) AS availablePlanHours,
-            ROUND(COALESCE(jc.actual_progress_percent, 0), 2) AS progressPercent
+            ROUND(COALESCE(jc.actual_progress_percent, 0), 2) AS progressPercent,
+            COALESCE(jc.status, 'PLAN') AS status
           FROM sm_jobdesc_countdown jc
           LEFT JOIN cars c ON c.id = jc.car_id
           LEFT JOIN car_project_assignment cpa ON cpa.car_id = jc.car_id AND cpa.ended_at IS NULL
@@ -1726,6 +1737,7 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
             jc.section_name,
             d.name,
             mjt.job_name,
+            jc.status,
             jc.remaining_hours,
             jc.actual_progress_percent,
             planCapacity.reservedPlanHours
@@ -1867,6 +1879,7 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
           row.availablePlanHours === null ? null : Number(row.availablePlanHours),
         progressPercent:
           row.progressPercent === null ? null : Number(row.progressPercent),
+        status: row.status ?? null,
       })),
       workOrders: workOrderRows.map((row) => ({
         value: row.value,
@@ -1993,7 +2006,7 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
     const scopeSql = buildScopeWhereClause(params.scope, params.employeeId, countdownParams, "jc", "p_scope");
     const scopeJoin = scopeSql ? "LEFT JOIN sm_jobdesc_plan p_scope ON p_scope.core_id = jc.id" : "";
     const commonWhere = `
-      COALESCE(jc.status, 'PLAN') NOT IN ('DONE', 'CANCEL')
+      COALESCE(jc.status, 'PLAN') NOT IN ('DONE', 'CANCEL', 'READY_QC', 'QC_READY', 'REJECTED')
       ${scopeSql ? `AND ${scopeSql}` : ""}
     `;
 
@@ -2046,7 +2059,7 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
             FROM sm_jobdesc_countdown jc_panel
             ${panelScopeSql ? "LEFT JOIN sm_jobdesc_plan p_scope_panel ON p_scope_panel.core_id = jc_panel.id" : ""}
             WHERE jc_panel.car_id = mp.car_id
-              AND COALESCE(jc_panel.status, 'PLAN') NOT IN ('DONE', 'CANCEL')
+              AND COALESCE(jc_panel.status, 'PLAN') NOT IN ('DONE', 'CANCEL', 'READY_QC', 'QC_READY', 'REJECTED')
               ${panelScopeSql ? `AND ${panelScopeSql}` : ""}
               ${params.divisionId ? "AND jc_panel.division_id = ?" : ""}
           )
@@ -2126,7 +2139,8 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
               ), 0),
               0
             ), 2) AS availablePlanHours,
-            ROUND(COALESCE(jc.actual_progress_percent, 0), 2) AS progressPercent
+            ROUND(COALESCE(jc.actual_progress_percent, 0), 2) AS progressPercent,
+            COALESCE(jc.status, 'PLAN') AS status
           FROM sm_jobdesc_countdown jc
           ${scopeJoin}
           LEFT JOIN cars c ON c.id = jc.car_id
@@ -2154,6 +2168,7 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
             jc.section_name,
             d.name,
             mjt.job_name,
+            jc.status,
             jc.target_hours,
             jc.target_hours_initial,
             jc.remaining_hours,
@@ -2183,6 +2198,7 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
         remainingHours: Number(row.remainingHours ?? 0),
         availablePlanHours: row.availablePlanHours === null ? null : Number(row.availablePlanHours),
         progressPercent: row.progressPercent === null ? null : Number(row.progressPercent),
+        status: row.status ?? null,
       }));
     }
 

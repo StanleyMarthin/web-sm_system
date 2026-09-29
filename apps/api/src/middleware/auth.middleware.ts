@@ -8,6 +8,18 @@ export async function requireSession(
 ): Promise<{ session: WebSession } | { response: Response }> {
   const session = await authService.getCurrentSession(request);
   if (!session) {
+    const revocation = await authService.getSessionRevocation?.(request);
+    if (revocation) {
+      return {
+        response: errorResponse(
+          request,
+          revocation.message,
+          401,
+          revocation.reason,
+        ),
+      };
+    }
+
     return {
       response: errorResponse(
         request,

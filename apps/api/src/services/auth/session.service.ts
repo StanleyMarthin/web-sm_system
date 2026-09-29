@@ -35,6 +35,11 @@ export interface WebSession {
   createdAt: string;
 }
 
+export interface SessionRevocation {
+  reason: "SESSION_REPLACED";
+  message: string;
+}
+
 interface CreateSessionInput {
   user: AuthUser;
   refreshToken: string;
@@ -47,10 +52,11 @@ interface CreateSessionInput {
 export interface SessionStore {
   createSession(input: CreateSessionInput): Promise<WebSession>;
   getSessionFromRequest(request: Request): Promise<WebSession | null>;
+  getSessionRevocationFromRequest?(request: Request): Promise<SessionRevocation | null>;
   getActiveSessionByEmployeeId(employeeId: string): Promise<WebSession | null>;
   updateSessionUser?(sessionKey: string, user: AuthUser): Promise<void>;
   deleteSessionByKey(sessionKey: string): Promise<void>;
-  deleteActiveSessionByEmployeeId(employeeId: string): Promise<void>;
+  deleteActiveSessionByEmployeeId(employeeId: string, revocation?: SessionRevocation): Promise<void>;
   buildLoginCookies(session: WebSession): string[];
   buildLogoutCookies(): string[];
 }
@@ -90,6 +96,10 @@ function decodeSignedSessionCookieValue(value: string, env: ApiEnv): string | nu
 function getSessionCookieValue(request: Request, env: ApiEnv): string | null {
   const cookieValue = getCookie(request, "sm_session");
   return cookieValue ? decodeSignedSessionCookieValue(cookieValue, env) : null;
+}
+
+function getRevokedSessionKey(sessionKey: string): string {
+  return `session-revoked:${sessionKey}`;
 }
 
 function createCsrfToken(): string {
@@ -232,6 +242,26 @@ export class RedisSessionStore implements SessionStore {
     };
   }
 
+  async getSessionRevocationFromRequest(request: Request): Promise<SessionRevocation | null> {
+    const sessionKey = getSessionCookieValue(request, this.env);
+    if (!sessionKey) {
+      return null;
+    }
+
+    const client = await this.clientFactory();
+    const rawRevocation = await client.get(getRevokedSessionKey(sessionKey));
+    if (!rawRevocation) {
+      return null;
+    }
+
+    const revocation = JSON.parse(rawRevocation) as SessionRevocation;
+    if (revocation.reason !== "SESSION_REPLACED" || !revocation.message) {
+      return null;
+    }
+
+    return revocation;
+  }
+
   async getActiveSessionByEmployeeId(employeeId: string): Promise<WebSession | null> {
     const client = await this.clientFactory();
     const activeSessionKey = `session-active:${employeeId}`;
@@ -317,11 +347,19 @@ export class RedisSessionStore implements SessionStore {
     }
   }
 
-  async deleteActiveSessionByEmployeeId(employeeId: string): Promise<void> {
+  async deleteActiveSessionByEmployeeId(employeeId: string, revocation?: SessionRevocation): Promise<void> {
     const client = await this.clientFactory();
     const activeSessionKey = `session-active:${employeeId}`;
     const sessionKey = await client.get(activeSessionKey);
     if (sessionKey) {
+      if (revocation) {
+        await client.set(getRevokedSessionKey(sessionKey), JSON.stringify(revocation), {
+          expiration: {
+            type: "EX",
+            value: this.env.SESSION_TTL_SECONDS,
+          },
+        });
+      }
       await client.del(sessionKey);
     }
     await client.del(activeSessionKey);

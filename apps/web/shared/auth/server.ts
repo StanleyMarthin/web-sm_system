@@ -31,12 +31,27 @@ async function fetchJson(path: string, cookieHeader: string) {
 export const fetchCurrentUser = cache(
   async (
     cookieHeader: string,
-  ): Promise<{ user: AuthUser | null; status: number }> => {
+  ): Promise<{ user: AuthUser | null; status: number; errorCode?: string; message?: string }> => {
     const response = await fetchJson("/api/auth/me", cookieHeader);
     if (!response || !response.ok) {
+      let errorCode: string | undefined;
+      let message: string | undefined;
+      try {
+        const payload = (await response?.json()) as {
+          errorCode?: string;
+          message?: string;
+        };
+        errorCode = payload?.errorCode;
+        message = payload?.message;
+      } catch {
+        // Invalid error envelopes fall through to the status-only result.
+      }
+
       return {
         user: null,
         status: response?.status ?? 503,
+        errorCode,
+        message,
       };
     }
 

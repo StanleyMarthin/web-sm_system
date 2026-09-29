@@ -60,6 +60,15 @@ function mapJobPlanError(request: Request, error: unknown): Response {
       );
     }
 
+    if (error.message === "COUNTDOWN_NOT_PLANABLE") {
+      return errorResponse(
+        request,
+        "Countdown sudah selesai, ditolak, dibatalkan, atau sedang butuh QC sehingga tidak bisa dibuat plan.",
+        409,
+        "COUNTDOWN_NOT_PLANABLE",
+      );
+    }
+
     if (error.message === "ADDITIONAL_REFERENCE_INCOMPLETE") {
       return errorResponse(
         request,

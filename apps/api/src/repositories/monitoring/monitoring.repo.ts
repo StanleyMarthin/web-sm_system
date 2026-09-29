@@ -40,7 +40,7 @@ interface MonitoringListPayload {
 interface MonitoringTaskRow extends RowDataPacket {
   planId: string;
   coreId: string;
-  carId: string;
+  carId: string | null;
   unitName: string;
   customerName: string | null;
   divisionId: number | null;
@@ -255,7 +255,7 @@ function buildMonitoringBaseSql(): string {
     SELECT
       p.id AS planId,
       p.core_id AS coreId,
-      COALESCE(c.id, cd.id) AS carId,
+      c.id AS carId,
       COALESCE(c.unit_name, NULLIF(cd.section_name, ''), p.jobdescription, cd.id) AS unitName,
       c.customer_name AS customerName,
       cd.division_id AS divisionId,
@@ -539,7 +539,7 @@ function mapTaskRow(row: MonitoringTaskRow): MonitoringTaskRecord {
   return {
     planId: row.planId,
     coreId: row.coreId,
-    carId: row.carId,
+    carId: row.carId ?? "",
     unitName: row.unitName,
     customerName: row.customerName,
     divisionId: row.divisionId,

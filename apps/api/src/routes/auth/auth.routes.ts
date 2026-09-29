@@ -171,6 +171,16 @@ export async function handleMeRoute(
 ): Promise<Response> {
   const user = await authService.getCurrentUser(request);
   if (!user) {
+    const revocation = await authService.getSessionRevocation?.(request);
+    if (revocation) {
+      return errorResponse(
+        request,
+        revocation.message,
+        401,
+        revocation.reason,
+      );
+    }
+
     return errorResponse(
       request,
       "Sesi tidak valid atau sudah berakhir.",
@@ -190,6 +200,16 @@ export async function handlePermissionsRoute(
 ): Promise<Response> {
   const permissions = await authService.getCurrentPermissions(request);
   if (!permissions) {
+    const revocation = await authService.getSessionRevocation?.(request);
+    if (revocation) {
+      return errorResponse(
+        request,
+        revocation.message,
+        401,
+        revocation.reason,
+      );
+    }
+
     return errorResponse(
       request,
       "Sesi tidak valid atau sudah berakhir.",

@@ -51,6 +51,8 @@ async function JobPlanPageContent({ searchParams }: JobPlanPageProps) {
       initialDate={requestedDate}
       initialMode={requestedModeParam}
       initialWorkMode={requestedWorkModeParam}
+      initialDraftRows={payload.data.filter((row) => row.status === "DRAFT")}
+      defaultDivisionName={!user.scope.canViewAllUnits ? user.divisionName : null}
       countdowns={payload.references.countdowns}
       employees={payload.references.employees}
       divisions={payload.references.divisions}
