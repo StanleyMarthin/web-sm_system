@@ -30,6 +30,7 @@ import {
   jobPlanWindowMinutes,
   minutesToDuration,
   minutesToTime,
+  resolveAdditionalJobTargetMinutes,
   resolveJobPlanDivisionName,
   toLocalDateValue,
   toJobPlanRuntimeDisplayRows,
@@ -670,12 +671,12 @@ function AdditionalJobDialog({
             />
           </label>
           <label className="text-[11px] text-muted-foreground">
-            Target awal (total sampai beres)
+            Target awal (opsional)
             <input
               value={value.targetText}
               onChange={(event) => update({ targetText: event.target.value })}
               className="mt-1 h-9 w-full border border-border bg-background px-2 font-mono text-[13px] text-foreground outline-none focus:border-primary/45"
-              placeholder="Contoh: 16:00"
+              placeholder="Kosong = target hari ini"
             />
           </label>
           <label className="text-[11px] text-muted-foreground">
@@ -1437,11 +1438,6 @@ export function JobPlanPlannerShell({
       setError("Team, PIC, unit, panel/part, dan jobdesc tambahan wajib diisi.");
       return;
     }
-    const target = parseSmsDurationMinutes(additionalJobForm.targetText.trim(), "Target awal");
-    if (!additionalJobForm.targetText.trim() || target.error || !target.value) {
-      setError(target.error ?? "Target awal wajib diisi.");
-      return;
-    }
     const windowMinutes = jobPlanWindowMinutes(additionalJobForm.startTime, additionalJobForm.finishTime);
     if (windowMinutes === null) {
       setError("Jam selesai harus lebih besar dari jam mulai.");
@@ -1453,8 +1449,9 @@ export function JobPlanPlannerShell({
       setError("Jam istirahat melebihi rentang jam kerja.");
       return;
     }
-    if (target.value < dailyMinutes) {
-      setError("Target awal tidak boleh lebih kecil dari total target hari ini.");
+    const target = resolveAdditionalJobTargetMinutes(additionalJobForm.targetText, dailyMinutes);
+    if (target.error || !target.value) {
+      setError(target.error ?? "Target awal tidak valid.");
       return;
     }
     const durationText = minutesToDuration(dailyMinutes);

@@ -19,6 +19,7 @@ import {
   isJobPlanCountdownPlannable,
   minutesToDuration,
   minutesToTime,
+  resolveAdditionalJobTargetMinutes,
   toJobPlanDraftDisplayRows,
   toLocalDateValue,
   toJobPlanRuntimeDisplayRows,
@@ -265,6 +266,54 @@ describe("Job Plan planner helpers", () => {
       panelId: 99,
       panelName: "Quarter Panel",
       jobName: "Making",
+    });
+  });
+
+  test("defaults blank additional target to the daily target", () => {
+    expect(resolveAdditionalJobTargetMinutes("", 99)).toEqual({ value: 99 });
+    expect(resolveAdditionalJobTargetMinutes(null, 99)).toEqual({ value: 99 });
+    expect(resolveAdditionalJobTargetMinutes("02:00", 99)).toEqual({ value: 120 });
+    expect(resolveAdditionalJobTargetMinutes("01:00", 99)).toEqual({
+      value: null,
+      error: "Target awal tidak boleh lebih kecil dari total target hari ini.",
+    });
+  });
+
+  test("uses target total for shared mobile draft while keeping daily finish time", () => {
+    const draft = {
+      clientId: "draft-web-total-target",
+      isNew: true as const,
+      sourceType: "additional" as const,
+      workMode: "normal" as const,
+      coreId: "",
+      divisionId: 7,
+      carId: "220S",
+      panelId: 99,
+      panelName: "Quarter Panel",
+      jobTypeId: "JOB-1",
+      jobTypeName: "",
+      employeeId: "EMP-1",
+      taskDate: "2026-09-15",
+      startTime: "08:00",
+      durationText: "01:39",
+      targetTotalText: "04:00",
+      jobDescription: "Making pola",
+      note: "Ikuti bentuk panel",
+      isOvertime: false,
+      isRework: false,
+      isPriority: false,
+      error: null,
+    };
+
+    expect(buildJobPlanDraftRecord(draft, {
+      countdowns: [],
+      employees: [employee],
+      divisions: [],
+      panels: [],
+      jobTypes: [{ value: "JOB-1", label: "Making", jobName: "Making", divisionId: 7 }],
+    })).toMatchObject({
+      targetHours: 4,
+      finishTime: "09:39",
     });
   });
 

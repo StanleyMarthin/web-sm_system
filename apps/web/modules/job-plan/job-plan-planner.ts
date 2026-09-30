@@ -179,7 +179,8 @@ export function buildJobPlanDraftRecord(
     references.countdowns,
     countdown?.divisionName,
   );
-  const targetMinutes = parseSmsDurationMinutes(draft.durationText, "Durasi").value ?? 0;
+  const durationMinutes = parseSmsDurationMinutes(draft.durationText, "Durasi").value ?? 0;
+  const targetMinutes = parseSmsDurationMinutes(draft.targetTotalText?.trim() || draft.durationText, "Target awal").value ?? durationMinutes;
   const startMinutes = parseTimeToMinutes(draft.startTime).value ?? 0;
 
   return {
@@ -199,7 +200,7 @@ export function buildJobPlanDraftRecord(
     taskDate: draft.taskDate,
     targetHours: targetMinutes / 60,
     startTime: draft.startTime,
-    finishTime: minutesToTime(startMinutes + targetMinutes),
+    finishTime: minutesToTime(startMinutes + durationMinutes),
     jobDescription: draft.jobDescription.trim(),
     note: draft.note.trim() || null,
     isOvertime: draft.isOvertime,
@@ -342,6 +343,17 @@ export function jobPlanBreakMinutesForWindow(taskDate: string, startTime: string
   const breakStart = breakStartMinutesForJobPlanDate(taskDate);
   const breakMinutes = breakMinutesForJobPlanDate(taskDate);
   return start < breakStart + breakMinutes && start + windowMinutes > breakStart ? breakMinutes : 0;
+}
+
+export function resolveAdditionalJobTargetMinutes(targetText: string | null | undefined, dailyMinutes: number) {
+  const rawTarget = targetText?.trim() ?? "";
+  if (!rawTarget) return { value: dailyMinutes };
+
+  const target = parseSmsDurationMinutes(rawTarget, "Target awal");
+  if (target.error || !target.value) return { value: null, error: target.error ?? "Target awal tidak valid." };
+  if (target.value < dailyMinutes) return { value: null, error: "Target awal tidak boleh lebih kecil dari total target hari ini." };
+
+  return { value: target.value };
 }
 
 export function createJobPlanRuntimeDraft(context: JobPlanCountdownOption | null): JobPlanRuntimePlannerDraft {
