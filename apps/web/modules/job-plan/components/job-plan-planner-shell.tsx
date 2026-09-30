@@ -1111,8 +1111,19 @@ export function JobPlanPlannerShell({
     }
 
     const availablePanels = panelOptions(next);
-    if (next.panelId !== null && !availablePanels.some((option) => option.value === String(next.panelId))) {
+    const masterPanel = next.panelId === null ? null : [
+      ...panels,
+      ...Object.values(lazyPanels).flat(),
+    ].find((option) => option.value === String(next.panelId) && (!option.carId || option.carId === next.carId));
+    if (
+      next.sourceType !== "additional"
+      && next.panelId !== null
+      && !availablePanels.some((option) => option.value === String(next.panelId))
+    ) {
       next = { ...next, panelId: null, coreId: "", jobDescription: "", initialFinding: "" };
+    }
+    if (next.sourceType === "additional" && masterPanel && !next.panelName?.trim()) {
+      next.panelName = masterPanel.panelName;
     }
 
     const availableJobs = jobOptions(next);
