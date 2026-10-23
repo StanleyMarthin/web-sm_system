@@ -10,10 +10,10 @@ import type {
   RoleScopePreset,
   RoleUnitScopeMode,
 } from "@smsystem/contracts/rbac";
+import { permissionCodes } from "@smsystem/permissions";
 import {
   CheckCircle2,
   ChevronRight,
-  Pencil,
   Plus,
   Save,
   Search,
@@ -28,6 +28,7 @@ import {
 } from "@/shared/api/roles/roles";
 import { describeHistoryChange, permissionAction, permissionChanges, permissionLabel, permissionModule, type PermissionAction } from "../permission-matrix";
 import { permissionPresentation } from "../permission-registry";
+import { approvalBlueprints, closestApprovalBlueprint, resolveApprovalBlueprintKey, type ApprovalBlueprint } from "../approval-mapping";
 
 interface RoleMatrixShellProps {
   roles: RoleRecord[];
@@ -38,14 +39,6 @@ interface RoleMatrixShellProps {
   };
   activeRoleId: number;
   activePermissionIds: number[];
-}
-
-interface ApprovalBlueprint {
-  key: string;
-  label: string;
-  roleLevel: string;
-  approvalRank: string;
-  note: string;
 }
 
 interface RoleFormState {
@@ -82,51 +75,6 @@ type EditorMode = "create" | "edit";
 type RoleTab = "summary" | "settings" | "permissions" | "history";
 
 const permissionActions: PermissionAction[] = ["View", "Create", "Approve", "Process", "Other"];
-
-const approvalBlueprints: ApprovalBlueprint[] = [
-  {
-    key: "support_staff",
-    label: "Staff Support",
-    roleLevel: "100",
-    approvalRank: "",
-    note: "Operasional harian, tidak masuk rantai approval.",
-  },
-  {
-    key: "coordinator_support",
-    label: "Koordinator Support",
-    roleLevel: "140",
-    approvalRank: "",
-    note: "Gudang, finance, atau admin spesialis tanpa approval proyek.",
-  },
-  {
-    key: "division_lead",
-    label: "Ketua Divisi",
-    roleLevel: "180",
-    approvalRank: "1",
-    note: "Pemeriksa pertama dari divisi yang memegang pekerjaan.",
-  },
-  {
-    key: "advisor",
-    label: "QA",
-    roleLevel: "220",
-    approvalRank: "2",
-    note: "Pengawas teknis dan validasi lintas pekerjaan divisi.",
-  },
-  {
-    key: "project_head",
-    label: "KP / Kepala Produksi",
-    roleLevel: "320",
-    approvalRank: "3",
-    note: "Penanggung jawab unit atau proyek pada tahap akhir operasional.",
-  },
-  {
-    key: "global_management",
-    label: "PM / MP / MIS",
-    roleLevel: "900",
-    approvalRank: "9",
-    note: "Kontrol global lintas unit, approval pusat, dan audit penuh.",
-  },
-];
 
 const divisionModeOptions: Array<{
   value: RoleDivisionScopeMode;
@@ -300,32 +248,28 @@ function humanizeDerivedScope(scopeBasis: RoleScopeBasis): string {
   }
 }
 
-function resolveApprovalBlueprintKey(form: RoleFormState): string {
-  const match = approvalBlueprints.find(
-    (blueprint) =>
-      blueprint.roleLevel === form.roleLevel &&
-      blueprint.approvalRank === form.approvalRank,
-  );
-  return match?.key ?? "legacy";
-}
+const approvalPermissionControls = [
+  {
+    code: permissionCodes.woApprove,
+    label: "KD dan KP",
+    note: "Boleh menyetujui tahap Ketua Divisi dan Kepala Produksi. Tahap KP juga membutuhkan level approval 3 atau lebih tinggi.",
+  },
+  {
+    code: permissionCodes.woApproveAdvisor,
+    label: "QA",
+    note: "Boleh menyetujui tahap QA pada Work Order.",
+  },
+  {
+    code: permissionCodes.woApprovePm,
+    label: "PM / MP",
+    note: "Boleh menyetujui tahap akhir PM atau MP pada Work Order.",
+  },
+] as const;
 
-function buildApprovalChoices(form: RoleFormState): ApprovalBlueprint[] {
-  const activeKey = resolveApprovalBlueprintKey(form);
-  if (activeKey !== "legacy") {
-    return approvalBlueprints;
-  }
-
-  return [
-    ...approvalBlueprints,
-    {
-      key: "legacy",
-      label: "Nilai Lama",
-      roleLevel: form.roleLevel || "0",
-      approvalRank: form.approvalRank,
-      note: "Nilai lama masih terbaca. Pilih lane standar agar admin lebih mudah mengelolanya.",
-    },
-  ];
-}
+const scopePermissionCodes: ReadonlySet<string> = new Set([
+  permissionCodes.viewAllUnits,
+  permissionCodes.viewAssignedUnits,
+]);
 
 function mapIdsToLabels(values: string[], options: RoleReferenceOption[]): string[] {
   if (values.length === 0) {
@@ -623,7 +567,7 @@ export function RoleMatrixShell({
   );
   const [originalPermissionIds, setOriginalPermissionIds] = useState<number[]>([]);
   const [editorMode, setEditorMode] = useState<EditorMode>("edit");
-  const [isEditing, setIsEditing] = useState(false);
+  const [isEditing, setIsEditing] = useState(true);
   const [roleSearch, setRoleSearch] = useState("");
   const [scopeDialog, setScopeDialog] = useState<"division" | "unit" | null>(null);
   const [activeTab, setActiveTab] = useState<RoleTab>("summary");
@@ -648,7 +592,7 @@ export function RoleMatrixShell({
   const [permissionRetry, setPermissionRetry] = useState(0);
 
   const selectedRole = roleCatalog.find((role) => role.id === selectedRoleId);
-  const canEditProfile = editorMode === "create" || isEditing;
+  const canEditProfile = true;
   const originalForm = roleToForm(selectedRole);
   const profileChanges = editorMode === "create" ? ["Role baru"] : [
     ["Nama role", form.roleName, originalForm.roleName],
@@ -659,8 +603,21 @@ export function RoleMatrixShell({
   ].filter(([, current, original]) => current !== original).map(([label]) => label);
   const permissionDiff = permissionChanges(originalPermissionIds, draftPermissionIds);
   const changeCount = profileChanges.length + permissionDiff.added.length + permissionDiff.removed.length;
-  const approvalChoices = useMemo(() => buildApprovalChoices(form), [form]);
   const selectedApprovalKey = resolveApprovalBlueprintKey(form);
+  const selectedApprovalBlueprint = approvalBlueprints.find((choice) => choice.key === selectedApprovalKey) ?? null;
+  const closestApproval = useMemo(() => closestApprovalBlueprint(form), [form]);
+  const unmappedRoleCount = useMemo(
+    () => roleCatalog.filter((role) => resolveApprovalBlueprintKey(roleToForm(role)) === "legacy").length,
+    [roleCatalog],
+  );
+  const permissionIdByCode = useMemo(
+    () => new Map(permissions.map((permission) => [permission.permissionCode, permission.id])),
+    [permissions],
+  );
+  const enabledApprovalControls = approvalPermissionControls.filter((control) => {
+    const permissionId = permissionIdByCode.get(control.code);
+    return permissionId !== undefined && draftPermissionIds.includes(permissionId);
+  });
 
   const filteredRoles = useMemo(() => {
     const keyword = roleSearch.trim().toLowerCase();
@@ -674,7 +631,8 @@ export function RoleMatrixShell({
   const permissionRows = useMemo(() => {
     return [...permissions]
       .filter((permission) => {
-        return permission.platforms?.includes(permissionViewFilter) ?? false;
+        return (permission.platforms?.includes(permissionViewFilter) ?? false)
+          && !scopePermissionCodes.has(permission.permissionCode);
       })
       .sort((left, right) => {
         const moduleCompare = (left.moduleName ?? "general").localeCompare(
@@ -845,7 +803,7 @@ export function RoleMatrixShell({
   }
 
   function openCreateRole() {
-    if (isEditing && !window.confirm("Buang perubahan yang belum disimpan?")) return;
+    if (isEditing && changeCount > 0 && !window.confirm("Buang perubahan yang belum disimpan?")) return;
     setEditorMode("create");
     setSelectedRoleId(0);
     setDraftPermissionIds([]);
@@ -858,22 +816,25 @@ export function RoleMatrixShell({
   }
 
   function selectExistingRole(roleId: number) {
-    if (isPending || (isEditing && !window.confirm("Buang perubahan yang belum disimpan?"))) return;
+    if (isPending || (isEditing && changeCount > 0 && !window.confirm("Buang perubahan yang belum disimpan?"))) return;
     setEditorMode("edit");
     setSelectedRoleId(roleId);
-    setIsEditing(false);
+    setIsEditing(true);
     setError(null);
     setMessage(null);
     setActiveTab("summary");
   }
 
-  function startEditing() {
-    if (editorMode === "create") {
+  function selectTab(nextTab: RoleTab) {
+    if (
+      nextTab !== activeTab &&
+      isEditing &&
+      changeCount > 0 &&
+      !window.confirm("Ada perubahan yang belum disimpan. Lanjutkan pindah tab tanpa menyimpan?")
+    ) {
       return;
     }
-    setIsEditing(true);
-    setError(null);
-    setMessage(null);
+    setActiveTab(nextTab);
   }
 
   function cancelEditing() {
@@ -890,13 +851,13 @@ export function RoleMatrixShell({
         setForm(emptyRoleForm());
         setSelectedRoleId(0);
       }
-      setIsEditing(false);
+      setIsEditing(true);
       return;
     }
 
     setForm(roleToForm(selectedRole));
     setDraftPermissionIds(permissionCacheRef.current[selectedRoleId] ?? []);
-    setIsEditing(false);
+    setIsEditing(true);
   }
 
   function applyApprovalBlueprint(blueprint: ApprovalBlueprint) {
@@ -909,6 +870,12 @@ export function RoleMatrixShell({
       roleLevel: blueprint.roleLevel,
       approvalRank: blueprint.approvalRank,
     }));
+  }
+
+  function toggleApprovalPermission(code: string) {
+    const permissionId = permissionIdByCode.get(code);
+    if (!canEditProfile || !permissionId) return;
+    togglePermission(permissionId);
   }
 
   function applyScopeDialog(payload: {
@@ -1014,7 +981,7 @@ export function RoleMatrixShell({
         setSelectedRoleId(savedRole.id);
         setEditorMode("edit");
         setForm(roleToForm(savedRole));
-        setIsEditing(false);
+        setIsEditing(true);
         setActiveTab("summary");
         setMessage(`Perubahan role ${savedRole.roleName} berhasil disimpan.`);
     } catch {
@@ -1033,7 +1000,7 @@ export function RoleMatrixShell({
       <div className="grid gap-4 lg:grid-cols-[240px_minmax(0,1fr)]">
         <aside className="min-w-0 border border-border bg-card">
           <div className="flex items-center justify-between gap-2 border-b border-border p-3">
-            <h2 className="text-sm font-semibold">Role</h2>
+            <div><h2 className="text-sm font-semibold">Role</h2>{unmappedRoleCount > 0 && <p className="mt-0.5 text-xs text-warning">{unmappedRoleCount} belum dipetakan</p>}</div>
             <button type="button" title="Tambah role" aria-label="Tambah role" onClick={openCreateRole} disabled={isPending} className="inline-flex h-9 w-9 items-center justify-center border border-border hover:bg-muted disabled:opacity-50"><Plus className="h-4 w-4" /></button>
           </div>
           <label className="flex items-center gap-2 border-b border-border px-3">
@@ -1042,12 +1009,15 @@ export function RoleMatrixShell({
             <input value={roleSearch} onChange={(event) => setRoleSearch(event.target.value)} placeholder="Cari nama role" className="h-10 min-w-0 w-full bg-transparent text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary" />
           </label>
           <div>
-            {filteredRoles.length === 0 ? <p className="p-3 text-sm text-muted-foreground">Role tidak ditemukan.</p> : filteredRoles.map((role) => (
-              <button key={role.id} type="button" onClick={() => selectExistingRole(role.id)} aria-current={editorMode === "edit" && selectedRoleId === role.id ? "true" : undefined} className={["block w-full border-b border-border px-3 py-3 text-left hover:bg-muted", editorMode === "edit" && selectedRoleId === role.id ? "bg-muted" : ""].join(" ")}>
+            {filteredRoles.length === 0 ? <p className="p-3 text-sm text-muted-foreground">Role tidak ditemukan.</p> : filteredRoles.map((role) => {
+              const needsMapping = resolveApprovalBlueprintKey(roleToForm(role)) === "legacy";
+              return (
+              <button key={role.id} type="button" onClick={() => selectExistingRole(role.id)} aria-current={editorMode === "edit" && selectedRoleId === role.id ? "true" : undefined} className={["block w-full border-b border-border px-3 py-3 text-left hover:bg-muted", editorMode === "edit" && selectedRoleId === role.id ? "border-l-2 border-l-primary bg-primary/[0.08]" : "", needsMapping ? "bg-warning/[0.04]" : ""].join(" ")}>
                 <span className="block break-words text-sm font-medium">{role.roleName}</span>
-                <span className="mt-1 block text-xs text-muted-foreground">{role.userCount} pegawai · {role.permissionCount} izin</span>
+                <span className="mt-1 block text-xs text-muted-foreground">{role.userCount === 0 ? "Belum dipakai" : `${role.userCount} pegawai`} · {role.permissionCount} izin</span>
+                {needsMapping && <span className="mt-1 block text-xs text-warning">Perlu pemetaan tahap approval</span>}
               </button>
-            ))}
+            ); })}
           </div>
         </aside>
 
@@ -1057,21 +1027,23 @@ export function RoleMatrixShell({
               <h2 className="break-words text-base font-semibold">{editorMode === "create" ? "Role baru" : selectedRole?.roleName ?? "Pilih role"}</h2>
               <p className="mt-1 text-sm text-muted-foreground">{form.description || "Tidak ada keterangan."}</p>
             </div>
-            {!canEditProfile && selectedRole && <button type="button" onClick={startEditing} disabled={isFetchingPermissions || !permissionsLoaded} className="inline-flex h-9 items-center gap-2 border border-border px-3 text-sm hover:bg-muted disabled:opacity-50"><Pencil className="h-4 w-4" /> Ubah</button>}
           </div>
           <nav aria-label="Detail role" className="flex flex-wrap gap-1 border-b border-border px-3">
             {([["summary", "Ringkasan"], ["settings", "Pengaturan"], ["permissions", "Izin"], ["history", "Riwayat"]] as Array<[RoleTab, string]>).map(([tab, label]) => (
-              <button key={tab} type="button" onClick={() => setActiveTab(tab)} aria-current={activeTab === tab ? "page" : undefined} className={["border-b-2 px-3 py-3 text-sm", activeTab === tab ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"].join(" ")}>{label}</button>
+              <button key={tab} type="button" onClick={() => selectTab(tab)} aria-current={activeTab === tab ? "page" : undefined} className={["border-b-2 px-3 py-3 text-sm", activeTab === tab ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"].join(" ")}>{label}</button>
             ))}
           </nav>
 
           {activeTab === "summary" && <div className="space-y-4 p-4 text-sm">
             <dl className="grid gap-4 sm:grid-cols-2">
-              <div><dt className="text-muted-foreground">Tahap approval</dt><dd className="mt-1 font-medium">{approvalChoices.find((choice) => choice.key === selectedApprovalKey)?.label ?? "-"}</dd></div>
+              <div><dt className="text-muted-foreground">Tahap utama</dt><dd className="mt-1 font-medium">{selectedApprovalBlueprint?.label ?? "Belum dipetakan"}</dd></div>
               <div><dt className="text-muted-foreground">Cakupan data</dt><dd className="mt-1 font-medium">{humanizeDerivedScope(derivedScopeBasis)}</dd></div>
-              <div><dt className="text-muted-foreground">Level akses</dt><dd className="mt-1">{form.roleLevel}</dd></div>
+              <div><dt className="text-muted-foreground">Dapat menyetujui</dt><dd className="mt-1">{enabledApprovalControls.length ? enabledApprovalControls.map((control) => control.label).join(", ") : "Tidak ada tahap approval"}</dd></div>
               <div><dt className="text-muted-foreground">Pegawai</dt><dd className="mt-1">{selectedRole?.userCount ?? 0}</dd></div>
             </dl>
+            {selectedApprovalKey === "legacy" && <div className="border border-warning/40 bg-warning/10 p-3"><p className="font-medium text-warning">Tahap approval belum dipetakan</p><p className="mt-1 text-muted-foreground">Level {form.roleLevel || "-"}, approval {form.approvalRank || "tidak ada"}. Ubah role ini lalu pilih tahap standar agar konfigurasi dapat dibaca konsisten.</p></div>}
+            {selectedRole?.userCount === 0 && <div className="border border-border bg-background p-3 text-muted-foreground">Role ini belum dipakai oleh pegawai mana pun.</div>}
+            <div className="border border-border bg-background p-3"><p className="font-medium">Pengecualian akun sistem</p><p className="mt-1 text-muted-foreground">SM-03.004 adalah superadmin sistem. Akses tersebut tidak berasal dari role yang sedang dipilih dan selalu berlaku lintas modul.</p></div>
           </div>}
 
           {activeTab === "settings" && <div className="space-y-6 p-4">
@@ -1079,9 +1051,15 @@ export function RoleMatrixShell({
               <label className="space-y-1 text-sm"><span className="text-muted-foreground">Nama role</span>{canEditProfile ? <input value={form.roleName} onChange={(event) => setForm((value) => ({ ...value, roleName: event.target.value }))} className="h-10 w-full border border-border bg-background px-3 text-sm focus-visible:outline-2 focus-visible:outline-primary" /> : <span className="block py-2">{form.roleName}</span>}</label>
               <label className="space-y-1 text-sm"><span className="text-muted-foreground">Keterangan</span>{canEditProfile ? <input value={form.description} onChange={(event) => setForm((value) => ({ ...value, description: event.target.value }))} className="h-10 w-full border border-border bg-background px-3 text-sm focus-visible:outline-2 focus-visible:outline-primary" /> : <span className="block py-2">{form.description || "-"}</span>}</label>
             </div>
-            <section>
-              <h3 className="text-sm font-semibold">Tahap approval</h3>
-              <div className="mt-2 flex flex-wrap gap-2">{approvalChoices.map((choice) => <button key={choice.key} type="button" disabled={!canEditProfile} onClick={() => applyApprovalBlueprint(choice)} aria-pressed={choice.key === selectedApprovalKey} title={choice.note} className={["border px-3 py-2 text-sm", choice.key === selectedApprovalKey ? "border-primary bg-primary/10" : "border-border", !canEditProfile ? "cursor-default" : "hover:bg-muted"].join(" ")}>{choice.label}</button>)}</div>
+            <section className="space-y-3">
+              <div><h3 className="text-sm font-semibold">Tahap utama di alur</h3><p className="mt-1 text-sm text-muted-foreground">Tahap utama menjelaskan posisi role. Izin approval tambahan di bawah dapat membuat satu role, misalnya MIS, menyetujui lebih dari satu tahap.</p></div>
+              {selectedApprovalKey === "legacy" && <div className="flex flex-wrap items-center justify-between gap-3 border border-warning/40 bg-warning/10 p-3"><div><p className="font-medium text-warning">Belum dipetakan</p><p className="mt-1 text-sm text-muted-foreground">Level {form.roleLevel || "-"} · approval {form.approvalRank || "tidak ada"} (nilai lama)</p></div>{canEditProfile && <button type="button" onClick={() => applyApprovalBlueprint(closestApproval)} className="h-9 border border-warning/50 px-3 text-sm text-warning hover:bg-warning/10">Pakai {closestApproval.label}</button>}</div>}
+              <div className="flex flex-wrap gap-2" aria-label="Alur approval">{approvalBlueprints.filter((choice) => choice.approvalRank !== "").map((choice) => <span key={choice.key} className={["border px-3 py-2 text-sm", choice.key === selectedApprovalKey ? "border-primary bg-primary/10 text-foreground" : "border-border text-muted-foreground"].join(" ")}>{choice.label}</span>)}</div>
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{approvalBlueprints.map((choice) => <label key={choice.key} title={choice.note} className={["flex min-h-24 cursor-pointer items-start gap-3 border p-3 text-sm", choice.key === selectedApprovalKey ? "border-primary bg-primary/10" : "border-border hover:bg-muted"].join(" ")}><input type="radio" name="approval-blueprint" checked={choice.key === selectedApprovalKey} onChange={() => applyApprovalBlueprint(choice)} disabled={isPending} className="mt-0.5 h-4 w-4 shrink-0 accent-primary" /><span><span className="block font-medium">{choice.label}</span><span className="mt-1 block text-xs text-muted-foreground">{choice.note}</span></span></label>)}</div>
+            </section>
+            <section className="space-y-3 border-t border-border pt-5">
+              <div><h3 className="text-sm font-semibold">Tahap yang dapat disetujui</h3><p className="mt-1 text-sm text-muted-foreground">Pengaturan ini memakai izin Work Order yang sama dengan matriks Izin. Role MIS dapat mengaktifkan seluruh tahap yang diperlukan.</p></div>
+              <div className="grid gap-2 sm:grid-cols-3">{approvalPermissionControls.map((control) => { const permissionId = permissionIdByCode.get(control.code); const enabled = permissionId !== undefined && draftPermissionIds.includes(permissionId); return <label key={control.code} className={["flex min-h-24 gap-3 border p-3", enabled ? "border-primary bg-primary/[0.06]" : "border-border"].join(" ")}><input type="checkbox" checked={enabled} disabled={!canEditProfile || !permissionId || isPending} onChange={() => toggleApprovalPermission(control.code)} className="mt-0.5 h-4 w-4 shrink-0 accent-primary" /><span><span className="block font-medium">{control.label}</span><span className="mt-1 block text-xs text-muted-foreground">{control.note}</span></span></label>; })}</div>
             </section>
             <section>
               <h3 className="text-sm font-semibold">Cakupan data</h3>
@@ -1106,7 +1084,7 @@ export function RoleMatrixShell({
               <input aria-label="Cari izin" value={permissionSearch} onChange={(event) => setPermissionSearch(event.target.value)} placeholder="Cari modul atau izin" className="h-10 min-w-[180px] flex-1 border border-border bg-background px-3 text-sm focus-visible:outline-2 focus-visible:outline-primary" />
               <select aria-label="Bandingkan dengan role lain" value={compareRoleId} onChange={(event) => setCompareRoleId(Number(event.target.value))} className="h-10 max-w-full border border-border bg-background px-3 text-sm"><option value={0}>Bandingkan role</option>{roleCatalog.filter((role) => role.id !== selectedRoleId).map((role) => <option key={role.id} value={role.id}>{role.roleName}</option>)}</select>
             </div>
-            <p className="text-xs text-muted-foreground">Centang menunjukkan izin yang diberikan langsung ke role. Pada API web, pegawai SM-03.004 mendapat izin sistem melalui pengecualian akun, di luar role. Akses juga dapat dibatasi aturan setiap fitur. Pengguna yang sudah masuk perlu masuk ulang agar sesi mengambil izin terbaru.</p>
+            <p className="text-xs text-muted-foreground">Centang menunjukkan izin yang diberikan langsung ke role. Cakupan unit diatur dari tab Pengaturan, sehingga izin “lihat semua unit” dan “lihat unit pegangan” tidak diubah dari tabel ini. SM-03.004 memiliki pengecualian superadmin sistem di luar role. Perubahan sesi aktif web dan mobile disinkronkan saat penyimpanan berhasil.</p>
             {isFetchingPermissions && <p role="status" className="text-sm">Memuat izin...</p>}
             {!permissionsLoaded && !isFetchingPermissions && <p className="text-sm text-destructive">Izin belum dimuat. <button type="button" onClick={() => setPermissionRetry((value) => value + 1)} className="underline">Coba lagi</button></p>}
             <div className="overflow-x-auto border border-border">

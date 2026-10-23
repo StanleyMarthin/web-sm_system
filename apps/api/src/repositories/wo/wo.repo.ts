@@ -471,6 +471,10 @@ async function canApproveKpForUnit(
     return false;
   }
 
+  if (params.scope.canViewAllUnits) {
+    return true;
+  }
+
   if (params.scope.unitIds.includes(params.carId)) {
     return true;
   }
@@ -1115,7 +1119,8 @@ export class MySqlWoRepository implements WoRepository {
         const canApproveKd =
           options.permissions.includes(permissionCodes.woApprove) &&
           row.toDivisionId !== null &&
-          (options.actorDivisionId === row.toDivisionId ||
+          (params.scope.canViewAllUnits ||
+            options.actorDivisionId === row.toDivisionId ||
             params.scope.divisionIds.includes(row.toDivisionId) ||
             params.scope.managedDivisionIds.includes(row.toDivisionId));
         if (!canApproveKd) {
@@ -1186,7 +1191,8 @@ export class MySqlWoRepository implements WoRepository {
       }
 
       if (status === WO_KP_STATUS) {
-        const canApproveKp = await canApproveKpForUnit(
+        const canApproveKp = options.permissions.includes(permissionCodes.woApprove)
+          && await canApproveKpForUnit(
           connection,
           {
             employeeId: params.employeeId,

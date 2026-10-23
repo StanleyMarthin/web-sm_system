@@ -29,6 +29,7 @@ export function DivisionManagementShell({ divisions, generalJobTypes }: Division
   const [jobName, setJobName] = useState("");
   const [isTeknis, setIsTeknis] = useState(true);
   const [editingJobTypeId, setEditingJobTypeId] = useState<string | null>(null);
+  const [isJobFormOpen, setIsJobFormOpen] = useState(false);
   const [divisionFormMode, setDivisionFormMode] = useState<"create" | "edit" | null>(null);
   const [divisionForm, setDivisionForm] = useState({
     id: 0,
@@ -75,6 +76,7 @@ export function DivisionManagementShell({ divisions, generalJobTypes }: Division
     setEditingJobTypeId(null);
     setJobName("");
     setIsTeknis(true);
+    setIsJobFormOpen(false);
   }
 
   function replaceJobType(jobType: MasterJobTypeRecord) {
@@ -119,6 +121,7 @@ export function DivisionManagementShell({ divisions, generalJobTypes }: Division
     setEditingJobTypeId(jobType.id);
     setJobName(jobType.jobName);
     setIsTeknis(jobType.isTeknis);
+    setIsJobFormOpen(true);
     setError(null);
     setMessage(null);
   }
@@ -319,9 +322,11 @@ export function DivisionManagementShell({ divisions, generalJobTypes }: Division
       { headerName: "Jobdesc", width: 100, valueGetter: ({ data }) => data?.jobTypes.length ?? 0 },
       {
         field: "isTeknis",
-        headerName: "Jenis",
-        width: 105,
-        valueFormatter: ({ value }) => (value ? "Teknis" : "Nonteknis"),
+        headerName: "Teknis",
+        width: 82,
+        cellRenderer: ({ value }: { value?: boolean }) => (
+          <input type="checkbox" checked={Boolean(value)} readOnly tabIndex={-1} aria-label={value ? "Divisi teknis" : "Divisi nonteknis"} className="h-4 w-4 accent-primary" />
+        ),
       },
       {
         headerName: "Aksi",
@@ -348,246 +353,79 @@ export function DivisionManagementShell({ divisions, generalJobTypes }: Division
 
   return (
     <div className="flex flex-col gap-4">
-
-      <div className="grid gap-4 xl:grid-cols-[minmax(580px,1fr)_minmax(360px,0.8fr)]">
-        <div className="flex min-w-0 flex-col space-y-3">
-        {message ? (
-          <div className="border border-success/20 bg-success/[0.04] px-3 py-2 text-[11px] font-mono text-success">
-            {message}
-          </div>
-        ) : null}
-        {error ? (
-          <div className="border border-destructive/20 bg-destructive/[0.04] px-3 py-2 text-[11px] font-mono text-destructive">
-            {error}
-          </div>
-        ) : null}
-
-        <div className="flex items-center gap-3">
-          <div className="flex flex-1 items-center gap-2 border border-border bg-card px-3">
-            <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
-            <input
-              aria-label="Cari divisi atau jobdesc"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Cari divisi atau master jobdesc..."
-              className="h-10 w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-primary"
-            />
-          </div>
-          <button
-            type="button"
-            onClick={openCreateDivision}
-            className="inline-flex h-10 shrink-0 items-center gap-2 border border-primary/40 bg-primary/[0.06] px-3 text-sm text-app-accent-ink transition-colors hover:bg-primary/10"
-          >
-            <Plus className="h-4 w-4" />
-            Tambah Divisi
-          </button>
+      {(message || error) && (
+        <div aria-live="polite" className={message ? "border border-success/30 bg-success/[0.06] px-3 py-2 text-sm text-success" : "border border-destructive/30 bg-destructive/[0.06] px-3 py-2 text-sm text-destructive"}>
+          {message ?? error}
         </div>
+      )}
 
-        {divisionFormMode ? (
-          <form className="space-y-2 border border-white/5 bg-background p-3" onSubmit={(event) => void handleDivisionSubmit(event)}>
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30">
-                {divisionFormMode === "edit" ? "Edit Divisi" : "Tambah Divisi"}
-              </p>
-              <button
-                type="button"
-                onClick={closeDivisionForm}
-                className="text-foreground/30 transition-colors hover:text-foreground/60"
-              >
-                <X className="h-3.5 w-3.5" />
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.05fr)_minmax(420px,0.95fr)]">
+        <section className="flex min-w-0 flex-col border border-border bg-background" aria-label="Daftar divisi dan tim">
+          <div className="space-y-3 border-b border-border p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-sm text-muted-foreground">Struktur kerja</p>
+                <h2 className="mt-0.5 text-lg font-semibold text-foreground">Divisi dan tim</h2>
+              </div>
+              <button type="button" onClick={openCreateDivision} className="inline-flex h-10 items-center gap-2 border border-primary/40 bg-primary/[0.06] px-3 text-sm text-app-accent-ink transition-colors hover:bg-primary/10">
+                <Plus className="h-4 w-4" />
+                Tambah divisi
               </button>
             </div>
-            <div className="grid grid-cols-[minmax(0,1fr)_96px] gap-2">
-              <input
-                value={divisionForm.name}
-                onChange={(event) => setDivisionForm((current) => ({ ...current, name: event.target.value }))}
-                placeholder="Nama divisi"
-                className="h-8 border border-white/10 bg-card px-3 text-[11px] font-mono text-foreground/70 outline-none transition-colors placeholder:text-foreground/20 focus:border-primary/40"
-              />
-              <input
-                value={divisionForm.code}
-                onChange={(event) => setDivisionForm((current) => ({ ...current, code: event.target.value.toUpperCase() }))}
-                placeholder="Kode"
-                className="h-8 border border-white/10 bg-card px-3 text-[11px] font-mono text-foreground/70 outline-none transition-colors placeholder:text-foreground/20 focus:border-primary/40"
-              />
+            <div className="flex items-center gap-2 border border-border bg-card px-3">
+              <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <input aria-label="Cari divisi atau jobdesc" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Cari divisi, kode, atau jobdesc..." className="h-10 w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-primary" />
             </div>
-            <label className="block">
-              <span className="mb-1 block text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30">Divisi Induk</span>
-              <select
-                value={divisionForm.parentId}
-                onChange={(event) => setDivisionForm((current) => ({ ...current, parentId: event.target.value }))}
-                className="h-8 w-full border border-white/10 bg-card px-3 text-[11px] font-mono text-foreground/70 outline-none focus:border-primary/40"
-              >
-                <option value="">Tidak ada (divisi utama)</option>
-                {rows
-                  .filter((division) => division.id !== divisionForm.id)
-                  .map((division) => (
-                    <option key={division.id} value={division.id}>
-                      {division.name} ({division.code})
-                    </option>
-                  ))}
-              </select>
-            </label>
-            <div className="flex items-center justify-between gap-2">
-              <label className="flex items-center gap-2 text-[10px] font-mono text-foreground/45">
-                <input
-                  type="checkbox"
-                  checked={divisionForm.isTeknis}
-                  onChange={(event) => setDivisionForm((current) => ({ ...current, isTeknis: event.target.checked }))}
-                  className="h-4 w-4 border-white/20 bg-transparent"
-                />
-                Teknis
-              </label>
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="border border-primary/40 bg-primary/[0.06] px-3 py-1.5 text-[10px] font-mono uppercase tracking-[0.12em] text-app-accent-ink transition-colors hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-30"
-              >
-                {isSubmitting ? "Menyimpan..." : "Simpan"}
-              </button>
-            </div>
-          </form>
-        ) : null}
-
-        <button
-          type="button"
-          onClick={() => { resetJobForm(); setIsGeneralSelected(true); }}
-          className={[
-            "flex items-center justify-between border px-3 py-2 text-left text-sm transition-colors",
-            isGeneralSelected
-              ? "border-primary/40 bg-primary/[0.06] text-app-accent-ink"
-              : "border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground",
-          ].join(" ")}
-        >
-          <span>Master jobdesc umum</span>
-          <span>{generalRows.length}</span>
-        </button>
-        <SmsAgGrid<DivisionManagementRecord>
-          rowData={filteredRows}
-          columnDefs={divisionColumnDefs}
-          getRowId={({ data }) => String(data.id)}
-          onRowClicked={({ data }) => {
-            if (!data) return;
-            resetJobForm();
-            setIsGeneralSelected(false);
-            setSelectedDivisionId(data.id);
-          }}
-          rowClassRules={{ "ag-row-selected": ({ data }) => data?.id === selectedDivision?.id && !isGeneralSelected }}
-          heightClassName="h-[560px]"
-          defaultColDef={{ filter: true, floatingFilter: true }}
-          emptyMessage="Belum ada divisi atau team."
-        />
-      </div>
-
-      <aside className="flex min-w-0 flex-col border border-border bg-background">
-        <div className="border-b border-white/5 px-4 py-3">
-          <p className="text-sm text-muted-foreground">Master jobdesc</p>
-          <div className="mt-1 flex items-end justify-between gap-3">
-            <h2 className="text-base font-semibold text-foreground">
-              {isGeneralSelected ? "Jobdesc Umum" : selectedDivision?.name ?? "Pilih divisi"}
-            </h2>
-            <span className="shrink-0 text-xs text-muted-foreground">
-              {filteredJobTypes.length} / {visibleJobTypes.length}
-            </span>
           </div>
 
-          <div className="mt-3 flex items-center gap-2 border border-border bg-card px-3">
-            <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
-            <input
-              aria-label="Cari master jobdesc"
-              value={jobSearch}
-              onChange={(event) => setJobSearch(event.target.value)}
-              placeholder="Cari master jobdesc..."
-              className="h-10 w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-primary"
-            />
-          </div>
-        </div>
-
-        <div className="p-4">
-          {filteredJobTypes.length ? (
-            <div className="space-y-1.5">
-              {filteredJobTypes.map((jobType) => (
-                <div key={jobType.id} className="flex items-center justify-between gap-3 border-b border-border px-3 py-2">
-                  <div className="min-w-0">
-                    <span className="block break-words text-sm text-foreground">{jobType.jobName}</span>
-                    <span className="mt-0.5 block text-xs text-muted-foreground">
-                      {jobType.isTeknis ? "TEKNIS" : "NON TEKNIS"}
-                    </span>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => openEditJobType(jobType)}
-                      className="inline-flex h-9 w-9 items-center justify-center border border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                      aria-label={`Ubah ${jobType.jobName}`}
-                      title="Edit jobdesc"
-                    >
-                      <Pencil className="h-3 w-3" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void handleDeleteJobType(jobType)}
-                      className="inline-flex h-9 w-9 items-center justify-center border border-destructive/30 text-destructive transition-colors hover:bg-destructive/10"
-                      aria-label={`Hapus ${jobType.jobName}`}
-                      title="Hapus jobdesc"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="border border-dashed border-white/10 px-4 py-8 text-center text-[11px] font-mono text-foreground/25">
-              {jobSearch ? `Tidak ada jobdesc untuk "${jobSearch}"` : "Belum ada master jobdesc untuk pilihan ini."}
-            </p>
+          {divisionFormMode && (
+            <form className="space-y-3 border-b border-border bg-card p-4" onSubmit={(event) => void handleDivisionSubmit(event)}>
+              <div className="flex items-center justify-between gap-3"><h3 className="text-sm font-semibold text-foreground">{divisionFormMode === "edit" ? "Ubah divisi atau tim" : "Divisi atau tim baru"}</h3><button type="button" onClick={closeDivisionForm} aria-label="Tutup form divisi" className="inline-flex h-9 w-9 items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground"><X className="h-4 w-4" /></button></div>
+              <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_8rem]">
+                <label className="space-y-1"><span className="text-xs text-muted-foreground">Nama</span><input value={divisionForm.name} onChange={(event) => setDivisionForm((current) => ({ ...current, name: event.target.value }))} placeholder="Contoh: Body work" className="h-10 w-full border border-border bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-primary" /></label>
+                <label className="space-y-1"><span className="text-xs text-muted-foreground">Kode</span><input value={divisionForm.code} onChange={(event) => setDivisionForm((current) => ({ ...current, code: event.target.value.toUpperCase() }))} placeholder="BODY" className="h-10 w-full border border-border bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-primary" /></label>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+                <label className="space-y-1"><span className="text-xs text-muted-foreground">Divisi induk</span><select value={divisionForm.parentId} onChange={(event) => setDivisionForm((current) => ({ ...current, parentId: event.target.value }))} className="h-10 w-full border border-border bg-background px-3 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-primary"><option value="">Tidak ada, divisi utama</option>{rows.filter((division) => division.id !== divisionForm.id).map((division) => <option key={division.id} value={division.id}>{division.name} ({division.code})</option>)}</select></label>
+                <label className="flex h-10 items-center gap-2 border border-border bg-background px-3 text-sm text-foreground"><input type="checkbox" checked={divisionForm.isTeknis} onChange={(event) => setDivisionForm((current) => ({ ...current, isTeknis: event.target.checked }))} className="h-4 w-4 accent-primary" /> Divisi teknis</label>
+              </div>
+              <div className="flex justify-end"><button type="submit" disabled={isSubmitting} className="h-10 border border-primary/40 bg-primary/[0.06] px-4 text-sm text-app-accent-ink hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50">{isSubmitting ? "Menyimpan..." : "Simpan divisi"}</button></div>
+            </form>
           )}
-        </div>
 
-        <form className="mt-auto space-y-3 border-t border-white/10 bg-card p-4" onSubmit={(event) => void handleSubmit(event)}>
-          <label className="block space-y-1">
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-sm text-muted-foreground">
-                {isEditing ? "Edit Jobdesc" : "Nama Jobdesc"}
-              </span>
-              {isEditing ? (
-                <button
-                  type="button"
-                  onClick={resetJobForm}
-                  className="inline-flex items-center gap-1 text-[9px] font-mono uppercase tracking-[0.1em] text-foreground/30 transition-colors hover:text-foreground/60"
-                >
-                  <X className="h-3 w-3" />
-                  Batal Edit
-                </button>
-              ) : null}
-            </div>
-            <input
-              value={jobName}
-              onChange={(event) => setJobName(event.target.value)}
-              className="h-10 w-full border border-border bg-background px-3 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-primary"
-            />
-          </label>
-
-          <label className="flex items-center gap-3 border border-white/5 bg-card px-3 py-2">
-            <input
-              type="checkbox"
-              checked={isTeknis}
-              onChange={(event) => setIsTeknis(event.target.checked)}
-              className="h-4 w-4 border-white/20 bg-transparent"
-            />
-            <span className="text-sm text-foreground">Jobdesc teknis</span>
-          </label>
-
-          <button
-            type="submit"
-            disabled={isSubmitting || (!isGeneralSelected && !selectedDivision)}
-            className="inline-flex h-10 items-center justify-center gap-2 border border-primary/40 bg-primary/[0.06] px-3 text-sm text-app-accent-ink transition-colors hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <Plus className="h-3 w-3" />
-            {isSubmitting ? "Menyimpan..." : isEditing ? "Simpan Perubahan" : "Tambah Jobdesc"}
+          <button type="button" onClick={() => { resetJobForm(); setIsGeneralSelected(true); }} className={["flex items-center justify-between border-b px-4 py-3 text-left text-sm transition-colors", isGeneralSelected ? "bg-primary/[0.08] text-app-accent-ink" : "text-muted-foreground hover:bg-muted hover:text-foreground"].join(" ")}>
+            <span>Jobdesc umum, dipakai semua divisi</span><span className="font-mono text-xs">{generalRows.length}</span>
           </button>
-        </form>
-      </aside>
+          <div className="min-h-[22rem] flex-1">
+            <SmsAgGrid<DivisionManagementRecord> rowData={filteredRows} columnDefs={divisionColumnDefs} getRowId={({ data }) => String(data.id)} onRowClicked={({ data }) => { if (!data) return; resetJobForm(); setIsGeneralSelected(false); setSelectedDivisionId(data.id); }} rowClassRules={{ "ag-row-selected": ({ data }) => data?.id === selectedDivision?.id && !isGeneralSelected }} heightClassName="h-[calc(100dvh-22rem)] min-h-[22rem]" defaultColDef={{ filter: true, floatingFilter: true }} emptyMessage="Belum ada divisi atau tim." />
+          </div>
+        </section>
+
+        <aside className="flex min-h-[42rem] min-w-0 flex-col border border-border bg-background xl:h-[calc(100dvh-10rem)]" aria-label="Master jobdesc">
+          <div className="space-y-3 border-b border-border p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm text-muted-foreground">Master jobdesc</p>
+                <h2 className="mt-0.5 break-words text-lg font-semibold text-foreground">{isGeneralSelected ? "Jobdesc umum" : selectedDivision?.name ?? "Pilih divisi"}</h2>
+                {selectedDivision && !isGeneralSelected && <p className="mt-1 text-xs text-muted-foreground">{selectedDivision.code} · {selectedDivision.activeUserCount} pegawai aktif · {visibleJobTypes.length} jobdesc</p>}
+              </div>
+              <button type="button" onClick={() => { resetJobForm(); setIsJobFormOpen(true); }} disabled={!isGeneralSelected && !selectedDivision} className="inline-flex h-10 shrink-0 items-center gap-2 border border-primary/40 bg-primary/[0.06] px-3 text-sm text-app-accent-ink hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50"><Plus className="h-4 w-4" /> Tambah jobdesc</button>
+            </div>
+            <div className="flex items-center gap-2 border border-border bg-card px-3"><Search className="h-4 w-4 shrink-0 text-muted-foreground" /><input aria-label="Cari master jobdesc" value={jobSearch} onChange={(event) => setJobSearch(event.target.value)} placeholder="Cari pekerjaan..." className="h-10 w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-primary" /></div>
+          </div>
+
+          {isJobFormOpen && (
+            <form className="space-y-3 border-b border-border bg-card p-4" onSubmit={(event) => void handleSubmit(event)}>
+              <div className="flex items-center justify-between gap-3"><h3 className="text-sm font-semibold text-foreground">{isEditing ? "Ubah jobdesc" : "Jobdesc baru"}</h3><button type="button" onClick={resetJobForm} aria-label="Tutup form jobdesc" className="inline-flex h-9 w-9 items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground"><X className="h-4 w-4" /></button></div>
+              <label className="block space-y-1"><span className="text-xs text-muted-foreground">Nama pekerjaan</span><input autoFocus value={jobName} onChange={(event) => setJobName(event.target.value)} placeholder="Contoh: Pemasangan panel" className="h-10 w-full border border-border bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-primary" /></label>
+              <div className="flex flex-wrap items-center justify-between gap-3"><label className="flex items-center gap-2 text-sm text-foreground"><input type="checkbox" checked={isTeknis} onChange={(event) => setIsTeknis(event.target.checked)} className="h-4 w-4 accent-primary" /> Pekerjaan teknis</label><button type="submit" disabled={isSubmitting} className="h-10 border border-primary/40 bg-primary/[0.06] px-4 text-sm text-app-accent-ink hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50">{isSubmitting ? "Menyimpan..." : isEditing ? "Simpan perubahan" : "Simpan jobdesc"}</button></div>
+            </form>
+          )}
+
+          <div className="min-h-0 flex-1 overflow-y-auto" aria-label="Daftar jobdesc">
+            {filteredJobTypes.length ? <ul className="divide-y divide-border">{filteredJobTypes.map((jobType) => <li key={jobType.id} className="group flex items-center justify-between gap-3 px-4 py-3 hover:bg-muted/60"><div className="min-w-0"><p className="break-words text-sm font-medium text-foreground">{jobType.jobName}</p><p className="mt-0.5 text-xs text-muted-foreground">{jobType.isTeknis ? "Pekerjaan teknis" : "Pekerjaan nonteknis"}</p></div><div className="flex shrink-0 items-center gap-1"><button type="button" onClick={() => openEditJobType(jobType)} className="inline-flex h-9 w-9 items-center justify-center border border-border text-muted-foreground hover:bg-background hover:text-foreground" aria-label={`Ubah ${jobType.jobName}`} title="Ubah jobdesc"><Pencil className="h-3.5 w-3.5" /></button><button type="button" onClick={() => void handleDeleteJobType(jobType)} className="inline-flex h-9 w-9 items-center justify-center border border-destructive/30 text-destructive hover:bg-destructive/10" aria-label={`Hapus ${jobType.jobName}`} title="Hapus jobdesc"><Trash2 className="h-3.5 w-3.5" /></button></div></li>)}</ul> : <div className="px-6 py-12 text-center"><p className="text-sm text-foreground">{jobSearch ? "Jobdesc tidak ditemukan." : "Belum ada jobdesc."}</p><p className="mt-1 text-sm text-muted-foreground">{jobSearch ? "Ubah kata kunci pencarian atau tambahkan jobdesc baru." : "Tambahkan pekerjaan yang biasa dikerjakan oleh divisi ini."}</p></div>}
+          </div>
+        </aside>
       </div>
     </div>
   );
