@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { Pool } from "mysql2/promise";
+import type { Pool, RowDataPacket } from "mysql2/promise";
 import { getApiEnv, type ApiEnv } from "@/config/env";
 import { getMySqlPool } from "@/db/mysql";
 
@@ -17,6 +17,15 @@ export interface AuditLogEntry {
 
 export interface AuditRepository {
   insert(entry: AuditLogEntry): Promise<void>;
+}
+
+export interface RoleHistoryEntry {
+  id: number;
+  actorName: string | null;
+  action: string;
+  createdAt: string;
+  oldValue: unknown;
+  newValue: unknown;
 }
 
 function getAuditTableName(auditDbName: string): string {
@@ -46,6 +55,20 @@ export class MySqlAuditRepository implements AuditRepository {
     private readonly poolFactory: (env?: ApiEnv) => Pick<Pool, "execute"> = getMySqlPool,
     private readonly env: ApiEnv = getApiEnv(),
   ) {}
+
+  async listRoleHistory(roleId: number): Promise<RoleHistoryEntry[]> {
+    const pool = this.poolFactory(this.env);
+    const [rows] = await pool.execute<Array<RowDataPacket & RoleHistoryEntry>>(
+      `SELECT id, performed_name AS actorName, COALESCE(change_reason, action) AS action,
+        DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') AS createdAt,
+        old_data AS oldValue, new_data AS newValue
+       FROM ${getAuditTableName(this.env.AUDIT_DB_NAME)}
+       WHERE source_db = ? AND table_name = 'rbac' AND record_id = ?
+       ORDER BY id DESC LIMIT 100`,
+      [this.env.DB_NAME, String(roleId)],
+    );
+    return rows.map((row) => ({ id: row.id, actorName: row.actorName, action: row.action, createdAt: row.createdAt, oldValue: row.oldValue, newValue: row.newValue }));
+  }
 
   async insert(entry: AuditLogEntry): Promise<void> {
     const pool = this.poolFactory(this.env);

@@ -57,6 +57,8 @@ export class SmLoginAdapterError extends Error {
 export interface SmLoginAdapter {
   loginWeb(params: LoginWebParams): Promise<MobileAuthSuccess>;
   refresh(params: RefreshWebParams): Promise<MobileAuthSuccess>;
+  syncEmployeeSessions(employeeIds: readonly string[]): Promise<void>;
+  invalidateEmployeeSessions(employeeIds: readonly string[]): Promise<void>;
 }
 
 async function parseEnvelope(response: Response) {
@@ -73,6 +75,44 @@ function buildSuccess(payload: z.infer<typeof loginSuccessSchema>): MobileAuthSu
 }
 
 export class HttpSmLoginAdapter implements SmLoginAdapter {
+  private async updateEmployeeSessions(
+    operation: "sync" | "invalidate",
+    employeeIds: readonly string[],
+  ): Promise<void> {
+    const uniqueEmployeeIds = [...new Set(employeeIds.map((employeeId) => employeeId.trim().toUpperCase()).filter(Boolean))];
+    if (uniqueEmployeeIds.length === 0) {
+      return;
+    }
+
+    const env = getApiEnv();
+    if (!env.SM_LOGIN_INTERNAL_TOKEN) {
+      throw new SmLoginAdapterError(
+        "Sinkronisasi sesi belum dikonfigurasi.",
+        503,
+        "SM_LOGIN_INTERNAL_TOKEN_MISSING",
+        {},
+      );
+    }
+
+    const response = await fetchWithTimeout(`${env.SM_LOGIN_BASE_URL}/api/v1/auth/internal/sessions/${operation}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-SM-Internal-Token": env.SM_LOGIN_INTERNAL_TOKEN,
+      },
+      body: JSON.stringify({ employeeIds: uniqueEmployeeIds }),
+    });
+    const envelope = await parseEnvelope(response);
+    if (!response.ok || !envelope.success) {
+      throw new SmLoginAdapterError(
+        envelope.message,
+        response.status,
+        envelope.errorCode ?? "AUTH_SESSION_SYNC_FAILED",
+        envelope.data,
+      );
+    }
+  }
+
   async loginWeb(params: LoginWebParams): Promise<MobileAuthSuccess> {
     const env = getApiEnv();
     const response = await fetchWithTimeout(`${env.SM_LOGIN_BASE_URL}/api/v1/auth/login-web`, {
@@ -117,5 +157,13 @@ export class HttpSmLoginAdapter implements SmLoginAdapter {
     }
 
     return buildSuccess(refreshSuccessSchema.parse(envelope.data));
+  }
+
+  async syncEmployeeSessions(employeeIds: readonly string[]): Promise<void> {
+    await this.updateEmployeeSessions("sync", employeeIds);
+  }
+
+  async invalidateEmployeeSessions(employeeIds: readonly string[]): Promise<void> {
+    await this.updateEmployeeSessions("invalidate", employeeIds);
   }
 }

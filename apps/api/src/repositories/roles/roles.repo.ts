@@ -76,6 +76,7 @@ export interface RolesRepository {
   listPermissions(): Promise<PermissionRecord[]>;
   getRolePermissionIds(roleId: number): Promise<number[]>;
   updateRolePermissions(roleId: number, permissionIds: number[]): Promise<number[]>;
+  listEmployeeIdsByRoleId(roleId: number): Promise<string[]>;
 }
 
 function deriveScopePresetFromScopeBasis(
@@ -370,6 +371,10 @@ function resolveScopePresetPayload(profile: RoleProfile): RoleScopePreset {
   };
 }
 
+function canFallbackScopePreset(profile: RoleProfile): boolean {
+  return JSON.stringify(resolveScopePresetPayload(profile)) === JSON.stringify(deriveScopePresetFromScopeBasis(profile.scopeBasis));
+}
+
 async function upsertRoleScopePreset(
   connection: PoolConnection,
   roleId: number,
@@ -402,6 +407,17 @@ async function upsertRoleScopePreset(
       JSON.stringify(scopePreset.unitIds),
     ],
   );
+}
+
+async function replaceRolePermissions(connection: PoolConnection, roleId: number, ids: number[]): Promise<void> {
+  const uniqueIds = [...new Set(ids)];
+  await connection.query("DELETE FROM sys_role_permissions WHERE role_id = ?", [roleId]);
+  if (uniqueIds.length) {
+    await connection.query(
+      `INSERT INTO sys_role_permissions (role_id, permission_id) VALUES ${uniqueIds.map(() => "(?, ?)").join(", ")}`,
+      uniqueIds.flatMap((id) => [roleId, id]),
+    );
+  }
 }
 
 export class MySqlRolesRepository implements RolesRepository {
@@ -452,9 +468,13 @@ export class MySqlRolesRepository implements RolesRepository {
           if (!isMissingRoleScopePresetTableError(error)) {
             throw error;
           }
+          if (!canFallbackScopePreset(normalizedProfile)) throw new Error("ROLE_SCOPE_STORAGE_UNAVAILABLE");
         }
       }
 
+      if (input.permissionIds !== undefined) {
+        await replaceRolePermissions(connection, roleId, input.permissionIds);
+      }
       await connection.commit();
     } catch (error) {
       await connection.rollback();
@@ -491,6 +511,17 @@ export class MySqlRolesRepository implements RolesRepository {
     try {
       await connection.beginTransaction();
 
+      if (input.expectedPermissionIds !== undefined) {
+        await connection.query("SELECT id FROM sm_role WHERE id = ? FOR UPDATE", [roleId]);
+        const [current] = await connection.query<PermissionIdRow[]>(
+          "SELECT permission_id AS permissionId FROM sys_role_permissions WHERE role_id = ? ORDER BY permission_id ASC",
+          [roleId],
+        );
+        const expected = [...new Set(input.expectedPermissionIds)].sort((a, b) => a - b);
+        const actual = current.map((row) => row.permissionId).sort((a, b) => a - b);
+        if (JSON.stringify(expected) !== JSON.stringify(actual)) throw new Error("ROLE_PERMISSIONS_CHANGED");
+      }
+
       if (updates.length > 0) {
         values.push(roleId);
         await connection.query<ResultSetHeader>(
@@ -526,9 +557,13 @@ export class MySqlRolesRepository implements RolesRepository {
           if (!isMissingRoleScopePresetTableError(error)) {
             throw error;
           }
+          if (!canFallbackScopePreset(normalizedProfile)) throw new Error("ROLE_SCOPE_STORAGE_UNAVAILABLE");
         }
       }
 
+      if (input.permissionIds !== undefined) {
+        await replaceRolePermissions(connection, roleId, input.permissionIds);
+      }
       await connection.commit();
     } catch (error) {
       await connection.rollback();
@@ -618,25 +653,8 @@ export class MySqlRolesRepository implements RolesRepository {
 
     try {
       await connection.beginTransaction();
-      await connection.query(
-        `
-          DELETE FROM sys_role_permissions
-          WHERE role_id = ?
-        `,
-        [roleId],
-      );
-
-      if (permissionIds.length > 0) {
-        const placeholders = permissionIds.map(() => "(?, ?)").join(", ");
-        const values = permissionIds.flatMap((permissionId) => [roleId, permissionId]);
-        await connection.query(
-          `
-            INSERT INTO sys_role_permissions (role_id, permission_id)
-            VALUES ${placeholders}
-          `,
-          values,
-        );
-      }
+      await connection.query("SELECT id FROM sm_role WHERE id = ? FOR UPDATE", [roleId]);
+      await replaceRolePermissions(connection, roleId, permissionIds);
 
       await connection.commit();
     } catch (error) {
@@ -647,5 +665,19 @@ export class MySqlRolesRepository implements RolesRepository {
     }
 
     return this.getRolePermissionIds(roleId);
+  }
+
+  async listEmployeeIdsByRoleId(roleId: number): Promise<string[]> {
+    const pool = this.poolFactory();
+    const [rows] = await pool.query<Array<RowDataPacket & { employeeId: string }>>(
+      `
+        SELECT employee_id AS employeeId
+        FROM sm_employee
+        WHERE role_id = ?
+        ORDER BY employee_id ASC
+      `,
+      [roleId],
+    );
+    return rows.map((row) => row.employeeId);
   }
 }

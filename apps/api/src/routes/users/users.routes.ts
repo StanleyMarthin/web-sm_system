@@ -20,6 +20,7 @@ import { requireSession } from "@/middleware/auth.middleware";
 import { requirePermission } from "@/middleware/permission.middleware";
 import type { AuthService } from "@/services/auth/auth.service";
 import type { UsersService } from "@/services/users/users.service";
+import { SessionSynchronizationError } from "@/services/auth/session-synchronizer";
 import {
   assertImageMagicBytes,
   extensionForImageContentType,
@@ -113,6 +114,10 @@ async function requireManageUsersSession(
 }
 
 function mapUsersError(request: Request, error: unknown): Response {
+  if (error instanceof SessionSynchronizationError) {
+    return errorResponse(request, "Perubahan user sudah tersimpan, tetapi sesi aktif belum tersinkron. Muat ulang data sebelum mencoba lagi.", 503, "SESSION_SYNCHRONIZATION_FAILED");
+  }
+
   if (error instanceof Error) {
     if (error.message === "USER_NOT_FOUND") {
       return errorResponse(request, "User tidak ditemukan.", 404, "USER_NOT_FOUND");

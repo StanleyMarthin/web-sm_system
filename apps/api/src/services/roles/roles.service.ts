@@ -15,7 +15,8 @@ import {
 import { TtlCache } from "@/lib/ttl-cache";
 import type { AuditService } from "@/services/audit/audit.service";
 import { DefaultAuditService } from "@/services/audit/audit.service";
-import { MySqlAuditRepository } from "@/repositories/audit/audit.repo";
+import { MySqlAuditRepository, type RoleHistoryEntry } from "@/repositories/audit/audit.repo";
+import type { SessionSynchronizer } from "@/services/auth/session-synchronizer";
 
 export interface RolesService {
   listRoles(session: WebSession): Promise<RoleRecord[]>;
@@ -36,6 +37,7 @@ export interface RolesService {
     roleId: number,
     input: UpdateRolePermissionsRequest,
   ): Promise<number[]>;
+  getRoleHistory(session: WebSession, roleId: number): Promise<RoleHistoryEntry[]>;
 }
 
 const REFERENCE_CACHE_TTL_MS = 60_000;
@@ -46,6 +48,10 @@ const roleReferencesCache = new TtlCache<{
 }>(REFERENCE_CACHE_TTL_MS);
 const permissionCatalogCache = new TtlCache<PermissionRecord[]>(REFERENCE_CACHE_TTL_MS);
 const rolePermissionCache = new TtlCache<number[]>(REFERENCE_CACHE_TTL_MS);
+const noSessionSynchronizer: SessionSynchronizer = {
+  async sync() {},
+  async invalidate() {},
+};
 
 function invalidateRoleCaches(roleId?: number): void {
   rolesListCache.clear();
@@ -108,6 +114,8 @@ export class DefaultRolesService implements RolesService {
     private readonly auditService: AuditService = new DefaultAuditService(
       new MySqlAuditRepository(),
     ),
+    private readonly historyRepository: Pick<MySqlAuditRepository, "listRoleHistory"> = new MySqlAuditRepository(),
+    private readonly sessionSynchronizer: SessionSynchronizer = noSessionSynchronizer,
   ) {}
 
   async listRoles(session: WebSession): Promise<RoleRecord[]> {
@@ -129,7 +137,7 @@ export class DefaultRolesService implements RolesService {
       action: "role.create",
       module: "rbac",
       recordId: String(role.id),
-      newValue: role,
+      newValue: { role, permissionIds: input.permissionIds ?? [] },
     });
     return role;
   }
@@ -159,6 +167,7 @@ export class DefaultRolesService implements RolesService {
       assertRoleNameAvailable(input.roleName, existingRole.roleName);
     }
 
+    const oldPermissionIds = input.permissionIds === undefined ? undefined : await this.repository.getRolePermissionIds(roleId);
     const role = await this.repository.updateRole(roleId, mergeRoleProfile(existingRole, input));
     invalidateRoleCaches(roleId);
     await this.auditService.log({
@@ -167,9 +176,12 @@ export class DefaultRolesService implements RolesService {
       action: "role.update",
       module: "rbac",
       recordId: String(roleId),
-      oldValue: existingRole,
-      newValue: role,
+      oldValue: oldPermissionIds === undefined ? existingRole : { role: existingRole, permissionIds: oldPermissionIds },
+      newValue: input.permissionIds === undefined ? role : { role, permissionIds: input.permissionIds },
     });
+    if (input.roleName !== undefined || input.profile !== undefined || input.permissionIds !== undefined) {
+      await this.syncRoleSessions(roleId);
+    }
     return role;
   }
 
@@ -194,6 +206,12 @@ export class DefaultRolesService implements RolesService {
     return rolePermissionCache.getOrCreate(`role:${roleId}`, () =>
       this.repository.getRolePermissionIds(roleId),
     );
+  }
+
+  async getRoleHistory(session: WebSession, roleId: number): Promise<RoleHistoryEntry[]> {
+    assertSystemSuperadmin(session);
+    if (!await this.repository.findRoleById(roleId)) throw new Error("ROLE_NOT_FOUND");
+    return this.historyRepository.listRoleHistory(roleId);
   }
 
   async updateRolePermissions(
@@ -221,6 +239,13 @@ export class DefaultRolesService implements RolesService {
       recordId: String(roleId),
       newValue: { permissionIds },
     });
+    await this.syncRoleSessions(roleId);
     return permissionIds;
+  }
+
+  private async syncRoleSessions(roleId: number): Promise<void> {
+    await this.sessionSynchronizer.sync(
+      await this.repository.listEmployeeIdsByRoleId(roleId),
+    );
   }
 }

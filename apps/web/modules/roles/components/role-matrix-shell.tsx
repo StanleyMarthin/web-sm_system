@@ -4,6 +4,7 @@ import type {
   PermissionRecord,
   RoleDivisionScopeMode,
   RoleRecord,
+  RoleHistoryEntry,
   RoleReferenceOption,
   RoleScopeBasis,
   RoleScopePreset,
@@ -16,18 +17,17 @@ import {
   Plus,
   Save,
   Search,
-  Settings2,
-  ShieldCheck,
-  Trash2,
   X,
 } from "lucide-react";
-import { Fragment, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   createRole,
   fetchRolePermissions,
-  saveRolePermissions,
+  fetchRoleHistory,
   updateRole,
 } from "@/shared/api/roles/roles";
+import { describeHistoryChange, permissionAction, permissionChanges, permissionLabel, permissionModule, type PermissionAction } from "../permission-matrix";
+import { permissionPresentation } from "../permission-registry";
 
 interface RoleMatrixShellProps {
   roles: RoleRecord[];
@@ -79,6 +79,9 @@ interface ScopeDialogProps {
 }
 
 type EditorMode = "create" | "edit";
+type RoleTab = "summary" | "settings" | "permissions" | "history";
+
+const permissionActions: PermissionAction[] = ["View", "Create", "Approve", "Process", "Other"];
 
 const approvalBlueprints: ApprovalBlueprint[] = [
   {
@@ -247,8 +250,8 @@ function roleToForm(role: RoleRecord | undefined): RoleFormState {
       role.profile?.approvalRank === null || role.profile?.approvalRank === undefined
         ? ""
         : String(role.profile.approvalRank),
-    webEnabled: true,
-    mobileEnabled: true,
+    webEnabled: role.profile?.webEnabled ?? true,
+    mobileEnabled: role.profile?.mobileEnabled ?? true,
     notes: role.profile?.notes ?? "",
     scopePreset: {
       divisionMode: scopePreset.divisionMode,
@@ -285,26 +288,15 @@ function deriveScopeBasis(scopePreset: RoleFormState["scopePreset"]): RoleScopeB
 function humanizeDerivedScope(scopeBasis: RoleScopeBasis): string {
   switch (scopeBasis) {
     case "GLOBAL":
-      return "Runtime scope: semua unit";
+      return "Semua unit";
     case "ASSIGNED_UNITS":
-      return "Runtime scope: unit pegangan";
+      return "Unit pegangan";
     case "ASSIGNED_DIVISIONS":
-      return "Runtime scope: divisi pegangan";
+      return "Divisi pegangan";
     case "OWN_DIVISION":
-      return "Runtime scope: divisi utama user";
+      return "Divisi utama";
     default:
-      return "Runtime scope: diri sendiri";
-  }
-}
-
-function sectionTitle(audience: PermissionRecord["audience"] | undefined): string {
-  switch (audience) {
-    case "WEB":
-      return "Dipakai di Web";
-    case "MOBILE":
-      return "Dipakai di Mobile";
-    default:
-      return "Dipakai di Web dan Mobile";
+      return "Data sendiri";
   }
 }
 
@@ -342,14 +334,6 @@ function mapIdsToLabels(values: string[], options: RoleReferenceOption[]): strin
 
   const optionMap = new Map(options.map((option) => [option.value, option.label]));
   return values.map((value) => optionMap.get(value) ?? value);
-}
-
-function humanizePermissionCode(permissionCode: string): string {
-  return permissionCode
-    .split("_")
-    .filter(Boolean)
-    .map((chunk) => chunk.charAt(0) + chunk.slice(1).toLowerCase())
-    .join(" ");
 }
 
 function ScopeDialog({
@@ -637,40 +621,54 @@ export function RoleMatrixShell({
   const [draftPermissionIds, setDraftPermissionIds] = useState<number[]>(
     activePermissionIds,
   );
+  const [originalPermissionIds, setOriginalPermissionIds] = useState<number[]>([]);
   const [editorMode, setEditorMode] = useState<EditorMode>("edit");
   const [isEditing, setIsEditing] = useState(false);
-  const [roleSearch, setRoleSearch] = useState(
-    roles.find((role) => role.id === activeRoleId)?.roleName ?? "",
-  );
+  const [roleSearch, setRoleSearch] = useState("");
   const [scopeDialog, setScopeDialog] = useState<"division" | "unit" | null>(null);
+  const [activeTab, setActiveTab] = useState<RoleTab>("summary");
   const [permissionViewFilter, setPermissionViewFilter] = useState<
     "WEB" | "MOBILE"
   >("WEB");
   const [permissionSearch, setPermissionSearch] = useState("");
+  const [compareRoleId, setCompareRoleId] = useState(0);
+  const [compareIds, setCompareIds] = useState<number[] | null>(null);
   const [form, setForm] = useState<RoleFormState>(() =>
     roleToForm(roles.find((role) => role.id === activeRoleId)),
   );
   const [isFetchingPermissions, setIsFetchingPermissions] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
+  const [isPending, setIsPending] = useState(false);
+  const [outcomeUnknown, setOutcomeUnknown] = useState(false);
+  const [history, setHistory] = useState<RoleHistoryEntry[] | null>(null);
+  const [historyError, setHistoryError] = useState(false);
   const permissionCacheRef = useRef<Record<number, number[]>>({});
+  const [permissionsLoaded, setPermissionsLoaded] = useState(false);
+  const [permissionRetry, setPermissionRetry] = useState(0);
 
   const selectedRole = roleCatalog.find((role) => role.id === selectedRoleId);
   const canEditProfile = editorMode === "create" || isEditing;
+  const originalForm = roleToForm(selectedRole);
+  const profileChanges = editorMode === "create" ? ["Role baru"] : [
+    ["Nama role", form.roleName, originalForm.roleName],
+    ["Keterangan", form.description, originalForm.description],
+    ["Tahap approval", `${form.roleLevel}:${form.approvalRank}`, `${originalForm.roleLevel}:${originalForm.approvalRank}`],
+    ["Cakupan data", JSON.stringify(form.scopePreset), JSON.stringify(originalForm.scopePreset)],
+    ["Catatan internal", form.notes, originalForm.notes],
+  ].filter(([, current, original]) => current !== original).map(([label]) => label);
+  const permissionDiff = permissionChanges(originalPermissionIds, draftPermissionIds);
+  const changeCount = profileChanges.length + permissionDiff.added.length + permissionDiff.removed.length;
   const approvalChoices = useMemo(() => buildApprovalChoices(form), [form]);
   const selectedApprovalKey = resolveApprovalBlueprintKey(form);
 
   const filteredRoles = useMemo(() => {
     const keyword = roleSearch.trim().toLowerCase();
     if (!keyword) {
-      return roleCatalog.slice(0, 8);
+      return roleCatalog;
     }
 
-    return roleCatalog.filter((role) => {
-      const haystack = `${role.roleName} ${role.description ?? ""}`.toLowerCase();
-      return haystack.includes(keyword);
-    });
+    return roleCatalog.filter((role) => role.roleName.toLowerCase().includes(keyword));
   }, [roleCatalog, roleSearch]);
 
   const permissionRows = useMemo(() => {
@@ -694,7 +692,7 @@ export function RoleMatrixShell({
     const grouped = new Map<string, PermissionRecord[]>();
 
     for (const permission of permissionRows) {
-      const moduleName = permission.moduleName?.trim() || "General";
+      const moduleName = permissionModule(permission);
       const existing = grouped.get(moduleName) ?? [];
       existing.push(permission);
       grouped.set(moduleName, existing);
@@ -706,37 +704,46 @@ export function RoleMatrixShell({
     }));
   }, [permissionRows]);
 
-  const filteredPermissionGroups = permissionSearch.trim()
-    ? permissionGroups.filter(
-        (group) =>
-          group.moduleName.toLowerCase().includes(permissionSearch.toLowerCase()) ||
-          group.items.some((item) =>
-            item.permissionCode.toLowerCase().includes(permissionSearch.toLowerCase()),
-          ),
-      )
-    : permissionGroups;
+  const filteredPermissionGroups = useMemo(() => {
+    const keyword = permissionSearch.trim().toLowerCase();
+    if (!keyword) return permissionGroups;
+
+    return permissionGroups
+      .map((group) => ({
+        ...group,
+        items: group.items.filter(
+          (item) =>
+            group.moduleName.toLowerCase().includes(keyword) ||
+            item.permissionCode.toLowerCase().includes(keyword) ||
+            permissionLabel(item).toLowerCase().includes(keyword),
+        ),
+      }))
+      .filter((group) => group.items.length > 0);
+  }, [permissionGroups, permissionSearch]);
+
+  const permissionMatrixRows = useMemo(
+    () =>
+      filteredPermissionGroups.map((group) => ({
+        moduleName: group.moduleName,
+        permissionCount: group.items.length,
+        byAction: group.items.reduce<Record<PermissionAction, PermissionRecord[]>>(
+          (result, permission) => {
+            result[permissionAction(permission.permissionCode)].push(permission);
+            return result;
+          },
+          { View: [], Create: [], Approve: [], Process: [], Other: [] },
+        ),
+      })),
+    [filteredPermissionGroups],
+  );
 
   const derivedScopeBasis = deriveScopeBasis(form.scopePreset);
   const divisionLabels = mapIdsToLabels(form.scopePreset.divisionIds, references.divisions);
   const unitLabels = mapIdsToLabels(form.scopePreset.unitIds, references.units);
 
-  const showSearchResults =
-    roleSearch.trim().length > 0 &&
-    !(
-      filteredRoles.length === 1 &&
-      filteredRoles[0]?.id === selectedRoleId &&
-      filteredRoles[0]?.roleName.toLowerCase() === roleSearch.trim().toLowerCase()
-    );
-
   useEffect(() => {
     setRoleCatalog(roles);
   }, [roles]);
-
-  useEffect(() => {
-    if (activeRoleId > 0 && activePermissionIds.length > 0) {
-      permissionCacheRef.current[activeRoleId] = activePermissionIds;
-    }
-  }, [activePermissionIds, activeRoleId]);
 
   useEffect(() => {
     if (editorMode === "create") {
@@ -744,28 +751,59 @@ export function RoleMatrixShell({
     }
 
     setForm(roleToForm(selectedRole));
-    if (selectedRole?.roleName) {
-      setRoleSearch(selectedRole.roleName);
-    }
   }, [editorMode, selectedRole]);
+
+  useEffect(() => {
+    if (activeTab !== "history" || selectedRoleId <= 0) return;
+    let cancelled = false;
+    setHistory(null);
+    setHistoryError(false);
+    void fetchRoleHistory(selectedRoleId).then((result) => {
+      if (!cancelled) {
+        if (result.payload) setHistory(result.payload.data.history);
+        else setHistoryError(true);
+      }
+    }).catch(() => { if (!cancelled) setHistoryError(true); });
+    return () => { cancelled = true; };
+  }, [activeTab, selectedRoleId]);
+
+  useEffect(() => {
+    if (!compareRoleId) {
+      setCompareIds(null);
+      return;
+    }
+    let cancelled = false;
+    setCompareIds(null);
+    void fetchRolePermissions("", compareRoleId).then((result) => {
+      if (!cancelled) {
+        if (result.payload) setCompareIds(result.payload.data.permissionIds);
+        else setError("Izin role pembanding gagal dimuat.");
+      }
+    }).catch(() => { if (!cancelled) setError("Izin role pembanding gagal dimuat."); });
+    return () => { cancelled = true; };
+  }, [compareRoleId]);
 
   useEffect(() => {
     if (selectedRoleId <= 0) {
       setDraftPermissionIds([]);
+      setOriginalPermissionIds([]);
+      setIsFetchingPermissions(false);
+      setPermissionsLoaded(editorMode === "create");
       return;
     }
 
     const cachedPermissionIds = permissionCacheRef.current[selectedRoleId];
     if (cachedPermissionIds) {
+      setOriginalPermissionIds(cachedPermissionIds);
       setDraftPermissionIds(cachedPermissionIds);
+      setPermissionsLoaded(true);
+      setIsFetchingPermissions(false);
       return;
     }
 
     let isCancelled = false;
     setIsFetchingPermissions(true);
-    setError(null);
-    setMessage(null);
-
+    setPermissionsLoaded(false);
     void (async () => {
       try {
         const result = await fetchRolePermissions("", selectedRoleId);
@@ -781,7 +819,11 @@ export function RoleMatrixShell({
 
         const permissionIds = result.payload.data.permissionIds;
         permissionCacheRef.current[selectedRoleId] = permissionIds;
+        setOriginalPermissionIds(permissionIds);
         setDraftPermissionIds(permissionIds);
+        setPermissionsLoaded(true);
+      } catch {
+        if (!isCancelled) setError("Izin role gagal dimuat. Pilih role kembali untuk mencoba lagi.");
       } finally {
         if (!isCancelled) {
           setIsFetchingPermissions(false);
@@ -792,7 +834,7 @@ export function RoleMatrixShell({
     return () => {
       isCancelled = true;
     };
-  }, [selectedRoleId]);
+  }, [selectedRoleId, editorMode, permissionRetry]);
 
   function togglePermission(permissionId: number) {
     setDraftPermissionIds((currentValue) =>
@@ -803,6 +845,7 @@ export function RoleMatrixShell({
   }
 
   function openCreateRole() {
+    if (isEditing && !window.confirm("Buang perubahan yang belum disimpan?")) return;
     setEditorMode("create");
     setSelectedRoleId(0);
     setDraftPermissionIds([]);
@@ -810,15 +853,18 @@ export function RoleMatrixShell({
     setError(null);
     setMessage(null);
     setRoleSearch("");
+    setActiveTab("settings");
     setForm(emptyRoleForm());
   }
 
   function selectExistingRole(roleId: number) {
+    if (isPending || (isEditing && !window.confirm("Buang perubahan yang belum disimpan?"))) return;
     setEditorMode("edit");
     setSelectedRoleId(roleId);
     setIsEditing(false);
     setError(null);
     setMessage(null);
+    setActiveTab("summary");
   }
 
   function startEditing() {
@@ -831,6 +877,7 @@ export function RoleMatrixShell({
   }
 
   function cancelEditing() {
+    if (!window.confirm("Buang perubahan yang belum disimpan?")) return;
     setError(null);
     setMessage(null);
     if (editorMode === "create") {
@@ -839,7 +886,6 @@ export function RoleMatrixShell({
         setEditorMode("edit");
         setSelectedRoleId(fallbackRole.id);
         setForm(roleToForm(fallbackRole));
-        setRoleSearch(fallbackRole.roleName);
       } else {
         setForm(emptyRoleForm());
         setSelectedRoleId(0);
@@ -849,6 +895,7 @@ export function RoleMatrixShell({
     }
 
     setForm(roleToForm(selectedRole));
+    setDraftPermissionIds(permissionCacheRef.current[selectedRoleId] ?? []);
     setIsEditing(false);
   }
 
@@ -895,13 +942,19 @@ export function RoleMatrixShell({
     });
   }
 
-  function submitRoleProfile() {
+  async function submitRoleProfile() {
     setMessage(null);
     setError(null);
+    if (isPending || !permissionsLoaded) return;
+    const originalIds = permissionCacheRef.current[selectedRoleId] ?? [];
+    const { added, removed } = permissionChanges(originalIds, draftPermissionIds);
+    const changes = [...added.map((id) => `+ ${permissions.find((p) => p.id === id)?.permissionCode ?? id}`), ...removed.map((id) => `- ${permissions.find((p) => p.id === id)?.permissionCode ?? id}`)];
+    if (!window.confirm(`Simpan perubahan role?${profileChanges.length ? `\n\nProfil: ${profileChanges.join(", ")}` : ""}${changes.length ? `\n\nPerubahan izin:\n${changes.join("\n")}` : "\nTidak ada perubahan izin."}`)) return;
 
     const payload = {
       roleName: form.roleName.trim(),
       description: form.description.trim() || null,
+      permissionIds: draftPermissionIds,
       profile: {
         roleLevel: Number(form.roleLevel || "0"),
         scopeBasis: deriveScopeBasis(form.scopePreset),
@@ -920,12 +973,14 @@ export function RoleMatrixShell({
       },
     } as const;
 
-    startTransition(() => {
-      void (async () => {
+    setIsPending(true);
+    try {
+        let savedRole: RoleRecord;
         if (editorMode === "create") {
           const result = await createRole(payload);
           if (!result.success) {
-            setError(result.message);
+            if (result.status >= 500) setOutcomeUnknown(true);
+            setError(result.status >= 500 ? "Server gagal menjawab dengan pasti. Muat ulang halaman sebelum mencoba lagi." : result.message);
             return;
           }
 
@@ -934,582 +989,153 @@ export function RoleMatrixShell({
               left.roleName.localeCompare(right.roleName),
             ),
           );
-          setSelectedRoleId(result.role.id);
-          setEditorMode("edit");
-          setIsEditing(false);
-          setForm(roleToForm(result.role));
-          setRoleSearch(result.role.roleName);
-          permissionCacheRef.current[result.role.id] = [];
-          setMessage(`Role ${result.role.roleName} berhasil dibuat.`);
-          return;
+          savedRole = result.role;
+        } else {
+          if (!selectedRoleId) {
+            return;
+          }
+
+          const result = await updateRole(selectedRoleId, { ...payload, expectedPermissionIds: originalPermissionIds });
+          if (!result.success) {
+            if (result.status >= 500 || result.errorCode === "ROLE_PERMISSIONS_CHANGED" || result.errorCode === "SESSION_SYNCHRONIZATION_FAILED") setOutcomeUnknown(true);
+            setError(result.status >= 500 ? "Server gagal menjawab dengan pasti. Muat ulang halaman sebelum mencoba lagi." : result.message);
+            return;
+          }
+          savedRole = result.role;
+          setRoleCatalog((currentValue) =>
+            currentValue
+              .map((role) => (role.id === result.role.id ? result.role : role))
+              .sort((left, right) => left.roleName.localeCompare(right.roleName)),
+          );
         }
 
-        if (!selectedRoleId) {
-          return;
-        }
-
-        const result = await updateRole(selectedRoleId, payload);
-        if (!result.success) {
-          setError(result.message);
-          return;
-        }
-
-        setRoleCatalog((currentValue) =>
-          currentValue
-            .map((role) => (role.id === result.role.id ? result.role : role))
-            .sort((left, right) => left.roleName.localeCompare(right.roleName)),
-        );
-        setForm(roleToForm(result.role));
-        setRoleSearch(result.role.roleName);
+        permissionCacheRef.current[savedRole.id] = [...draftPermissionIds];
+        setOriginalPermissionIds([...draftPermissionIds]);
+        setSelectedRoleId(savedRole.id);
+        setEditorMode("edit");
+        setForm(roleToForm(savedRole));
         setIsEditing(false);
-        setMessage(`Role ${result.role.roleName} berhasil diperbarui.`);
-      })();
-    });
-  }
-
-  function submitPermissionMatrix() {
-    if (selectedRoleId <= 0 || !canEditProfile) {
-      return;
+        setActiveTab("summary");
+        setMessage(`Perubahan role ${savedRole.roleName} berhasil disimpan.`);
+    } catch {
+      setOutcomeUnknown(true);
+      setError("Jawaban server terputus. Muat ulang halaman untuk memastikan apakah perubahan tersimpan sebelum mencoba lagi.");
+    } finally {
+      setIsPending(false);
     }
-
-    setMessage(null);
-    setError(null);
-
-    startTransition(() => {
-      void (async () => {
-        const result = await saveRolePermissions(selectedRoleId, draftPermissionIds);
-        if (!result.success) {
-          setError(result.message);
-          return;
-        }
-
-        permissionCacheRef.current[selectedRoleId] = [...draftPermissionIds];
-        setMessage("Checklist akses berhasil disimpan.");
-      })();
-    });
   }
 
   return (
-    <div className="space-y-4">
-      {message ? (
-        <div className="border border-success/20 bg-success/[0.04] px-3 py-2 text-[11px] font-mono text-success">
-          {message}
-        </div>
-      ) : null}
-      {error ? (
-        <div className="border border-destructive/20 bg-destructive/[0.04] px-3 py-2 text-[11px] font-mono text-destructive">
-          {error}
-        </div>
-      ) : null}
+    <div className="space-y-3">
+      {message && <div role="status" className="border border-success/30 px-3 py-2 text-sm text-success">{message}</div>}
+      {error && <div role="alert" className="border border-destructive/30 px-3 py-2 text-sm text-destructive">{error}{!permissionsLoaded && !isFetchingPermissions && selectedRoleId > 0 && <> <button type="button" onClick={() => setPermissionRetry((value) => value + 1)} className="underline">Coba lagi</button></>}</div>}
 
-      <div className="border border-border dark:border-white/5 bg-white dark:bg-card p-4">
-        <div className="flex flex-col gap-3 border-b border-border dark:border-white/5 pb-3 xl:flex-row xl:items-center xl:justify-between">
+      <div className="grid gap-4 lg:grid-cols-[240px_minmax(0,1fr)]">
+        <aside className="min-w-0 border border-border bg-card">
+          <div className="flex items-center justify-between gap-2 border-b border-border p-3">
+            <h2 className="text-sm font-semibold">Role</h2>
+            <button type="button" title="Tambah role" aria-label="Tambah role" onClick={openCreateRole} disabled={isPending} className="inline-flex h-9 w-9 items-center justify-center border border-border hover:bg-muted disabled:opacity-50"><Plus className="h-4 w-4" /></button>
+          </div>
+          <label className="flex items-center gap-2 border-b border-border px-3">
+            <Search className="h-4 w-4 text-muted-foreground" />
+            <span className="sr-only">Cari nama role</span>
+            <input value={roleSearch} onChange={(event) => setRoleSearch(event.target.value)} placeholder="Cari nama role" className="h-10 min-w-0 w-full bg-transparent text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+          </label>
           <div>
-            <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30">
-              Role Management
-            </p>
-            <h2 className="text-[13px] font-mono text-foreground dark:text-foreground/80 mt-0.5">
-              Cari role, cek ringkasannya, lalu buka edit bila perlu
-            </h2>
-          </div>
-
-          <button
-            type="button"
-            onClick={openCreateRole}
-            className="flex items-center gap-1.5 border border-border dark:border-white/10 bg-muted dark:bg-background px-3 py-1.5 text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/50 hover:text-foreground dark:text-foreground hover:border-white/30 transition-colors"
-          >
-            <Plus className="h-3 w-3" />
-            Tambah Role
-          </button>
-        </div>
-
-        <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,390px)_minmax(0,1fr)]">
-          <div className="space-y-0">
-            <label className="space-y-1">
-              <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30">
-                Cari nama role
-              </span>
-              <div className="flex items-center gap-2 border-b border-border dark:border-white/10 px-2">
-                <Search className="h-3.5 w-3.5 text-muted-foreground dark:text-foreground/25 shrink-0" />
-                <input
-                  value={roleSearch}
-                  onChange={(event) => setRoleSearch(event.target.value)}
-                  placeholder="Ketik nama role..."
-                  className="h-8 w-full bg-transparent text-[11px] font-mono text-foreground dark:text-foreground outline-none placeholder:text-muted-foreground dark:text-foreground/20"
-                />
-              </div>
-            </label>
-
-            {showSearchResults ? (
-              <div className="border border-border dark:border-white/5 bg-muted dark:bg-background">
-                <div className="max-h-[260px] overflow-y-auto">
-                  {filteredRoles.length === 0 ? (
-                    <div className="px-3 py-3 text-[10px] font-mono text-muted-foreground dark:text-foreground/25">
-                      — Role tidak ditemukan.
-                    </div>
-                  ) : (
-                    filteredRoles.map((role) => {
-                      const selected = editorMode === "edit" && selectedRoleId === role.id;
-                      return (
-                        <button
-                          key={role.id}
-                          type="button"
-                          onClick={() => selectExistingRole(role.id)}
-                          className={[
-                            "w-full border-b border-border dark:border-white/5 px-3 py-2 text-left transition-colors",
-                            selected
-                              ? "bg-primary/[0.06] border-l-2 border-l-amber-500"
-                              : "hover:bg-muted dark:hover:bg-white/[0.02]",
-                          ].join(" ")}
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <div>
-                              <p className="text-[11px] font-mono text-foreground dark:text-foreground">{role.roleName}</p>
-                              <p className="text-[10px] text-muted-foreground dark:text-foreground/30 mt-0.5">
-                                {role.description ?? "Belum ada catatan role."}
-                              </p>
-                            </div>
-                            <span className="font-mono text-[10px] text-muted-foreground dark:text-foreground/30 border border-border dark:border-white/10 px-1.5 py-0.5 shrink-0">
-                              {humanizeDerivedScope(role.profile?.scopeBasis ?? "SELF_ONLY")}
-                            </span>
-                          </div>
-                        </button>
-                      );
-                    })
-                  )}
-                </div>
-              </div>
-            ) : null}
-          </div>
-
-          <div className="border border-border dark:border-white/5 bg-muted dark:bg-background p-4">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-              <div className="min-w-0">
-                <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30">
-                  Role aktif
-                </p>
-                <h3 className="text-[13px] font-mono text-foreground dark:text-foreground mt-0.5">
-                  {editorMode === "create"
-                    ? "Role baru"
-                    : selectedRole?.roleName ?? "Belum ada role terpilih"}
-                </h3>
-              </div>
-
-              <div className="border border-border dark:border-white/5 bg-white dark:bg-card px-3 py-2 text-[12px] text-muted-foreground dark:text-foreground/55">
-                {humanizeDerivedScope(derivedScopeBasis)}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="border border-border dark:border-white/5 bg-white dark:bg-card p-4">
-        <div className="flex flex-col gap-3 border-b border-border dark:border-white/5 pb-3 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30">
-              Pengaturan Role
-            </p>
-            <h1 className="text-[13px] font-mono text-foreground dark:text-foreground mt-0.5">
-              {editorMode === "create" ? "Role Baru" : selectedRole?.roleName ?? "Pilih Role"}
-            </h1>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            {editorMode === "edit" ? (
-              <button
-                type="button"
-                onClick={isEditing ? cancelEditing : startEditing}
-                className="flex items-center gap-1.5 border border-border dark:border-white/10 px-3 py-1.5 text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/50 hover:text-foreground dark:text-foreground transition-colors"
-              >
-                {isEditing ? <X className="h-3 w-3" /> : <Pencil className="h-3 w-3" />}
-                {isEditing ? "Batal Ubah" : "Buka Edit"}
+            {filteredRoles.length === 0 ? <p className="p-3 text-sm text-muted-foreground">Role tidak ditemukan.</p> : filteredRoles.map((role) => (
+              <button key={role.id} type="button" onClick={() => selectExistingRole(role.id)} aria-current={editorMode === "edit" && selectedRoleId === role.id ? "true" : undefined} className={["block w-full border-b border-border px-3 py-3 text-left hover:bg-muted", editorMode === "edit" && selectedRoleId === role.id ? "bg-muted" : ""].join(" ")}>
+                <span className="block break-words text-sm font-medium">{role.roleName}</span>
+                <span className="mt-1 block text-xs text-muted-foreground">{role.userCount} pegawai · {role.permissionCount} izin</span>
               </button>
-            ) : null}
-
-            <button
-              type="button"
-              onClick={submitRoleProfile}
-              disabled={
-                isPending ||
-                !canEditProfile ||
-                !form.roleName.trim() ||
-                !form.roleLevel.trim()
-              }
-              className="flex items-center gap-1.5 border border-primary/40 bg-primary/[0.06] px-3 py-1.5 text-[10px] font-mono uppercase tracking-[0.12em] text-app-accent-ink hover:bg-primary/10 transition-colors disabled:opacity-30"
-            >
-              <Save className="h-3 w-3" />
-              Simpan Role
-            </button>
+            ))}
           </div>
-        </div>
+        </aside>
 
-        <div className="mt-4 grid gap-4 md:grid-cols-2">
-          <label className="space-y-1">
-            <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30">
-              Nama Role
-            </span>
-            <input
-              value={form.roleName}
-              onChange={(event) =>
-                setForm((currentValue) => ({
-                  ...currentValue,
-                  roleName: event.target.value,
-                }))
-              }
-              disabled={!canEditProfile}
-              className="h-8 w-full border border-border dark:border-white/10 bg-muted dark:bg-background px-2 text-[11px] font-mono text-foreground dark:text-foreground outline-none focus:border-primary/40 disabled:cursor-not-allowed disabled:opacity-70"
-            />
-          </label>
-
-          <label className="space-y-1">
-            <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30">
-              Catatan Role
-            </span>
-            <input
-              value={form.description}
-              onChange={(event) =>
-                setForm((currentValue) => ({
-                  ...currentValue,
-                  description: event.target.value,
-                }))
-              }
-              disabled={!canEditProfile}
-              className="h-8 w-full border border-border dark:border-white/10 bg-muted dark:bg-background px-2 text-[11px] font-mono text-foreground dark:text-foreground outline-none focus:border-primary/40 disabled:cursor-not-allowed disabled:opacity-70"
-              placeholder="Contoh: QA upholstery, admin gudang bahan"
-            />
-          </label>
-
-          <div className="md:col-span-2 border border-border dark:border-white/5 bg-muted dark:bg-background p-4">
-            <div className="flex items-start justify-between gap-4">
-              <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30">
-                Tanggung Jawab Approval
-              </p>
+        <main className="min-w-0 border border-border bg-card">
+          <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border p-4">
+            <div className="min-w-0">
+              <h2 className="break-words text-base font-semibold">{editorMode === "create" ? "Role baru" : selectedRole?.roleName ?? "Pilih role"}</h2>
+              <p className="mt-1 text-sm text-muted-foreground">{form.description || "Tidak ada keterangan."}</p>
             </div>
-
-            <div className="mt-4 grid gap-2 xl:grid-cols-3">
-              {approvalChoices.map((blueprint) => {
-                const selected = blueprint.key === selectedApprovalKey;
-                return (
-                  <button
-                    key={blueprint.key}
-                    type="button"
-                    onClick={() => applyApprovalBlueprint(blueprint)}
-                    disabled={!canEditProfile}
-                    className={[
-                      "border px-4 py-3 text-left transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-40",
-                      selected
-                        ? "border-primary/30 bg-primary/[0.04]"
-                        : "border-border dark:border-white/5 bg-white dark:bg-card hover:border-border dark:border-white/10",
-                    ].join(" ")}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <p className="text-[11px] font-mono text-foreground dark:text-foreground">{blueprint.label}</p>
-                      {selected ? (
-                        <ShieldCheck className="mt-0.5 h-3.5 w-3.5 text-app-accent-ink shrink-0" />
-                      ) : null}
-                    </div>
-                    <p className="mt-2 text-[10px] text-muted-foreground dark:text-foreground/35">
-                      {blueprint.note}
-                    </p>
-                  </button>
-                );
-              })}
-            </div>
+            {!canEditProfile && selectedRole && <button type="button" onClick={startEditing} disabled={isFetchingPermissions || !permissionsLoaded} className="inline-flex h-9 items-center gap-2 border border-border px-3 text-sm hover:bg-muted disabled:opacity-50"><Pencil className="h-4 w-4" /> Ubah</button>}
           </div>
+          <nav aria-label="Detail role" className="flex flex-wrap gap-1 border-b border-border px-3">
+            {([["summary", "Ringkasan"], ["settings", "Pengaturan"], ["permissions", "Izin"], ["history", "Riwayat"]] as Array<[RoleTab, string]>).map(([tab, label]) => (
+              <button key={tab} type="button" onClick={() => setActiveTab(tab)} aria-current={activeTab === tab ? "page" : undefined} className={["border-b-2 px-3 py-3 text-sm", activeTab === tab ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"].join(" ")}>{label}</button>
+            ))}
+          </nav>
 
-          <div className="md:col-span-2 border border-border dark:border-white/5 bg-muted dark:bg-background p-4">
-            <div className="flex items-start justify-between gap-4">
-              <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30">
-                Lingkup Data
-              </p>
-              <div className="border border-border dark:border-white/5 bg-white dark:bg-card px-3 py-1.5 text-[11px] font-mono text-muted-foreground dark:text-foreground/50 shrink-0">
-                {humanizeDerivedScope(derivedScopeBasis)}
-              </div>
+          {activeTab === "summary" && <div className="space-y-4 p-4 text-sm">
+            <dl className="grid gap-4 sm:grid-cols-2">
+              <div><dt className="text-muted-foreground">Tahap approval</dt><dd className="mt-1 font-medium">{approvalChoices.find((choice) => choice.key === selectedApprovalKey)?.label ?? "-"}</dd></div>
+              <div><dt className="text-muted-foreground">Cakupan data</dt><dd className="mt-1 font-medium">{humanizeDerivedScope(derivedScopeBasis)}</dd></div>
+              <div><dt className="text-muted-foreground">Level akses</dt><dd className="mt-1">{form.roleLevel}</dd></div>
+              <div><dt className="text-muted-foreground">Pegawai</dt><dd className="mt-1">{selectedRole?.userCount ?? 0}</dd></div>
+            </dl>
+          </div>}
+
+          {activeTab === "settings" && <div className="space-y-6 p-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="space-y-1 text-sm"><span className="text-muted-foreground">Nama role</span>{canEditProfile ? <input value={form.roleName} onChange={(event) => setForm((value) => ({ ...value, roleName: event.target.value }))} className="h-10 w-full border border-border bg-background px-3 text-sm focus-visible:outline-2 focus-visible:outline-primary" /> : <span className="block py-2">{form.roleName}</span>}</label>
+              <label className="space-y-1 text-sm"><span className="text-muted-foreground">Keterangan</span>{canEditProfile ? <input value={form.description} onChange={(event) => setForm((value) => ({ ...value, description: event.target.value }))} className="h-10 w-full border border-border bg-background px-3 text-sm focus-visible:outline-2 focus-visible:outline-primary" /> : <span className="block py-2">{form.description || "-"}</span>}</label>
             </div>
-
-            <div className="mt-4 grid gap-3 xl:grid-cols-2">
-              <div className="border border-border dark:border-white/5 bg-white dark:bg-card px-4 py-3">
-                <div className="flex items-start justify-between gap-4">
-                  <p className="text-[11px] font-mono text-foreground dark:text-foreground">Akses Divisi</p>
-                  <button
-                    type="button"
-                    onClick={() => setScopeDialog("division")}
-                    disabled={!canEditProfile}
-                    className="border border-border dark:border-white/10 px-2 py-1 text-[10px] font-mono uppercase text-muted-foreground dark:text-foreground/40 hover:text-foreground dark:text-foreground transition-colors disabled:opacity-40"
-                  >
-                    Atur
-                  </button>
-                </div>
-
-                <div className="mt-3 flex flex-wrap gap-1.5">
-                  <span className="border border-border dark:border-white/10 px-2 py-0.5 text-[10px] font-mono uppercase text-muted-foreground dark:text-foreground/40">
-                    {divisionModeOptions.find(
-                      (option) => option.value === form.scopePreset.divisionMode,
-                    )?.label ?? "Tidak dipakai"}
-                  </span>
-                  {divisionLabels.slice(0, 4).map((label) => (
-                    <span
-                      key={label}
-                      className="border border-primary/20 px-2 py-0.5 text-[10px] font-mono text-app-accent-ink"
-                    >
-                      {label}
-                    </span>
-                  ))}
-                  {divisionLabels.length > 4 ? (
-                    <span className="border border-border dark:border-white/10 px-2 py-0.5 text-[10px] font-mono text-muted-foreground dark:text-foreground/30">
-                      +{divisionLabels.length - 4} divisi
-                    </span>
-                  ) : null}
-                </div>
+            <section>
+              <h3 className="text-sm font-semibold">Tahap approval</h3>
+              <div className="mt-2 flex flex-wrap gap-2">{approvalChoices.map((choice) => <button key={choice.key} type="button" disabled={!canEditProfile} onClick={() => applyApprovalBlueprint(choice)} aria-pressed={choice.key === selectedApprovalKey} title={choice.note} className={["border px-3 py-2 text-sm", choice.key === selectedApprovalKey ? "border-primary bg-primary/10" : "border-border", !canEditProfile ? "cursor-default" : "hover:bg-muted"].join(" ")}>{choice.label}</button>)}</div>
+            </section>
+            <section>
+              <h3 className="text-sm font-semibold">Cakupan data</h3>
+              <div className="mt-2 grid gap-3 sm:grid-cols-2">
+                {(["division", "unit"] as const).map((kind) => <div key={kind} className="border border-border p-3 text-sm">
+                  <div className="flex items-center justify-between gap-2"><span className="font-medium">{kind === "division" ? "Divisi" : "Unit"}</span>{canEditProfile && <button type="button" onClick={() => setScopeDialog(kind)} className="border border-border px-2 py-1 text-xs hover:bg-muted">Atur</button>}</div>
+                  <p className="mt-2 text-muted-foreground">{kind === "division" ? divisionModeOptions.find((option) => option.value === form.scopePreset.divisionMode)?.label : unitModeOptions.find((option) => option.value === form.scopePreset.unitMode)?.label}</p>
+                  {(kind === "division" ? divisionLabels : unitLabels).length > 0 && <p className="mt-1 break-words">{(kind === "division" ? divisionLabels : unitLabels).join(", ")}</p>}
+                </div>)}
               </div>
+            </section>
+            <label className="block space-y-1 text-sm"><span className="text-muted-foreground">Catatan internal</span>{canEditProfile ? <textarea value={form.notes} onChange={(event) => setForm((value) => ({ ...value, notes: event.target.value }))} rows={3} className="w-full border border-border bg-background p-3 focus-visible:outline-2 focus-visible:outline-primary" /> : <span className="block whitespace-pre-wrap py-2">{form.notes || "-"}</span>}</label>
+          </div>}
 
-              <div className="border border-border dark:border-white/5 bg-white dark:bg-card px-4 py-3">
-                <div className="flex items-start justify-between gap-4">
-                  <p className="text-[11px] font-mono text-foreground dark:text-foreground">Akses Unit</p>
-                  <button
-                    type="button"
-                    onClick={() => setScopeDialog("unit")}
-                    disabled={!canEditProfile}
-                    className="border border-border dark:border-white/10 px-2 py-1 text-[10px] font-mono uppercase text-muted-foreground dark:text-foreground/40 hover:text-foreground dark:text-foreground transition-colors disabled:opacity-40"
-                  >
-                    Atur
-                  </button>
-                </div>
+          {activeTab === "history" && <section className="p-4" aria-label="Riwayat perubahan role">
+            {editorMode === "create" ? <p className="text-sm text-muted-foreground">Riwayat tersedia setelah role dibuat.</p> : historyError ? <p role="alert" className="text-sm text-destructive">Riwayat gagal dimuat. Pilih tab lain lalu buka kembali untuk mencoba lagi.</p> : history === null ? <p role="status" className="text-sm text-muted-foreground">Memuat riwayat...</p> : history.length === 0 ? <p className="text-sm text-muted-foreground">Belum ada riwayat yang tercatat.</p> : <ol className="divide-y divide-border">{history.map((entry) => <li key={entry.id} className="py-3 first:pt-0"><div className="flex flex-wrap justify-between gap-2 text-sm"><span className="font-medium">{entry.actorName || "Tidak diketahui"}</span><time className="text-muted-foreground">{entry.createdAt}</time></div><p className="mt-1 text-sm">{entry.action === "role.create" ? "Role dibuat" : entry.action === "role.permissions.update" ? "Izin diubah" : "Role diubah"}</p><ul className="mt-2 space-y-1 text-sm text-muted-foreground">{describeHistoryChange(entry.oldValue, entry.newValue, permissions).map((line, index) => <li key={index} className="break-words">{line}</li>)}</ul></li>)}</ol>}
+          </section>}
 
-                <div className="mt-3 flex flex-wrap gap-1.5">
-                  <span className="border border-border dark:border-white/10 px-2 py-0.5 text-[10px] font-mono uppercase text-muted-foreground dark:text-foreground/40">
-                    {unitModeOptions.find(
-                      (option) => option.value === form.scopePreset.unitMode,
-                    )?.label ?? "Tidak dipakai"}
-                  </span>
-                  {unitLabels.slice(0, 4).map((label) => (
-                    <span
-                      key={label}
-                      className="border border-primary/20 px-2 py-0.5 text-[10px] font-mono text-app-accent-ink"
-                    >
-                      {label}
-                    </span>
-                  ))}
-                  {unitLabels.length > 4 ? (
-                    <span className="border border-border dark:border-white/10 px-2 py-0.5 text-[10px] font-mono text-muted-foreground dark:text-foreground/30">
-                      +{unitLabels.length - 4} unit
-                    </span>
-                  ) : null}
-                </div>
-              </div>
+          {activeTab === "permissions" && <div className="space-y-3 p-4">
+            <div className="flex flex-wrap items-center gap-2">
+              {(["WEB", "MOBILE"] as const).map((platform) => <button key={platform} type="button" onClick={() => setPermissionViewFilter(platform)} aria-pressed={platform === permissionViewFilter} className={["border px-3 py-2 text-sm", platform === permissionViewFilter ? "border-primary bg-primary/10" : "border-border hover:bg-muted"].join(" ")}>{platform === "WEB" ? "Web" : "Mobile"}</button>)}
+              <input aria-label="Cari izin" value={permissionSearch} onChange={(event) => setPermissionSearch(event.target.value)} placeholder="Cari modul atau izin" className="h-10 min-w-[180px] flex-1 border border-border bg-background px-3 text-sm focus-visible:outline-2 focus-visible:outline-primary" />
+              <select aria-label="Bandingkan dengan role lain" value={compareRoleId} onChange={(event) => setCompareRoleId(Number(event.target.value))} className="h-10 max-w-full border border-border bg-background px-3 text-sm"><option value={0}>Bandingkan role</option>{roleCatalog.filter((role) => role.id !== selectedRoleId).map((role) => <option key={role.id} value={role.id}>{role.roleName}</option>)}</select>
             </div>
-          </div>
+            <p className="text-xs text-muted-foreground">Centang menunjukkan izin yang diberikan langsung ke role. Pada API web, pegawai SM-03.004 mendapat izin sistem melalui pengecualian akun, di luar role. Akses juga dapat dibatasi aturan setiap fitur. Pengguna yang sudah masuk perlu masuk ulang agar sesi mengambil izin terbaru.</p>
+            {isFetchingPermissions && <p role="status" className="text-sm">Memuat izin...</p>}
+            {!permissionsLoaded && !isFetchingPermissions && <p className="text-sm text-destructive">Izin belum dimuat. <button type="button" onClick={() => setPermissionRetry((value) => value + 1)} className="underline">Coba lagi</button></p>}
+            <div className="overflow-x-auto border border-border">
+              <table className="w-full min-w-[860px] table-fixed text-left text-sm">
+                <thead className="bg-muted text-muted-foreground"><tr><th className="w-48 px-3 py-2 font-medium">Modul</th>{permissionActions.map((action) => <th key={action} className="px-3 py-2 font-medium">{({ View: "Lihat", Create: "Buat", Approve: "Approve", Process: "Proses", Other: "Lainnya" })[action]}</th>)}</tr></thead>
+                <tbody>{permissionMatrixRows.map((group) => <tr key={group.moduleName} className="align-top border-t border-border">
+                  <th className="px-3 py-3 font-medium"><label className="flex items-start gap-2"><input type="checkbox" aria-label={`Pilih izin yang tampil untuk ${group.moduleName}`} disabled={!canEditProfile || !permissionsLoaded || isPending} checked={Object.values(group.byAction).flat().every((item) => draftPermissionIds.includes(item.id))} ref={(element) => { if (element) { const count = Object.values(group.byAction).flat().filter((item) => draftPermissionIds.includes(item.id)).length; element.indeterminate = count > 0 && count < group.permissionCount; } }} onChange={(event) => { const ids = Object.values(group.byAction).flat().map((item) => item.id); const checked = event.target.checked; setDraftPermissionIds((current) => checked ? [...new Set([...current, ...ids])] : current.filter((id) => !ids.includes(id))); }} className="mt-0.5 h-4 w-4 shrink-0 accent-primary" /><span className="break-words">{group.moduleName}</span></label><span className="mt-1 block text-xs font-normal text-muted-foreground">{Object.values(group.byAction).flat().filter((item) => draftPermissionIds.includes(item.id)).length}/{group.permissionCount} diberikan</span></th>
+                  {permissionActions.map((action) => <td key={action} className="px-2 py-2">{group.byAction[action].length === 0 ? <span className="text-muted-foreground">-</span> : group.byAction[action].map((permission) => {
+                    const checked = draftPermissionIds.includes(permission.id);
+                    const differs = compareIds !== null && checked !== compareIds.includes(permission.id);
+                    return <label key={permission.id} title={permission.permissionCode} className={["mb-1 flex min-h-10 cursor-pointer items-start gap-2 p-1.5 focus-within:ring-2 focus-within:ring-primary", differs ? "bg-primary/10" : "hover:bg-muted"].join(" ")}>
+                      <input type="checkbox" checked={checked} disabled={!canEditProfile || !permissionsLoaded || isPending} onChange={() => togglePermission(permission.id)} className="mt-0.5 h-4 w-4 shrink-0 accent-primary" />
+                      <span className="min-w-0 break-words text-xs leading-5">{permissionLabel(permission)}{permissionPresentation(permission.permissionCode)?.[3] && <span title="Izin penting" className="ml-1 font-semibold text-warning">!</span>}{differs && <span className="block text-muted-foreground">Role pembanding: {compareIds?.includes(permission.id) ? "diberikan" : "tidak ada"}</span>}</span>
+                    </label>;
+                  })}</td>)}
+                </tr>)}</tbody>
+              </table>
+            </div>
+            {permissionMatrixRows.length === 0 && <p className="py-4 text-center text-sm text-muted-foreground">Tidak ada izin yang cocok.</p>}
+          </div>}
 
-          <label className="space-y-1 md:col-span-2">
-            <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30">
-              Catatan Teknis
-            </span>
-            <textarea
-              value={form.notes}
-              onChange={(event) =>
-                setForm((currentValue) => ({
-                  ...currentValue,
-                  notes: event.target.value,
-                }))
-              }
-              disabled={!canEditProfile}
-              rows={3}
-              className="w-full border border-border dark:border-white/10 bg-muted dark:bg-background px-2 py-2 text-[11px] font-mono text-foreground dark:text-foreground outline-none focus:border-primary/40 disabled:cursor-not-allowed disabled:opacity-70"
-              placeholder="Catatan teknis role..."
-            />
-          </label>
-
-        </div>
+          {canEditProfile && <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 border-t border-border bg-card p-3">
+            <p className="text-sm text-muted-foreground">{changeCount} perubahan belum disimpan</p>
+            <div className="flex gap-2"><button type="button" onClick={cancelEditing} disabled={isPending} className="h-9 border border-border px-3 text-sm hover:bg-muted disabled:opacity-50">Batal</button><button type="button" onClick={() => void submitRoleProfile()} disabled={isPending || outcomeUnknown || !permissionsLoaded || isFetchingPermissions || !form.roleName.trim() || changeCount === 0} className="inline-flex h-9 items-center gap-2 border border-primary bg-primary/10 px-3 text-sm text-app-accent-ink hover:bg-primary/20 disabled:opacity-50"><Save className="h-4 w-4" /> {isPending ? "Menyimpan..." : "Simpan perubahan"}</button></div>
+          </div>}
+        </main>
       </div>
 
-      <div className="border border-border dark:border-white/5 bg-white dark:bg-card p-4">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30">
-              Checklist Akses
-            </p>
-            <h2 className="text-[13px] font-mono text-foreground dark:text-foreground/80 mt-0.5">
-              Permission per Fitur
-            </h2>
-          </div>
-
-          <button
-            type="button"
-            onClick={submitPermissionMatrix}
-            disabled={
-              isPending ||
-              isFetchingPermissions ||
-              selectedRoleId <= 0 ||
-              editorMode === "create" ||
-              !canEditProfile
-            }
-            className="flex items-center gap-1.5 border border-primary/40 bg-primary/[0.06] px-3 py-1.5 text-[10px] font-mono uppercase tracking-[0.12em] text-app-accent-ink hover:bg-primary/10 transition-colors disabled:opacity-30"
-          >
-            <Save className="h-3 w-3" />
-            Simpan Checklist
-          </button>
-        </div>
-
-        <div className="mt-4 flex flex-wrap items-center gap-3">
-          <div className="flex border-b border-border dark:border-white/5">
-            {[
-              { key: "WEB", label: "Web" },
-              { key: "MOBILE", label: "Mobile" },
-            ].map((filter) => {
-              const selected = permissionViewFilter === filter.key;
-              return (
-                <button
-                  key={filter.key}
-                  type="button"
-                  onClick={() => setPermissionViewFilter(filter.key as "WEB" | "MOBILE")}
-                  className={[
-                    "px-4 py-1.5 text-[11px] font-mono uppercase tracking-[0.12em] transition-colors",
-                    selected
-                      ? "text-app-accent-ink border-b-2 border-primary"
-                      : "text-muted-foreground dark:text-foreground/30 hover:text-foreground dark:text-foreground/60",
-                  ].join(" ")}
-                >
-                  {filter.label}
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="border border-border dark:border-white/5 px-2 py-0.5 text-[10px] font-mono text-muted-foreground dark:text-foreground/30">
-            {permissionViewFilter === "WEB"
-              ? "Lane akses web aktif"
-              : "Lane akses mobile aktif"}
-          </div>
-        </div>
-
-        <div className="mt-4 flex justify-end">
-          <div className="border border-border dark:border-white/5 bg-muted dark:bg-background px-3 py-2">
-            <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30">Ringkasan lane</p>
-            <p className="text-[11px] font-mono text-foreground dark:text-foreground mt-0.5">
-              {permissionGroups.length} modul · {permissionRows.length} permission
-            </p>
-          </div>
-        </div>
-
-        {editorMode === "create" ? (
-          <p className="mt-4 text-sm text-muted-foreground dark:text-foreground/45">
-            Simpan role baru dulu, setelah itu checklist akses akan aktif.
-          </p>
-        ) : null}
-        {isFetchingPermissions ? (
-          <p className="mt-4 text-sm text-muted-foreground dark:text-foreground/45">
-            Checklist akses sedang dimuat...
-          </p>
-        ) : null}
-
-        <input
-          value={permissionSearch}
-          onChange={(e) => setPermissionSearch(e.target.value)}
-          placeholder="Filter modul atau kode permission..."
-          className="h-7 w-full border-b border-border dark:border-white/10 bg-transparent px-4 text-[11px] font-mono text-foreground dark:text-foreground/60 outline-none placeholder:text-muted-foreground dark:text-foreground/20"
-        />
-
-        <div className="mt-0 border border-border dark:border-white/5 overflow-hidden">
-          <div className="overflow-auto max-h-[480px]">
-            <table className="min-w-full text-left">
-              <thead className="sticky top-0 z-10 bg-muted dark:bg-background text-[11px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30 border-b border-border dark:border-white/10">
-                <tr>
-                  <th className="px-4 py-1.5 font-mono">Akses</th>
-                  <th className="px-4 py-1.5 font-mono">Catatan</th>
-                  <th className="px-4 py-1.5 text-center font-mono">Otorisasi</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredPermissionGroups.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={3}
-                      className="px-4 py-10 text-center text-sm text-muted-foreground dark:text-foreground/35"
-                    >
-                      Belum ada permission pada lane platform ini.
-                    </td>
-                  </tr>
-                ) : (
-                  filteredPermissionGroups.map((group) => (
-                    <Fragment key={group.moduleName}>
-                      <tr className="border-t border-border dark:border-white/5 bg-muted dark:bg-background">
-                        <td colSpan={3} className="px-4 py-1.5">
-                          <div className="flex items-center justify-between gap-3">
-                            <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30">
-                              {group.moduleName}
-                            </span>
-                            <span className="border border-border dark:border-white/10 px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground dark:text-foreground/30">
-                              {group.items.length}
-                            </span>
-                          </div>
-                        </td>
-                      </tr>
-
-                      {group.items.map((permission) => {
-                        const checked = draftPermissionIds.includes(permission.id);
-                        return (
-                          <tr
-                            key={permission.id}
-                            className="border-t border-white/[0.04] hover:bg-muted dark:hover:bg-white/[0.02] transition-colors"
-                          >
-                            <td className="px-4 py-1.5">
-                              <p className="text-[11px] font-mono text-foreground dark:text-foreground/70">
-                                {humanizePermissionCode(permission.permissionCode)}
-                              </p>
-                              <p className="text-[10px] font-mono text-muted-foreground dark:text-foreground/25 mt-0.5">
-                                {permission.permissionCode}
-                              </p>
-                            </td>
-                            <td className="px-4 py-1.5 text-[10px] text-muted-foreground dark:text-foreground/30">
-                              {permission.description ?? "Belum ada catatan permission."}
-                            </td>
-                            <td className="px-4 py-1.5 text-center">
-                              <div className="flex items-center justify-center gap-1.5">
-                                <input
-                                  type="checkbox"
-                                  checked={checked}
-                                  onChange={() => togglePermission(permission.id)}
-                                  disabled={
-                                    editorMode === "create" ||
-                                    !canEditProfile
-                                  }
-                                  className="h-4 w-4 rounded border-white/20 bg-transparent text-app-accent-ink disabled:opacity-40"
-                                />
-                                <span className="text-[10px] font-mono text-muted-foreground dark:text-foreground/30">
-                                  {checked ? "Aktif" : "Mati"}
-                                </span>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </Fragment>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-
-      <ScopeDialog
-        open={scopeDialog !== null}
-        kind={scopeDialog}
-        canEdit={canEditProfile}
-        options={scopeDialog === "division" ? references.divisions : references.units}
-        initialMode={
-          scopeDialog === "division"
-            ? form.scopePreset.divisionMode
-            : form.scopePreset.unitMode
-        }
-        initialIds={
-          scopeDialog === "division"
-            ? form.scopePreset.divisionIds
-            : form.scopePreset.unitIds
-        }
-        onClose={() => setScopeDialog(null)}
-        onApply={applyScopeDialog}
-      />
+      <ScopeDialog open={scopeDialog !== null} kind={scopeDialog} canEdit={canEditProfile} options={scopeDialog === "division" ? references.divisions : references.units} initialMode={scopeDialog === "division" ? form.scopePreset.divisionMode : form.scopePreset.unitMode} initialIds={scopeDialog === "division" ? form.scopePreset.divisionIds : form.scopePreset.unitIds} onClose={() => setScopeDialog(null)} onApply={applyScopeDialog} />
     </div>
   );
 }

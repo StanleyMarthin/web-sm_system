@@ -46,12 +46,30 @@ export const createRoleRequestSchema = z.object({
   roleName: z.string().trim().min(1).max(50),
   description: z.string().trim().max(255).nullable().optional(),
   profile: roleProfileSchema.optional(),
+  permissionIds: z.array(z.number().int().positive()).max(200).optional(),
 });
 
 export const updateRoleRequestSchema = z.object({
   roleName: z.string().trim().min(1).max(50).optional(),
   description: z.string().trim().max(255).nullable().optional(),
   profile: roleProfileSchema.partial().optional(),
+  permissionIds: z.array(z.number().int().positive()).max(200).optional(),
+  expectedPermissionIds: z.array(z.number().int().positive()).max(200).optional(),
+});
+
+export const roleHistoryEnvelopeSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+  data: z.object({
+    history: z.array(z.object({
+      id: z.number(),
+      actorName: z.string().nullable(),
+      action: z.string(),
+      createdAt: z.string(),
+      oldValue: z.unknown(),
+      newValue: z.unknown(),
+    })),
+  }),
 });
 
 export const updateRolePermissionsRequestSchema = z.object({
@@ -131,3 +149,4 @@ export type RoleScopePreset = z.infer<typeof roleScopePresetSchema>;
 export type PermissionPlatform = z.infer<typeof permissionPlatformSchema>;
 export type PermissionAudience = z.infer<typeof permissionAudienceSchema>;
 export type RoleReferenceOption = z.infer<typeof roleReferenceOptionSchema>;
+export type RoleHistoryEntry = z.infer<typeof roleHistoryEnvelopeSchema>["data"]["history"][number];

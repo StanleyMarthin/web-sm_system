@@ -3,6 +3,7 @@ import {
   createRoleRequestSchema,
   permissionsEnvelopeSchema,
   rolePermissionsEnvelopeSchema,
+  roleHistoryEnvelopeSchema,
   roleReferencesEnvelopeSchema,
   roleRecordSchema,
   rolesEnvelopeSchema,
@@ -12,6 +13,16 @@ import type {
   CreateRoleRequest,
   UpdateRoleRequest,
 } from "@smsystem/contracts/rbac";
+import { z } from "zod";
+
+function assertSavedPermissions(value: unknown, expected: number[] | undefined) {
+  if (expected === undefined) return;
+  const saved = z.array(z.number().int().positive()).parse(value);
+  const normalize = (ids: number[]) => [...new Set(ids)].sort((a, b) => a - b);
+  if (JSON.stringify(normalize(saved)) !== JSON.stringify(normalize(expected))) {
+    throw new Error("SAVED_PERMISSIONS_MISMATCH");
+  }
+}
 
 interface ApiFailure {
   success: false;
@@ -103,6 +114,15 @@ export async function fetchRolePermissions(cookieHeader: string, roleId: number)
   };
 }
 
+export async function fetchRoleHistory(roleId: number) {
+  const response = await fetch(`${getApiBaseUrl()}/api/roles/${roleId}/history`, {
+    credentials: "include",
+    cache: "no-store",
+  });
+  if (!response.ok) return { payload: null, status: response.status };
+  return { payload: roleHistoryEnvelopeSchema.parse(await response.json()), status: response.status };
+}
+
 export async function fetchRoleReferences(cookieHeader: string) {
   const response = await fetch(`${getApiBaseUrl()}/api/roles/references`, {
     credentials: "include",
@@ -166,11 +186,13 @@ export async function createRole(input: CreateRoleRequest) {
     const failure = await parseFailure(response);
     return {
       ...failure,
+      status: response.status,
       success: false as const,
     };
   }
 
   const body = await response.json();
+  assertSavedPermissions(body.data.permissionIds, payload.permissionIds);
   return {
     success: true as const,
     role: roleRecordSchema.parse(body.data.role),
@@ -192,11 +214,13 @@ export async function updateRole(roleId: number, input: UpdateRoleRequest) {
     const failure = await parseFailure(response);
     return {
       ...failure,
+      status: response.status,
       success: false as const,
     };
   }
 
   const body = await response.json();
+  assertSavedPermissions(body.data.permissionIds, payload.permissionIds);
   return {
     success: true as const,
     role: roleRecordSchema.parse(body.data.role),

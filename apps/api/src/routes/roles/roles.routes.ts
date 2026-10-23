@@ -3,7 +3,6 @@ import {
   updateRolePermissionsRequestSchema,
   updateRoleRequestSchema,
 } from "@smsystem/contracts/rbac";
-import { permissionCodes } from "@smsystem/permissions";
 import { isSystemSuperadminEmployee } from "@smsystem/contracts/auth";
 import { parseJsonBody } from "@/http/request";
 import {
@@ -11,9 +10,9 @@ import {
   successResponse,
 } from "@/http/response";
 import { requireSession } from "@/middleware/auth.middleware";
-import { requirePermission } from "@/middleware/permission.middleware";
 import type { AuthService } from "@/services/auth/auth.service";
 import type { RolesService } from "@/services/roles/roles.service";
+import { SessionSynchronizationError } from "@/services/auth/session-synchronizer";
 
 async function requireRoleMatrixSession(
   request: Request,
@@ -22,15 +21,6 @@ async function requireRoleMatrixSession(
   const sessionResult = await requireSession(request, authService);
   if ("response" in sessionResult) {
     return sessionResult;
-  }
-
-  const permissionResult = requirePermission(
-    request,
-    sessionResult.session,
-    permissionCodes.manageUsers,
-  );
-  if ("response" in permissionResult) {
-    return permissionResult;
   }
 
   if (!isSystemSuperadminEmployee(sessionResult.session.user.employeeId)) {
@@ -47,10 +37,31 @@ async function requireRoleMatrixSession(
   return { session: sessionResult.session };
 }
 
+export async function handleRoleHistoryRoute(request: Request, roleId: number, authService: AuthService, rolesService: RolesService): Promise<Response> {
+  const sessionResult = await requireRoleMatrixSession(request, authService);
+  if ("response" in sessionResult) return sessionResult.response;
+  try {
+    const history = await rolesService.getRoleHistory(sessionResult.session, roleId);
+    return successResponse(request, "Role history loaded", { history });
+  } catch (error) {
+    return mapRolesError(request, error);
+  }
+}
+
 function mapRolesError(request: Request, error: unknown): Response {
+  if (error instanceof SessionSynchronizationError) {
+    return errorResponse(request, "Perubahan role sudah tersimpan, tetapi sesi aktif belum tersinkron. Muat ulang data dan coba sinkronkan kembali.", 503, "SESSION_SYNCHRONIZATION_FAILED");
+  }
+
   if (error instanceof Error) {
     if (error.message === "ROLE_NOT_FOUND") {
       return errorResponse(request, "Role tidak ditemukan.", 404, "ROLE_NOT_FOUND");
+    }
+    if (error.message === "ROLE_PERMISSIONS_CHANGED") {
+      return errorResponse(request, "Izin role berubah di sesi lain. Muat ulang sebelum menyimpan.", 409, "ROLE_PERMISSIONS_CHANGED");
+    }
+    if (error.message === "ROLE_SCOPE_STORAGE_UNAVAILABLE") {
+      return errorResponse(request, "Pengaturan cakupan khusus belum tersedia di database. Perubahan tidak disimpan.", 409, "ROLE_SCOPE_STORAGE_UNAVAILABLE");
     }
 
     if (error.message === "SUPERADMIN_REQUIRED") {
@@ -142,6 +153,7 @@ export async function handleRolesCreateRoute(
       "Role berhasil dibuat.",
       {
         role,
+        ...(parsedBody.data.permissionIds === undefined ? {} : { permissionIds: await rolesService.getRolePermissionIds(sessionResult.session, role.id) }),
       },
       { status: 201 },
     );
@@ -174,6 +186,7 @@ export async function handleRolesUpdateRoute(
     );
     return successResponse(request, "Role berhasil diupdate.", {
       role,
+      ...(parsedBody.data.permissionIds === undefined ? {} : { permissionIds: await rolesService.getRolePermissionIds(sessionResult.session, role.id) }),
     });
   } catch (error) {
     return mapRolesError(request, error);

@@ -301,14 +301,11 @@ export function DivisionManagementShell({ divisions, generalJobTypes }: Division
     setIsSubmitting(false);
   }
 
-  const globalActiveUserCount = useMemo(() => rows.reduce((sum, div) => sum + div.activeUserCount, 0), [rows]);
-  const globalJobdescCount = useMemo(() => rows.reduce((sum, div) => sum + div.jobTypes.length, 0) + generalRows.length, [rows, generalRows]);
   const divisionColumnDefs = useMemo<ColDef<DivisionManagementRecord>[]>(
     () => [
       {
         headerName: "Divisi / Team",
-        pinned: "left",
-        minWidth: 190,
+        minWidth: 240,
         flex: 1,
         valueGetter: ({ data }) => {
           if (!data) return "";
@@ -328,7 +325,6 @@ export function DivisionManagementShell({ divisions, generalJobTypes }: Division
       },
       {
         headerName: "Aksi",
-        pinned: "right",
         sortable: false,
         filter: false,
         width: 82,
@@ -352,51 +348,9 @@ export function DivisionManagementShell({ divisions, generalJobTypes }: Division
 
   return (
     <div className="flex flex-col gap-4">
-      {/* 4 Summary Cards */}
-      <div className="grid shrink-0 gap-3 md:grid-cols-4">
-        {isGeneralSelected ? (
-          <>
-            <div className="border border-white/5 bg-card px-4 py-3 transition-colors">
-              <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30">Total Divisi</p>
-              <p className="mt-1 text-[18px] font-mono text-foreground">{rows.length}</p>
-            </div>
-            <div className="border border-white/5 bg-card px-4 py-3 transition-colors">
-              <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30">Global User Aktif</p>
-              <p className="mt-1 text-[18px] font-mono text-foreground">{globalActiveUserCount}</p>
-            </div>
-            <div className="border border-white/5 bg-card px-4 py-3 transition-colors">
-              <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30">Global Jobdesc</p>
-              <p className="mt-1 text-[18px] font-mono text-foreground">{globalJobdescCount}</p>
-            </div>
-            <div className="border border-white/5 bg-card px-4 py-3 transition-colors">
-              <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30">Jobdesc Umum</p>
-              <p className="mt-1 text-[18px] font-mono text-foreground">{generalRows.length}</p>
-            </div>
-          </>
-        ) : (
-          <>
-            <div className="border border-primary/30 bg-card px-4 py-3 transition-colors">
-              <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-app-accent-ink/60">Divisi Terpilih</p>
-              <p className="mt-1 text-[16px] font-mono text-app-accent-ink truncate">{selectedDivision?.name}</p>
-            </div>
-            <div className="border border-primary/30 bg-card px-4 py-3 transition-colors">
-              <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-app-accent-ink/60">Total User</p>
-              <p className="mt-1 text-[18px] font-mono text-app-accent-ink">{selectedDivision?.userCount}</p>
-            </div>
-            <div className="border border-primary/30 bg-card px-4 py-3 transition-colors">
-              <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-app-accent-ink/60">User Aktif</p>
-              <p className="mt-1 text-[18px] font-mono text-app-accent-ink">{selectedDivision?.activeUserCount}</p>
-            </div>
-            <div className="border border-primary/30 bg-card px-4 py-3 transition-colors">
-              <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-app-accent-ink/60">Total Jobdesc</p>
-              <p className="mt-1 text-[18px] font-mono text-app-accent-ink">{selectedDivision?.jobTypes.length}</p>
-            </div>
-          </>
-        )}
-      </div>
 
-      <div className="grid h-[calc(100vh-180px)] min-h-[500px] gap-4 overflow-hidden xl:grid-cols-[450px_minmax(0,1fr)]">
-        <div className="flex h-full flex-col space-y-3 overflow-hidden">
+      <div className="grid gap-4 xl:grid-cols-[minmax(580px,1fr)_minmax(360px,0.8fr)]">
+        <div className="flex min-w-0 flex-col space-y-3">
         {message ? (
           <div className="border border-success/20 bg-success/[0.04] px-3 py-2 text-[11px] font-mono text-success">
             {message}
@@ -409,21 +363,22 @@ export function DivisionManagementShell({ divisions, generalJobTypes }: Division
         ) : null}
 
         <div className="flex items-center gap-3">
-          <div className="flex-1 flex items-center gap-2 border border-white/10 bg-card px-3">
-            <Search className="h-3.5 w-3.5 shrink-0 text-foreground/30" />
+          <div className="flex flex-1 items-center gap-2 border border-border bg-card px-3">
+            <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
             <input
+              aria-label="Cari divisi atau jobdesc"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Cari divisi atau master jobdesc..."
-              className="h-8 w-full bg-transparent text-[11px] font-mono text-foreground/70 outline-none placeholder:text-foreground/20"
+              className="h-10 w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-primary"
             />
           </div>
           <button
             type="button"
             onClick={openCreateDivision}
-            className="shrink-0 inline-flex items-center gap-1.5 border border-primary/40 bg-primary/[0.06] px-3 py-1.5 text-[10px] font-mono uppercase tracking-[0.12em] text-app-accent-ink transition-colors hover:bg-primary/10"
+            className="inline-flex h-10 shrink-0 items-center gap-2 border border-primary/40 bg-primary/[0.06] px-3 text-sm text-app-accent-ink transition-colors hover:bg-primary/10"
           >
-            <Plus className="h-3 w-3" />
+            <Plus className="h-4 w-4" />
             Tambah Divisi
           </button>
         </div>
@@ -496,9 +451,9 @@ export function DivisionManagementShell({ divisions, generalJobTypes }: Division
 
         <button
           type="button"
-          onClick={() => setIsGeneralSelected(true)}
+          onClick={() => { resetJobForm(); setIsGeneralSelected(true); }}
           className={[
-            "flex items-center justify-between border px-3 py-2 text-left text-[11px] font-mono transition-colors",
+            "flex items-center justify-between border px-3 py-2 text-left text-sm transition-colors",
             isGeneralSelected
               ? "border-primary/40 bg-primary/[0.06] text-app-accent-ink"
               : "border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground",
@@ -513,47 +468,49 @@ export function DivisionManagementShell({ divisions, generalJobTypes }: Division
           getRowId={({ data }) => String(data.id)}
           onRowClicked={({ data }) => {
             if (!data) return;
+            resetJobForm();
             setIsGeneralSelected(false);
             setSelectedDivisionId(data.id);
           }}
           rowClassRules={{ "ag-row-selected": ({ data }) => data?.id === selectedDivision?.id && !isGeneralSelected }}
-          heightClassName="min-h-0 flex-1"
+          heightClassName="h-[560px]"
           defaultColDef={{ filter: true, floatingFilter: true }}
           emptyMessage="Belum ada divisi atau team."
         />
       </div>
 
-      <aside className="flex h-full min-h-0 flex-col border border-white/5 bg-background">
+      <aside className="flex min-w-0 flex-col border border-border bg-background">
         <div className="border-b border-white/5 px-4 py-3">
-          <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30">Master Jobdesc</p>
+          <p className="text-sm text-muted-foreground">Master jobdesc</p>
           <div className="mt-1 flex items-end justify-between gap-3">
-            <h2 className="text-[16px] font-mono text-foreground/85">
+            <h2 className="text-base font-semibold text-foreground">
               {isGeneralSelected ? "Jobdesc Umum" : selectedDivision?.name ?? "Pilih divisi"}
             </h2>
-            <span className="shrink-0 text-[10px] font-mono text-foreground/30">
+            <span className="shrink-0 text-xs text-muted-foreground">
               {filteredJobTypes.length} / {visibleJobTypes.length}
             </span>
           </div>
 
-          <div className="mt-3 flex items-center gap-2 border border-white/10 bg-card px-3">
-            <Search className="h-3.5 w-3.5 shrink-0 text-foreground/30" />
+          <div className="mt-3 flex items-center gap-2 border border-border bg-card px-3">
+            <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
             <input
+              aria-label="Cari master jobdesc"
               value={jobSearch}
               onChange={(event) => setJobSearch(event.target.value)}
               placeholder="Cari master jobdesc..."
-              className="h-8 w-full bg-transparent text-[11px] font-mono text-foreground/70 outline-none placeholder:text-foreground/20"
+              className="h-10 w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-primary"
             />
           </div>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto p-4 [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,0.2)_transparent] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-white/20 [&::-webkit-scrollbar-thumb]:hover:bg-white/30">
+        <div className="p-4">
           {filteredJobTypes.length ? (
             <div className="space-y-1.5">
               {filteredJobTypes.map((jobType) => (
-                <div key={jobType.id} className="flex items-center justify-between gap-3 border border-white/[0.05] bg-card px-3 py-2">
+                <div key={jobType.id} className="flex items-center justify-between gap-3 border-b border-border px-3 py-2">
                   <div className="min-w-0">
-                    <span className="block truncate text-[10px] font-mono text-foreground/60">{jobType.jobName}</span>
-                    <span className="mt-0.5 block text-[9px] font-mono text-foreground/20">
+                    <span className="block break-words text-sm text-foreground">{jobType.jobName}</span>
+                    <span className="mt-0.5 block text-xs text-muted-foreground">
                       {jobType.isTeknis ? "TEKNIS" : "NON TEKNIS"}
                     </span>
                   </div>
@@ -561,7 +518,8 @@ export function DivisionManagementShell({ divisions, generalJobTypes }: Division
                     <button
                       type="button"
                       onClick={() => openEditJobType(jobType)}
-                      className="inline-flex h-6 w-6 items-center justify-center border border-white/10 text-foreground/30 transition-colors hover:border-white/25 hover:text-foreground/70"
+                      className="inline-flex h-9 w-9 items-center justify-center border border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                      aria-label={`Ubah ${jobType.jobName}`}
                       title="Edit jobdesc"
                     >
                       <Pencil className="h-3 w-3" />
@@ -569,7 +527,8 @@ export function DivisionManagementShell({ divisions, generalJobTypes }: Division
                     <button
                       type="button"
                       onClick={() => void handleDeleteJobType(jobType)}
-                      className="inline-flex h-6 w-6 items-center justify-center border border-destructive/20 text-destructive/45 transition-colors hover:border-destructive/40 hover:text-destructive"
+                      className="inline-flex h-9 w-9 items-center justify-center border border-destructive/30 text-destructive transition-colors hover:bg-destructive/10"
+                      aria-label={`Hapus ${jobType.jobName}`}
                       title="Hapus jobdesc"
                     >
                       <Trash2 className="h-3 w-3" />
@@ -588,7 +547,7 @@ export function DivisionManagementShell({ divisions, generalJobTypes }: Division
         <form className="mt-auto space-y-3 border-t border-white/10 bg-card p-4" onSubmit={(event) => void handleSubmit(event)}>
           <label className="block space-y-1">
             <div className="flex items-center justify-between gap-3">
-              <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30">
+              <span className="text-sm text-muted-foreground">
                 {isEditing ? "Edit Jobdesc" : "Nama Jobdesc"}
               </span>
               {isEditing ? (
@@ -605,7 +564,7 @@ export function DivisionManagementShell({ divisions, generalJobTypes }: Division
             <input
               value={jobName}
               onChange={(event) => setJobName(event.target.value)}
-              className="h-8 w-full border border-white/10 bg-card px-3 text-[11px] font-mono text-foreground/70 outline-none transition-colors focus:border-primary/40"
+              className="h-10 w-full border border-border bg-background px-3 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-primary"
             />
           </label>
 
@@ -616,13 +575,13 @@ export function DivisionManagementShell({ divisions, generalJobTypes }: Division
               onChange={(event) => setIsTeknis(event.target.checked)}
               className="h-4 w-4 border-white/20 bg-transparent"
             />
-            <span className="text-[10px] font-mono text-foreground/50">Jobdesc teknis</span>
+            <span className="text-sm text-foreground">Jobdesc teknis</span>
           </label>
 
           <button
             type="submit"
             disabled={isSubmitting || (!isGeneralSelected && !selectedDivision)}
-            className="inline-flex w-full justify-center items-center gap-1.5 border border-primary/40 bg-primary/[0.06] px-3 py-1.5 text-[10px] font-mono uppercase tracking-[0.12em] text-app-accent-ink transition-colors hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-30"
+            className="inline-flex h-10 items-center justify-center gap-2 border border-primary/40 bg-primary/[0.06] px-3 text-sm text-app-accent-ink transition-colors hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Plus className="h-3 w-3" />
             {isSubmitting ? "Menyimpan..." : isEditing ? "Simpan Perubahan" : "Tambah Jobdesc"}

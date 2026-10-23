@@ -6,6 +6,7 @@ import { MySqlAuditRepository } from "@/repositories/audit/audit.repo";
 import { DefaultAuditService } from "@/services/audit/audit.service";
 import { DefaultAuthService, type AuthService } from "@/services/auth/auth.service";
 import { RedisSessionStore } from "@/services/auth/session.service";
+import { DefaultSessionSynchronizer } from "@/services/auth/session-synchronizer";
 import { HttpSmLoginAdapter } from "@/services/auth/sm-login.adapter";
 import {
   handleLoginRoute,
@@ -37,6 +38,7 @@ import { handleNotificationsRoute } from "@/routes/notifications/notification.ro
 import {
   handlePermissionsListRoute,
   handleRolesReferencesRoute,
+  handleRoleHistoryRoute,
   handleRolePermissionsDetailRoute,
   handleRolePermissionsUpdateRoute,
   handleRolesCreateRoute,
@@ -478,6 +480,11 @@ function matchRoute(
 }
 
 export function createApiFetchHandler(dependencies: AppDependencies = {}) {
+  const createSessionSynchronizer = () => new DefaultSessionSynchronizer(
+    new HttpSmLoginAdapter(),
+    new MySqlAuthContextRepository(),
+    new RedisSessionStore(),
+  );
   const getAuthService = () =>
     dependencies.authService ??
     new DefaultAuthService(
@@ -486,8 +493,18 @@ export function createApiFetchHandler(dependencies: AppDependencies = {}) {
       new RedisSessionStore(),
       new DefaultAuditService(new MySqlAuditRepository()),
     );
-  const getUsersService = () => dependencies.usersService ?? new DefaultUsersService();
-  const getRolesService = () => dependencies.rolesService ?? new DefaultRolesService();
+  const getUsersService = () => dependencies.usersService ?? new DefaultUsersService(
+    undefined,
+    undefined,
+    undefined,
+    createSessionSynchronizer(),
+  );
+  const getRolesService = () => dependencies.rolesService ?? new DefaultRolesService(
+    undefined,
+    undefined,
+    undefined,
+    createSessionSynchronizer(),
+  );
   const getUnitsService = () => dependencies.unitsService ?? new DefaultUnitsService();
   const getUnitCatalogService = () =>
     dependencies.unitCatalogService ?? new UnitCatalogService();
@@ -572,6 +589,7 @@ export function createApiFetchHandler(dependencies: AppDependencies = {}) {
     { method: "POST", pattern: "/api/roles", handler: (request) => handleRolesCreateRoute(request, getAuthService(), getRolesService()) },
     { method: "GET", pattern: "/api/permissions", handler: (request) => handlePermissionsListRoute(request, getAuthService(), getRolesService()) },
     { method: "GET", pattern: /^\/api\/roles\/(\d+)\/permissions$/, handler: (request, match) => handleRolePermissionsDetailRoute(request, Number.parseInt(match![1], 10), getAuthService(), getRolesService()) },
+    { method: "GET", pattern: /^\/api\/roles\/(\d+)\/history$/, handler: (request, match) => handleRoleHistoryRoute(request, Number.parseInt(match![1], 10), getAuthService(), getRolesService()) },
     { method: "PUT", pattern: /^\/api\/roles\/(\d+)\/permissions$/, handler: (request, match) => handleRolePermissionsUpdateRoute(request, Number.parseInt(match![1], 10), getAuthService(), getRolesService()) },
     { method: "PUT", pattern: /^\/api\/roles\/(\d+)$/, handler: (request, match) => handleRolesUpdateRoute(request, Number.parseInt(match![1], 10), getAuthService(), getRolesService()) },
     { method: "PATCH", pattern: /^\/api\/roles\/(\d+)$/, handler: (request, match) => handleRolesUpdateRoute(request, Number.parseInt(match![1], 10), getAuthService(), getRolesService()) },

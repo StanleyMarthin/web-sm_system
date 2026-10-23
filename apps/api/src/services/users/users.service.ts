@@ -19,6 +19,7 @@ import type { AuditService } from "@/services/audit/audit.service";
 import { DefaultAuditService } from "@/services/audit/audit.service";
 import { MySqlAuditRepository } from "@/repositories/audit/audit.repo";
 import { isSystemSuperadminEmployee } from "@smsystem/contracts/auth";
+import type { SessionSynchronizer } from "@/services/auth/session-synchronizer";
 
 export interface PasswordHasher {
   hash(password: string): Promise<string>;
@@ -58,6 +59,10 @@ const userReferenceCache = new TtlCache<{
   roles: Awaited<ReturnType<UsersRepository["listRoleOptions"]>>;
   divisions: Awaited<ReturnType<UsersRepository["listDivisionOptions"]>>;
 }>(USER_REFERENCE_CACHE_TTL_MS);
+const noSessionSynchronizer: SessionSynchronizer = {
+  async sync() {},
+  async invalidate() {},
+};
 
 function toApiUserRecord(record: UserRecord): ApiUserRecord {
   return {
@@ -153,6 +158,7 @@ export class DefaultUsersService implements UsersService {
     private readonly auditService: AuditService = new DefaultAuditService(
       new MySqlAuditRepository(),
     ),
+    private readonly sessionSynchronizer: SessionSynchronizer = noSessionSynchronizer,
   ) {}
 
   async list(session: WebSession, query: GridQueryState) {
@@ -277,6 +283,14 @@ export class DefaultUsersService implements UsersService {
         isActive: updatedRecord.isActive,
       },
     });
+    if (
+      input.roleId !== undefined ||
+      input.divisionId !== undefined ||
+      input.isActive !== undefined ||
+      input.managedDivisionIds !== undefined
+    ) {
+      await this.sessionSynchronizer.sync([employeeId]);
+    }
     return toApiUserRecord(updatedRecord);
   }
 
@@ -309,6 +323,7 @@ export class DefaultUsersService implements UsersService {
         passwordChanged: true,
       },
     });
+    await this.sessionSynchronizer.invalidate([employeeId]);
   }
 
   async deactivate(session: WebSession, employeeId: string): Promise<void> {
@@ -338,6 +353,7 @@ export class DefaultUsersService implements UsersService {
         isActive: false,
       },
     });
+    await this.sessionSynchronizer.invalidate([employeeId]);
   }
 
   async exportCsv(session: WebSession, query: GridQueryState): Promise<string> {
