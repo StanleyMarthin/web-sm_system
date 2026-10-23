@@ -17,6 +17,11 @@ const divisionManagementRecordSchema = z.object({
   userCount: z.number().int().nonnegative(),
   activeUserCount: z.number().int().nonnegative(),
   managedByCount: z.number().int().nonnegative(),
+  members: z.array(z.object({
+    employeeId: z.string(),
+    fullName: z.string(),
+    isActive: z.boolean(),
+  })).default([]),
   jobTypes: z.array(masterJobTypeSchema),
 });
 

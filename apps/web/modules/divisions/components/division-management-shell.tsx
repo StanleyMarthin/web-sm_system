@@ -11,7 +11,7 @@ import {
   updateDivisionMasterJobdesc,
 } from "@/shared/api/divisions/divisions";
 import { Pencil, Plus, Search, Trash2, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { SmsAgGrid } from "@/shared/datagrid/sms-ag-grid";
 
 interface DivisionManagementShellProps {
@@ -24,6 +24,8 @@ export function DivisionManagementShell({ divisions, generalJobTypes }: Division
   const [generalRows, setGeneralRows] = useState(generalJobTypes);
   const [isGeneralSelected, setIsGeneralSelected] = useState(false);
   const [selectedDivisionId, setSelectedDivisionId] = useState(divisions[0]?.id ?? 0);
+  const [memberDivisionId, setMemberDivisionId] = useState<number | null>(null);
+  const memberDialogRef = useRef<HTMLDialogElement>(null);
   const [search, setSearch] = useState("");
   const [jobSearch, setJobSearch] = useState("");
   const [jobName, setJobName] = useState("");
@@ -71,6 +73,13 @@ export function DivisionManagementShell({ divisions, generalJobTypes }: Division
     );
   }, [jobSearch, visibleJobTypes]);
   const isEditing = editingJobTypeId !== null;
+  const memberDivision = rows.find((division) => division.id === memberDivisionId);
+
+  useEffect(() => {
+    const dialog = memberDialogRef.current;
+    if (memberDivisionId !== null && dialog && !dialog.open) dialog.showModal();
+    if (memberDivisionId === null && dialog?.open) dialog.close();
+  }, [memberDivisionId]);
 
   function resetJobForm() {
     setEditingJobTypeId(null);
@@ -190,7 +199,7 @@ export function DivisionManagementShell({ divisions, generalJobTypes }: Division
         divisionFormMode === "edit"
           ? currentRows.map((division) =>
               division.id === result.division.id
-                ? { ...result.division, jobTypes: division.jobTypes }
+                ? { ...result.division, jobTypes: division.jobTypes, members: division.members }
                 : division,
             )
           : [...currentRows, result.division];
@@ -332,16 +341,16 @@ export function DivisionManagementShell({ divisions, generalJobTypes }: Division
         headerName: "Aksi",
         sortable: false,
         filter: false,
-        width: 82,
+        width: 142,
         cellRenderer: ({ data }: { data?: DivisionManagementRecord }) => {
           if (!data) return null;
           return (
             <div className="flex h-full items-center justify-center gap-1">
-              <button type="button" title="Ubah divisi atau team" aria-label={`Ubah ${data.name}`} onClick={(event) => { event.stopPropagation(); openEditDivision(data); }} className="inline-flex h-7 w-7 items-center justify-center border border-border text-muted-foreground hover:bg-muted hover:text-foreground">
-                <Pencil className="h-3.5 w-3.5" />
+              <button type="button" onClick={(event) => { event.stopPropagation(); openEditDivision(data); }} className="inline-flex h-8 items-center gap-1 border border-border px-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground">
+                <Pencil className="h-3.5 w-3.5" /> Ubah
               </button>
-              <button type="button" title="Hapus divisi atau team" aria-label={`Hapus ${data.name}`} onClick={(event) => { event.stopPropagation(); void handleDeleteDivision(data); }} className="inline-flex h-7 w-7 items-center justify-center border border-destructive/35 text-destructive hover:bg-destructive/10">
-                <Trash2 className="h-3.5 w-3.5" />
+              <button type="button" onClick={(event) => { event.stopPropagation(); void handleDeleteDivision(data); }} className="inline-flex h-8 items-center gap-1 border border-destructive/35 px-2 text-xs text-destructive hover:bg-destructive/10">
+                <Trash2 className="h-3.5 w-3.5" /> Hapus
               </button>
             </div>
           );
@@ -393,11 +402,11 @@ export function DivisionManagementShell({ divisions, generalJobTypes }: Division
             </form>
           )}
 
-          <button type="button" onClick={() => { resetJobForm(); setIsGeneralSelected(true); }} className={["flex items-center justify-between border-b px-4 py-3 text-left text-sm transition-colors", isGeneralSelected ? "bg-primary/[0.08] text-app-accent-ink" : "text-muted-foreground hover:bg-muted hover:text-foreground"].join(" ")}>
-            <span>Jobdesc umum, dipakai semua divisi</span><span className="font-mono text-xs">{generalRows.length}</span>
+          <button type="button" onClick={() => { resetJobForm(); setIsGeneralSelected(true); }} className={["flex items-center justify-between gap-3 border-b px-4 py-3 text-left transition-colors", isGeneralSelected ? "bg-primary/[0.08] text-app-accent-ink" : "text-muted-foreground hover:bg-muted hover:text-foreground"].join(" ")}>
+            <span><span className="block text-sm font-medium">Pekerjaan umum</span><span className="mt-0.5 block text-xs">Dipakai oleh semua divisi</span></span><span className="font-mono text-xs">{generalRows.length}</span>
           </button>
           <div className="min-h-[22rem] flex-1">
-            <SmsAgGrid<DivisionManagementRecord> rowData={filteredRows} columnDefs={divisionColumnDefs} getRowId={({ data }) => String(data.id)} onRowClicked={({ data }) => { if (!data) return; resetJobForm(); setIsGeneralSelected(false); setSelectedDivisionId(data.id); }} rowClassRules={{ "ag-row-selected": ({ data }) => data?.id === selectedDivision?.id && !isGeneralSelected }} heightClassName="h-[calc(100dvh-22rem)] min-h-[22rem]" defaultColDef={{ filter: true, floatingFilter: true }} emptyMessage="Belum ada divisi atau tim." />
+            <SmsAgGrid<DivisionManagementRecord> rowData={filteredRows} columnDefs={divisionColumnDefs} getRowId={({ data }) => String(data.id)} onRowClicked={({ data }) => { if (!data) return; resetJobForm(); setIsGeneralSelected(false); setSelectedDivisionId(data.id); setMemberDivisionId(data.id); }} rowClassRules={{ "ag-row-selected": ({ data }) => data?.id === selectedDivision?.id && !isGeneralSelected }} heightClassName="h-[calc(100dvh-22rem)] min-h-[22rem]" defaultColDef={{ filter: true, floatingFilter: true }} emptyMessage="Belum ada divisi atau tim." />
           </div>
         </section>
 
@@ -405,8 +414,8 @@ export function DivisionManagementShell({ divisions, generalJobTypes }: Division
           <div className="space-y-3 border-b border-border p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="text-sm text-muted-foreground">Master jobdesc</p>
-                <h2 className="mt-0.5 break-words text-lg font-semibold text-foreground">{isGeneralSelected ? "Jobdesc umum" : selectedDivision?.name ?? "Pilih divisi"}</h2>
+                <p className="text-sm text-muted-foreground">Daftar pekerjaan</p>
+                <h2 className="mt-0.5 break-words text-lg font-semibold text-foreground">{isGeneralSelected ? "Pekerjaan umum" : selectedDivision?.name ?? "Pilih divisi di sebelah kiri"}</h2>
                 {selectedDivision && !isGeneralSelected && <p className="mt-1 text-xs text-muted-foreground">{selectedDivision.code} · {selectedDivision.activeUserCount} pegawai aktif · {visibleJobTypes.length} jobdesc</p>}
               </div>
               <button type="button" onClick={() => { resetJobForm(); setIsJobFormOpen(true); }} disabled={!isGeneralSelected && !selectedDivision} className="inline-flex h-10 shrink-0 items-center gap-2 border border-primary/40 bg-primary/[0.06] px-3 text-sm text-app-accent-ink hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50"><Plus className="h-4 w-4" /> Tambah jobdesc</button>
@@ -427,6 +436,15 @@ export function DivisionManagementShell({ divisions, generalJobTypes }: Division
           </div>
         </aside>
       </div>
+      <dialog ref={memberDialogRef} onClose={() => setMemberDivisionId(null)} aria-labelledby="division-members-title" className="m-auto w-[min(32rem,calc(100%-2rem))] max-h-[80vh] border border-border bg-card p-0 text-foreground backdrop:bg-black/60">
+        <div className="flex items-start justify-between gap-3 border-b border-border p-4">
+          <div><h2 id="division-members-title" className="text-base font-semibold">Anggota {memberDivision?.name}</h2><p className="mt-1 text-sm text-muted-foreground">{memberDivision?.members.length ?? 0} pegawai terdaftar di divisi ini</p></div>
+          <button type="button" onClick={() => setMemberDivisionId(null)} aria-label="Tutup daftar anggota" className="inline-flex h-10 w-10 items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground"><X className="h-4 w-4" /></button>
+        </div>
+        <div className="max-h-[60vh] overflow-y-auto">
+          {memberDivision?.members.length ? <ul className="divide-y divide-border">{memberDivision.members.map((member) => <li key={member.employeeId} className="flex items-center justify-between gap-3 px-4 py-3"><div><p className="text-sm font-medium">{member.fullName}</p><p className="mt-1 text-xs text-muted-foreground">{member.employeeId}</p></div><span className="text-xs text-muted-foreground">{member.isActive ? "Aktif" : "Tidak aktif"}</span></li>)}</ul> : <p className="p-6 text-sm text-muted-foreground">Belum ada pegawai yang terdaftar di divisi ini.</p>}
+        </div>
+      </dialog>
     </div>
   );
 }

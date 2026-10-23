@@ -49,6 +49,13 @@ interface JobTypeRow extends RowDataPacket {
   isTeknis: number;
 }
 
+interface DivisionMemberRow extends RowDataPacket {
+  divisionId: number;
+  employeeId: string;
+  fullName: string;
+  isActive: number;
+}
+
 function toJobTypePayload(row: JobTypeRow) {
   return {
     id: row.id,
@@ -297,7 +304,7 @@ export async function handleDivisionManagementListRoute(
 
   try {
     const pool = getMySqlPool();
-    const [divisionRows, jobTypeRows] = await Promise.all([
+    const [divisionRows, jobTypeRows, memberRows] = await Promise.all([
       pool.query<DivisionRow[]>(
         `
           SELECT
@@ -327,6 +334,11 @@ export async function handleDivisionManagementListRoute(
           ORDER BY job_name ASC
         `,
       ),
+      pool.query<DivisionMemberRow[]>(
+        `SELECT division_id AS divisionId, employee_id AS employeeId, full_name AS fullName,
+                COALESCE(is_active, 1) AS isActive
+         FROM sm_employee WHERE division_id IS NOT NULL ORDER BY full_name ASC`,
+      ),
     ]);
 
     const jobTypesByDivision = new Map<number, JobTypeRow[]>();
@@ -351,6 +363,11 @@ export async function handleDivisionManagementListRoute(
         userCount: Number(row.userCount),
         activeUserCount: Number(row.activeUserCount),
         managedByCount: Number(row.managedByCount),
+        members: memberRows[0].filter((member) => member.divisionId === row.id).map((member) => ({
+          employeeId: member.employeeId,
+          fullName: member.fullName,
+          isActive: member.isActive === 1,
+        })),
         jobTypes: (jobTypesByDivision.get(row.id) ?? []).map((jobType) => ({
           id: jobType.id,
           divisionId: jobType.divisionId,
