@@ -11,6 +11,7 @@ import { useSweetAlert } from "@/shared/ui/sweet-alert";
 import { UserCreateForm } from "./forms/user-create-form";
 import { UserEditForm } from "./forms/user-edit-form";
 import { UserResetPasswordForm } from "./forms/user-reset-password-form";
+import { isUserVisible } from "../user-visibility";
 
 interface UserManagementShellProps {
   rows: UserRecord[];
@@ -32,8 +33,12 @@ export function UserManagementShell({ rows, references }: UserManagementShellPro
   const [editorMode, setEditorMode] = useState<EditorMode>(null);
   const [activeUser, setActiveUser] = useState<UserRecord | null>(null);
   const [quickFilterText, setQuickFilterText] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"ACTIVE" | "INACTIVE" | "ALL">("ACTIVE");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const visibleRows = useMemo(() => rows.filter((row) =>
+    isUserVisible(row.status, statusFilter, quickFilterText),
+  ), [rows, statusFilter, quickFilterText]);
 
   useEffect(() => {
     if (!message) return;
@@ -134,6 +139,11 @@ export function UserManagementShell({ rows, references }: UserManagementShellPro
           <input value={quickFilterText} onChange={(event) => setQuickFilterText(event.target.value)} placeholder="Cari ID, nama, role, divisi, atau jabatan" className="h-9 w-full border border-border bg-background pl-9 pr-3 text-sm outline-none focus:border-primary/55" />
         </div>
         <div className="flex items-center gap-2">
+          <select aria-label="Filter status pengguna" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as "ACTIVE" | "INACTIVE" | "ALL")} className="h-9 border border-border bg-background px-3 text-sm text-foreground">
+            <option value="ACTIVE">{quickFilterText.trim() ? "Pencarian semua pengguna" : "Pengguna aktif"}</option>
+            <option value="INACTIVE">Pengguna tidak aktif</option>
+            <option value="ALL">Semua pengguna</option>
+          </select>
           <button type="button" title="Muat ulang" aria-label="Muat ulang daftar pengguna" onClick={() => router.refresh()} className="inline-flex h-9 w-9 items-center justify-center border border-border text-muted-foreground hover:bg-muted hover:text-foreground">
             <RefreshCcw className="h-4 w-4" />
           </button>
@@ -144,7 +154,7 @@ export function UserManagementShell({ rows, references }: UserManagementShellPro
       </div>
 
       <SmsAgGrid<UserRecord>
-        rowData={rows}
+        rowData={visibleRows}
         columnDefs={columnDefs}
         quickFilterText={quickFilterText}
         getRowId={({ data }) => data.employeeId}

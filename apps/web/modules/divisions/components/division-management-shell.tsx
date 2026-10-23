@@ -74,6 +74,7 @@ export function DivisionManagementShell({ divisions, generalJobTypes }: Division
   }, [jobSearch, visibleJobTypes]);
   const isEditing = editingJobTypeId !== null;
   const memberDivision = rows.find((division) => division.id === memberDivisionId);
+  const activeMembers = memberDivision?.members.filter((member) => member.isActive) ?? [];
 
   useEffect(() => {
     const dialog = memberDialogRef.current;
@@ -406,7 +407,7 @@ export function DivisionManagementShell({ divisions, generalJobTypes }: Division
             <span><span className="block text-sm font-medium">Pekerjaan umum</span><span className="mt-0.5 block text-xs">Dipakai oleh semua divisi</span></span><span className="font-mono text-xs">{generalRows.length}</span>
           </button>
           <div className="min-h-[22rem] flex-1">
-            <SmsAgGrid<DivisionManagementRecord> rowData={filteredRows} columnDefs={divisionColumnDefs} getRowId={({ data }) => String(data.id)} onRowClicked={({ data }) => { if (!data) return; resetJobForm(); setIsGeneralSelected(false); setSelectedDivisionId(data.id); setMemberDivisionId(data.id); }} rowClassRules={{ "ag-row-selected": ({ data }) => data?.id === selectedDivision?.id && !isGeneralSelected }} heightClassName="h-[calc(100dvh-22rem)] min-h-[22rem]" defaultColDef={{ filter: true, floatingFilter: true }} emptyMessage="Belum ada divisi atau tim." />
+            <SmsAgGrid<DivisionManagementRecord> rowData={filteredRows} columnDefs={divisionColumnDefs} getRowId={({ data }) => String(data.id)} onRowClicked={({ data }) => { if (!data) return; resetJobForm(); setIsGeneralSelected(false); setSelectedDivisionId(data.id); }} onRowDoubleClicked={({ data }) => { if (data) setMemberDivisionId(data.id); }} rowClassRules={{ "ag-row-selected": ({ data }) => data?.id === selectedDivision?.id && !isGeneralSelected }} heightClassName="h-[calc(100dvh-22rem)] min-h-[22rem]" defaultColDef={{ filter: true, floatingFilter: true }} emptyMessage="Belum ada divisi atau tim." />
           </div>
         </section>
 
@@ -438,11 +439,11 @@ export function DivisionManagementShell({ divisions, generalJobTypes }: Division
       </div>
       <dialog ref={memberDialogRef} onClose={() => setMemberDivisionId(null)} aria-labelledby="division-members-title" className="m-auto w-[min(32rem,calc(100%-2rem))] max-h-[80vh] border border-border bg-card p-0 text-foreground backdrop:bg-black/60">
         <div className="flex items-start justify-between gap-3 border-b border-border p-4">
-          <div><h2 id="division-members-title" className="text-base font-semibold">Anggota {memberDivision?.name}</h2><p className="mt-1 text-sm text-muted-foreground">{memberDivision?.members.length ?? 0} pegawai terdaftar di divisi ini</p></div>
+          <div><h2 id="division-members-title" className="text-base font-semibold">Anggota {memberDivision?.name}</h2><p className="mt-1 text-sm text-muted-foreground">{activeMembers.length} pegawai aktif</p></div>
           <button type="button" onClick={() => setMemberDivisionId(null)} aria-label="Tutup daftar anggota" className="inline-flex h-10 w-10 items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground"><X className="h-4 w-4" /></button>
         </div>
         <div className="max-h-[60vh] overflow-y-auto">
-          {memberDivision?.members.length ? <ul className="divide-y divide-border">{memberDivision.members.map((member) => <li key={member.employeeId} className="flex items-center justify-between gap-3 px-4 py-3"><div><p className="text-sm font-medium">{member.fullName}</p><p className="mt-1 text-xs text-muted-foreground">{member.employeeId}</p></div><span className="text-xs text-muted-foreground">{member.isActive ? "Aktif" : "Tidak aktif"}</span></li>)}</ul> : <p className="p-6 text-sm text-muted-foreground">Belum ada pegawai yang terdaftar di divisi ini.</p>}
+          {activeMembers.length ? <ul className="divide-y divide-border">{activeMembers.map((member) => <li key={member.employeeId} className="px-4 py-3"><p className="text-sm font-medium">{member.fullName}</p><p className="mt-1 text-xs text-muted-foreground">{member.employeeId}</p></li>)}</ul> : <p className="p-6 text-sm text-muted-foreground">Belum ada pegawai aktif di divisi ini.</p>}
         </div>
       </dialog>
     </div>

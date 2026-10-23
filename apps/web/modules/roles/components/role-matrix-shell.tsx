@@ -1061,8 +1061,6 @@ export function RoleMatrixShell({
               <div><dt className="text-muted-foreground">Dipakai oleh</dt><dd className="mt-1">{selectedRole?.userCount ?? 0} pegawai</dd></div>
             </dl>
             {selectedApprovalKey === "legacy" && <div className="border border-warning/40 bg-warning/10 p-3"><p className="font-medium text-warning">Posisi utama belum dipilih</p><p className="mt-1 text-muted-foreground">Data role lama belum memakai pilihan posisi yang sekarang. Buka Pengaturan lalu pilih posisi utama.</p></div>}
-            {selectedRole?.userCount === 0 && <div className="border border-border bg-background p-3 text-muted-foreground">Role ini belum dipakai oleh pegawai mana pun.</div>}
-            <p className="text-xs text-muted-foreground">Akun SM-03.004 memiliki akses superadmin sistem di luar role ini.</p>
           </div>}
 
           {activeTab === "settings" && <div className="space-y-6 p-4">

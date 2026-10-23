@@ -26,6 +26,7 @@ async function UsersPageContent({ searchParams }: UsersPageProps) {
   const { payload, status } = await fetchUserGrid(cookieHeader, {
     ...resolvedSearchParams,
     limit: "100",
+    page: "1",
   });
 
   if (status === 401) {
@@ -46,6 +47,15 @@ async function UsersPageContent({ searchParams }: UsersPageProps) {
     );
   }
 
+  const remainingPages = await Promise.all(
+    Array.from({ length: payload.meta.totalPages - 1 }, (_, index) =>
+      fetchUserGrid(cookieHeader, { ...resolvedSearchParams, limit: "100", page: String(index + 2) }),
+    ),
+  );
+  if (remainingPages.some((page) => !page.payload)) {
+    return <ModuleUnavailableState module="Pengguna" title="User management belum bisa dimuat" message="Data pengguna belum terbaca seluruhnya. Coba muat ulang beberapa saat lagi." />;
+  }
+
   return (
     <div className="space-y-3">
       <div className="sr-only">
@@ -57,7 +67,7 @@ async function UsersPageContent({ searchParams }: UsersPageProps) {
       </div>
 
       <UserManagementShell
-        rows={payload.data}
+        rows={[...payload.data, ...remainingPages.flatMap((page) => page.payload?.data ?? [])]}
         references={payload.references}
       />
     </div>
