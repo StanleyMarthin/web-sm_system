@@ -11,7 +11,6 @@ import { useRouter } from "next/navigation";
 import { groupDivisionOptions } from "../../division-options";
 
 const createUserSchema = z.object({
-  employeeId: z.string().min(1, "ID Pegawai wajib diisi"),
   fullName: z.string().min(1, "Nama lengkap wajib diisi"),
   email: z.string().email("Email tidak valid").or(z.literal("")).optional(),
   roleId: z.string().min(1, "Role wajib dipilih"),
@@ -64,7 +63,6 @@ export function UserCreateForm({ references, onSuccess, onError, onClose }: User
   } = useForm<CreateUserFormValues>({
     resolver: zodResolver(createUserSchema),
     defaultValues: {
-      employeeId: "",
       fullName: "",
       email: "",
       roleId: "",
@@ -77,14 +75,15 @@ export function UserCreateForm({ references, onSuccess, onError, onClose }: User
   });
 
   const selectedRoleId = watch("roleId");
+  const selectedDivisionId = watch("divisionId");
   const selectedRoleDefinition = references.roles.find((r) => r.value === selectedRoleId);
+  const selectedDivision = references.divisions.find((division) => division.value === selectedDivisionId);
   const managedDivisionIds = watch("managedDivisionIds");
   const divisionGroups = groupDivisionOptions(references.divisions);
 
   const onSubmit = (data: CreateUserFormValues) => {
     startTransition(async () => {
       const createResult = await createUser({
-        employeeId: data.employeeId.trim(),
         fullName: data.fullName.trim(),
         email: data.email?.trim() || null,
         password: data.password,
@@ -99,7 +98,7 @@ export function UserCreateForm({ references, onSuccess, onError, onClose }: User
         return;
       }
 
-      onSuccess(`Pengguna ${createResult.user?.employeeId || data.employeeId} berhasil dibuat.`);
+      onSuccess(`Pengguna ${createResult.user?.employeeId || "baru"} berhasil dibuat.`);
       onClose();
       router.refresh();
     });
@@ -113,10 +112,10 @@ export function UserCreateForm({ references, onSuccess, onError, onClose }: User
       <label className="space-y-1">
         <span className="text-xs uppercase tracking-[0.14em] text-foreground/45">ID Pegawai</span>
         <input
-          {...register("employeeId")}
-          className="h-11 w-full rounded-2xl border border-white/[0.08] bg-white/[0.03] px-3 text-sm text-foreground outline-none focus:border-primary/40"
+          value={selectedDivision ? `SM-${selectedDivision.value.padStart(2, "0")}.xxx` : "Pilih divisi terlebih dahulu"}
+          readOnly
+          className="h-11 w-full border border-white/[0.08] bg-white/[0.03] px-3 text-sm text-muted-foreground outline-none"
         />
-        {errors.employeeId && <p className="text-xs text-destructive">{errors.employeeId.message}</p>}
       </label>
 
       <label className="space-y-1">

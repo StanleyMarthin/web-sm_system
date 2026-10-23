@@ -179,7 +179,7 @@ export const countdownDetailEnvelopeSchema = z.object({
 });
 
 export const countdownRevisionRequestSchema = z.object({
-  requestedHours: z.number().positive(),
+  requestedHours: z.number().nonnegative(),
   requestedDeadline: countdownRevisionDateSchema,
   reason: z.string().trim().min(1).max(1000),
 });

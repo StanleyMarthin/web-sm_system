@@ -2,7 +2,8 @@ import { gridMetaSchema, gridQueryStateSchema } from "@smsystem/contracts/grid";
 import { z } from "zod";
 
 export const unitRiskLevelSchema = z.enum(["GREEN", "YELLOW", "ORANGE", "RED", "UNKNOWN", "DELIVERED"]);
-export const unitMasterStatusSchema = z.enum(["In_Progress", "Done"]);
+export const unitMasterStatusSchema = z.enum(["PLAN", "ON_PROGRESS", "HOLD", "DONE"]);
+export const unitRestorationTypeSchema = z.enum(["FULL_RESTORATION", "PARTIAL_RESTORATION"]);
 
 const nullableTrimmedText = z
   .string()
@@ -15,6 +16,29 @@ const nullableTrimmedText = z
       return null;
     }
 
+    return value.length > 0 ? value : null;
+  });
+
+const optionalNullableTrimmedText = z
+  .string()
+  .trim()
+  .max(255)
+  .nullable()
+  .optional()
+  .transform((value) => {
+    if (value === undefined) return undefined;
+    if (value === null) return null;
+    return value.length > 0 ? value : null;
+  });
+
+const nullableLongText = z
+  .string()
+  .trim()
+  .max(4000)
+  .nullable()
+  .optional()
+  .transform((value) => {
+    if (value === undefined || value === null) return null;
     return value.length > 0 ? value : null;
   });
 
@@ -37,10 +61,16 @@ export const unitBoardRowSchema = z.object({
   unitName: z.string(),
   plateNumber: z.string().nullable(),
   customerName: z.string().nullable(),
-  restorationType: z.string().nullable(),
+  vehicleNotes: z.string().nullable().optional(),
+  restorationType: unitRestorationTypeSchema.nullable(),
   isMargin: z.boolean(),
   incomingDate: z.string().nullable(),
-  revisionContract: z.string().nullable(),
+  targetTdAwal: z.string().nullable(),
+  targetTdCoo: z.string().nullable(),
+  targetDelivery: z.string().nullable(),
+  deliveredAt: z.string().nullable(),
+  kpId: z.string().nullable(),
+  kdId: z.string().nullable(),
   kpName: z.string(),
   advisorName: z.string(),
   targetDeliveryDate: z.string().nullable(),
@@ -52,7 +82,7 @@ export const unitBoardRowSchema = z.object({
   prOpenCount: z.number().int().nonnegative(),
   qcIssueOpenCount: z.number().int().nonnegative(),
   issueOpenCount: z.number().int().nonnegative(),
-  status: z.string(),
+  status: unitMasterStatusSchema,
 });
 
 export const unitBoardEnvelopeSchema = z.object({
@@ -87,28 +117,96 @@ export type UnitClient = z.infer<typeof unitClientSchema>;
 export type UnitClientUnit = z.infer<typeof unitClientUnitSchema>;
 
 export const createUnitRequestSchema = z.object({
-  unitId: z.string().trim().min(1).max(64),
+  unitId: nullableTrimmedText.refine((value) => value === null || value.length <= 36, "ID unit maksimal 36 karakter"),
   unitName: z.string().trim().min(1).max(255),
   plateNumber: nullableTrimmedText,
   customerName: nullableTrimmedText,
-  restorationType: z.string().trim().max(50).default("FULL_RESTORASI"),
+  vehicleNotes: nullableLongText,
+  restorationType: unitRestorationTypeSchema.default("FULL_RESTORATION"),
   isMargin: z.boolean().default(true),
-  contractDeliveryDate: nullableDateText,
   incomingDate: nullableDateText,
-  revisionContract: nullableDateText,
-  status: unitMasterStatusSchema.default("In_Progress"),
+  targetTdAwal: nullableDateText,
+  targetTdCoo: nullableDateText,
+  targetDelivery: nullableDateText,
+  kpId: z.string().trim().min(1).max(50),
+  kdId: nullableTrimmedText,
 });
 
 export const updateUnitRequestSchema = z.object({
   unitName: z.string().trim().min(1).max(255),
   plateNumber: nullableTrimmedText,
   customerName: nullableTrimmedText,
-  restorationType: z.string().trim().max(50).default("FULL_RESTORASI"),
+  vehicleNotes: nullableLongText,
+  restorationType: unitRestorationTypeSchema.default("FULL_RESTORATION"),
   isMargin: z.boolean().default(true),
-  contractDeliveryDate: nullableDateText,
   incomingDate: nullableDateText,
-  revisionContract: nullableDateText,
-  status: unitMasterStatusSchema.default("In_Progress"),
+  targetTdAwal: nullableDateText,
+  targetTdCoo: nullableDateText,
+  targetDelivery: nullableDateText,
+  kpId: z.string().trim().min(1).max(50),
+  kdId: nullableTrimmedText,
+  status: unitMasterStatusSchema.optional(),
+});
+
+export const unitReferenceOptionSchema = z.object({
+  value: z.string(),
+  label: z.string(),
+});
+
+export const unitReferencesEnvelopeSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+  data: z.object({
+    customers: z.array(unitReferenceOptionSchema),
+    kps: z.array(unitReferenceOptionSchema),
+    kds: z.array(unitReferenceOptionSchema),
+    qa: unitReferenceOptionSchema.nullable(),
+  }),
+});
+
+export const unitMediaFolderSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  sortOrder: z.number().int(),
+});
+
+export const unitMediaSchema = z.object({
+  id: z.string(),
+  folderId: z.string(),
+  folderName: z.string(),
+  mediaType: z.enum(["PHOTO", "VIDEO"]),
+  source: z.enum(["UPLOAD", "GOOGLE_DRIVE"]),
+  mediaUrl: z.string().url(),
+  caption: z.string().nullable(),
+  isCover: z.boolean(),
+  createdAt: z.string().nullable(),
+});
+
+export const unitMediaCollectionEnvelopeSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+  data: z.object({
+    folders: z.array(unitMediaFolderSchema),
+    media: z.array(unitMediaSchema),
+  }),
+});
+
+export const createUnitMediaFolderRequestSchema = z.object({
+  name: z.string().trim().min(1).max(100),
+});
+
+export const createUnitMediaRequestSchema = z.object({
+  folderId: z.string().trim().min(1).max(36),
+  mediaType: z.enum(["PHOTO", "VIDEO"]),
+  source: z.enum(["UPLOAD", "GOOGLE_DRIVE"]),
+  mediaUrl: z.string().trim().url().max(2048),
+  caption: nullableTrimmedText,
+});
+
+export const updateUnitMediaRequestSchema = z.object({
+  folderId: z.string().trim().min(1).max(36).optional(),
+  caption: optionalNullableTrimmedText,
+  isCover: z.boolean().optional(),
 });
 
 export const unitMutationEnvelopeSchema = z.object({
@@ -207,3 +305,9 @@ export type UnitBoardRow = z.infer<typeof unitBoardRowSchema>;
 export type UnitWorkspace = z.infer<typeof unitWorkspaceSchema>;
 export type CreateUnitRequest = z.infer<typeof createUnitRequestSchema>;
 export type UpdateUnitRequest = z.infer<typeof updateUnitRequestSchema>;
+export type UnitReferenceOption = z.infer<typeof unitReferenceOptionSchema>;
+export type UnitMediaFolder = z.infer<typeof unitMediaFolderSchema>;
+export type UnitMedia = z.infer<typeof unitMediaSchema>;
+export type CreateUnitMediaFolderRequest = z.infer<typeof createUnitMediaFolderRequestSchema>;
+export type CreateUnitMediaRequest = z.infer<typeof createUnitMediaRequestSchema>;
+export type UpdateUnitMediaRequest = z.infer<typeof updateUnitMediaRequestSchema>;

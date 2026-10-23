@@ -83,6 +83,38 @@ const WO_APPROVER_PERMISSION: Partial<Record<WoStatus, string>> = {
   PENDING_PM_APPROVAL: permissionCodes.woApprovePm,
 };
 
+const WO_KD_QUEUE_STATUSES = new Set<WoStatus>([
+  "OPEN",
+  "SUBMITTED",
+  "PENDING_TARGET_KD_APPROVAL",
+]);
+
+function targetDivisionIdsForSession(session: WebSession): Set<number> {
+  return new Set(
+    [
+      session.user.divisionId,
+      ...session.user.scope.divisionIds,
+      ...session.user.scope.managedDivisionIds,
+    ].filter(
+      (value): value is number =>
+        typeof value === "number" && Number.isFinite(value),
+    ),
+  );
+}
+
+function filterTargetKdQueue(
+  session: WebSession,
+  rows: WoRecord[],
+): WoRecord[] {
+  if (!session.user.permissions.includes(permissionCodes.woApprove))
+    return rows;
+  const divisionIds = targetDivisionIdsForSession(session);
+  return rows.filter((row) => {
+    if (!WO_KD_QUEUE_STATUSES.has(row.status)) return true;
+    return row.toDivisionId !== null && divisionIds.has(row.toDivisionId);
+  });
+}
+
 async function notifyWoApprovers(
   status: WoStatus,
   divisionId: number | null,
@@ -91,12 +123,19 @@ async function notifyWoApprovers(
 ): Promise<void> {
   const permission = WO_APPROVER_PERMISSION[status];
   if (!permission) return;
-  const recipients = await resolveEmployeeIdsByPermission(permission, divisionId ?? undefined);
-  await notifyMobileEmployees(recipients, {
-    title: "Approval Work Order",
-    body,
-    data: { module: "wo", reqId: woId, woId, status },
-  }, "sm_wo");
+  const recipients = await resolveEmployeeIdsByPermission(
+    permission,
+    divisionId ?? undefined,
+  );
+  await notifyMobileEmployees(
+    recipients,
+    {
+      title: "Approval Work Order",
+      body,
+      data: { module: "wo", reqId: woId, woId, status },
+    },
+    "sm_wo",
+  );
 }
 
 async function notifyWoRequesterDivision(
@@ -109,11 +148,15 @@ async function notifyWoRequesterDivision(
     permissionCodes.woCreate,
     divisionId ?? undefined,
   );
-  await notifyMobileEmployees(recipients, {
-    title: "Update Work Order",
-    body,
-    data: { module: "wo", reqId: woId, woId, status },
-  }, "sm_wo");
+  await notifyMobileEmployees(
+    recipients,
+    {
+      title: "Update Work Order",
+      body,
+      data: { module: "wo", reqId: woId, woId, status },
+    },
+    "sm_wo",
+  );
 }
 
 export interface WoService {
@@ -121,13 +164,31 @@ export interface WoService {
   listPendingApproval(session: WebSession): Promise<WoListResult>;
   listMyDivision(session: WebSession): Promise<WoListResult>;
   listUrgent(session: WebSession): Promise<WoRecord[]>;
-  create(session: WebSession, input: WoCreateRequest): Promise<{ woId: string }>;
-  update(session: WebSession, woId: string, input: WoCreateRequest): Promise<{ woId: string }>;
+  create(
+    session: WebSession,
+    input: WoCreateRequest,
+  ): Promise<{ woId: string }>;
+  update(
+    session: WebSession,
+    woId: string,
+    input: WoCreateRequest,
+  ): Promise<{ woId: string }>;
   findDetail(session: WebSession, woId: string): Promise<WoDetailResult | null>;
-  approve(session: WebSession, woId: string, input?: WoApproveRequest): Promise<WoMutationResult>;
-  reject(session: WebSession, woId: string, reason: string): Promise<WoMutationResult>;
+  approve(
+    session: WebSession,
+    woId: string,
+    input?: WoApproveRequest,
+  ): Promise<WoMutationResult>;
+  reject(
+    session: WebSession,
+    woId: string,
+    reason: string,
+  ): Promise<WoMutationResult>;
   markDone(session: WebSession, woId: string): Promise<WoMutationResult>;
-  findLinkedCountdowns(session: WebSession, woId: string): Promise<WoLinkedCountdown[]>;
+  findLinkedCountdowns(
+    session: WebSession,
+    woId: string,
+  ): Promise<WoLinkedCountdown[]>;
 }
 
 export class DefaultWoService implements WoService {
@@ -139,13 +200,11 @@ export class DefaultWoService implements WoService {
   ) {}
 
   private getReferences(session: WebSession) {
-    return woReferenceCache.getOrCreate(
-      buildWoScopeCacheKey(session),
-      () =>
-        this.repository.listReferences({
-          employeeId: session.user.employeeId,
-          scope: session.user.scope,
-        }),
+    return woReferenceCache.getOrCreate(buildWoScopeCacheKey(session), () =>
+      this.repository.listReferences({
+        employeeId: session.user.employeeId,
+        scope: session.user.scope,
+      }),
     );
   }
 
@@ -162,8 +221,9 @@ export class DefaultWoService implements WoService {
           this.getReferences(session),
         ]);
 
+        const rows = filterTargetKdQueue(session, listResult.rows);
         return {
-          data: listResult.rows,
+          data: rows,
           meta: buildGridMeta(listResult.total, query.page, query.limit),
           references,
           query,
@@ -196,7 +256,7 @@ export class DefaultWoService implements WoService {
         ]);
 
         return {
-          data: listResult.rows,
+          data: filterTargetKdQueue(session, listResult.rows),
           meta: buildGridMeta(listResult.total, query.page, query.limit),
           references,
           query,
@@ -229,7 +289,7 @@ export class DefaultWoService implements WoService {
         ]);
 
         return {
-          data: listResult.rows,
+          data: filterTargetKdQueue(session, listResult.rows),
           meta: buildGridMeta(listResult.total, query.page, query.limit),
           references,
           query,
@@ -240,13 +300,17 @@ export class DefaultWoService implements WoService {
   }
 
   async listUrgent(session: WebSession): Promise<WoRecord[]> {
-    return this.repository.listUrgent({
+    const rows = await this.repository.listUrgent({
       employeeId: session.user.employeeId,
       scope: session.user.scope,
     });
+    return filterTargetKdQueue(session, rows);
   }
 
-  async create(session: WebSession, input: WoCreateRequest): Promise<{ woId: string }> {
+  async create(
+    session: WebSession,
+    input: WoCreateRequest,
+  ): Promise<{ woId: string }> {
     const fromDivisionId = session.user.divisionId;
     if (!fromDivisionId) {
       throw new Error("MISSING_DIVISION");
@@ -283,7 +347,11 @@ export class DefaultWoService implements WoService {
     return result;
   }
 
-  async update(session: WebSession, woId: string, input: WoCreateRequest): Promise<{ woId: string }> {
+  async update(
+    session: WebSession,
+    woId: string,
+    input: WoCreateRequest,
+  ): Promise<{ woId: string }> {
     const detail = await this.findDetail(session, woId);
     if (!detail) throw new Error("WO_NOT_FOUND");
     const result = await this.repository.update(woId, input);
@@ -315,7 +383,10 @@ export class DefaultWoService implements WoService {
     return result;
   }
 
-  async findDetail(session: WebSession, woId: string): Promise<WoDetailResult | null> {
+  async findDetail(
+    session: WebSession,
+    woId: string,
+  ): Promise<WoDetailResult | null> {
     const ticket = await this.repository.findById({
       employeeId: session.user.employeeId,
       scope: session.user.scope,
@@ -334,7 +405,11 @@ export class DefaultWoService implements WoService {
   async approve(
     session: WebSession,
     woId: string,
-    input: WoApproveRequest = { picId: null, estimatedHours: null, notes: null },
+    input: WoApproveRequest = {
+      picId: null,
+      estimatedHours: null,
+      notes: null,
+    },
   ): Promise<WoMutationResult> {
     const detail = await this.findDetail(session, woId);
     if (!detail) {

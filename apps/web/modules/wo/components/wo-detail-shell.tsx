@@ -1,9 +1,6 @@
 "use client";
 
-import type {
-  WoLinkedCountdown,
-  WoRecord,
-} from "@smsystem/contracts/wo";
+import type { WoLinkedCountdown, WoRecord } from "@smsystem/contracts/wo";
 import { ArrowLeft, CheckCheck, Link2, XCircle } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -15,6 +12,7 @@ interface WoDetailShellProps {
   ticket: WoRecord;
   linkedCountdowns: WoLinkedCountdown[];
   canApprove: boolean;
+  canApproveKd: boolean;
   canReject: boolean;
 }
 
@@ -29,9 +27,13 @@ function InfoCard({
 }) {
   return (
     <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-5">
-      <p className="text-[10px] uppercase tracking-[0.18em] text-foreground/35">{label}</p>
+      <p className="text-[10px] uppercase tracking-[0.18em] text-foreground/35">
+        {label}
+      </p>
       <p className="mt-3 text-lg text-foreground">{value}</p>
-      {helper ? <p className="mt-2 text-sm text-foreground/40">{helper}</p> : null}
+      {helper ? (
+        <p className="mt-2 text-sm text-foreground/40">{helper}</p>
+      ) : null}
     </div>
   );
 }
@@ -40,6 +42,7 @@ export function WoDetailShell({
   ticket,
   linkedCountdowns,
   canApprove,
+  canApproveKd,
   canReject,
 }: WoDetailShellProps) {
   const router = useRouter();
@@ -47,9 +50,19 @@ export function WoDetailShell({
   const [error, setError] = useState<string | null>(null);
   const [isPendingAction, setIsPendingAction] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
+  const [approvePicId, setApprovePicId] = useState("");
+  const [approveEstimatedHours, setApproveEstimatedHours] = useState("");
+  const [approveNotes, setApproveNotes] = useState("");
+  const isKdApprovalStatus = [
+    "OPEN",
+    "SUBMITTED",
+    "PENDING_TARGET_KD_APPROVAL",
+  ].includes(ticket.status);
 
   async function runMutation(
-    action: () => Promise<{ success: true } | { success: false; message: string }>,
+    action: () => Promise<
+      { success: true } | { success: false; message: string }
+    >,
     successMessage: string,
   ) {
     setError(null);
@@ -131,33 +144,51 @@ export function WoDetailShell({
               </div>
               <div>
                 <p className="text-foreground/35">Prioritas</p>
-                <p className="mt-1">{ticket.isPriority ? "Tinggi" : "Normal"}</p>
+                <p className="mt-1">
+                  {ticket.isPriority ? "Tinggi" : "Normal"}
+                </p>
               </div>
               <div>
                 <p className="text-foreground/35">Notes</p>
                 <p className="mt-1">{ticket.notes ?? "-"}</p>
               </div>
+              <div className="xl:col-span-2">
+                <p className="text-foreground/35">Temuan / Masalah</p>
+                <p className="mt-1">{ticket.issueNote ?? "-"}</p>
+              </div>
             </div>
+            {ticket.mediaUrl ? (
+              <div className="mt-5 max-w-lg border border-white/[0.06] bg-white/[0.025] p-3">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-foreground/35">
+                  Lampiran
+                </p>
+                {ticket.mediaType === "video" ? (
+                  <video
+                    src={ticket.mediaUrl}
+                    controls
+                    className="mt-3 aspect-video w-full bg-black"
+                  />
+                ) : (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={ticket.mediaUrl}
+                    alt="Lampiran WO"
+                    className="mt-3 max-h-80 w-full object-contain"
+                  />
+                )}
+                <a
+                  href={ticket.mediaUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-3 inline-flex text-sm text-app-accent-ink hover:text-app-accent-ink"
+                >
+                  Buka file
+                </a>
+              </div>
+            ) : null}
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            {canApprove && ["OPEN", "SUBMITTED"].includes(ticket.status) ? (
-              <button
-                type="button"
-                disabled={isPendingAction}
-                onClick={() => {
-                  void runMutation(
-                    () => approveWo(ticket.woId),
-                    "WO berhasil diapprove.",
-                  );
-                }}
-                className="inline-flex items-center gap-2 rounded-full bg-success px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-primary-foreground transition-colors hover:bg-success/80 disabled:opacity-50"
-              >
-                <CheckCheck className="h-3.5 w-3.5" />
-                Setujui
-              </button>
-            ) : null}
-
             {canApprove && ticket.status === "APPROVED" ? (
               <button
                 type="button"
@@ -188,7 +219,71 @@ export function WoDetailShell({
           </p>
         ) : null}
 
-        {canReject && ["OPEN", "SUBMITTED"].includes(ticket.status) ? (
+        {canApproveKd && isKdApprovalStatus ? (
+          <div className="mt-5 border border-white/[0.06] bg-white/[0.025] p-4">
+            <p className="text-[11px] uppercase tracking-[0.18em] text-app-accent-ink/70">
+              Persetujuan KD Tujuan
+            </p>
+            <div className="mt-3 grid gap-3 md:grid-cols-2">
+              <label className="space-y-1.5">
+                <span className="text-xs text-foreground/40">PIC</span>
+                <input
+                  value={approvePicId}
+                  onChange={(event) => setApprovePicId(event.target.value)}
+                  placeholder="SM-11.xxx"
+                  className="h-10 w-full border border-white/[0.06] bg-white/[0.03] px-3 text-sm text-foreground outline-none focus:border-primary/30"
+                />
+              </label>
+              <label className="space-y-1.5">
+                <span className="text-xs text-foreground/40">Estimasi jam</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.25"
+                  value={approveEstimatedHours}
+                  onChange={(event) =>
+                    setApproveEstimatedHours(event.target.value)
+                  }
+                  className="h-10 w-full border border-white/[0.06] bg-white/[0.03] px-3 text-sm text-foreground outline-none focus:border-primary/30"
+                />
+              </label>
+              <label className="space-y-1.5 md:col-span-2">
+                <span className="text-xs text-foreground/40">Catatan</span>
+                <textarea
+                  value={approveNotes}
+                  onChange={(event) => setApproveNotes(event.target.value)}
+                  rows={2}
+                  className="w-full border border-white/[0.06] bg-white/[0.03] px-3 py-2 text-sm text-foreground outline-none focus:border-primary/30"
+                />
+              </label>
+            </div>
+            <button
+              type="button"
+              disabled={
+                isPendingAction ||
+                !approvePicId.trim() ||
+                !Number(approveEstimatedHours)
+              }
+              onClick={() => {
+                void runMutation(
+                  () =>
+                    approveWo(ticket.woId, {
+                      picId: approvePicId.trim(),
+                      estimatedHours: Number(approveEstimatedHours),
+                      notes: approveNotes.trim() || null,
+                    }),
+                  "WO berhasil diapprove.",
+                );
+              }}
+              className="mt-3 inline-flex items-center gap-2 rounded-full bg-success px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-primary-foreground transition-colors hover:bg-success/80 disabled:opacity-50"
+            >
+              <CheckCheck className="h-3.5 w-3.5" />
+              Setujui WO
+            </button>
+          </div>
+        ) : null}
+
+        {canReject && isKdApprovalStatus ? (
           <div className="mt-5 rounded-3xl border border-white/[0.06] bg-white/[0.025] p-4">
             <p className="text-[11px] uppercase tracking-[0.18em] text-app-accent-ink/70">
               Tolak WO
@@ -225,7 +320,8 @@ export function WoDetailShell({
               Countdown Terkait
             </p>
             <p className="text-sm text-foreground/40">
-              Countdown dicari dari relasi `sm_jobdesc_countdown.ref_taks_id = woId`.
+              Countdown dicari dari relasi `sm_jobdesc_countdown.ref_taks_id =
+              woId`.
             </p>
           </div>
         </div>
@@ -249,7 +345,9 @@ export function WoDetailShell({
                 </Link>
                 <span>{row.divisionName}</span>
                 <span>{row.status}</span>
-                <span className="text-foreground/35">{fmtDateTime(row.createdAt)}</span>
+                <span className="text-foreground/35">
+                  {fmtDateTime(row.createdAt)}
+                </span>
               </div>
             ))
           )}

@@ -10,7 +10,7 @@ import type {
   QcRejectRequest,
   QcSummary,
 } from "@smsystem/contracts/qc";
-import type { GridFilter } from "@smsystem/contracts/grid";
+import type { ColDef, ICellRendererParams, RowClickedEvent } from "ag-grid-community";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -19,20 +19,19 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   approveQcFinalChecklist,
   passQc,
   rejectQc,
 } from "@/shared/api/qc/qc";
 import { humanizeCodeLabel } from "@/shared/format/humanize";
-import { SmartDataGrid } from "@/shared/datagrid/smart-data-grid";
-import type {
-  SmartDataGridColumn,
-  SmartDataGridFilterDefinition,
-  SmartDataGridSavedView,
-  SmartDataGridSortOption,
-} from "@/shared/datagrid/types";
+import { SmsAgGrid } from "@/shared/datagrid/sms-ag-grid";
+import { DataGridStatusBadge } from "@/shared/datagrid/status-badge";
+import { SearchableSelect } from "@/shared/ui/compact";
+import { useDataGridState } from "@/shared/datagrid/use-data-grid-state";
+
+const GRID_SCROLL_LIMIT = 100;
 
 type QcTab = "ready" | "rework" | "recheck";
 
@@ -119,46 +118,25 @@ function emptyRejectForm(detail: QcQueueRecord | null): RejectFormState {
   };
 }
 
-const sortOptions: SmartDataGridSortOption[] = [
-  { label: "Menunggu", value: "waitingHours" },
-  { label: "Unit", value: "unitName" },
-  { label: "Divisi", value: "divisionName" },
-  { label: "Panel", value: "panelName" },
-  { label: "Status", value: "countdownStatus" },
-  { label: "Level QC", value: "qcLevel" },
-  { label: "Deadline", value: "deadlineDate" },
-  { label: "QC Terakhir", value: "latestInspectionDate" },
-];
+function StatusCell({ value }: ICellRendererParams<QcQueueRecord>) {
+  return <DataGridStatusBadge value={value ? String(value) : "-"} />;
+}
 
-const savedViews: SmartDataGridSavedView[] = [
-  {
-    id: "ready-qc",
-    label: "Siap QC",
-    sortBy: "waitingHours",
-    sortDirection: "desc",
-    filters: [],
-  },
-  {
-    id: "reject-only",
-    label: "Tolak",
-    sortBy: "latestInspectionDate",
-    sortDirection: "desc",
-    filters: [
-      {
-        field: "status",
-        operator: "eq",
-        value: "TIDAK_LOLOS",
-      } satisfies GridFilter,
-    ],
-  },
-  {
-    id: "high-wait",
-    label: "Aging",
-    sortBy: "waitingHours",
-    sortDirection: "desc",
-    filters: [],
-  },
-];
+function textValue(value: unknown) {
+  return value === null || value === undefined || value === "" ? "-" : String(value);
+}
+
+function qcResultLabel(item: Pick<QcQueueRecord, "qcLevel" | "qcLastStatus">) {
+  if (item.qcLevel === "QC_KD") return "QC_KD · Menunggu QA";
+  if (item.qcLevel === "QC_QA" || item.qcLevel === "QC_ADVISOR") {
+    return item.qcLastStatus === "LOLOS" ? "Lolos QC" : "Tidak lolos QC";
+  }
+  return "Menunggu QC";
+}
+
+function filterValue(state: QcGridQuery, field: string) {
+  return state.filters.find((filter) => filter.field === field)?.value ?? "";
+}
 
 export function QcShell({
   activeTab,
@@ -175,12 +153,14 @@ export function QcShell({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const gridState = useDataGridState(state);
   const [passForm, setPassForm] = useState<PassFormState>(emptyPassForm(detail));
   const [rejectForm, setRejectForm] = useState<RejectFormState>(emptyRejectForm(detail));
   const [finalNotes, setFinalNotes] = useState(finalChecklist?.checklist.notes ?? "");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [searchInput, setSearchInput] = useState(state.search);
 
   useEffect(() => {
     setPassForm(emptyPassForm(detail));
@@ -191,28 +171,15 @@ export function QcShell({
     setFinalNotes(finalChecklist?.checklist.notes ?? "");
   }, [finalChecklist?.checklist.carId, finalChecklist?.checklist.notes]);
 
-  const filters: SmartDataGridFilterDefinition[] = [
-    {
-      field: "divisionId",
-      label: "Divisi",
-      options: references.divisions,
-    },
-    {
-      field: "carId",
-      label: "Unit",
-      options: references.units,
-    },
-    {
-      field: "status",
-      label: "Status",
-      options: references.statuses,
-    },
-    {
-      field: "qcLevel",
-      label: "Level QC",
-      options: references.qcLevels,
-    },
-  ];
+  useEffect(() => {
+    setSearchInput(state.search);
+  }, [state.search]);
+
+  useEffect(() => {
+    if (state.limit !== GRID_SCROLL_LIMIT) {
+      gridState.setLimit(GRID_SCROLL_LIMIT);
+    }
+  }, [state.limit]);
 
   function pushParams(mutator: (params: URLSearchParams) => void) {
     const nextParams = new URLSearchParams(searchParams.toString());
@@ -221,72 +188,34 @@ export function QcShell({
     router.push(`${pathname}?${nextParams.toString()}`);
   }
 
-  const columns: SmartDataGridColumn[] = [
-    {
-      key: "coreId",
-      label: "Core ID",
-      kind: "mono",
-      sticky: true,
-      renderCell: (value, row) => (
-        <button
-          type="button"
-          onClick={() => {
-            pushParams((params) => {
-              params.set("coreId", String(row.coreId));
-              params.set("carId", String(row.carId));
-            });
-          }}
-          className="text-app-accent-ink transition-colors hover:text-app-accent-ink"
-        >
-          {String(value)}
-        </button>
-      ),
-    },
-    {
-      key: "unitName",
-      label: "Unit",
-      filterKey: "carId",
-      filterOptions: references.units,
-    },
-    {
-      key: "divisionName",
-      label: "Divisi",
-      filterKey: "divisionId",
-      filterOptions: references.divisions,
-    },
-    {
-      key: "panelName",
-      label: "Panel",
-    },
-    {
-      key: "jobName",
-      label: "Job",
-      filterKey: "jobName",
-    },
-    {
-      key: "countdownStatus",
-      label: "Countdown",
-      kind: "status",
-      filterKey: "status",
-      filterOptions: references.statuses,
-    },
-    {
-      key: "qcLastStatus",
-      label: "QC Result",
-      kind: "status",
-    },
-    {
-      key: "reworkPlanStatus",
-      label: "Rework Plan",
-      kind: "status",
-    },
-    {
-      key: "waitingHours",
-      label: "Waiting",
-      kind: "number",
-      align: "right",
-    },
-  ];
+  const columns = useMemo<ColDef<QcQueueRecord>[]>(
+    () => [
+      {
+        field: "coreId",
+        headerName: "Core ID",
+        pinned: "left",
+        width: 150,
+        cellRenderer: ({ value }: ICellRendererParams<QcQueueRecord>) => (
+          <span className="font-mono text-[12px] text-app-accent-ink">{value ? String(value) : "-"}</span>
+        ),
+      },
+      { field: "unitName", headerName: "Unit", minWidth: 190 },
+      { field: "divisionName", headerName: "Divisi", valueFormatter: ({ value }) => textValue(value), width: 145 },
+      { field: "panelName", headerName: "Panel", valueFormatter: ({ value }) => textValue(value), minWidth: 190 },
+      { field: "jobName", headerName: "Job", minWidth: 210, flex: 1 },
+      { field: "countdownStatus", headerName: "Countdown", cellRenderer: StatusCell, width: 155 },
+      { field: "qcLastStatus", headerName: "Hasil QC", valueGetter: ({ data }) => data ? qcResultLabel(data) : "-", cellRenderer: StatusCell, width: 230 },
+      { field: "reworkPlanStatus", headerName: "Rework Plan", cellRenderer: StatusCell, width: 155 },
+      {
+        field: "waitingHours",
+        headerName: "Waiting",
+        type: "rightAligned",
+        width: 125,
+        valueFormatter: ({ value }) => `${Number(value ?? 0).toFixed(1)}j`,
+      },
+    ],
+    [],
+  );
 
   async function handlePass() {
     if (!detail) {
@@ -324,7 +253,7 @@ export function QcShell({
       return;
     }
 
-    if (!rejectForm.reworkDate || !rejectForm.reworkAssignedUser.trim()) {
+    if (canValidate && (!rejectForm.reworkDate || !rejectForm.reworkAssignedUser.trim())) {
       setError("Tanggal dan PIC rework wajib diisi.");
       return;
     }
@@ -471,38 +400,121 @@ export function QcShell({
             </div>
           </div>
 
-          <SmartDataGrid
-        viewportClassName="max-h-[calc(100svh-260px)]"
-            title={
-              activeTab === "ready"
-                ? "Siap QC"
-                : activeTab === "rework"
-                  ? "Antrian Rework"
-                  : "QC Ulang"
-            }
-            description={
-              activeTab === "ready"
-                ? "Task yang sudah mencapai 100% dan menunggu hasil inspeksi QC."
-                : activeTab === "rework"
-                  ? "Task reject yang sudah dijadwalkan ke job plan rework."
-                  : "Task reject yang siap diuji ulang oleh QC."
-            }
-            columns={columns}
-            rows={rows}
-            meta={meta}
-            state={state}
-            filters={filters}
-            sortOptions={sortOptions}
-            savedViews={savedViews}
-            searchPlaceholder="Cari unit, panel, job, atau divisi..."
-            emptyMessage="Belum ada data QC pada scope query saat ini."
-            headerActions={
-              <div className="inline-flex items-center gap-2 rounded-full bg-white/[0.03] px-3 py-1.5 text-[11px] uppercase tracking-[0.16em] text-foreground/50 ring-1 ring-white/[0.06]">
-                <ShieldCheck className="h-3.5 w-3.5" />
-                {selectedUnitLabel}
+          <section className="overflow-hidden border border-border bg-card">
+            <div className="border-b border-border px-3 py-3">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-[14px] font-semibold text-foreground">
+                    {activeTab === "ready"
+                      ? "Siap QC"
+                      : activeTab === "rework"
+                        ? "Antrian Rework"
+                        : "QC Ulang"}
+                  </p>
+                  <p className="mt-1 text-[12px] text-muted-foreground">
+                    {meta.total} baris · {selectedUnitLabel}
+                  </p>
+                </div>
+                <div className="inline-flex items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+                  <ShieldCheck className="h-3.5 w-3.5" />
+                  {state.search ? `Pencarian: ${state.search}` : "Semua data"}
+                </div>
               </div>
-            }
-          />
+
+              <form
+                className="mt-3 flex flex-wrap items-center gap-2"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  gridState.setSearch(searchInput.trim());
+                }}
+              >
+                <input
+                  value={searchInput}
+                  onChange={(event) => setSearchInput(event.target.value)}
+                  placeholder="Cari unit, panel, job, atau divisi"
+                  className="h-9 min-w-64 flex-1 border border-border bg-muted px-3 text-[13px] text-foreground outline-none placeholder:text-muted-foreground focus:border-primary/55 dark:border-white/[0.08] dark:bg-muted"
+                />
+                <button
+                  type="submit"
+                  className="h-9 border border-primary/40 px-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-app-accent-ink hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                >
+                  Cari
+                </button>
+                <SearchableSelect
+                  value={filterValue(state, "divisionId")}
+                  onChange={(value) => gridState.setFilter("divisionId", value)}
+                  options={references.divisions}
+                  placeholder="Divisi"
+                  className="w-40"
+                />
+                <SearchableSelect
+                  value={filterValue(state, "carId")}
+                  onChange={(value) => gridState.setFilter("carId", value)}
+                  options={references.units}
+                  placeholder="Unit"
+                  className="w-44"
+                />
+                <SearchableSelect
+                  value={filterValue(state, "status")}
+                  onChange={(value) => gridState.setFilter("status", value)}
+                  options={references.statuses}
+                  placeholder="Status"
+                  className="w-40"
+                />
+                <SearchableSelect
+                  value={filterValue(state, "qcLevel")}
+                  onChange={(value) => gridState.setFilter("qcLevel", value)}
+                  options={references.qcLevels}
+                  placeholder="Level QC"
+                  className="w-40"
+                />
+              </form>
+            </div>
+
+            <SmsAgGrid<QcQueueRecord>
+              heightClassName="h-[calc(100svh-330px)] min-h-[30rem]"
+              rowData={rows}
+              columnDefs={columns}
+              quickFilterText={searchInput}
+              onRowClicked={(event: RowClickedEvent<QcQueueRecord>) => {
+                if (!event.data) {
+                  return;
+                }
+                pushParams((params) => {
+                  params.set("coreId", event.data!.coreId);
+                  params.set("carId", event.data!.carId);
+                });
+              }}
+              emptyMessage="Belum ada data QC pada scope query saat ini."
+            />
+
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-3 py-2 text-[12px] text-muted-foreground">
+              <span>
+                {meta.total === 0
+                  ? "0 dari 0 baris"
+                  : `${(meta.page - 1) * meta.limit + 1} - ${Math.min(meta.page * meta.limit, meta.total)} dari ${meta.total} baris`}
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={!meta.hasPrev || gridState.isPending}
+                  onClick={() => gridState.setPage(meta.page - 1)}
+                  className="border border-border px-3 py-1.5 text-[11px] uppercase tracking-[0.1em] hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Sebelumnya
+                </button>
+                <span className="min-w-20 text-center">Halaman {meta.page}</span>
+                <button
+                  type="button"
+                  disabled={!meta.hasNext || gridState.isPending}
+                  onClick={() => gridState.setPage(meta.page + 1)}
+                  className="border border-border px-3 py-1.5 text-[11px] uppercase tracking-[0.1em] hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Berikutnya
+                </button>
+              </div>
+            </div>
+          </section>
         </div>
 
         <div className="space-y-6">
@@ -532,7 +544,7 @@ export function QcShell({
                   <p>Divisi: {detail.divisionName ?? "-"}</p>
                   <p>Panel: {detail.panelName ?? "-"}</p>
                   <p>Countdown: {humanizeCodeLabel(detail.countdownStatus)}</p>
-                  <p>QC Terakhir: {detail.qcLastStatus ? humanizeCodeLabel(detail.qcLastStatus) : "-"}</p>
+                  <p>Hasil QC: {qcResultLabel(detail)}</p>
                   <p>Issue Terbuka: {detail.openIssueCount}</p>
                   <p>Rencana Rework: {detail.reworkPlanId ?? "-"}</p>
                 </div>
@@ -586,11 +598,12 @@ export function QcShell({
                       className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-primary px-4 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary disabled:opacity-60"
                     >
                       <CheckCircle2 className="h-4 w-4" />
-                      Lolos QC
+                      {canValidate ? "Lolos QC" : "QC KD: Lolos"}
                     </button>
 
                     <div className="space-y-3 rounded-2xl border border-white/[0.06] bg-white/[0.03] p-4">
-                      <p className="text-sm text-foreground">Tolak dan buat rework</p>
+                      <p className="text-sm text-foreground">{canValidate ? "Tolak dan buat rework" : "QC KD: Tidak lolos, menunggu QA"}</p>
+                      {canValidate ? <>
                       <input
                         value={rejectForm.reworkDate}
                         onChange={(event) =>
@@ -685,6 +698,7 @@ export function QcShell({
                           Lembur
                         </label>
                       </div>
+                      </> : null}
                       <button
                         type="button"
                         disabled={isSubmitting}
@@ -782,7 +796,7 @@ export function QcShell({
                         </div>
                         <div className="text-right text-xs text-foreground/45">
                           <p>{humanizeCodeLabel(item.countdownStatus)}</p>
-                          <p>{item.qcLastStatus ? humanizeCodeLabel(item.qcLastStatus) : "-"}</p>
+                          <p>{item.qcLastStatus === "LOLOS" ? "Lolos QC" : item.qcLastStatus === "TIDAK_LOLOS" ? "Tidak lolos QC" : "Menunggu QA"}</p>
                           <p>{item.issueStatus ? humanizeCodeLabel(item.issueStatus) : "-"}</p>
                         </div>
                       </div>

@@ -1,9 +1,15 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { AuthScope } from "@smsystem/contracts/auth";
 import type {
+  CreateUnitMediaFolderRequest,
+  CreateUnitMediaRequest,
   CreateUnitRequest,
   UnitBoardRow,
+  UnitMedia,
+  UnitMediaFolder,
+  UnitReferenceOption,
   UnitWorkspace,
+  UpdateUnitMediaRequest,
   UpdateUnitRequest,
   UnitClient,
   UnitClientUnit,
@@ -30,7 +36,7 @@ import type {
   UnitPanelRecord,
   UpdateUnitPanelRequest,
 } from "@smsystem/contracts/unit-panel";
-import type { Pool, ResultSetHeader, RowDataPacket } from "mysql2/promise";
+import type { Pool, PoolConnection, ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { getApiEnv, type ApiEnv } from "@/config/env";
 import { qualifyTable } from "@/db/identifier";
 import { getMySqlPool } from "@/db/mysql";
@@ -42,15 +48,20 @@ interface UnitBoardRowPacket extends RowDataPacket {
   unitName: string;
   plateNumber: string | null;
   customerName: string | null;
+  vehicleNotes: string | null;
   restorationType: string | null;
   isMargin: number | boolean | null;
   incomingDate: string | null;
-  revisionContract: string | null;
+  targetTdAwal: string | null;
+  targetTdCoo: string | null;
+  targetDelivery: string | null;
+  deliveredAt: string | null;
+  kpId: string | null;
+  kdId: string | null;
   kpName: string;
   advisorName: string;
-  targetDeliveryDate: string | null;
   etaDate: string | null;
-  riskLevel: "GREEN" | "YELLOW" | "ORANGE" | "RED" | "UNKNOWN";
+  riskLevel: "GREEN" | "YELLOW" | "ORANGE" | "RED" | "UNKNOWN" | "DELIVERED";
   progressPercent: number;
   remainingHours: number;
   woOpenCount: number;
@@ -58,6 +69,29 @@ interface UnitBoardRowPacket extends RowDataPacket {
   qcIssueOpenCount: number;
   issueOpenCount: number;
   status: string;
+}
+
+interface UnitReferenceOptionPacket extends RowDataPacket {
+  value: string;
+  label: string;
+}
+
+interface UnitMediaFolderPacket extends RowDataPacket {
+  id: string;
+  name: string;
+  sortOrder: number;
+}
+
+interface UnitMediaPacket extends RowDataPacket {
+  id: string;
+  folderId: string;
+  folderName: string;
+  mediaType: "PHOTO" | "VIDEO";
+  source: "UPLOAD" | "GOOGLE_DRIVE";
+  mediaUrl: string;
+  caption: string | null;
+  isCover: number | boolean;
+  createdAt: string | null;
 }
 
 interface AggregateCountPacket extends RowDataPacket {
@@ -511,7 +545,7 @@ function buildFilterClauses(query: UnitGridQuery, params: unknown[]): string[] {
 
 function buildOrderBy(sortBy: UnitGridQuery["sortBy"], direction: "asc" | "desc"): string {
   const columnMap: Record<UnitGridQuery["sortBy"], string> = {
-    targetDeliveryDate: "ub.targetDeliveryDate",
+    targetDeliveryDate: "ub.targetDelivery",
     unitName: "ub.unitName",
     customerName: "ub.customerName",
     etaDate: "ub.etaDate",
@@ -967,25 +1001,30 @@ function unitBoardBaseSql(): string {
       c.unit_name AS unitName,
       c.plate_number AS plateNumber,
       c.customer_name AS customerName,
+      c.vehicle_notes AS vehicleNotes,
       c.restoration_type AS restorationType,
       COALESCE(c.is_margin, 1) AS isMargin,
       DATE_FORMAT(c.incoming_date, '%Y-%m-%d') AS incomingDate,
-      DATE_FORMAT(c.revision_contract, '%Y-%m-%d') AS revisionContract,
+      DATE_FORMAT(c.contract_delivery_date, '%Y-%m-%d') AS targetTdAwal,
+      DATE_FORMAT(c.revision_contract, '%Y-%m-%d') AS targetTdCoo,
+      DATE_FORMAT(c.target_delivery_date, '%Y-%m-%d') AS targetDelivery,
+      DATE_FORMAT(c.delivered_at, '%Y-%m-%d %H:%i:%s') AS deliveredAt,
+      cpa.kp_id AS kpId,
+      cpa.kd_id AS kdId,
       COALESCE(kp.full_name, '-') AS kpName,
       COALESCE(advisor.full_name, '-') AS advisorName,
-      DATE_FORMAT(c.contract_delivery_date, '%Y-%m-%d') AS targetDeliveryDate,
       CASE
         WHEN UPPER(COALESCE(c.status, '')) = 'DONE'
-          THEN DATE_FORMAT(c.contract_delivery_date, '%Y-%m-%d')
+          THEN DATE_FORMAT(COALESCE(c.target_delivery_date, c.revision_contract, c.contract_delivery_date), '%Y-%m-%d')
         WHEN cd.remainingHours > 0
           THEN DATE_FORMAT(DATE_ADD(CURDATE(), INTERVAL CEIL(cd.remainingHours / 8) DAY), '%Y-%m-%d')
-        ELSE DATE_FORMAT(c.contract_delivery_date, '%Y-%m-%d')
+        ELSE DATE_FORMAT(COALESCE(c.target_delivery_date, c.revision_contract, c.contract_delivery_date), '%Y-%m-%d')
       END AS etaDate,
       CASE
         WHEN UPPER(COALESCE(c.status, '')) = 'DONE' THEN 'DELIVERED'
-        WHEN c.contract_delivery_date IS NULL THEN 'UNKNOWN'
-        WHEN c.contract_delivery_date < CURDATE() THEN 'RED'
-        WHEN DATEDIFF(c.contract_delivery_date, CURDATE()) <= 2 THEN 'ORANGE'
+        WHEN COALESCE(c.target_delivery_date, c.revision_contract, c.contract_delivery_date) IS NULL THEN 'UNKNOWN'
+        WHEN COALESCE(c.target_delivery_date, c.revision_contract, c.contract_delivery_date) < CURDATE() THEN 'RED'
+        WHEN DATEDIFF(COALESCE(c.target_delivery_date, c.revision_contract, c.contract_delivery_date), CURDATE()) <= 2 THEN 'ORANGE'
         WHEN COALESCE(cd.progressPercent, 0) >= 85 THEN 'GREEN'
         ELSE 'YELLOW'
       END AS riskLevel,
@@ -995,13 +1034,19 @@ function unitBoardBaseSql(): string {
       0 AS prOpenCount,
       COALESCE(qc.notPassCount, 0) AS qcIssueOpenCount,
       COALESCE(li.openCount, 0) AS issueOpenCount,
-      COALESCE(c.status, 'In_Progress') AS status
+      CASE
+        WHEN c.status = 'DONE' THEN 'DONE'
+        WHEN c.status = 'HOLD' THEN 'HOLD'
+        WHEN COALESCE(cd.total, 0) > 0 THEN 'ON_PROGRESS'
+        ELSE 'PLAN'
+      END AS status
     FROM cars c
     LEFT JOIN (
       SELECT
         car_id,
         MAX(kp_id) AS kp_id,
-        MAX(advisor_id) AS advisor_id
+        MAX(advisor_id) AS advisor_id,
+        MAX(kd_id) AS kd_id
       FROM car_project_assignment
       WHERE ended_at IS NULL
       GROUP BY car_id
@@ -1011,6 +1056,7 @@ function unitBoardBaseSql(): string {
     LEFT JOIN (
       SELECT
         car_id,
+        COUNT(*) AS total,
         AVG(actual_progress_percent) AS progressPercent,
         SUM(COALESCE(remaining_hours, 0)) AS remainingHours
       FROM sm_jobdesc_countdown
@@ -1048,13 +1094,19 @@ function mapUnitBoardRow(row: UnitBoardRowPacket): UnitBoardRow {
     unitName: row.unitName,
     plateNumber: row.plateNumber,
     customerName: row.customerName,
-    restorationType: row.restorationType,
+    vehicleNotes: row.vehicleNotes,
+    restorationType: row.restorationType === "FULL_RESTORATION" || row.restorationType === "PARTIAL_RESTORATION" ? row.restorationType : null,
     isMargin: mapTinyIntBoolean(row.isMargin),
     incomingDate: row.incomingDate,
-    revisionContract: row.revisionContract,
+    targetTdAwal: row.targetTdAwal,
+    targetTdCoo: row.targetTdCoo,
+    targetDelivery: row.targetDelivery,
+    deliveredAt: row.deliveredAt,
+    kpId: row.kpId,
+    kdId: row.kdId,
     kpName: row.kpName,
     advisorName: row.advisorName,
-    targetDeliveryDate: row.targetDeliveryDate,
+    targetDeliveryDate: row.targetDelivery,
     etaDate: row.etaDate,
     riskLevel: row.riskLevel,
     progressPercent: Number(row.progressPercent ?? 0),
@@ -1063,9 +1115,59 @@ function mapUnitBoardRow(row: UnitBoardRowPacket): UnitBoardRow {
     prOpenCount: Number(row.prOpenCount ?? 0),
     qcIssueOpenCount: Number(row.qcIssueOpenCount ?? 0),
     issueOpenCount: Number(row.issueOpenCount ?? 0),
-    status: row.status,
+    status: row.status === "PLAN" || row.status === "ON_PROGRESS" || row.status === "HOLD" || row.status === "DONE"
+      ? row.status
+      : "ON_PROGRESS",
   };
 }
+
+function mapUnitReferenceOption(row: UnitReferenceOptionPacket): UnitReferenceOption {
+  return { value: String(row.value), label: String(row.label) };
+}
+
+function mapUnitMediaFolder(row: UnitMediaFolderPacket): UnitMediaFolder {
+  return { id: row.id, name: row.name, sortOrder: Number(row.sortOrder ?? 0) };
+}
+
+function mapUnitMedia(row: UnitMediaPacket): UnitMedia {
+  return {
+    id: row.id,
+    folderId: row.folderId,
+    folderName: row.folderName,
+    mediaType: row.mediaType,
+    source: row.source,
+    mediaUrl: row.mediaUrl,
+    caption: row.caption,
+    isCover: mapTinyIntBoolean(row.isCover),
+    createdAt: row.createdAt,
+  };
+}
+
+function toUnitIdFragment(value: string): string {
+  return value
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/gu, "-")
+    .replace(/^-+|-+$/gu, "")
+    .slice(0, 32);
+}
+
+function defaultUnitId(unitName: string, customerName: string | null): string {
+  return [toUnitIdFragment(unitName), toUnitIdFragment(customerName ?? "")]
+    .filter(Boolean)
+    .join("_")
+    .slice(0, 36) || `UNIT-${randomUUID().slice(0, 8).toUpperCase()}`;
+}
+
+function defaultOwnerSlug(ownerName: string): string {
+  return toUnitIdFragment(ownerName).toLowerCase().slice(0, 108) || "customer";
+}
+
+const DEFAULT_UNIT_MEDIA_FOLDERS = [
+  "Kedatangan Unit",
+  "Kedatangan Customer",
+  "Lainnya",
+] as const;
 
 function getUnitDeleteDependencyTables(env: ApiEnv): readonly string[] {
   return [
@@ -1096,6 +1198,7 @@ export class UnitsRepository {
   private readonly env: ApiEnv;
   private readonly purchaseDb: string;
   private readonly warehouseDb: string;
+  private readonly clientDb: string;
   private masterPanelInventorySchemaPromise: Promise<MasterPanelInventorySchema> | null = null;
 
   constructor(
@@ -1104,6 +1207,122 @@ export class UnitsRepository {
     this.env = getApiEnv();
     this.purchaseDb = this.env.PURCHASE_DB_NAME;
     this.warehouseDb = this.env.WAREHOUSE_DB_NAME;
+    this.clientDb = this.env.CLIENT_DB_NAME;
+  }
+
+  private async resolveUnitId(connection: PoolConnection, input: CreateUnitRequest): Promise<string> {
+    const requested = input.unitId?.trim();
+    const base = requested || defaultUnitId(input.unitName, input.customerName);
+    for (let index = 1; index <= 99; index += 1) {
+      const suffix = index === 1 ? "" : `-${index}`;
+      const candidate = `${base.slice(0, 36 - suffix.length)}${suffix}`;
+      const [rows] = await connection.query<RowDataPacket[]>(
+        "SELECT id FROM cars WHERE id = ? LIMIT 1 FOR UPDATE",
+        [candidate],
+      );
+      if (rows.length === 0) return candidate;
+      if (requested) throw new Error("UNIT_ALREADY_EXISTS");
+    }
+    throw new Error("UNIT_ID_GENERATION_FAILED");
+  }
+
+  private async findOrCreatePortalAccount(
+    connection: PoolConnection,
+    customerName: string | null,
+  ): Promise<{ id: string; ownerName: string } | null> {
+    if (!customerName) return null;
+    const accounts = qualifyTable(this.clientDb, "sm_portal_accounts");
+    const [existing] = await connection.query<RowDataPacket[]>(
+      `SELECT id, owner_name AS ownerName FROM ${accounts} WHERE LOWER(owner_name) = LOWER(?) LIMIT 1 FOR UPDATE`,
+      [customerName],
+    );
+    if (existing[0]) {
+      return { id: String(existing[0].id), ownerName: String(existing[0].ownerName) };
+    }
+
+    const ownerSlugBase = defaultOwnerSlug(customerName);
+    let ownerSlug = ownerSlugBase;
+    let foundAvailableSlug = false;
+    for (let index = 1; index <= 99; index += 1) {
+      ownerSlug = index === 1
+        ? ownerSlugBase
+        : `${ownerSlugBase.slice(0, 108 - String(index).length)}-${index}`;
+      const [slugRows] = await connection.query<RowDataPacket[]>(
+        `SELECT id FROM ${accounts} WHERE owner_slug = ? LIMIT 1 FOR UPDATE`,
+        [ownerSlug],
+      );
+      if (slugRows.length === 0) {
+        foundAvailableSlug = true;
+        break;
+      }
+    }
+    if (!foundAvailableSlug) throw new Error("CUSTOMER_SLUG_GENERATION_FAILED");
+
+    const id = randomUUID();
+    const disabledAccessHash = createHash("sha256").update(randomUUID()).digest("hex");
+    await connection.execute(
+      `INSERT INTO ${accounts} (id, owner_slug, owner_name, access_code_hash, is_active) VALUES (?, ?, ?, ?, 0)`,
+      [id, ownerSlug, customerName, disabledAccessHash],
+    );
+    return { id, ownerName: customerName };
+  }
+
+  private async ensureUnitAssignment(
+    connection: PoolConnection,
+    input: { carId: string; kpId: string; kdId: string | null; actorId: string },
+  ): Promise<void> {
+    const [activeRows] = await connection.query<RowDataPacket[]>(
+      `SELECT id, kp_id AS kpId, advisor_id AS advisorId, kd_id AS kdId
+       FROM car_project_assignment
+       WHERE car_id = ? AND ended_at IS NULL
+       ORDER BY assigned_at DESC
+       LIMIT 1
+       FOR UPDATE`,
+      [input.carId],
+    );
+    const active = activeRows[0];
+    const advisorId = input.kdId
+      ? (active?.advisorId ? String(active.advisorId) : await this.findDefaultQaId(connection))
+      : null;
+    if (
+      active &&
+      String(active.kpId ?? "") === input.kpId &&
+      String(active.kdId ?? "") === String(input.kdId ?? "") &&
+      String(active.advisorId ?? "") === String(advisorId ?? "")
+    ) {
+      return;
+    }
+
+    await connection.execute(
+      "UPDATE car_project_assignment SET ended_at = CURRENT_TIMESTAMP WHERE car_id = ? AND ended_at IS NULL",
+      [input.carId],
+    );
+    await connection.execute(
+      `INSERT INTO car_project_assignment (id, car_id, kp_id, advisor_id, kd_id, assigned_by, reason)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [randomUUID(), input.carId, input.kpId, advisorId, input.kdId, input.actorId, "Assignment unit"],
+    );
+  }
+
+  private async findDefaultQaId(connection: Pick<PoolConnection, "query">): Promise<string | null> {
+    const [rows] = await connection.query<RowDataPacket[]>(
+      `SELECT e.employee_id AS employeeId
+       FROM sm_employee e
+       JOIN sm_role r ON r.id = e.role_id
+       WHERE e.is_active = 1 AND r.role_name IN ('qa', 'advisor')
+       ORDER BY e.employee_id ASC
+       LIMIT 1`,
+    );
+    return rows[0]?.employeeId ? String(rows[0].employeeId) : null;
+  }
+
+  private async ensureDefaultMediaFolders(connection: PoolConnection, carId: string, actorId: string): Promise<void> {
+    for (const [sortOrder, name] of DEFAULT_UNIT_MEDIA_FOLDERS.entries()) {
+      await connection.execute(
+        "INSERT IGNORE INTO sm_unit_media_folders (id, car_id, name, sort_order, created_by) VALUES (?, ?, ?, ?, ?)",
+        [randomUUID(), carId, name, sortOrder, actorId],
+      );
+    }
   }
 
   private async getMasterPanelInventorySchema(pool: Pick<Pool, "query">): Promise<MasterPanelInventorySchema> {
@@ -1151,41 +1370,56 @@ export class UnitsRepository {
     input: CreateUnitRequest;
   }): Promise<UnitBoardRow> {
     const pool = this.poolFactory();
-    const existing = await this.findUnitBoardRowById(params.input.unitId);
-    if (existing) {
-      throw new Error("UNIT_ALREADY_EXISTS");
+    const connection = await pool.getConnection();
+    let unitId = "";
+    try {
+      await connection.beginTransaction();
+      unitId = await this.resolveUnitId(connection, params.input);
+      const account = await this.findOrCreatePortalAccount(connection, params.input.customerName);
+      await connection.execute<ResultSetHeader>(
+        `
+          INSERT INTO cars (
+            id, unit_name, plate_number, customer_name, vehicle_notes, restoration_type, is_margin,
+            contract_delivery_date, incoming_date, revision_contract, target_delivery_date, status
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PLAN')
+        `,
+        [
+          unitId,
+          params.input.unitName,
+          params.input.plateNumber,
+          account?.ownerName ?? params.input.customerName,
+          params.input.vehicleNotes,
+          params.input.restorationType,
+          params.input.isMargin ? 1 : 0,
+          params.input.targetTdAwal,
+          params.input.incomingDate,
+          params.input.targetTdCoo,
+          params.input.targetDelivery,
+        ],
+      );
+      if (account) {
+        await connection.execute(
+          `INSERT IGNORE INTO ${qualifyTable(this.clientDb, "sm_portal_account_cars")} (account_id, car_id)
+           VALUES (?, ?)`,
+          [account.id, unitId],
+        );
+      }
+      await this.ensureUnitAssignment(connection, {
+        carId: unitId,
+        kpId: params.input.kpId,
+        kdId: params.input.kdId,
+        actorId: params.actorId,
+      });
+      await this.ensureDefaultMediaFolders(connection, unitId, params.actorId);
+      await connection.commit();
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
     }
 
-    await pool.execute<ResultSetHeader>(
-      `
-        INSERT INTO cars (
-          id,
-          unit_name,
-          plate_number,
-          customer_name,
-          restoration_type,
-          is_margin,
-          contract_delivery_date,
-          incoming_date,
-          revision_contract,
-          status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `,
-      [
-        params.input.unitId,
-        params.input.unitName,
-        params.input.plateNumber,
-        params.input.customerName,
-        params.input.restorationType,
-        params.input.isMargin ? 1 : 0,
-        params.input.contractDeliveryDate,
-        params.input.incomingDate,
-        params.input.revisionContract,
-        params.input.status,
-      ],
-    );
-
-    const unit = await this.findUnitBoardRowById(params.input.unitId);
+    const unit = await this.findUnitBoardRowById(unitId);
     if (!unit) {
       throw new Error("UNIT_NOT_FOUND");
     }
@@ -1203,36 +1437,62 @@ export class UnitsRepository {
       throw new Error("UNIT_NOT_FOUND");
     }
 
+    if (params.input.status === "DONE") {
+      throw new Error("UNIT_DELIVERY_REQUIRED");
+    }
     const pool = this.poolFactory();
-    await pool.execute<ResultSetHeader>(
-      `
-        UPDATE cars
-        SET
-          unit_name = ?,
-          plate_number = ?,
-          customer_name = ?,
-          restoration_type = ?,
-          is_margin = ?,
-          contract_delivery_date = ?,
-          incoming_date = ?,
-          revision_contract = ?,
-          status = ?
-        WHERE id = ?
-        LIMIT 1
-      `,
-      [
-        params.input.unitName,
-        params.input.plateNumber,
-        params.input.customerName,
-        params.input.restorationType,
-        params.input.isMargin ? 1 : 0,
-        params.input.contractDeliveryDate,
-        params.input.incomingDate,
-        params.input.revisionContract,
-        params.input.status,
-        params.unitId,
-      ],
-    );
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      const account = await this.findOrCreatePortalAccount(connection, params.input.customerName);
+      const storedStatus = params.input.status === undefined
+        ? null
+        : params.input.status === "HOLD" ? "HOLD" : "PLAN";
+      await connection.execute<ResultSetHeader>(
+        `
+          UPDATE cars
+          SET
+            unit_name = ?, plate_number = ?, customer_name = ?, vehicle_notes = ?, restoration_type = ?, is_margin = ?,
+            contract_delivery_date = ?, incoming_date = ?, revision_contract = ?, target_delivery_date = ?, status = COALESCE(?, status)
+          WHERE id = ?
+          LIMIT 1
+        `,
+        [
+          params.input.unitName,
+          params.input.plateNumber,
+          account?.ownerName ?? params.input.customerName,
+          params.input.vehicleNotes,
+          params.input.restorationType,
+          params.input.isMargin ? 1 : 0,
+          params.input.targetTdAwal,
+          params.input.incomingDate,
+          params.input.targetTdCoo,
+          params.input.targetDelivery,
+          storedStatus,
+          params.unitId,
+        ],
+      );
+      if (account) {
+        await connection.execute(
+          `INSERT IGNORE INTO ${qualifyTable(this.clientDb, "sm_portal_account_cars")} (account_id, car_id)
+           VALUES (?, ?)`,
+          [account.id, params.unitId],
+        );
+      }
+      await this.ensureUnitAssignment(connection, {
+        carId: params.unitId,
+        kpId: params.input.kpId,
+        kdId: params.input.kdId,
+        actorId: params.actorId,
+      });
+      await this.ensureDefaultMediaFolders(connection, params.unitId, params.actorId);
+      await connection.commit();
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
 
     const after = await this.findUnitBoardRowById(params.unitId);
     if (!after) {
@@ -1267,14 +1527,26 @@ export class UnitsRepository {
       }
     }
 
-    await pool.execute<ResultSetHeader>(
-      `
-        DELETE FROM cars
-        WHERE id = ?
-        LIMIT 1
-      `,
-      [params.unitId],
-    );
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      await connection.execute("DELETE FROM sm_unit_media WHERE car_id = ?", [params.unitId]);
+      await connection.execute("DELETE FROM sm_unit_media_folders WHERE car_id = ?", [params.unitId]);
+      await connection.execute<ResultSetHeader>(
+        `
+          DELETE FROM cars
+          WHERE id = ?
+          LIMIT 1
+        `,
+        [params.unitId],
+      );
+      await connection.commit();
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
 
     return current;
   }
@@ -1370,6 +1642,235 @@ export class UnitsRepository {
       clients: clients.map((row) => ({ name: row.name, unitCount: Number(row.unitCount) })),
       selectedClient: units.length > 0 ? { name: params.selected.trim(), units } : null,
     };
+  }
+
+  async findUnitReferences(): Promise<{
+    customers: UnitReferenceOption[];
+    kps: UnitReferenceOption[];
+    kds: UnitReferenceOption[];
+    qa: UnitReferenceOption | null;
+  }> {
+    const pool = this.poolFactory();
+    const [customers, kps, kds, qa] = await Promise.all([
+      pool.query<UnitReferenceOptionPacket[]>(
+        `SELECT owner_name AS value, owner_name AS label
+         FROM ${qualifyTable(this.clientDb, "sm_portal_accounts")}
+         GROUP BY owner_name
+         ORDER BY owner_name ASC
+         LIMIT 200`,
+      ),
+      pool.query<UnitReferenceOptionPacket[]>(
+        `SELECT e.employee_id AS value, CONCAT(e.full_name, ' · ', e.employee_id) AS label
+         FROM sm_employee e
+         JOIN sm_role r ON r.id = e.role_id
+         WHERE e.is_active = 1 AND r.role_name = 'kepala_produksi'
+         ORDER BY e.full_name ASC`,
+      ),
+      pool.query<UnitReferenceOptionPacket[]>(
+        `SELECT e.employee_id AS value, CONCAT(e.full_name, ' · ', e.employee_id) AS label
+         FROM sm_employee e
+         JOIN sm_role r ON r.id = e.role_id
+         WHERE e.is_active = 1 AND r.role_name = 'ketua_divisi'
+         ORDER BY e.full_name ASC`,
+      ),
+      pool.query<UnitReferenceOptionPacket[]>(
+        `SELECT e.employee_id AS value, CONCAT(e.full_name, ' · ', e.employee_id) AS label
+         FROM sm_employee e
+         JOIN sm_role r ON r.id = e.role_id
+         WHERE e.is_active = 1 AND r.role_name IN ('qa', 'advisor')
+         ORDER BY e.employee_id ASC
+         LIMIT 1`,
+      ),
+    ]);
+
+    return {
+      customers: customers[0].map(mapUnitReferenceOption),
+      kps: kps[0].map(mapUnitReferenceOption),
+      kds: kds[0].map(mapUnitReferenceOption),
+      qa: qa[0][0] ? mapUnitReferenceOption(qa[0][0]) : null,
+    };
+  }
+
+  async findUnitMedia(carId: string): Promise<{ folders: UnitMediaFolder[]; media: UnitMedia[] }> {
+    const pool = this.poolFactory();
+    const [folders, media] = await Promise.all([
+      pool.query<UnitMediaFolderPacket[]>(
+        `SELECT id, name, sort_order AS sortOrder
+         FROM sm_unit_media_folders
+         WHERE car_id = ?
+         ORDER BY sort_order ASC, name ASC`,
+        [carId],
+      ),
+      pool.query<UnitMediaPacket[]>(
+        `SELECT m.id, m.folder_id AS folderId, f.name AS folderName, m.media_type AS mediaType,
+                m.source, m.media_url AS mediaUrl, m.caption, m.is_cover AS isCover,
+                DATE_FORMAT(m.created_at, '%Y-%m-%d %H:%i:%s') AS createdAt
+         FROM sm_unit_media m
+         JOIN sm_unit_media_folders f ON f.id = m.folder_id
+         WHERE m.car_id = ?
+         ORDER BY f.sort_order ASC, m.created_at ASC`,
+        [carId],
+      ),
+    ]);
+    return { folders: folders[0].map(mapUnitMediaFolder), media: media[0].map(mapUnitMedia) };
+  }
+
+  async createUnitMediaFolder(params: {
+    carId: string;
+    actorId: string;
+    input: CreateUnitMediaFolderRequest;
+  }): Promise<UnitMediaFolder> {
+    const pool = this.poolFactory();
+    const [rows] = await pool.query<UnitMediaFolderPacket[]>(
+      "SELECT COALESCE(MAX(sort_order), -1) + 1 AS sortOrder FROM sm_unit_media_folders WHERE car_id = ?",
+      [params.carId],
+    );
+    const folder: UnitMediaFolder = {
+      id: randomUUID(),
+      name: params.input.name,
+      sortOrder: Number(rows[0]?.sortOrder ?? 0),
+    };
+    try {
+      await pool.execute(
+        "INSERT INTO sm_unit_media_folders (id, car_id, name, sort_order, created_by) VALUES (?, ?, ?, ?, ?)",
+        [folder.id, params.carId, folder.name, folder.sortOrder, params.actorId],
+      );
+    } catch (error) {
+      if (error && typeof error === "object" && "code" in error && error.code === "ER_DUP_ENTRY") {
+        throw new Error("UNIT_MEDIA_FOLDER_DUPLICATE");
+      }
+      throw error;
+    }
+    return folder;
+  }
+
+  async createUnitMedia(params: {
+    carId: string;
+    actorId: string;
+    input: CreateUnitMediaRequest;
+  }): Promise<UnitMedia> {
+    const pool = this.poolFactory();
+    const connection = await pool.getConnection();
+    const id = randomUUID();
+    try {
+      await connection.beginTransaction();
+      const [folders] = await connection.query<UnitMediaFolderPacket[]>(
+        "SELECT id, name, sort_order AS sortOrder FROM sm_unit_media_folders WHERE id = ? AND car_id = ? LIMIT 1 FOR UPDATE",
+        [params.input.folderId, params.carId],
+      );
+      const folder = folders[0];
+      if (!folder) throw new Error("UNIT_MEDIA_FOLDER_NOT_FOUND");
+      await connection.execute(
+        `INSERT INTO sm_unit_media (id, car_id, folder_id, media_type, source, media_url, caption, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [id, params.carId, folder.id, params.input.mediaType, params.input.source, params.input.mediaUrl, params.input.caption, params.actorId],
+      );
+      if (params.input.mediaType === "PHOTO") {
+        const [coverRows] = await connection.query<RowDataPacket[]>(
+          "SELECT id FROM sm_unit_media WHERE car_id = ? AND is_cover = 1 LIMIT 1 FOR UPDATE",
+          [params.carId],
+        );
+        if (!coverRows[0]) {
+          await connection.execute("UPDATE sm_unit_media SET is_cover = 1 WHERE id = ?", [id]);
+          await connection.execute("UPDATE cars SET cover_photo_url = ? WHERE id = ?", [params.input.mediaUrl, params.carId]);
+        }
+      }
+      await connection.commit();
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+
+    const collection = await this.findUnitMedia(params.carId);
+    const media = collection.media.find((item) => item.id === id);
+    if (!media) throw new Error("UNIT_MEDIA_NOT_FOUND");
+    return media;
+  }
+
+  async updateUnitMedia(params: {
+    carId: string;
+    mediaId: string;
+    input: UpdateUnitMediaRequest;
+  }): Promise<UnitMedia> {
+    const pool = this.poolFactory();
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      const [rows] = await connection.query<UnitMediaPacket[]>(
+        `SELECT m.id, m.folder_id AS folderId, f.name AS folderName, m.media_type AS mediaType,
+                m.source, m.media_url AS mediaUrl, m.caption, m.is_cover AS isCover,
+                DATE_FORMAT(m.created_at, '%Y-%m-%d %H:%i:%s') AS createdAt
+         FROM sm_unit_media m
+         JOIN sm_unit_media_folders f ON f.id = m.folder_id
+         WHERE m.id = ? AND m.car_id = ?
+         LIMIT 1 FOR UPDATE`,
+        [params.mediaId, params.carId],
+      );
+      const current = rows[0];
+      if (!current) throw new Error("UNIT_MEDIA_NOT_FOUND");
+      const folderId = params.input.folderId ?? current.folderId;
+      if (params.input.folderId) {
+        const [folderRows] = await connection.query<RowDataPacket[]>(
+          "SELECT id FROM sm_unit_media_folders WHERE id = ? AND car_id = ? LIMIT 1 FOR UPDATE",
+          [params.input.folderId, params.carId],
+        );
+        if (!folderRows[0]) throw new Error("UNIT_MEDIA_FOLDER_NOT_FOUND");
+      }
+      const caption = params.input.caption === undefined ? current.caption : params.input.caption;
+      await connection.execute("UPDATE sm_unit_media SET folder_id = ?, caption = ? WHERE id = ?", [folderId, caption, params.mediaId]);
+      if (params.input.isCover) {
+        if (current.mediaType !== "PHOTO") throw new Error("UNIT_MEDIA_COVER_MUST_BE_PHOTO");
+        await connection.execute("UPDATE sm_unit_media SET is_cover = 0 WHERE car_id = ?", [params.carId]);
+        await connection.execute("UPDATE sm_unit_media SET is_cover = 1 WHERE id = ?", [params.mediaId]);
+        await connection.execute("UPDATE cars SET cover_photo_url = ? WHERE id = ?", [current.mediaUrl, params.carId]);
+      }
+      await connection.commit();
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+    const collection = await this.findUnitMedia(params.carId);
+    const media = collection.media.find((item) => item.id === params.mediaId);
+    if (!media) throw new Error("UNIT_MEDIA_NOT_FOUND");
+    return media;
+  }
+
+  async deleteUnitMedia(params: { carId: string; mediaId: string }): Promise<void> {
+    const pool = this.poolFactory();
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      const [rows] = await connection.query<RowDataPacket[]>(
+        "SELECT media_url AS mediaUrl, is_cover AS isCover FROM sm_unit_media WHERE id = ? AND car_id = ? LIMIT 1 FOR UPDATE",
+        [params.mediaId, params.carId],
+      );
+      const current = rows[0];
+      if (!current) throw new Error("UNIT_MEDIA_NOT_FOUND");
+      await connection.execute("DELETE FROM sm_unit_media WHERE id = ?", [params.mediaId]);
+      if (mapTinyIntBoolean(current.isCover)) {
+        const [replacementRows] = await connection.query<RowDataPacket[]>(
+          "SELECT id, media_url AS mediaUrl FROM sm_unit_media WHERE car_id = ? AND media_type = 'PHOTO' ORDER BY created_at ASC LIMIT 1 FOR UPDATE",
+          [params.carId],
+        );
+        const replacement = replacementRows[0];
+        if (replacement) {
+          await connection.execute("UPDATE sm_unit_media SET is_cover = 1 WHERE id = ?", [replacement.id]);
+          await connection.execute("UPDATE cars SET cover_photo_url = ? WHERE id = ?", [replacement.mediaUrl, params.carId]);
+        } else {
+          await connection.execute("UPDATE cars SET cover_photo_url = NULL WHERE id = ?", [params.carId]);
+        }
+      }
+      await connection.commit();
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
   }
 
   async findUnitSummary(params: ScopeParams & { unitId: string }): Promise<UnitBoardRow | null> {

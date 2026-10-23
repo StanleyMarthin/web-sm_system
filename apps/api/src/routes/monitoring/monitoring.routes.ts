@@ -502,6 +502,14 @@ export async function handleMonitoringActualCreateRoute(
       }),
     );
   } catch (error) {
+    if (error instanceof Error && error.message === "UNIT_ON_HOLD") {
+      return errorResponse(
+        request,
+        "Unit sedang ditahan. Ubah status Unit ke Sedang dikerjakan sebelum memperbarui progress.",
+        409,
+        "UNIT_ON_HOLD",
+      );
+    }
     if (
       error instanceof Error &&
       error.message === "MANUAL_TECHNICAL_ACTUAL_REQUIRES_PLAN"

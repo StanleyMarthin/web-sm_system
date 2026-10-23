@@ -61,6 +61,7 @@ async function fetchWithCookie(path: string, cookieHeader: string) {
           }
         : undefined,
       cache: "no-store",
+      credentials: cookieHeader ? undefined : "include",
     });
   } catch {
     return null;
@@ -100,7 +101,7 @@ export function buildQcGridQueryString(
   }
 
   if (!params.has("limit")) {
-    params.set("limit", "25");
+    params.set("limit", "100");
   }
 
   if (!params.has("sortBy")) {

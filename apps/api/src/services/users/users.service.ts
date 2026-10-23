@@ -18,6 +18,7 @@ import { TtlCache } from "@/lib/ttl-cache";
 import type { AuditService } from "@/services/audit/audit.service";
 import { DefaultAuditService } from "@/services/audit/audit.service";
 import { MySqlAuditRepository } from "@/repositories/audit/audit.repo";
+import { isSystemSuperadminEmployee } from "@smsystem/contracts/auth";
 
 export interface PasswordHasher {
   hash(password: string): Promise<string>;
@@ -121,6 +122,12 @@ function assertManagedDivisionAssignments(
   }
 }
 
+function assertSystemSuperadmin(session: WebSession): void {
+  if (!isSystemSuperadminEmployee(session.user.employeeId)) {
+    throw new Error("SUPERADMIN_REQUIRED");
+  }
+}
+
 function escapeCsvValue(value: string | number | null): string {
   const normalized = value === null ? "" : String(value);
   if (!/[",\n]/u.test(normalized)) {
@@ -149,6 +156,7 @@ export class DefaultUsersService implements UsersService {
   ) {}
 
   async list(session: WebSession, query: GridQueryState) {
+    assertSystemSuperadmin(session);
     const sanitizedQuery = sanitizeUserGridQuery(query);
     const [payload, references] = await Promise.all([
       this.repository.list({
@@ -181,6 +189,7 @@ export class DefaultUsersService implements UsersService {
     session: WebSession,
     employeeId: string,
   ): Promise<ApiUserRecord | null> {
+    assertSystemSuperadmin(session);
     const record = await this.repository.findByEmployeeId(employeeId);
     if (!record) {
       return null;
@@ -194,16 +203,12 @@ export class DefaultUsersService implements UsersService {
     session: WebSession,
     input: CreateUserRequest,
   ): Promise<ApiUserRecord> {
+    assertSystemSuperadmin(session);
     if (!canManageDivision(session, input.divisionId)) {
       throw new Error("SCOPE_FORBIDDEN");
     }
 
     assertManagedDivisionAssignments(session, input.managedDivisionIds);
-
-    const existingRecord = await this.repository.findByEmployeeId(input.employeeId);
-    if (existingRecord) {
-      throw new Error("USER_ALREADY_EXISTS");
-    }
 
     const passwordHash = await this.passwordHasher.hash(input.password);
     const createdRecord = await this.repository.create({
@@ -234,6 +239,7 @@ export class DefaultUsersService implements UsersService {
     employeeId: string,
     input: UpdateUserRequest,
   ): Promise<ApiUserRecord> {
+    assertSystemSuperadmin(session);
     const existingRecord = await this.repository.findByEmployeeId(employeeId);
     if (!existingRecord) {
       throw new Error("USER_NOT_FOUND");
@@ -279,6 +285,7 @@ export class DefaultUsersService implements UsersService {
     employeeId: string,
     input: ResetPasswordRequest,
   ): Promise<void> {
+    assertSystemSuperadmin(session);
     const existingRecord = await this.repository.findByEmployeeId(employeeId);
     if (!existingRecord) {
       throw new Error("USER_NOT_FOUND");
@@ -305,6 +312,7 @@ export class DefaultUsersService implements UsersService {
   }
 
   async deactivate(session: WebSession, employeeId: string): Promise<void> {
+    assertSystemSuperadmin(session);
     if (employeeId === session.user.employeeId) {
       throw new Error("CANNOT_DEACTIVATE_SELF");
     }
@@ -333,6 +341,7 @@ export class DefaultUsersService implements UsersService {
   }
 
   async exportCsv(session: WebSession, query: GridQueryState): Promise<string> {
+    assertSystemSuperadmin(session);
     const sanitizedQuery = sanitizeUserGridQuery(query);
     const payload = await this.repository.list({
       employeeId: session.user.employeeId,

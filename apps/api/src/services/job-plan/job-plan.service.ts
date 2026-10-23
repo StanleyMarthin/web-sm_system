@@ -88,6 +88,7 @@ function expandPlanDraftForSchedule(plan: CreateJobPlanRequest) {
     taskDate: plan.taskDate,
     requestedMode: plan.isOvertime ? "overtime" : "normal",
     targetHours: plan.targetHours,
+    startTime: plan.startTime,
   });
 
   if (scheduleSegments.length === 0) {
@@ -1134,6 +1135,7 @@ export class DefaultJobPlanService implements JobPlanService {
         taskDate: draft.taskDate,
         requestedMode: draft.isOvertime ? "overtime" : "normal",
         targetHours: draft.targetHours,
+        startTime: draft.startTime,
       });
 
       for (const segment of scheduleSegments) {
@@ -1447,6 +1449,7 @@ export class DefaultJobPlanService implements JobPlanService {
         taskDate: input.taskDate,
         requestedMode: input.mode,
         targetHours: row.targetHours,
+        startTime: row.startTime,
       });
 
       for (const segment of scheduleSegments) {

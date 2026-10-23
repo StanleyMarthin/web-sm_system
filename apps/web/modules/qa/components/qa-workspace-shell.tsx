@@ -1,27 +1,27 @@
 "use client";
 
-import Image from "next/image";
 import type {
   QaGridQuery,
   QaInspectionRecord,
-  QaIssueArea,
-  QaIssueType,
-  QaFollowupStatus,
-  QaPriorityLevel,
   QaReferences,
   QaUpdateInspectionRequest,
 } from "@smsystem/contracts/qa";
-import { CheckCircle2, ClipboardList, Image as ImageIcon, RefreshCcw, XCircle } from "lucide-react";
+import type { ColDef, ICellRendererParams, RowClickedEvent } from "ag-grid-community";
+import { CheckCircle2, ClipboardList, XCircle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { SmartDataGrid } from "@/shared/datagrid/smart-data-grid";
-import type {
-  SmartDataGridColumn,
-  SmartDataGridFilterDefinition,
-  SmartDataGridSortOption,
-} from "@/shared/datagrid/types";
+import { SmsAgGrid } from "@/shared/datagrid/sms-ag-grid";
+import { DataGridStatusBadge } from "@/shared/datagrid/status-badge";
+import { SearchableSelect } from "@/shared/ui/compact";
+import { useDataGridState } from "@/shared/datagrid/use-data-grid-state";
 import { updateQaInspection } from "@/shared/api/qa/qa";
 import { QaInspectionForm } from "./forms/qa-inspection-form";
+
+const GRID_SCROLL_LIMIT = 100;
+type QaHistoryRow = QaInspectionRecord & {
+  historyKey: string;
+  inspections: QaInspectionRecord[];
+};
 
 interface QaWorkspaceShellProps {
   rows: QaInspectionRecord[];
@@ -38,27 +38,69 @@ interface QaWorkspaceShellProps {
   canEdit: boolean;
 }
 
-const inputCls =
-  "h-10 rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 text-sm text-foreground outline-none transition-colors focus:border-primary/30 [color-scheme:dark]";
+function StatusCell({ value }: ICellRendererParams<QaHistoryRow>) {
+  return <DataGridStatusBadge value={value ? String(value) : "-"} />;
+}
 
+function textValue(value: unknown) {
+  return value === null || value === undefined || value === "" ? "-" : String(value);
+}
 
+function timeOnly(value: string | null | undefined) {
+  if (!value) return "-";
+  const match = value.match(/\b(\d{2}:\d{2})/u);
+  return match?.[1] ?? value;
+}
 
-function StatusBadge({
-  children,
-  tone,
-}: {
-  children: string;
-  tone: "good" | "bad" | "warn" | "neutral";
-}) {
-  const className =
-    tone === "good"
-      ? "bg-success/10 text-success ring-success/20"
-      : tone === "bad"
-        ? "bg-destructive/10 text-destructive ring-destructive/20"
-        : tone === "warn"
-          ? "bg-primary/10 text-app-accent-ink ring-primary/20"
-          : "bg-white/[0.04] text-foreground/65 ring-white/[0.08]";
-  return <span className={`rounded-full px-2.5 py-1 text-[11px] font-medium ring-1 ${className}`}>{children}</span>;
+function qcLevelLabel(value: QaInspectionRecord["qcLevel"]) {
+  if (value === "QC_KD") return "QC KD";
+  if (value === "QC_QA") return "QC QA";
+  if (value === "QC_ADVISOR") return "QC Advisor";
+  return value ? value.replace("_", " ") : "QC";
+}
+
+function compareInspection(a: QaInspectionRecord, b: QaInspectionRecord) {
+  return b.inspectionDate.localeCompare(a.inspectionDate);
+}
+
+function groupByJobdesc(rows: QaInspectionRecord[]): QaHistoryRow[] {
+  const groups = new Map<string, QaInspectionRecord[]>();
+
+  for (const row of rows) {
+    const key = row.coreId || row.qcId;
+    groups.set(key, [...(groups.get(key) ?? []), row]);
+  }
+
+  return Array.from(groups.entries()).map(([historyKey, inspections]) => {
+    const sorted = [...inspections].sort(compareInspection);
+    return { ...sorted[0]!, historyKey, inspections: sorted };
+  });
+}
+
+function QcHistoryCell({ data }: ICellRendererParams<QaHistoryRow>) {
+  if (!data) return "-";
+
+  return (
+    <div className="flex min-w-0 flex-wrap items-center gap-1.5 py-1">
+      {data.inspections.map((inspection) => (
+        <span
+          key={inspection.qcId}
+          className={[
+            "inline-flex items-center border px-2 py-1 text-[11px] font-semibold",
+            inspection.resultStatus === "LOLOS"
+              ? "border-success/25 bg-success/10 text-success"
+              : "border-destructive/35 bg-destructive/10 text-destructive",
+          ].join(" ")}
+        >
+          {qcLevelLabel(inspection.qcLevel)} · {inspection.resultStatus === "LOLOS" ? "Lolos" : "Tidak lolos"}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function filterValue(state: QaGridQuery, field: string) {
+  return state.filters.find((filter) => filter.field === field)?.value ?? "";
 }
 
 export function QaWorkspaceShell({
@@ -69,80 +111,49 @@ export function QaWorkspaceShell({
   canEdit,
 }: QaWorkspaceShellProps) {
   const router = useRouter();
-  const [selectedInspectionId, setSelectedInspectionId] = useState<string | null>(null);
+  const gridState = useDataGridState(state);
+  const [selectedHistoryKey, setSelectedHistoryKey] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [quickFilter, setQuickFilter] = useState("");
 
+  const groupedRows = useMemo(() => groupByJobdesc(rows), [rows]);
   const selectedInspection = useMemo(
-    () => rows.find((row) => row.qcId === selectedInspectionId) ?? null,
-    [rows, selectedInspectionId],
+    () => groupedRows.find((row) => row.historyKey === selectedHistoryKey) ?? null,
+    [groupedRows, selectedHistoryKey],
   );
 
   useEffect(() => {
     setMessage(null);
     setError(null);
-  }, [selectedInspectionId, selectedInspection]);
+  }, [selectedHistoryKey, selectedInspection]);
 
-  const filters: SmartDataGridFilterDefinition[] = [
-    { field: "unitId", label: "Unit", options: references.units },
-    { field: "divisionId", label: "Divisi", options: references.divisions },
-    { field: "resultStatus", label: "Status QC", options: references.resultStatuses },
-    { field: "priorityLevel", label: "Prioritas", options: references.priorityLevels },
-    { field: "followupStatus", label: "Follow-up", options: references.followupStatuses },
-    { field: "issueArea", label: "Area", options: references.issueAreas },
-  ];
+  useEffect(() => {
+    if (state.limit !== GRID_SCROLL_LIMIT) {
+      gridState.setLimit(GRID_SCROLL_LIMIT);
+    }
+  }, [state.limit]);
 
-  const sortOptions: SmartDataGridSortOption[] = [
-    { label: "Tanggal", value: "inspectionDate" },
-    { label: "Unit", value: "unitName" },
-    { label: "Divisi", value: "divisionName" },
-    { label: "Jobdesc", value: "jobName" },
-    { label: "Status QC", value: "resultStatus" },
-    { label: "Prioritas", value: "priorityLevel" },
-    { label: "Follow-up", value: "followupStatus" },
-  ];
-
-  const columns: SmartDataGridColumn[] = [
-    { key: "inspectionDate", label: "Tanggal", kind: "mono", sticky: true },
-    { key: "unitName", label: "Unit", filterKey: "unitId", filterOptions: references.units },
-    { key: "divisionName", label: "Divisi", filterKey: "divisionId", filterOptions: references.divisions },
-    { key: "jobName", label: "Jobdesc" },
-    {
-      key: "resultStatus",
-      label: "Status QC",
-      filterKey: "resultStatus",
-      filterOptions: references.resultStatuses,
-      renderCell: (value) =>
-        String(value) === "LOLOS" ? (
-          <StatusBadge tone="good">Lolos</StatusBadge>
-        ) : (
-          <StatusBadge tone="bad">Tolak</StatusBadge>
-        ),
-    },
-    {
-      key: "priorityLevel",
-      label: "Prioritas",
-      filterKey: "priorityLevel",
-      filterOptions: references.priorityLevels,
-      renderCell: (value) => (
-        <StatusBadge
-          tone={String(value) === "HIGH" ? "bad" : String(value) === "MEDIUM" ? "warn" : "neutral"}
-        >
-          {String(value ?? "-")}
-        </StatusBadge>
-      ),
-    },
-    {
-      key: "followupStatus",
-      label: "Status Follow-Up",
-      filterKey: "followupStatus",
-      filterOptions: references.followupStatuses,
-      renderCell: (value) => (
-        <StatusBadge tone={String(value) === "CLOSED" ? "good" : "warn"}>{String(value ?? "-")}</StatusBadge>
-      ),
-    },
-  ];
+  const columns = useMemo<ColDef<QaHistoryRow>[]>(
+    () => [
+      { field: "unitName", headerName: "Unit", pinned: "left", minWidth: 190 },
+      { field: "divisionName", headerName: "Divisi", valueFormatter: ({ value }) => textValue(value), width: 145 },
+      { field: "panelName", headerName: "Panel", valueFormatter: ({ value }) => textValue(value), minWidth: 190 },
+      { field: "jobName", headerName: "Jobdesc", minWidth: 210, flex: 1 },
+      { colId: "qcHistory", headerName: "Riwayat QC", cellRenderer: QcHistoryCell, minWidth: 260 },
+      {
+        colId: "inspectionCount",
+        headerName: "Pemeriksaan",
+        width: 130,
+        valueGetter: ({ data }) => data?.inspections.length ?? 0,
+      },
+      { field: "inspectionDate", headerName: "Terakhir", width: 120, valueFormatter: ({ value }) => timeOnly(value) },
+      { field: "priorityLevel", headerName: "Prioritas", cellRenderer: StatusCell, width: 135 },
+      { field: "followupStatus", headerName: "Follow-up", cellRenderer: StatusCell, width: 150 },
+    ],
+    [],
+  );
 
   async function handleSave(data: QaUpdateInspectionRequest) {
     if (!selectedInspection) {
@@ -169,23 +180,87 @@ export function QaWorkspaceShell({
 
   return (
     <div className="space-y-4">
-
-
-      <SmartDataGrid
-        title="Riwayat inspeksi"
-        description=""
-        columns={columns}
-        rows={rows as Array<Record<string, string | number | boolean | null>>}
-        meta={meta}
-        state={state}
-        filters={filters}
-        sortOptions={sortOptions}
-        searchPlaceholder="Cari unit, divisi, jobdesc, atau inspector..."
-        emptyMessage="Belum ada data inspeksi QA."
-        viewportClassName="max-h-[calc(100svh-260px)]"
-        onRowClick={(row) => setSelectedInspectionId(String(row.qcId ?? ""))}
-        getRowAriaLabel={(row) => `Buka inspeksi QA ${String(row.unitName ?? "")}`}
-      />
+      <section className="rounded-[10px] border border-border bg-card">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2">
+          <div>
+            <p className="text-[14px] font-semibold text-foreground">Riwayat inspeksi</p>
+            <p className="text-[12px] text-muted-foreground">
+              {rows.length > 0
+                ? `${groupedRows.length} jobdesc dari ${rows.length} pemeriksaan`
+                : "0 dari 0 baris"}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              value={quickFilter}
+              onChange={(event) => setQuickFilter(event.target.value)}
+              placeholder="Cari di halaman ini"
+              className="h-9 w-56 border border-border bg-muted px-3 text-[13px] text-foreground outline-none placeholder:text-muted-foreground focus:border-primary/55"
+            />
+            <SearchableSelect
+              value={filterValue(state, "unitId")}
+              onChange={(value) => gridState.setFilter("unitId", value)}
+              options={references.units}
+              placeholder="Unit"
+              className="w-40"
+            />
+            <SearchableSelect
+              value={filterValue(state, "resultStatus")}
+              onChange={(value) => gridState.setFilter("resultStatus", value)}
+              options={references.resultStatuses}
+              placeholder="Status QC"
+              className="w-36"
+            />
+            <SearchableSelect
+              value={filterValue(state, "priorityLevel")}
+              onChange={(value) => gridState.setFilter("priorityLevel", value)}
+              options={references.priorityLevels}
+              placeholder="Prioritas"
+              className="w-36"
+            />
+            <SearchableSelect
+              value={filterValue(state, "followupStatus")}
+              onChange={(value) => gridState.setFilter("followupStatus", value)}
+              options={references.followupStatuses}
+              placeholder="Follow-up"
+              className="w-36"
+            />
+            <SearchableSelect
+              value={filterValue(state, "divisionId")}
+              onChange={(value) => gridState.setFilter("divisionId", value)}
+              options={references.divisions}
+              placeholder="Divisi"
+              className="w-36"
+            />
+            <button
+              type="button"
+              disabled={!meta.hasPrev || gridState.isPending}
+              onClick={() => gridState.setPage(meta.page - 1)}
+              className="h-9 border border-border px-3 text-[12px] text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-30"
+            >
+              Sebelumnya
+            </button>
+            <button
+              type="button"
+              disabled={!meta.hasNext || gridState.isPending}
+              onClick={() => gridState.setPage(meta.page + 1)}
+              className="h-9 border border-primary/40 bg-primary/[0.08] px-3 text-[12px] font-semibold text-app-accent-ink hover:bg-primary/15 disabled:opacity-30"
+            >
+              Berikutnya
+            </button>
+          </div>
+        </div>
+        <SmsAgGrid<QaHistoryRow>
+          heightClassName="h-[calc(100svh-280px)] min-h-[28rem]"
+          rowData={groupedRows}
+          columnDefs={columns}
+          quickFilterText={quickFilter}
+          onRowClicked={(event: RowClickedEvent<QaHistoryRow>) => {
+            if (event.data?.historyKey) setSelectedHistoryKey(event.data.historyKey);
+          }}
+          emptyMessage="Belum ada riwayat QC pada filter ini."
+        />
+      </section>
 
       {selectedInspection ? (
         <div className="fixed inset-0 z-[80] bg-black/80">
@@ -199,7 +274,7 @@ export function QaWorkspaceShell({
                 </div>
                 <button
                   type="button"
-                  onClick={() => setSelectedInspectionId(null)}
+                  onClick={() => setSelectedHistoryKey(null)}
                   className="rounded-full border border-white/[0.08] p-2 text-foreground/55 transition hover:text-foreground"
                 >
                   <XCircle className="h-5 w-5" />
@@ -211,39 +286,67 @@ export function QaWorkspaceShell({
               <section className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-4">
                 <div className="mb-4 flex items-center gap-2">
                   <ClipboardList className="h-4 w-4 text-app-accent-ink" />
-                  <p className="text-sm font-semibold text-foreground">Data inspeksi mobile</p>
+                  <p className="text-sm font-semibold text-foreground">Riwayat QC jobdesc</p>
                 </div>
-                <div className="grid gap-3 text-sm text-foreground/70 md:grid-cols-2">
-                  <div>
-                    <p className="text-foreground/35">Inspektor</p>
-                    <p className="mt-1 text-foreground">{selectedInspection.inspectorName ?? "-"}</p>
-                  </div>
-                  <div>
-                    <p className="text-foreground/35">Status hasil</p>
-                    <p className="mt-1 text-foreground">{selectedInspection.resultStatus}</p>
-                  </div>
-                  <div className="md:col-span-2">
-                    <p className="text-foreground/35">Catatan QC</p>
-                    <p className="mt-1 whitespace-pre-wrap text-foreground">{selectedInspection.qcNotes ?? "-"}</p>
-                  </div>
-                </div>
-
-                <div className="mt-4 grid gap-3 md:grid-cols-2">
-                  {[selectedInspection.photoBeforeUrl, selectedInspection.evidencePhotoUrl].map((photoUrl, index) => (
-                    <div
-                      key={`${photoUrl ?? "empty"}-${index}`}
-                      className="relative overflow-hidden rounded-xl border border-white/[0.06] bg-black/20"
-                    >
-                      {photoUrl ? (
-                        <Image src={photoUrl} alt={index === 0 ? "Foto sebelum" : "Foto bukti"} fill sizes="(max-width: 768px) 100vw, 33vw" className="object-cover" />
-                      ) : (
-                        <div className="flex h-56 items-center justify-center text-foreground/25">
-                          <ImageIcon className="h-6 w-6" />
+                <div className="space-y-3">
+                  {selectedInspection.inspections.map((inspection) => (
+                    <div key={inspection.qcId} className="border border-white/[0.06] bg-black/15 p-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-sm font-semibold text-foreground">{qcLevelLabel(inspection.qcLevel)}</span>
+                        <DataGridStatusBadge value={inspection.resultStatus === "LOLOS" ? "Lolos" : "Tidak lolos"} />
+                        <span className="text-[12px] text-foreground/40">{timeOnly(inspection.inspectionDate)}</span>
+                      </div>
+                      <div className="mt-3 grid gap-3 text-sm text-foreground/70 md:grid-cols-3">
+                        <div>
+                          <p className="text-foreground/35">Pemeriksa</p>
+                          <p className="mt-1 text-foreground">{inspection.inspectorName ?? "-"}</p>
                         </div>
-                      )}
+                        <div>
+                          <p className="text-foreground/35">Durasi</p>
+                          <p className="mt-1 text-foreground">
+                            {inspection.inspectionDurationMinutes == null ? "-" : `${inspection.inspectionDurationMinutes} menit`}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-foreground/35">Foto</p>
+                          <p className="mt-1 text-foreground">
+                            {[inspection.photoBeforeUrl, inspection.evidencePhotoUrl].filter(Boolean).length} file
+                          </p>
+                        </div>
+                        <div className="md:col-span-3">
+                          <p className="text-foreground/35">Catatan QC</p>
+                          <p className="mt-1 whitespace-pre-wrap break-words text-foreground">{inspection.qcNotes ?? "-"}</p>
+                        </div>
+                        {[inspection.photoBeforeUrl, inspection.evidencePhotoUrl].some(Boolean) ? (
+                          <div className="flex flex-wrap gap-2 md:col-span-3">
+                            {inspection.photoBeforeUrl ? (
+                              <a
+                                href={inspection.photoBeforeUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                download
+                                className="border border-white/[0.08] px-3 py-1.5 text-[12px] text-foreground/70 hover:text-foreground"
+                              >
+                                Foto sebelum
+                              </a>
+                            ) : null}
+                            {inspection.evidencePhotoUrl ? (
+                              <a
+                                href={inspection.evidencePhotoUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                download
+                                className="border border-white/[0.08] px-3 py-1.5 text-[12px] text-foreground/70 hover:text-foreground"
+                              >
+                                Foto bukti
+                              </a>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </div>
                     </div>
                   ))}
-                </div>
+                  </div>
               </section>
 
               {selectedInspection.resultStatus !== "LOLOS" && (

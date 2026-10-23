@@ -2,6 +2,7 @@ import type {
   CreateJobPlanAdditionalCountdownRequest,
   JobPlanMode,
   JobPlanOptionKind,
+  JobPlanRecord,
   SaveJobPlanDraftRequest,
 } from "@smsystem/contracts/job-plan";
 import {
@@ -74,8 +75,9 @@ export function buildJobPlanGridQueryString(
   mode: JobPlanMode,
 ): string {
   const params = toUrlSearchParams(searchParams);
-  const effectiveMode = resolveJobPlanMode(params.get("workMode") ?? params.get("mode"), mode);
+  const effectiveMode = resolveJobPlanMode(mode, mode);
 
+  params.delete("nav");
   params.set("mode", effectiveMode);
   params.set("workMode", effectiveMode);
 
@@ -129,6 +131,16 @@ export async function fetchJobPlanGrid(
       payload: null,
       status: 503,
     };
+  }
+}
+
+export async function fetchJobActualRows(date: string) {
+  const rows: JobPlanRecord[] = [];
+  for (let page = 1; ; page += 1) {
+    const response = await fetchJobPlanGrid("", { date, page: String(page), limit: "100" }, "all");
+    if (!response.payload) return { rows: null, status: response.status };
+    rows.push(...response.payload.data);
+    if (!response.payload.meta.hasNext) return { rows, status: response.status };
   }
 }
 

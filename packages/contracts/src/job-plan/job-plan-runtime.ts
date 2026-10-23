@@ -38,6 +38,13 @@ export const jobPlanRuntimeViewSchema = z.enum([
   "history",
 ]);
 
+const jobPlanRuntimeMonitoringHistorySchema = z.object({
+  sequence: z.number().int().positive(),
+  time: z.string().nullable().optional(),
+  progress: z.number().int().min(0).max(100).nullable().optional(),
+  note: z.string().nullable().optional(),
+});
+
 const jobPlanRuntimeReadItemBaseSchema = z.object({
   plan_id: z.string(),
   core_id: z.string(),
@@ -59,6 +66,11 @@ const jobPlanRuntimeReadItemBaseSchema = z.object({
   is_priority: z.boolean(),
   jobdescription: z.string().nullable().optional(),
   job_description: z.string().nullable().optional(),
+  unit_name: z.string().nullable().optional(),
+  panel_name: z.string().nullable().optional(),
+  division_name: z.string().nullable().optional(),
+  employee_name: z.string().nullable().optional(),
+  countdown_name: z.string().nullable().optional(),
   note: z.string().nullable(),
   source: jobPlanRuntimeSourceSchema,
   created_by: z.string().nullable().optional(),
@@ -67,6 +79,10 @@ const jobPlanRuntimeReadItemBaseSchema = z.object({
   accumulated_work_minutes: z.number().int().default(0),
   persisted_work_minutes: z.number().int().default(0),
   unverified_work_minutes: z.number().int().default(0),
+  actual_start: z.string().nullable().optional(),
+  actual_finish: z.string().nullable().optional(),
+  active_segment_started_at: z.string().nullable().optional(),
+  monitoring_history: z.array(jobPlanRuntimeMonitoringHistorySchema).default([]),
   live_state_available: z.boolean().default(true),
   read_only: z.boolean().default(false),
 });

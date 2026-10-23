@@ -1,4 +1,10 @@
-import type { QaDashboardSummary } from "@smsystem/contracts/qa";
+"use client";
+
+import type { QaDashboardSummary, QaInspectionRecord } from "@smsystem/contracts/qa";
+import type { ColDef, ICellRendererParams } from "ag-grid-community";
+import { useMemo } from "react";
+import { SmsAgGrid } from "@/shared/datagrid/sms-ag-grid";
+import { DataGridStatusBadge } from "@/shared/datagrid/status-badge";
 
 function fmtPct(value: number) {
   return `${new Intl.NumberFormat("id-ID", {
@@ -24,6 +30,14 @@ function EmptyBlock({ message }: { message: string }) {
   );
 }
 
+function StatusCell({ value }: ICellRendererParams<QaInspectionRecord>) {
+  return <DataGridStatusBadge value={value ? String(value) : "-"} />;
+}
+
+function textValue(value: unknown) {
+  return value === null || value === undefined || value === "" ? "-" : String(value);
+}
+
 const chartColors = [
   "var(--primary)",
   "var(--info)",
@@ -36,6 +50,18 @@ const chartColors = [
 
 export function QaDashboardShell({ dashboard }: { dashboard: QaDashboardSummary }) {
   const totalArea = dashboard.issueAreaDistribution.reduce((sum, item) => sum + item.total, 0);
+  const criticalColumns = useMemo<ColDef<QaInspectionRecord>[]>(
+    () => [
+      { field: "inspectionDate", headerName: "Tanggal", pinned: "left", width: 145 },
+      { field: "unitName", headerName: "Unit", minWidth: 190 },
+      { field: "divisionName", headerName: "Divisi", valueFormatter: ({ value }) => textValue(value), width: 145 },
+      { field: "panelName", headerName: "Panel", valueFormatter: ({ value }) => textValue(value), minWidth: 190 },
+      { field: "jobName", headerName: "Jobdesc", minWidth: 210, flex: 1 },
+      { field: "priorityLevel", headerName: "Prioritas", cellRenderer: StatusCell, width: 135 },
+      { field: "followupStatus", headerName: "Follow-up", cellRenderer: StatusCell, width: 150 },
+    ],
+    [],
+  );
   const donutStops = (() => {
     if (totalArea === 0) return "conic-gradient(rgba(255,255,255,0.08) 0deg 360deg)";
     let start = 0;
@@ -124,32 +150,12 @@ export function QaDashboardShell({ dashboard }: { dashboard: QaDashboardSummary 
           <p className="text-sm font-semibold text-foreground">Critical Alert</p>
         </div>
         {dashboard.criticalAlerts.length > 0 ? (
-          <div className="overflow-x-auto rounded-xl border border-white/[0.04] bg-white/[0.015]">
-            <table className="min-w-full text-left text-sm">
-              <thead>
-                <tr className="border-b border-white/[0.06] bg-white/[0.02] text-[10px] uppercase tracking-[0.16em] text-foreground/35">
-                  <th className="px-3 py-2 font-medium">Tanggal</th>
-                  <th className="px-3 py-2 font-medium">Unit</th>
-                  <th className="px-3 py-2 font-medium">Divisi</th>
-                  <th className="px-3 py-2 font-medium">Jobdesc</th>
-                  <th className="px-3 py-2 font-medium">Prioritas</th>
-                  <th className="px-3 py-2 font-medium">Follow-up</th>
-                </tr>
-              </thead>
-              <tbody>
-                {dashboard.criticalAlerts.map((row) => (
-                  <tr key={row.qcId} className="border-b border-white/[0.04] last:border-b-0">
-                    <td className="px-3 py-2.5 text-foreground/75">{row.inspectionDate}</td>
-                    <td className="px-3 py-2.5 text-foreground">{row.unitName}</td>
-                    <td className="px-3 py-2.5 text-foreground/75">{row.divisionName ?? "-"}</td>
-                    <td className="px-3 py-2.5 text-foreground/75">{row.jobName}</td>
-                    <td className="px-3 py-2.5 text-destructive">{row.priorityLevel ?? "-"}</td>
-                    <td className="px-3 py-2.5 text-app-accent-ink">{row.followupStatus ?? "-"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <SmsAgGrid<QaInspectionRecord>
+            heightClassName="h-[22rem]"
+            rowData={dashboard.criticalAlerts}
+            columnDefs={criticalColumns}
+            emptyMessage="Belum ada reject prioritas tinggi yang masih open."
+          />
         ) : (
           <EmptyBlock message="Belum ada reject prioritas tinggi yang masih open." />
         )}

@@ -4,6 +4,10 @@ import {
   unitBoardRowSchema,
   unitMutationEnvelopeSchema,
   unitClientsEnvelopeSchema,
+  unitMediaCollectionEnvelopeSchema,
+  unitMediaFolderSchema,
+  unitMediaSchema,
+  unitReferencesEnvelopeSchema,
   unitWorkspaceEnvelopeSchema,
   type CreateUnitRequest,
   type UpdateUnitRequest,
@@ -362,6 +366,59 @@ export async function deleteUnit(unitId: string) {
     success: true as const,
     result: payload.data,
   };
+}
+
+export async function fetchUnitReferences() {
+  const response = await fetch(`${getApiBaseUrl()}/api/units/references`, { credentials: "include", cache: "no-store" });
+  if (!response.ok) return { ...(await parseFailure(response)), success: false as const };
+  return { success: true as const, result: unitReferencesEnvelopeSchema.parse(await response.json()).data };
+}
+
+export async function fetchUnitMedia(unitId: string) {
+  const response = await fetch(`${getApiBaseUrl()}/api/units/${encodeURIComponent(unitId)}/media`, { credentials: "include", cache: "no-store" });
+  if (!response.ok) return { ...(await parseFailure(response)), success: false as const };
+  return { success: true as const, result: unitMediaCollectionEnvelopeSchema.parse(await response.json()).data };
+}
+
+export async function createUnitMediaFolder(unitId: string, name: string) {
+  const response = await fetch(`${getApiBaseUrl()}/api/units/${encodeURIComponent(unitId)}/media/folders`, {
+    method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }),
+  });
+  if (!response.ok) return { ...(await parseFailure(response)), success: false as const };
+  const payload = z.object({ data: z.object({ folder: unitMediaFolderSchema }) }).parse(await response.json());
+  return { success: true as const, result: payload.data.folder };
+}
+
+export async function requestUnitMediaUploadTicket(input: { unitId: string; filename: string; contentType: string; size: number }) {
+  const params = new URLSearchParams({ filename: input.filename, contentType: input.contentType, size: String(input.size) });
+  const response = await fetch(`${getApiBaseUrl()}/api/units/${encodeURIComponent(input.unitId)}/media/upload-ticket?${params}`, { credentials: "include" });
+  if (!response.ok) return { ...(await parseFailure(response)), success: false as const };
+  const payload = z.object({ data: z.object({ uploadUrl: z.string().url(), publicUrl: z.string().url() }) }).parse(await response.json());
+  return { success: true as const, result: payload.data };
+}
+
+export async function createUnitMedia(input: { unitId: string; folderId: string; mediaType: "PHOTO" | "VIDEO"; source: "UPLOAD" | "GOOGLE_DRIVE"; mediaUrl: string; caption?: string | null }) {
+  const response = await fetch(`${getApiBaseUrl()}/api/units/${encodeURIComponent(input.unitId)}/media`, {
+    method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input),
+  });
+  if (!response.ok) return { ...(await parseFailure(response)), success: false as const };
+  const payload = z.object({ data: z.object({ media: unitMediaSchema }) }).parse(await response.json());
+  return { success: true as const, result: payload.data.media };
+}
+
+export async function updateUnitMedia(unitId: string, mediaId: string, input: { folderId?: string; caption?: string | null; isCover?: boolean }) {
+  const response = await fetch(`${getApiBaseUrl()}/api/units/${encodeURIComponent(unitId)}/media/${encodeURIComponent(mediaId)}`, {
+    method: "PUT", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input),
+  });
+  if (!response.ok) return { ...(await parseFailure(response)), success: false as const };
+  const payload = z.object({ data: z.object({ media: unitMediaSchema }) }).parse(await response.json());
+  return { success: true as const, result: payload.data.media };
+}
+
+export async function deleteUnitMedia(unitId: string, mediaId: string) {
+  const response = await fetch(`${getApiBaseUrl()}/api/units/${encodeURIComponent(unitId)}/media/${encodeURIComponent(mediaId)}`, { method: "DELETE", credentials: "include" });
+  if (!response.ok) return { ...(await parseFailure(response)), success: false as const };
+  return { success: true as const };
 }
 
 export async function fetchUnitPanels(cookieHeader: string, unitId: string) {

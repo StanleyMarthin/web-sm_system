@@ -1,5 +1,6 @@
 import type { PermissionCode } from "@smsystem/permissions";
 import { permissionCodes } from "@smsystem/permissions";
+import { isSystemSuperadminEmployee } from "@smsystem/contracts/auth";
 import {
   getWarehouseSectionDefinition,
 } from "@/modules/warehouse/config/workspace";
@@ -191,7 +192,7 @@ const navigationModules: NavigationItem[] = [
       { id: "reports-summary", label: "Rekapan", href: "/reports", permission: permissionCodes.reportView },
       { id: "reports-division", label: "Per Divisi", href: "/monitoring/division", permission: permissionCodes.listCarProgress },
       { id: "reports-unit", label: "Unit", href: "/monitoring/unit", permission: permissionCodes.listCarProgress },
-      { id: "reports-employee", label: "Karyawan", href: "/monitoring/employee", permission: permissionCodes.listCarProgress },
+      { id: "reports-employee", label: "Karyawan", href: "/monitoring/employee?nav=reports", permission: permissionCodes.listCarProgress },
       { id: "reports-materials", label: "Bahan", href: "/warehouse?tab=usage", permission: permissionCodes.warehouseView },
       { id: "reports-bubut", label: "Rekap Bubut", href: "/invoice/wo-bubut", permission: permissionCodes.bubutInvoiceView },
     ],
@@ -277,10 +278,18 @@ function hasUnitCatalogAccess(permissions: readonly string[]) {
   ].some((permission) => permissions.includes(permission));
 }
 
+interface NavigationContext {
+  employeeId?: string;
+}
+
 function hasNodePermission(
   item: Pick<NavigationItem, "id" | "permission">,
   permissions: readonly string[],
+  context: NavigationContext,
 ) {
+  if (["users", "users-list", "roles-matrix", "divisions-management"].includes(item.id)) {
+    return isSystemSuperadminEmployee(context.employeeId);
+  }
   if (item.id === "units") {
     return permissions.includes(permissionCodes.viewUnits) || hasUnitCatalogAccess(permissions);
   }
@@ -326,12 +335,13 @@ function firstNavigableHref(items: NavigationSubItem[] | undefined): string | un
 function filterSubItems(
   items: NavigationSubItem[] | undefined,
   permissions: readonly string[],
+  context: NavigationContext,
 ): NavigationSubItem[] {
   const filteredItems: NavigationSubItem[] = [];
 
   for (const item of items ?? []) {
-    const filteredSubItems = filterSubItems(item.subItems, permissions);
-    const selfAllowed = hasNodePermission(item, permissions);
+    const filteredSubItems = filterSubItems(item.subItems, permissions, context);
+    const selfAllowed = hasNodePermission(item, permissions, context);
 
     if (!selfAllowed && filteredSubItems.length === 0) {
       continue;
@@ -347,15 +357,15 @@ function filterSubItems(
   return filteredItems;
 }
 
-export function buildNavigation(permissions: readonly string[], roleName?: string): NavigationItem[] {
-  const effectivePermissions = roleName?.trim().toLowerCase() === "mis"
-    ? Object.values(permissionCodes)
-    : permissions;
+export function buildNavigation(
+  permissions: readonly string[],
+  context: NavigationContext = {},
+): NavigationItem[] {
   const filteredItems: NavigationItem[] = [];
 
   for (const item of navigationModules) {
-    const filteredSubItems = filterSubItems(item.subItems, effectivePermissions);
-    const selfAllowed = hasNodePermission(item, effectivePermissions);
+    const filteredSubItems = filterSubItems(item.subItems, permissions, context);
+    const selfAllowed = hasNodePermission(item, permissions, context);
 
     if (!selfAllowed && filteredSubItems.length === 0) {
       continue;

@@ -47,7 +47,7 @@ async function RolesPageContent() {
   if (!rolesPayload || !permissionsPayload || !referencesPayload) {
     return (
       <ModuleUnavailableState
-        module="Phase 4"
+        module="Role Matrix"
         title="Role matrix belum bisa dimuat"
         message="Data role atau permission belum terbaca saat ini. Coba muat ulang beberapa saat lagi."
       />
@@ -58,15 +58,10 @@ async function RolesPageContent() {
   const activeRoleId = roles[0]?.id ?? 0;
 
   return (
-    <div className="space-y-6">
-      <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-6">
-        <p className="text-[11px] uppercase tracking-[0.2em] text-app-accent-ink/70">
-          Phase 4
-        </p>
-        <h1 className="mt-3 text-2xl font-light text-foreground">Pengaturan Role</h1>
-        <p className="mt-2 text-sm text-foreground/45">
-          Atur role, tingkatan approval, lingkup divisi atau unit, dan checklist akses Web serta Mobile dari satu tempat.
-        </p>
+    <div className="space-y-3">
+      <div className="border border-border bg-card px-3 py-2">
+        <p className="text-[11px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Administrasi</p>
+        <h1 className="mt-0.5 text-base font-semibold text-foreground">Role Matrix</h1>
       </div>
 
       <RoleMatrixShell

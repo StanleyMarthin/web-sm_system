@@ -4,6 +4,7 @@ import {
   updateRoleRequestSchema,
 } from "@smsystem/contracts/rbac";
 import { permissionCodes } from "@smsystem/permissions";
+import { isSystemSuperadminEmployee } from "@smsystem/contracts/auth";
 import { parseJsonBody } from "@/http/request";
 import {
   errorResponse,
@@ -14,12 +15,7 @@ import { requirePermission } from "@/middleware/permission.middleware";
 import type { AuthService } from "@/services/auth/auth.service";
 import type { RolesService } from "@/services/roles/roles.service";
 
-function withShortSharedCache(response: Response): Response {
-  response.headers.set("Cache-Control", "s-maxage=60, stale-while-revalidate=300");
-  return response;
-}
-
-async function requireGlobalManageUsersSession(
+async function requireRoleMatrixSession(
   request: Request,
   authService: AuthService,
 ) {
@@ -37,13 +33,13 @@ async function requireGlobalManageUsersSession(
     return permissionResult;
   }
 
-  if (!sessionResult.session.user.scope.canViewAllUnits) {
+  if (!isSystemSuperadminEmployee(sessionResult.session.user.employeeId)) {
     return {
       response: errorResponse(
         request,
-        "Role management hanya boleh untuk scope global.",
+        "Role Matrix hanya tersedia untuk superadmin.",
         403,
-        "SCOPE_FORBIDDEN",
+        "SUPERADMIN_REQUIRED",
       ),
     };
   }
@@ -57,13 +53,12 @@ function mapRolesError(request: Request, error: unknown): Response {
       return errorResponse(request, "Role tidak ditemukan.", 404, "ROLE_NOT_FOUND");
     }
 
-    if (error.message === "SCOPE_FORBIDDEN") {
-      return errorResponse(
-        request,
-        "Role management hanya boleh untuk scope global.",
-        403,
-        "SCOPE_FORBIDDEN",
-      );
+    if (error.message === "SUPERADMIN_REQUIRED") {
+      return errorResponse(request, "Role Matrix hanya tersedia untuk superadmin.", 403, "SUPERADMIN_REQUIRED");
+    }
+
+    if (error.message === "RESERVED_ROLE_NAME") {
+      return errorResponse(request, "Nama role ini khusus untuk sistem dan tidak dapat dipakai.", 400, "RESERVED_ROLE_NAME");
     }
   }
 
@@ -94,18 +89,14 @@ export async function handleRolesListRoute(
   authService: AuthService,
   rolesService: RolesService,
 ): Promise<Response> {
-  const sessionResult = await requireGlobalManageUsersSession(request, authService);
+  const sessionResult = await requireRoleMatrixSession(request, authService);
   if ("response" in sessionResult) {
     return sessionResult.response;
   }
 
   try {
     const roles = await rolesService.listRoles(sessionResult.session);
-    return withShortSharedCache(
-      successResponse(request, "Roles loaded", {
-        roles,
-      }),
-    );
+    return successResponse(request, "Roles loaded", { roles });
   } catch (error) {
     return mapRolesError(request, error);
   }
@@ -116,16 +107,14 @@ export async function handleRolesReferencesRoute(
   authService: AuthService,
   rolesService: RolesService,
 ): Promise<Response> {
-  const sessionResult = await requireGlobalManageUsersSession(request, authService);
+  const sessionResult = await requireRoleMatrixSession(request, authService);
   if ("response" in sessionResult) {
     return sessionResult.response;
   }
 
   try {
     const references = await rolesService.listReferences(sessionResult.session);
-    return withShortSharedCache(
-      successResponse(request, "Role references loaded", references),
-    );
+    return successResponse(request, "Role references loaded", references);
   } catch (error) {
     return mapRolesError(request, error);
   }
@@ -136,7 +125,7 @@ export async function handleRolesCreateRoute(
   authService: AuthService,
   rolesService: RolesService,
 ): Promise<Response> {
-  const sessionResult = await requireGlobalManageUsersSession(request, authService);
+  const sessionResult = await requireRoleMatrixSession(request, authService);
   if ("response" in sessionResult) {
     return sessionResult.response;
   }
@@ -167,7 +156,7 @@ export async function handleRolesUpdateRoute(
   authService: AuthService,
   rolesService: RolesService,
 ): Promise<Response> {
-  const sessionResult = await requireGlobalManageUsersSession(request, authService);
+  const sessionResult = await requireRoleMatrixSession(request, authService);
   if ("response" in sessionResult) {
     return sessionResult.response;
   }
@@ -196,18 +185,14 @@ export async function handlePermissionsListRoute(
   authService: AuthService,
   rolesService: RolesService,
 ): Promise<Response> {
-  const sessionResult = await requireGlobalManageUsersSession(request, authService);
+  const sessionResult = await requireRoleMatrixSession(request, authService);
   if ("response" in sessionResult) {
     return sessionResult.response;
   }
 
   try {
     const permissions = await rolesService.listPermissions(sessionResult.session);
-    return withShortSharedCache(
-      successResponse(request, "Permissions loaded", {
-        permissions,
-      }),
-    );
+    return successResponse(request, "Permissions loaded", { permissions });
   } catch (error) {
     return mapRolesError(request, error);
   }
@@ -219,7 +204,7 @@ export async function handleRolePermissionsDetailRoute(
   authService: AuthService,
   rolesService: RolesService,
 ): Promise<Response> {
-  const sessionResult = await requireGlobalManageUsersSession(request, authService);
+  const sessionResult = await requireRoleMatrixSession(request, authService);
   if ("response" in sessionResult) {
     return sessionResult.response;
   }
@@ -229,12 +214,7 @@ export async function handleRolePermissionsDetailRoute(
       sessionResult.session,
       roleId,
     );
-    return withShortSharedCache(
-      successResponse(request, "Role permissions loaded", {
-        roleId,
-        permissionIds,
-      }),
-    );
+    return successResponse(request, "Role permissions loaded", { roleId, permissionIds });
   } catch (error) {
     return mapRolesError(request, error);
   }
@@ -246,7 +226,7 @@ export async function handleRolePermissionsUpdateRoute(
   authService: AuthService,
   rolesService: RolesService,
 ): Promise<Response> {
-  const sessionResult = await requireGlobalManageUsersSession(request, authService);
+  const sessionResult = await requireRoleMatrixSession(request, authService);
   if ("response" in sessionResult) {
     return sessionResult.response;
   }

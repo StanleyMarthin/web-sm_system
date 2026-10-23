@@ -38,7 +38,9 @@ interface QaInspectionRow extends RowDataPacket {
   jobName: string;
   inspectorId: string | null;
   inspectorName: string | null;
+  qcLevel: QaInspectionRecord["qcLevel"];
   resultStatus: "LOLOS" | "TIDAK_LOLOS";
+  inspectionDurationMinutes: number | string | null;
   qcNotes: string | null;
   photoBeforeUrl: string | null;
   evidencePhotoUrl: string | null;
@@ -159,7 +161,16 @@ function mapRow(row: QaInspectionRow): QaInspectionRecord {
     jobName: row.jobName,
     inspectorId: row.inspectorId,
     inspectorName: row.inspectorName,
+    qcLevel: normalizeNullableEnum(row.qcLevel, [
+      "QC_KD",
+      "QC_QA",
+      "QC_ADVISOR",
+      "QC_KP",
+      "QC_MP",
+      "QC_MO",
+    ]),
     resultStatus: row.resultStatus,
+    inspectionDurationMinutes: row.inspectionDurationMinutes == null ? null : Number(row.inspectionDurationMinutes),
     qcNotes: row.qcNotes,
     photoBeforeUrl: row.photoBeforeUrl,
     evidencePhotoUrl: row.evidencePhotoUrl,
@@ -256,7 +267,7 @@ function buildFilterClauses(columns: Set<string>, query: QaGridQuery, params: un
       continue;
     }
     if (filter.field === "resultStatus") {
-      clauses.push("qc.result_status = ?");
+      clauses.push("CASE WHEN UPPER(qc.result_status) IN ('PASS', 'LOLOS') THEN 'LOLOS' ELSE 'TIDAK_LOLOS' END = ?");
       params.push(filter.value);
       continue;
     }
@@ -274,7 +285,7 @@ function buildFilterClauses(columns: Set<string>, query: QaGridQuery, params: un
     }
     if (filter.field === "unitId") {
       clauses.push("cd.car_id = ?");
-      params.push(Number.parseInt(filter.value, 10) || filter.value);
+      params.push(filter.value);
       continue;
     }
     if (filter.field === "issueArea") {
@@ -324,7 +335,9 @@ function baseSelectSql(columns: Set<string>) {
       COALESCE(wo.job_detail, jt.job_name, cd.section_name, cd.task_category) AS jobName,
       ${qcColumn(columns, "inspector_id")} AS inspectorId,
       emp.full_name AS inspectorName,
-      qc.result_status AS resultStatus,
+      ${qcColumn(columns, "qc_level")} AS qcLevel,
+      CASE WHEN UPPER(qc.result_status) IN ('PASS', 'LOLOS') THEN 'LOLOS' ELSE 'TIDAK_LOLOS' END AS resultStatus,
+      ${qcColumn(columns, "inspection_duration_minutes")} AS inspectionDurationMinutes,
       qc.qc_notes AS qcNotes,
       ${qcColumn(columns, "photo_before_url")} AS photoBeforeUrl,
       ${qcColumn(columns, "evidence_photo_url")} AS evidencePhotoUrl,

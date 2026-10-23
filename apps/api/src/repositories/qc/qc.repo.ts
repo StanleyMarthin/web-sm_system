@@ -3,6 +3,7 @@ import type {
   QcFinalChecklist,
   QcFinalChecklistItem,
   QcGridQuery,
+  QcInspectionRecord,
   QcPassRequest,
   QcQueueRecord,
   QcRejectRequest,
@@ -20,6 +21,7 @@ interface ScopeParams {
 
 interface QcListParams extends ScopeParams {
   query: QcGridQuery;
+  qcLevel?: "QC_KD" | "QC_QA";
 }
 
 interface QcListPayload {
@@ -41,7 +43,7 @@ interface QcRow extends RowDataPacket {
   jobName: string;
   countdownStatus: string;
   qcLastStatus: "LOLOS" | "TIDAK_LOLOS" | null;
-  qcLevel: "QC_KD" | "QC_ADVISOR" | "QC_KP" | "QC_MP" | "QC_MO" | null;
+  qcLevel: "QC_KD" | "QC_QA" | "QC_ADVISOR" | "QC_KP" | "QC_MP" | "QC_MO" | null;
   latestQcId: string | null;
   refWoId: string | null;
   waitingHours: number | null;
@@ -90,6 +92,7 @@ interface ApprovalRow extends RowDataPacket {
 }
 
 interface MutationResult {
+  applied?: boolean;
   qcId: string;
   coreId: string;
   resultStatus: "LOLOS" | "TIDAK_LOLOS";
@@ -114,6 +117,7 @@ export interface QcRepository {
     qcLevels: Array<{ label: string; value: string }>;
   }>;
   findByCoreId(params: ScopeParams & { coreId: string }): Promise<QcQueueRecord | null>;
+  listInspectionHistory(params: ScopeParams & { coreId: string }): Promise<QcInspectionRecord[]>;
   findAssignedEmployeeIds?(coreId: string): Promise<string[]>;
   findUnitApprovers?(carId: string): Promise<ApproverRow | null>;
   passInspection(
@@ -187,14 +191,24 @@ function toHours(value: string): number {
   const [hoursRaw, minutesRaw] = value.split(":");
   const hours = Number.parseInt(hoursRaw ?? "0", 10);
   const minutes = Number.parseInt(minutesRaw ?? "0", 10);
-  return hours + minutes / 60;
+  return Number((hours + minutes / 60).toFixed(2));
 }
 
 const TECHNICAL_COUNTDOWN_WHERE = "COALESCE(jt.is_teknis, 1) = 1";
 
 function isFinalQcLevel(qcLevel: string): boolean {
-  return qcLevel === "QC_ADVISOR";
+  return qcLevel === "QC_QA" || qcLevel === "QC_ADVISOR";
 }
+
+const completedActualJoin = `
+  LEFT JOIN sm_jobdesc_actual qc_work ON qc_work.id = (
+    SELECT a.id FROM sm_jobdesc_actual a
+    JOIN sm_jobdesc_plan p ON p.id = a.plandaily_id
+    WHERE p.core_id = cd.id AND p.status NOT IN ('REJECTED', 'CANCEL')
+    ORDER BY a.created_at DESC, a.id DESC LIMIT 1
+  )
+`;
+const completedWorkWhere = "LOWER(qc_work.status) IN ('done', 'ready_qc') AND COALESCE(qc_work.progres, 0) >= 100";
 
 function mapQcRow(row: QcRow): QcQueueRecord {
   return {
@@ -392,9 +406,10 @@ function baseQcSelectSql(issueStorageReady: boolean): string {
       cd.task_category AS taskCategory,
       COALESCE(wo.job_detail, jt.job_name, cd.section_name, cd.task_category) AS jobName,
       COALESCE(cd.status, 'PLAN') AS countdownStatus,
-      cd.qc_last_status AS qcLastStatus,
-      cd.last_qc_level AS qcLevel,
-      cd.latest_qc_id AS latestQcId,
+      CASE WHEN UPPER(latest_qc.result_status) = 'PASS' THEN 'LOLOS'
+        ELSE latest_qc.result_status END AS qcLastStatus,
+      latest_qc.qc_level AS qcLevel,
+      latest_qc.id AS latestQcId,
       cd.ref_taks_id AS refWoId,
       ROUND(
         TIMESTAMPDIFF(
@@ -424,7 +439,12 @@ function baseQcSelectSql(issueStorageReady: boolean): string {
     LEFT JOIN master_panels mp ON mp.id = cd.panel_id
     LEFT JOIN master_job_types jt ON jt.id = cd.job_type_id
     LEFT JOIN sm_jobdesc_wo wo ON wo.id = cd.ref_taks_id
-    LEFT JOIN sm_qc_inspections latest_qc ON latest_qc.id = cd.latest_qc_id
+    ${completedActualJoin}
+    LEFT JOIN sm_qc_inspections latest_qc ON latest_qc.id = (
+      SELECT q.id FROM sm_qc_inspections q
+      WHERE q.core_id = cd.id AND q.inspection_date >= qc_work.created_at
+      ORDER BY (q.qc_level IN ('QC_QA', 'QC_ADVISOR')) DESC, q.inspection_date DESC, q.id DESC LIMIT 1
+    )
     LEFT JOIN sm_qc_inspections reject_qc ON reject_qc.id = cd.ref_rework_qc_id
     LEFT JOIN sm_jobdesc_plan rework_plan ON rework_plan.id = reject_qc.rework_plan_id
     LEFT JOIN sm_employee rework_emp ON rework_emp.employee_id = rework_plan.assigned_user_id
@@ -471,8 +491,12 @@ export class MySqlQcRepository implements QcRepository {
   async listQueue(params: QcListParams): Promise<QcListPayload> {
     return this.listByMode(params, {
       extraWhere: [
-        "UPPER(COALESCE(cd.status, '')) = 'READY_QC'",
-        "COALESCE(UPPER(cd.qc_last_status), '') <> 'TIDAK_LOLOS'",
+        completedWorkWhere,
+        params.qcLevel ? `NOT EXISTS (
+          SELECT 1 FROM sm_qc_inspections checked
+          WHERE checked.core_id = cd.id AND checked.inspection_date >= qc_work.created_at
+            AND checked.qc_level IN (${params.qcLevel === "QC_KD" ? "'QC_KD'" : "'QC_QA', 'QC_ADVISOR'"})
+        )` : "1=1",
       ],
     });
   }
@@ -553,10 +577,7 @@ export class MySqlQcRepository implements QcRepository {
       ],
       qcLevels: [
         { label: "QC_KD", value: "QC_KD" },
-        { label: "QC_ADVISOR", value: "QC_ADVISOR" },
-        { label: "QC_KP", value: "QC_KP" },
-        { label: "QC_MP", value: "QC_MP" },
-        { label: "QC_MO", value: "QC_MO" },
+        { label: "QC QA", value: "QC_QA" },
       ],
     };
   }
@@ -594,6 +615,33 @@ export class MySqlQcRepository implements QcRepository {
     return rows[0] ? mapQcRow(rows[0]) : null;
   }
 
+  async listInspectionHistory(params: ScopeParams & { coreId: string }): Promise<QcInspectionRecord[]> {
+    const values: unknown[] = [params.coreId];
+    const scope = buildScopeWhereClause(params.scope, params.employeeId, values, {
+      carId: "cd.car_id", divisionId: "cd.division_id",
+    });
+    const [rows] = await this.poolFactory().query<RowDataPacket[]>(`
+      SELECT q.id AS qcId, q.qc_level AS qcLevel,
+        CASE WHEN UPPER(q.result_status) IN ('PASS', 'LOLOS') THEN 'LOLOS' ELSE 'TIDAK_LOLOS' END AS resultStatus,
+        DATE_FORMAT(q.inspection_date, '%Y-%m-%d %H:%i:%s') AS inspectionDate,
+        q.inspector_id AS inspectorId, e.full_name AS inspectorName,
+        q.inspection_duration_minutes AS inspectionDurationMinutes, q.qc_notes AS notes,
+        q.photo_before_url AS photoBeforeUrl, q.evidence_photo_url AS evidencePhotoUrl
+      FROM sm_qc_inspections q
+      JOIN sm_jobdesc_countdown cd ON cd.id = q.core_id
+      LEFT JOIN sm_employee e ON e.employee_id = q.inspector_id
+      WHERE cd.id = ? ${scope ? `AND ${scope}` : ""}
+      ORDER BY q.inspection_date DESC, q.id DESC
+    `, values);
+    return rows.map((row) => ({
+      qcId: row.qcId, qcLevel: row.qcLevel, resultStatus: row.resultStatus,
+      inspectionDate: row.inspectionDate, inspectorId: row.inspectorId,
+      inspectorName: row.inspectorName, notes: row.notes,
+      inspectionDurationMinutes: row.inspectionDurationMinutes == null ? null : Number(row.inspectionDurationMinutes),
+      photoBeforeUrl: row.photoBeforeUrl, evidencePhotoUrl: row.evidencePhotoUrl,
+    }));
+  }
+
   async passInspection(
     context: { actorId: string; qcLevel: string },
     input: { coreId: string; payload: QcPassRequest },
@@ -607,9 +655,11 @@ export class MySqlQcRepository implements QcRepository {
       if (!current) {
         throw new Error("QC_NOT_FOUND");
       }
+      if (current.isUnitOnHold) throw new Error("UNIT_ON_HOLD");
       if (!current.isTechnicalJob) {
         throw new Error("QC_NON_TECHNICAL_FORBIDDEN");
       }
+      if (!current.workCompleted) throw new Error("QC_WORK_NOT_COMPLETED");
 
       const nextStatus = isFinalQcLevel(context.qcLevel) ? "DONE" : "READY_QC";
       const remainingHoursAfter = isFinalQcLevel(context.qcLevel) ? 0 : current.remainingHours;
@@ -645,7 +695,7 @@ export class MySqlQcRepository implements QcRepository {
         ],
       );
 
-      await connection.execute(
+      if (!current.qaQcId || isFinalQcLevel(context.qcLevel)) await connection.execute(
         `
           UPDATE sm_jobdesc_countdown
           SET status = ?,
@@ -664,6 +714,7 @@ export class MySqlQcRepository implements QcRepository {
         qcId,
         coreId: input.coreId,
         resultStatus: "LOLOS",
+        applied: !current.qaQcId || isFinalQcLevel(context.qcLevel),
         issueId: null,
         reworkPlanId: current.reworkPlanId,
       };
@@ -688,13 +739,74 @@ export class MySqlQcRepository implements QcRepository {
       if (!current) {
         throw new Error("QC_NOT_FOUND");
       }
+      if (current.isUnitOnHold) throw new Error("UNIT_ON_HOLD");
 
+      if (!current.isTechnicalJob) throw new Error("QC_NON_TECHNICAL_FORBIDDEN");
+      if (!current.workCompleted) throw new Error("QC_WORK_NOT_COMPLETED");
+      if (!isFinalQcLevel(context.qcLevel)) {
+        const qcId = randomUUID();
+        await connection.execute(
+          `INSERT INTO sm_qc_inspections (id, core_id, result_status, qc_notes,
+            inspector_id, qc_level, inspector_role, inspection_duration_minutes,
+            photo_before_url, evidence_photo_url)
+           VALUES (?, ?, 'TIDAK_LOLOS', ?, ?, ?, ?, ?, ?, ?)`,
+          [qcId, input.coreId, input.payload.notes, context.actorId, context.qcLevel,
+            context.qcLevel.replace("QC_", ""), input.payload.inspectionDurationMinutes,
+            input.payload.photoBeforeUrl, input.payload.evidencePhotoUrl],
+        );
+        if (!current.qaQcId) await connection.execute(
+          `UPDATE sm_jobdesc_countdown SET status = 'READY_QC',
+             qc_last_status = 'TIDAK_LOLOS', last_qc_level = 'QC_KD',
+             latest_qc_id = ?, user_update = ? WHERE id = ?`,
+          [qcId, context.actorId, input.coreId],
+        );
+        await connection.commit();
+        return { qcId, coreId: input.coreId, resultStatus: "TIDAK_LOLOS", issueId: null, reworkPlanId: null, applied: false };
+      }
+
+      if (!input.payload.reworkAssignedUser.trim()) throw new Error("QC_REWORK_REQUIRED");
       const qcId = randomUUID();
       const reworkPlanId = randomUUID();
-      const remainingHours = toHours(input.payload.reworkDailyHours);
+      const reworkHours = toHours(input.payload.reworkDailyHours);
+      const extensionHours = Math.max(0, Number((reworkHours - current.remainingHours).toFixed(2)));
+      const nextRemainingHours = Number((current.remainingHours + extensionHours).toFixed(2));
+      const nextTargetHours = Number((current.targetHours + extensionHours).toFixed(2));
       const jobDescription =
         input.payload.reworkDescription?.trim() ||
         `QC Rework - ${current.jobName ?? current.panelName ?? "Task"}`;
+
+      if (extensionHours > 0) {
+        await connection.execute(
+          `
+            INSERT INTO sm_jobdesc_countdown_revisions (
+              countdown_id,
+              revision_type,
+              reason_code,
+              old_target_hours,
+              new_target_hours,
+              delta_hours,
+              old_deadline_date,
+              new_deadline_date,
+              reference_type,
+              reference_id,
+              reason_detail,
+              changed_by,
+              approval_status
+            ) VALUES (?, 'EXTENSION', 'QC_REWORK', ?, ?, ?, ?, ?, 'QC_REJECT', ?, ?, ?, 'APPROVED')
+          `,
+          [
+            input.coreId,
+            current.targetHours,
+            nextTargetHours,
+            extensionHours,
+            current.deadlineDate,
+            input.payload.reworkDate,
+            qcId,
+            input.payload.notes?.trim() || input.payload.reworkDescription?.trim() || "Extend otomatis karena reject QC.",
+            context.actorId,
+          ],
+        );
+      }
 
       await connection.execute(
         `
@@ -752,7 +864,7 @@ export class MySqlQcRepository implements QcRepository {
           input.coreId,
           input.payload.notes ?? input.payload.reworkDescription ?? null,
           input.payload.inspectionDurationMinutes ?? null,
-          remainingHours,
+          nextRemainingHours,
           reworkPlanId,
           context.actorId,
           context.qcLevel,
@@ -765,16 +877,17 @@ export class MySqlQcRepository implements QcRepository {
       await connection.execute(
         `
           UPDATE sm_jobdesc_countdown
-          SET status = 'READY_QC',
+          SET status = 'PROSES',
               qc_last_status = 'TIDAK_LOLOS',
               latest_qc_id = ?,
               ref_rework_qc_id = ?,
               last_qc_level = ?,
+              target_hours = ?,
               remaining_hours = ?,
               user_update = ?
           WHERE id = ?
         `,
-        [qcId, qcId, context.qcLevel, remainingHours, context.actorId, input.coreId],
+        [qcId, qcId, context.qcLevel, nextTargetHours, nextRemainingHours, context.actorId, input.coreId],
       );
 
       await connection.commit();
@@ -823,7 +936,8 @@ export class MySqlQcRepository implements QcRepository {
           DATE_FORMAT(COALESCE(c.revision_contract, c.contract_delivery_date), '%Y-%m-%d') AS targetDeliveryDate,
           COUNT(cd.id) AS totalTasks,
           SUM(CASE WHEN UPPER(COALESCE(cd.status, '')) = 'DONE' THEN 1 ELSE 0 END) AS completedTasks,
-          SUM(CASE WHEN UPPER(COALESCE(cd.qc_last_status, '')) = 'LOLOS' THEN 1 ELSE 0 END) AS passedTasks,
+          SUM(CASE WHEN UPPER(COALESCE(cd.qc_last_status, '')) = 'LOLOS'
+            AND cd.last_qc_level IN ('QC_QA', 'QC_ADVISOR') THEN 1 ELSE 0 END) AS passedTasks,
           SUM(CASE WHEN UPPER(COALESCE(cd.qc_last_status, '')) = 'TIDAK_LOLOS' THEN 1 ELSE 0 END) AS rejectedTasks,
           COALESCE(issues.openIssueCount, 0) AS openIssueCount,
           DATE_FORMAT(final.approved_at, '%Y-%m-%d %H:%i:%s') AS approvedAt,
@@ -862,7 +976,7 @@ export class MySqlQcRepository implements QcRepository {
           d.name AS divisionName,
           COALESCE(wo.job_detail, jt.job_name, cd.section_name, cd.task_category) AS jobName,
           COALESCE(cd.status, 'PLAN') AS countdownStatus,
-          cd.qc_last_status AS qcLastStatus,
+          CASE WHEN cd.last_qc_level IN ('QC_QA', 'QC_ADVISOR') THEN cd.qc_last_status ELSE NULL END AS qcLastStatus,
           cd.latest_qc_id AS latestQcId,
           issue_link.issueId AS issueId,
           issue_link.issueStatus AS issueStatus
@@ -1045,8 +1159,9 @@ export class MySqlQcRepository implements QcRepository {
         SELECT
           SUM(
             CASE
-              WHEN UPPER(COALESCE(cd.status, '')) = 'READY_QC'
+              WHEN ${completedWorkWhere}
                 AND COALESCE(UPPER(cd.qc_last_status), '') <> 'TIDAK_LOLOS'
+                AND COALESCE(cd.last_qc_level, '') NOT IN ('QC_QA', 'QC_ADVISOR')
               THEN 1 ELSE 0
             END
           ) AS readyCount,
@@ -1068,6 +1183,7 @@ export class MySqlQcRepository implements QcRepository {
           ) AS activeReworkCount
         FROM sm_jobdesc_countdown cd
         LEFT JOIN master_job_types jt ON jt.id = cd.job_type_id
+        ${completedActualJoin}
         LEFT JOIN sm_qc_inspections reject_qc ON reject_qc.id = cd.ref_rework_qc_id
         LEFT JOIN sm_jobdesc_plan rework_plan ON rework_plan.id = reject_qc.rework_plan_id
         ${whereSql}
@@ -1111,7 +1227,12 @@ export class MySqlQcRepository implements QcRepository {
     panelName: string | null;
     reworkPlanId: string | null;
     remainingHours: number;
+    targetHours: number;
+    deadlineDate: string | null;
     isTechnicalJob: boolean;
+    workCompleted: boolean;
+    qaQcId: string | null;
+    isUnitOnHold: boolean;
   } | null> {
     const [rows] = (await connection.query(
       `
@@ -1121,11 +1242,21 @@ export class MySqlQcRepository implements QcRepository {
           COALESCE(cd.section_name, mp.panel_name, mp.name_part) AS panelName,
           reject_qc.rework_plan_id AS reworkPlanId,
           COALESCE(cd.remaining_hours, 0) AS remainingHours,
-          COALESCE(jt.is_teknis, 1) AS isTechnicalJob
+          COALESCE(cd.target_hours, cd.target_hours_initial, 0) AS targetHours,
+          DATE_FORMAT(cd.deadline_date, '%Y-%m-%d') AS deadlineDate,
+          COALESCE(jt.is_teknis, 1) AS isTechnicalJob,
+          CASE WHEN UPPER(COALESCE(c.status, '')) = 'HOLD' THEN 1 ELSE 0 END AS isUnitOnHold,
+          (${completedWorkWhere}) AS workCompleted,
+          (SELECT q.id FROM sm_qc_inspections q
+           WHERE q.core_id = cd.id AND q.qc_level IN ('QC_QA', 'QC_ADVISOR')
+             AND q.inspection_date >= qc_work.created_at
+           ORDER BY q.inspection_date DESC, q.id DESC LIMIT 1) AS qaQcId
         FROM sm_jobdesc_countdown cd
         LEFT JOIN master_panels mp ON mp.id = cd.panel_id
         LEFT JOIN master_job_types jt ON jt.id = cd.job_type_id
+        LEFT JOIN cars c ON c.id = cd.car_id
         LEFT JOIN sm_jobdesc_wo wo ON wo.id = cd.ref_taks_id
+        ${completedActualJoin}
         LEFT JOIN sm_qc_inspections reject_qc ON reject_qc.id = cd.ref_rework_qc_id
         WHERE cd.id = ?
         LIMIT 1
@@ -1138,7 +1269,12 @@ export class MySqlQcRepository implements QcRepository {
       panelName: string | null;
       reworkPlanId: string | null;
       remainingHours: number | null;
+      targetHours: number | null;
+      deadlineDate: string | null;
       isTechnicalJob: number | null;
+      isUnitOnHold: number | null;
+      workCompleted: number | null;
+      qaQcId: string | null;
     }>, unknown];
 
     return rows[0]
@@ -1147,7 +1283,12 @@ export class MySqlQcRepository implements QcRepository {
           panelName: rows[0].panelName,
           reworkPlanId: rows[0].reworkPlanId,
           remainingHours: Number(rows[0].remainingHours ?? 0),
+          targetHours: Number(rows[0].targetHours ?? rows[0].remainingHours ?? 0),
+          deadlineDate: rows[0].deadlineDate ?? null,
           isTechnicalJob: Number(rows[0].isTechnicalJob ?? 1) === 1,
+          isUnitOnHold: Number(rows[0].isUnitOnHold ?? 0) === 1,
+          workCompleted: Number(rows[0].workCompleted ?? 0) === 1,
+          qaQcId: rows[0].qaQcId ?? null,
         }
       : null;
   }

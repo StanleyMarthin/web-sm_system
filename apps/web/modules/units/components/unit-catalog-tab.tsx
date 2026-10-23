@@ -10,6 +10,7 @@ Side Effects: HTTP fetch/update catalog dan upload file reference.
 
 import type { CatalogOverview, CatalogWorkspace } from "@smsystem/contracts/unit-catalog";
 import { AlertCircle, ArrowUpDown, CheckCircle2, Eye, ImagePlus, MapPin, Maximize2, Pencil, Printer, RotateCcw, Save, Search, Settings2, Trash2, X, ZoomIn, ZoomOut } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CatalogPanelManager } from "@/modules/units/components/catalog-panel-manager";
@@ -698,10 +699,18 @@ export function UnitCatalogTab({ unitId, unitName, canManageCatalog }: UnitCatal
             </>
           )
         ) : managePanelMode || !canManageCatalog ? undefined : (
-          <ActionButton variant="primary" onClick={() => setManagePanelMode(true)}>
-            <Settings2 className="h-3.5 w-3.5" />
-            Kelola Panel
-          </ActionButton>
+          <>
+            <Link href={`/units/${encodeURIComponent(unitId)}/catalog/new`}>
+              <ActionButton variant="primary">
+                <ImagePlus className="h-3.5 w-3.5" />
+                Tambah Catalog
+              </ActionButton>
+            </Link>
+            <ActionButton onClick={() => setManagePanelMode(true)}>
+              <Settings2 className="h-3.5 w-3.5" />
+              Kelola Panel
+            </ActionButton>
+          </>
         )}
       />
 

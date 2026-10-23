@@ -18,6 +18,7 @@ services:
       CORE_DB_NAME: ${CORE_DB_NAME:-sms_db}
       PURCHASE_DB_NAME: ${PURCHASE_DB_NAME:-sms_purchase}
       WAREHOUSE_DB_NAME: ${WAREHOUSE_DB_NAME:-sms_warehouse}
+      CLIENT_DB_NAME: ${CLIENT_DB_NAME:-sms_client}
       AUDIT_DB_NAME: ${AUDIT_DB_NAME:-sms_log}
       DB_POOL_LIMIT: ${DB_POOL_LIMIT:-20}
       REDIS_HOST: ${REDIS_HOST:?REDIS_HOST is required}

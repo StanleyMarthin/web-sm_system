@@ -1,6 +1,15 @@
 import { z } from "zod";
 import { roleProfileSchema } from "@smsystem/contracts/rbac";
 
+/** The sole break-glass administrator is deliberately identity-bound, not role-bound. */
+export const SYSTEM_SUPERADMIN_EMPLOYEE_ID = "SM-03.004";
+
+export function isSystemSuperadminEmployee(
+  employeeId: string | null | undefined,
+): boolean {
+  return employeeId?.trim().toUpperCase() === SYSTEM_SUPERADMIN_EMPLOYEE_ID;
+}
+
 export const SESSION_COOKIE_NAME = "sm_session";
 export const REFRESH_COOKIE_NAME = "sm_refresh";
 export const DEVICE_COOKIE_NAME = "sm_device_id";

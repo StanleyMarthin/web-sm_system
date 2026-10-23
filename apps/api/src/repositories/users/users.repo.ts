@@ -77,6 +77,24 @@ export interface UsersRepository {
   deactivate(employeeId: string): Promise<void>;
 }
 
+export function formatEmployeeId(divisionId: number, sequence: number): string {
+  return `SM-${String(divisionId).padStart(2, "0")}.${String(sequence).padStart(3, "0")}`;
+}
+
+export function nextEmployeeSequence(
+  employeeIds: readonly string[],
+  divisionId: number,
+): number {
+  const prefix = `SM-${String(divisionId).padStart(2, "0")}.`;
+  return employeeIds.reduce((highest, employeeId) => {
+    const suffix = employeeId.toUpperCase().startsWith(prefix)
+      ? employeeId.slice(prefix.length)
+      : "";
+    const sequence = /^\d+$/u.test(suffix) ? Number.parseInt(suffix, 10) : 0;
+    return Math.max(highest, sequence);
+  }, 0) + 1;
+}
+
 function getAuditLogTableName(): string {
   const auditDbName = getApiEnv().AUDIT_DB_NAME.trim();
   if (!/^[a-zA-Z0-9_]+$/u.test(auditDbName)) {
@@ -501,8 +519,23 @@ export class MySqlUsersRepository implements UsersRepository {
     const pool = this.poolFactory();
     const connection = await pool.getConnection();
 
+    let employeeId = "";
+
     try {
       await connection.beginTransaction();
+      const [employeeIdRows] = await connection.query<Array<RowDataPacket & { employeeId: string }>>(
+        `
+          SELECT employee_id AS employeeId
+          FROM sm_employee
+          WHERE employee_id LIKE ?
+          FOR UPDATE
+        `,
+        [`SM-${String(input.divisionId).padStart(2, "0")}.%`],
+      );
+      employeeId = formatEmployeeId(
+        input.divisionId,
+        nextEmployeeSequence(employeeIdRows.map((row) => row.employeeId), input.divisionId),
+      );
       await connection.query<ResultSetHeader>(
         `
           INSERT INTO sm_employee (
@@ -518,7 +551,7 @@ export class MySqlUsersRepository implements UsersRepository {
           ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, NOW())
         `,
         [
-          input.employeeId,
+          employeeId,
           input.fullName,
           input.email ?? null,
           input.passwordHash,
@@ -529,7 +562,7 @@ export class MySqlUsersRepository implements UsersRepository {
       );
       await replaceManagedDivisionAssignments(
         connection,
-        input.employeeId,
+        employeeId,
         input.managedDivisionIds ?? [],
       );
       await connection.commit();
@@ -540,7 +573,7 @@ export class MySqlUsersRepository implements UsersRepository {
       connection.release();
     }
 
-    const createdUser = await this.findByEmployeeId(input.employeeId);
+    const createdUser = await this.findByEmployeeId(employeeId);
     if (!createdUser) {
       throw new Error("USER_NOT_FOUND_AFTER_CREATE");
     }

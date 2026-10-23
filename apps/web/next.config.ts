@@ -18,6 +18,7 @@ const securityHeaders = [
       `media-src 'self' blob: https://${r2ImageHost}`,
       "font-src 'self' data:",
       "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+      "worker-src 'self' blob:",
       "style-src 'self' 'unsafe-inline'",
       `connect-src 'self' https://${r2ImageHost} https://*.r2.cloudflarestorage.com http://127.0.0.1:3203 http://localhost:3203`,
     ].join("; "),
@@ -38,6 +39,9 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  experimental: {
+    useTypeScriptCli: false,
+  },
   turbopack: {
     root: path.resolve(configDirectory, "../.."),
   },

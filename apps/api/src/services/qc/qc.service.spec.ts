@@ -84,12 +84,13 @@ describe("DefaultQcService QC parity", () => {
       user: {
         employeeId: "KD-1",
         fullName: "KD",
-        permissions: [permissionCodes.qcSubmit],
+        roleName: "KETUA_DIVISI",
+        permissions: [permissionCodes.qcSubmit, permissionCodes.qcValidate],
         scope: {
           canViewAllUnits: false,
-          canViewAssignedUnits: false,
+          canViewAssignedUnits: true,
           divisionIds: [],
-          managedDivisionIds: [],
+          managedDivisionIds: [7],
           unitIds: [],
         },
       },
@@ -195,12 +196,12 @@ describe("DefaultQcService QC parity", () => {
       ["PIC-1", "PIC-2"],
       {
         title: "QC Lolos",
-        body: "QC ADVISOR menyatakan Unit A - Panel A lolos. Pekerjaan selesai.",
+        body: "QC QA menyatakan Unit A - Panel A lolos. Pekerjaan selesai.",
         data: {
           coreId: "CD-1",
           qcId: "QC-2",
           resultStatus: "LOLOS",
-          qcLevel: "QC_ADVISOR",
+          qcLevel: "QC_QA",
           module: "qc",
         },
       },

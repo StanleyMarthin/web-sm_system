@@ -1,6 +1,9 @@
 "use client";
 
-import { createCountdownRecord, updateCountdownRecord } from "@/shared/api/countdown/countdown";
+import {
+  createCountdownRecord,
+  updateCountdownRecord,
+} from "@/shared/api/countdown/countdown";
 import { createPr, updatePr } from "@/shared/api/pr/pr";
 import { createVendor, updateVendor } from "@/shared/api/vendor/vendor";
 import { createWo, updateWo } from "@/shared/api/wo/wo";
@@ -76,7 +79,8 @@ export function createWorkflowJobForm(
   return {
     type: defaultType,
     divisionId: context.divisionId ?? "",
-    sectionName: context.sectionName ?? context.panelCategory ?? context.panelName,
+    sectionName:
+      context.sectionName ?? context.panelCategory ?? context.panelName,
     jobTypeId: "",
     title: context.panelName,
     targetHours: "01:00",
@@ -104,10 +108,13 @@ export function visibleWorkflowJobTypes(
   selectedDivisionId: string,
 ) {
   if (!selectedDivisionId) return references.jobTypes;
-  const selectedDivisionOption = references.divisions.find((division) => division.value === selectedDivisionId);
+  const selectedDivisionOption = references.divisions.find(
+    (division) => division.value === selectedDivisionId,
+  );
   const selectedParentId = selectedDivisionOption?.parentId ?? null;
   return references.jobTypes.filter((jobType) => {
-    if (jobType.divisionId === null || jobType.divisionId === undefined) return true;
+    if (jobType.divisionId === null || jobType.divisionId === undefined)
+      return true;
     if (String(jobType.divisionId) === selectedDivisionId) return true;
     return jobType.divisionId === selectedParentId;
   });
@@ -117,10 +124,15 @@ export async function submitWorkflowJobCreate(input: {
   form: WorkflowJobCreateFormState;
   context: WorkflowJobCreateContext;
   references: WorkflowJobCreateReferences;
-}): Promise<{ success: true; created: CreatedWorkflowJob } | { success: false; message: string }> {
+}): Promise<
+  | { success: true; created: CreatedWorkflowJob }
+  | { success: false; message: string }
+> {
   const { form, context, references } = input;
   const divisionValue = form.divisionId || context.divisionId || "";
-  const division = references.divisions.find((item) => item.value === divisionValue);
+  const division = references.divisions.find(
+    (item) => item.value === divisionValue,
+  );
   const divisionId = Number(divisionValue);
   const divisionName = division?.label ?? context.divisionName ?? "";
   const title = form.title.trim() || context.panelName;
@@ -129,15 +141,24 @@ export async function submitWorkflowJobCreate(input: {
   const normalizedQty = Number.isFinite(qty) && qty > 0 ? qty : 1;
   const meta = `${context.panelName} - ${divisionName || "Divisi mengikuti request"}`;
 
-  if (!title.trim()) return { success: false, message: "Nama pekerjaan wajib diisi." };
+  if (!title.trim())
+    return { success: false, message: "Nama pekerjaan wajib diisi." };
   if (!Number.isFinite(divisionId) && form.type !== "WOV") {
     return { success: false, message: "Divisi wajib dipilih." };
   }
 
   if (form.type === "COUNTDOWN") {
-    const targetHoursInitial = parseHHMMToDecimal(form.targetHours || "0:00", true);
-    if (!form.sectionName.trim()) return { success: false, message: "Section wajib dipilih." };
-    if (!form.jobTypeId.trim()) return { success: false, message: "Jobdesc wajib dipilih dari master jobdesc." };
+    const targetHoursInitial = parseHHMMToDecimal(
+      form.targetHours || "0:00",
+      true,
+    );
+    if (!form.sectionName.trim())
+      return { success: false, message: "Section wajib dipilih." };
+    if (!form.jobTypeId.trim())
+      return {
+        success: false,
+        message: "Jobdesc wajib dipilih dari master jobdesc.",
+      };
     if (!Number.isFinite(targetHoursInitial) || targetHoursInitial < 0) {
       return { success: false, message: "Target jam wajib format HHH:MM." };
     }
@@ -161,8 +182,13 @@ export async function submitWorkflowJobCreate(input: {
     });
 
     if (!result.success) return { success: false, message: result.message };
-    const idSuffix = String(result.payload.data.countdown.countdownId ?? Date.now());
-    return { success: true, created: { type: form.type, title, meta, idSuffix } };
+    const idSuffix = String(
+      result.payload.data.countdown.countdownId ?? Date.now(),
+    );
+    return {
+      success: true,
+      created: { type: form.type, title, meta, idSuffix },
+    };
   }
 
   if (form.type === "WO") {
@@ -175,19 +201,38 @@ export async function submitWorkflowJobCreate(input: {
       jobDetail: null,
       estimatedHours: null,
       notes: null,
-      items: [{
-        jobDetail: title,
-        panelName: context.panelName,
-        sectionName: context.sectionName ?? context.panelName,
-        panelCategory: context.panelCategory ?? null,
-        addPanelToMaster: false,
-        estimatedHours: form.estimatedHours ? Number(form.estimatedHours) : null,
-        notes: form.notes.trim() || null,
-      }],
+      items: [
+        {
+          jobDetail: title,
+          panelName: context.panelName,
+          sectionName: context.sectionName ?? context.panelName,
+          panelCategory: context.panelCategory ?? null,
+          addPanelToMaster: false,
+          estimatedHours: form.estimatedHours
+            ? Number(form.estimatedHours)
+            : null,
+          notes: form.notes.trim() || null,
+          issueNote: form.temuanAwal.trim() || null,
+          mediaUrl: form.photoUrl.trim() || null,
+          mediaType: form.photoUrl.trim()
+            ? form.photoUrl.trim().toLowerCase().endsWith(".mp4")
+              ? "video"
+              : "image"
+            : null,
+        },
+      ],
     });
 
     if (!result.success) return { success: false, message: result.message };
-    return { success: true, created: { type: form.type, title, meta, idSuffix: String(result.result.woId) } };
+    return {
+      success: true,
+      created: {
+        type: form.type,
+        title,
+        meta,
+        idSuffix: String(result.result.woId),
+      },
+    };
   }
 
   if (form.type === "PR") {
@@ -197,22 +242,35 @@ export async function submitWorkflowJobCreate(input: {
       targetDate: targetDate || null,
       priority: form.priority || "NORMAL",
       notes: form.notes.trim() || null,
-      items: [{
-        itemName: context.panelName,
-        description: title,
-        originType: "LOKAL",
-        qty: normalizedQty,
-        uom: form.uom.trim() || "pcs",
-        estimatedPrice: form.estimatedPrice ? Number(form.estimatedPrice) : null,
-        photoUrl: form.photoUrl.trim() || null,
-      }],
+      items: [
+        {
+          itemName: context.panelName,
+          description: title,
+          originType: "LOKAL",
+          qty: normalizedQty,
+          uom: form.uom.trim() || "pcs",
+          estimatedPrice: form.estimatedPrice
+            ? Number(form.estimatedPrice)
+            : null,
+          photoUrl: form.photoUrl.trim() || null,
+        },
+      ],
     });
 
     if (!result.success) return { success: false, message: result.message };
-    return { success: true, created: { type: form.type, title, meta, idSuffix: String(result.result.prId) } };
+    return {
+      success: true,
+      created: {
+        type: form.type,
+        title,
+        meta,
+        idSuffix: String(result.result.prId),
+      },
+    };
   }
 
-  if (!form.vendorName.trim()) return { success: false, message: "Vendor wajib diisi untuk WOV." };
+  if (!form.vendorName.trim())
+    return { success: false, message: "Vendor wajib diisi untuk WOV." };
 
   const result = await createVendor({
     carId: context.carId,
@@ -228,17 +286,27 @@ export async function submitWorkflowJobCreate(input: {
     targetDateReturn: targetDate || null,
     estimatedCost: null,
     remarks: form.notes.trim() || null,
-    items: [{
-      itemName: title || context.panelName,
-      quantity: normalizedQty,
-      uom: form.uom.trim() || null,
-      goodsConditionOut: form.goodsConditionOut.trim() || null,
-      estimatedCost: form.estimatedCost ? Number(form.estimatedCost) : null,
-    }],
+    items: [
+      {
+        itemName: title || context.panelName,
+        quantity: normalizedQty,
+        uom: form.uom.trim() || null,
+        goodsConditionOut: form.goodsConditionOut.trim() || null,
+        estimatedCost: form.estimatedCost ? Number(form.estimatedCost) : null,
+      },
+    ],
   });
 
   if (!result.success) return { success: false, message: result.message };
-  return { success: true, created: { type: form.type, title, meta, idSuffix: String(result.result.wovId) } };
+  return {
+    success: true,
+    created: {
+      type: form.type,
+      title,
+      meta,
+      idSuffix: String(result.result.wovId),
+    },
+  };
 }
 
 export async function submitWorkflowJobUpdate(input: {
@@ -249,7 +317,9 @@ export async function submitWorkflowJobUpdate(input: {
 }): Promise<{ success: true } | { success: false; message: string }> {
   const { id, form, context, references } = input;
   const divisionValue = form.divisionId || context.divisionId || "";
-  const division = references.divisions.find((item) => item.value === divisionValue);
+  const division = references.divisions.find(
+    (item) => item.value === divisionValue,
+  );
   const divisionId = Number(divisionValue);
   const divisionName = division?.label ?? context.divisionName ?? "";
   const title = form.title.trim() || context.panelName;
@@ -257,15 +327,24 @@ export async function submitWorkflowJobUpdate(input: {
   const qty = Number(form.qty || 1);
   const normalizedQty = Number.isFinite(qty) && qty > 0 ? qty : 1;
 
-  if (!title.trim()) return { success: false, message: "Nama pekerjaan wajib diisi." };
+  if (!title.trim())
+    return { success: false, message: "Nama pekerjaan wajib diisi." };
   if (!Number.isFinite(divisionId) && form.type !== "WOV") {
     return { success: false, message: "Divisi wajib dipilih." };
   }
 
   if (form.type === "COUNTDOWN") {
-    const targetHoursInitial = parseHHMMToDecimal(form.targetHours || "0:00", true);
-    if (!form.sectionName.trim()) return { success: false, message: "Section wajib dipilih dari master." };
-    if (!form.jobTypeId.trim()) return { success: false, message: "Jobdesc wajib dipilih dari master jobdesc." };
+    const targetHoursInitial = parseHHMMToDecimal(
+      form.targetHours || "0:00",
+      true,
+    );
+    if (!form.sectionName.trim())
+      return { success: false, message: "Section wajib dipilih dari master." };
+    if (!form.jobTypeId.trim())
+      return {
+        success: false,
+        message: "Jobdesc wajib dipilih dari master jobdesc.",
+      };
     if (!Number.isFinite(targetHoursInitial) || targetHoursInitial < 0) {
       return { success: false, message: "Target jam wajib format HHH:MM." };
     }
@@ -286,7 +365,9 @@ export async function submitWorkflowJobUpdate(input: {
       keterangan: form.keterangan.trim() || `Panel: ${context.panelName}`,
       status: "PLAN",
     });
-    return result.success ? { success: true } : { success: false, message: result.message };
+    return result.success
+      ? { success: true }
+      : { success: false, message: result.message };
   }
 
   if (form.type === "WO") {
@@ -299,17 +380,30 @@ export async function submitWorkflowJobUpdate(input: {
       jobDetail: null,
       estimatedHours: null,
       notes: null,
-      items: [{
-        jobDetail: title,
-        panelName: context.panelName,
-        sectionName: context.sectionName ?? context.panelName,
-        panelCategory: context.panelCategory ?? null,
-        addPanelToMaster: false,
-        estimatedHours: form.estimatedHours ? Number(form.estimatedHours) : null,
-        notes: form.notes.trim() || null,
-      }],
+      items: [
+        {
+          jobDetail: title,
+          panelName: context.panelName,
+          sectionName: context.sectionName ?? context.panelName,
+          panelCategory: context.panelCategory ?? null,
+          addPanelToMaster: false,
+          estimatedHours: form.estimatedHours
+            ? Number(form.estimatedHours)
+            : null,
+          notes: form.notes.trim() || null,
+          issueNote: form.temuanAwal.trim() || null,
+          mediaUrl: form.photoUrl.trim() || null,
+          mediaType: form.photoUrl.trim()
+            ? form.photoUrl.trim().toLowerCase().endsWith(".mp4")
+              ? "video"
+              : "image"
+            : null,
+        },
+      ],
     });
-    return result.success ? { success: true } : { success: false, message: result.message };
+    return result.success
+      ? { success: true }
+      : { success: false, message: result.message };
   }
 
   if (form.type === "PR") {
@@ -319,17 +413,23 @@ export async function submitWorkflowJobUpdate(input: {
       targetDate: targetDate || null,
       priority: form.priority || "NORMAL",
       notes: form.notes.trim() || null,
-      items: [{
-        itemName: context.panelName,
-        description: title,
-        originType: "LOKAL",
-        qty: normalizedQty,
-        uom: form.uom.trim() || "pcs",
-        estimatedPrice: form.estimatedPrice ? Number(form.estimatedPrice) : null,
-        photoUrl: form.photoUrl.trim() || null,
-      }],
+      items: [
+        {
+          itemName: context.panelName,
+          description: title,
+          originType: "LOKAL",
+          qty: normalizedQty,
+          uom: form.uom.trim() || "pcs",
+          estimatedPrice: form.estimatedPrice
+            ? Number(form.estimatedPrice)
+            : null,
+          photoUrl: form.photoUrl.trim() || null,
+        },
+      ],
     });
-    return result.success ? { success: true } : { success: false, message: result.message };
+    return result.success
+      ? { success: true }
+      : { success: false, message: result.message };
   }
 
   const result = await updateVendor(id, {
@@ -346,13 +446,17 @@ export async function submitWorkflowJobUpdate(input: {
     targetDateReturn: targetDate || null,
     estimatedCost: null,
     remarks: form.notes.trim() || null,
-    items: [{
-      itemName: title || context.panelName,
-      quantity: normalizedQty,
-      uom: form.uom.trim() || null,
-      goodsConditionOut: form.goodsConditionOut.trim() || null,
-      estimatedCost: form.estimatedCost ? Number(form.estimatedCost) : null,
-    }],
+    items: [
+      {
+        itemName: title || context.panelName,
+        quantity: normalizedQty,
+        uom: form.uom.trim() || null,
+        goodsConditionOut: form.goodsConditionOut.trim() || null,
+        estimatedCost: form.estimatedCost ? Number(form.estimatedCost) : null,
+      },
+    ],
   });
-  return result.success ? { success: true } : { success: false, message: result.message };
+  return result.success
+    ? { success: true }
+    : { success: false, message: result.message };
 }

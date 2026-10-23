@@ -63,6 +63,24 @@ function addMinutes(time: string, minutesToAdd: number): string {
   return toTimeString((hour * 60) + minute + minutesToAdd);
 }
 
+function parseTimeMinutes(time: string | null | undefined): number | null {
+  if (!time) return null;
+  const match = /^(\d{1,2}):(\d{2})$/u.exec(time.trim());
+  if (!match) return null;
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute) || hour > 23 || minute > 59) return null;
+  return (hour * 60) + minute;
+}
+
+function workMinutesBetween(taskDate: string, startMinutes: number, finishMinutes: number): number {
+  if (finishMinutes <= startMinutes) return 0;
+  const breakStart = breakStartMinutesForJobPlanDate(taskDate);
+  const breakEnd = breakStart + breakMinutesForJobPlanDate(taskDate);
+  const breakOverlap = Math.max(0, Math.min(finishMinutes, breakEnd) - Math.max(startMinutes, breakStart));
+  return Math.max(0, finishMinutes - startMinutes - breakOverlap);
+}
+
 export function parseDurationHHMM(value: string): number | null {
   const normalized = value.trim();
   if (!/^\d{1,3}:\d{2}$/u.test(normalized)) {
@@ -181,57 +199,77 @@ export function buildJobPlanScheduleSegments(input: {
   taskDate: string;
   requestedMode: JobPlanScheduleMode;
   targetHours: number;
+  startTime?: string | null;
 }): JobPlanScheduleSegment[] {
   const requestedHours = Math.max(0, Number(input.targetHours.toFixed(2)));
   if (requestedHours <= 0) {
     return [];
   }
+  const requestedMinutes = Math.round(requestedHours * 60);
+  const parsedStart = parseTimeMinutes(input.startTime);
 
   if (input.requestedMode === "overtime") {
-    const startTime = getOvertimeStartTime(input.taskDate);
+    const startTime = parsedStart !== null ? toTimeString(parsedStart) : getOvertimeStartTime(input.taskDate);
     return [
       {
         mode: "overtime",
         targetHours: requestedHours,
         startTime,
-        finishTime: addMinutes(startTime, Math.round(requestedHours * 60)),
+        finishTime: addMinutes(startTime, requestedMinutes),
       },
     ];
   }
 
   if (isSundayJobPlan(input.taskDate)) {
-    const startTime = START_MINUTES_SUNDAY;
+    const startTime = parsedStart ?? START_MINUTES_SUNDAY;
     return [
       {
         mode: "overtime",
         targetHours: requestedHours,
         startTime: toTimeString(startTime),
-        finishTime: toTimeString(startTime + Math.round(requestedHours * 60)),
+        finishTime: toTimeString(startTime + requestedMinutes),
       },
     ];
   }
 
-  const normalCapacityHours = getNormalCapacityHours(input.taskDate);
-  const normalHours = Math.min(requestedHours, normalCapacityHours);
-  const overtimeHours = Math.max(0, Number((requestedHours - normalHours).toFixed(2)));
+  const startMinutes = parsedStart ?? START_MINUTES_NORMAL;
+  const thresholdMinutes = parseTimeMinutes(getNormalThresholdTime(input.taskDate)) ?? OVERTIME_START_WEEKDAY;
+  if (startMinutes >= thresholdMinutes) {
+    const startTime = toTimeString(startMinutes);
+    return [
+      {
+        mode: "overtime",
+        targetHours: requestedHours,
+        startTime,
+        finishTime: addMinutes(startTime, requestedMinutes),
+      },
+    ];
+  }
+
+  const normalCapacityMinutes = workMinutesBetween(input.taskDate, startMinutes, thresholdMinutes);
+  const normalMinutes = Math.min(requestedMinutes, normalCapacityMinutes);
+  const overtimeMinutes = Math.max(0, requestedMinutes - normalMinutes);
   const segments: JobPlanScheduleSegment[] = [];
 
-  if (normalHours > 0) {
+  if (normalMinutes > 0) {
+    const normalHours = normalMinutes / 60;
+    const startTime = toTimeString(startMinutes);
     segments.push({
       mode: "normal",
       targetHours: normalHours,
-      startTime: "08:00",
-      finishTime: calculateNormalFinishTime(input.taskDate, normalHours),
+      startTime,
+      finishTime: calculateJobPlanFinishTime(input.taskDate, startTime, normalHours),
     });
   }
 
-  if (overtimeHours > 0) {
+  if (overtimeMinutes > 0) {
+    const overtimeHours = overtimeMinutes / 60;
     const startTime = getOvertimeStartTime(input.taskDate);
     segments.push({
       mode: "overtime",
       targetHours: overtimeHours,
       startTime,
-      finishTime: addMinutes(startTime, Math.round(overtimeHours * 60)),
+      finishTime: addMinutes(startTime, overtimeMinutes),
     });
   }
 

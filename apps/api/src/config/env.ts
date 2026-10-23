@@ -32,6 +32,7 @@ export interface ApiEnv {
   PURCHASE_DB_NAME: string;
   CORE_DB_NAME: string;
   WAREHOUSE_DB_NAME: string;
+  CLIENT_DB_NAME: string;
   DB_POOL_LIMIT: number;
   R2_ENDPOINT_URL?: string;
   R2_ACCESS_KEY_ID?: string;
@@ -180,6 +181,7 @@ export function loadApiEnv(
     PURCHASE_DB_NAME: merged.PURCHASE_DB_NAME?.trim() || "sms_purchase",
     CORE_DB_NAME: merged.CORE_DB_NAME?.trim() || merged.DB_NAME!.trim(),
     WAREHOUSE_DB_NAME: merged.WAREHOUSE_DB_NAME?.trim() || "sms_warehouse",
+    CLIENT_DB_NAME: merged.CLIENT_DB_NAME?.trim() || "sms_client",
     DB_POOL_LIMIT: parseInteger(merged.DB_POOL_LIMIT, 20, "DB_POOL_LIMIT"),
     R2_ENDPOINT_URL: merged.R2_ENDPOINT_URL?.trim() || undefined,
     R2_ACCESS_KEY_ID: merged.R2_ACCESS_KEY_ID?.trim() || undefined,

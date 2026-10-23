@@ -39,6 +39,10 @@ interface RoleProfileRow extends RowDataPacket {
   mobile_enabled: number;
   approval_rank: number | null;
   notes: string | null;
+  division_mode?: "NONE" | "OWN_DIVISION" | "ASSIGNED_DIVISIONS" | "GLOBAL" | null;
+  division_ids_json?: string | null;
+  unit_mode?: "NONE" | "ASSIGNED_UNITS" | "GLOBAL" | null;
+  unit_ids_json?: string | null;
 }
 
 interface UnitAssignmentRow extends RowDataPacket {
@@ -57,7 +61,77 @@ function mapRoleProfile(row: RoleProfileRow | undefined): RoleProfile | null {
     mobileEnabled: row.mobile_enabled === 1,
     approvalRank: row.approval_rank,
     notes: row.notes,
+    scopePreset: {
+      divisionMode: row.division_mode ?? "NONE",
+      divisionIds: parseJsonNumberArray(row.division_ids_json),
+      unitMode: row.unit_mode ?? "NONE",
+      unitIds: parseJsonStringArray(row.unit_ids_json),
+    },
   };
+}
+
+function parseJsonNumberArray(value: string | null | undefined): number[] {
+  try {
+    const parsed = value ? JSON.parse(value) : [];
+    return Array.isArray(parsed)
+      ? parsed
+          .map((item) => Number.parseInt(String(item), 10))
+          .filter((item) => Number.isInteger(item) && item > 0)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function parseJsonStringArray(value: string | null | undefined): string[] {
+  try {
+    const parsed = value ? JSON.parse(value) : [];
+    return Array.isArray(parsed)
+      ? parsed.map((item) => String(item).trim()).filter(Boolean)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+async function findRoleProfile(
+  roleId: number | null,
+): Promise<RoleProfileRow[]> {
+  if (roleId === null) return [];
+
+  const pool = getMySqlPool();
+  const profileSql = (includeScopePreset: boolean) => `
+    SELECT
+      rp.role_level,
+      rp.scope_basis,
+      rp.web_enabled,
+      rp.mobile_enabled,
+      rp.approval_rank,
+      rp.notes,
+      ${
+        includeScopePreset
+          ? `rsp.division_mode, CAST(rsp.division_ids_json AS CHAR) AS division_ids_json,
+             rsp.unit_mode, CAST(rsp.unit_ids_json AS CHAR) AS unit_ids_json`
+          : `NULL AS division_mode, NULL AS division_ids_json,
+             NULL AS unit_mode, NULL AS unit_ids_json`
+      }
+    FROM sys_role_profiles rp
+    ${includeScopePreset ? "LEFT JOIN sys_role_scope_presets rsp ON rsp.role_id = rp.role_id" : ""}
+    WHERE rp.role_id = ?
+    LIMIT 1
+  `;
+
+  try {
+    const [rows] = await pool.query<RoleProfileRow[]>(profileSql(true), [roleId]);
+    return rows;
+  } catch (error) {
+    if (!(typeof error === "object" && error !== null && "code" in error && error.code === "ER_NO_SUCH_TABLE")) {
+      throw error;
+    }
+
+    const [rows] = await pool.query<RoleProfileRow[]>(profileSql(false), [roleId]);
+    return rows;
+  }
 }
 
 export interface AuthContextRepository {
@@ -126,21 +200,7 @@ export class MySqlAuthContextRepository implements AuthContextRepository {
           FROM sm_divisi
         `,
       ),
-      pool.query<RoleProfileRow[]>(
-        `
-          SELECT
-            role_level,
-            scope_basis,
-            web_enabled,
-            mobile_enabled,
-            approval_rank,
-            notes
-          FROM sys_role_profiles
-          WHERE role_id = ?
-          LIMIT 1
-        `,
-        [employee.role_id],
-      ),
+      findRoleProfile(employee.role_id),
       pool.query<UnitAssignmentRow[]>(
         `
           SELECT DISTINCT car_id

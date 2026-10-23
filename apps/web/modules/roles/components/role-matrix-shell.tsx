@@ -247,8 +247,8 @@ function roleToForm(role: RoleRecord | undefined): RoleFormState {
       role.profile?.approvalRank === null || role.profile?.approvalRank === undefined
         ? ""
         : String(role.profile.approvalRank),
-    webEnabled: role.profile?.webEnabled ?? true,
-    mobileEnabled: role.profile?.mobileEnabled ?? true,
+    webEnabled: true,
+    mobileEnabled: true,
     notes: role.profile?.notes ?? "",
     scopePreset: {
       divisionMode: scopePreset.divisionMode,
@@ -306,10 +306,6 @@ function sectionTitle(audience: PermissionRecord["audience"] | undefined): strin
     default:
       return "Dipakai di Web dan Mobile";
   }
-}
-
-function isReservedSuperAdminRole(roleName: string | undefined): boolean {
-  return roleName?.trim().toLowerCase() === "mis";
 }
 
 function resolveApprovalBlueprintKey(form: RoleFormState): string {
@@ -661,7 +657,6 @@ export function RoleMatrixShell({
   const permissionCacheRef = useRef<Record<number, number[]>>({});
 
   const selectedRole = roleCatalog.find((role) => role.id === selectedRoleId);
-  const isReservedSuperAdmin = isReservedSuperAdminRole(selectedRole?.roleName);
   const canEditProfile = editorMode === "create" || isEditing;
   const approvalChoices = useMemo(() => buildApprovalChoices(form), [form]);
   const selectedApprovalKey = resolveApprovalBlueprintKey(form);
@@ -830,11 +825,6 @@ export function RoleMatrixShell({
     if (editorMode === "create") {
       return;
     }
-    if (isReservedSuperAdmin) {
-      setError(null);
-      setMessage("Role MIS selalu menjadi Super Admin. Profil intinya tidak bisa diturunkan dari panel ini.");
-      return;
-    }
     setIsEditing(true);
     setError(null);
     setMessage(null);
@@ -906,12 +896,6 @@ export function RoleMatrixShell({
   }
 
   function submitRoleProfile() {
-    if (isReservedSuperAdmin) {
-      setError(null);
-      setMessage("Role MIS selalu menjadi Super Admin. Profil intinya tidak bisa diturunkan dari panel ini.");
-      return;
-    }
-
     setMessage(null);
     setError(null);
 
@@ -985,12 +969,6 @@ export function RoleMatrixShell({
 
   function submitPermissionMatrix() {
     if (selectedRoleId <= 0 || !canEditProfile) {
-      return;
-    }
-
-    if (isReservedSuperAdmin) {
-      setError(null);
-      setMessage("Role MIS selalu membawa seluruh checklist akses. Tidak perlu disimpan manual.");
       return;
     }
 
@@ -1092,7 +1070,7 @@ export function RoleMatrixShell({
                               </p>
                             </div>
                             <span className="font-mono text-[10px] text-muted-foreground dark:text-foreground/30 border border-border dark:border-white/10 px-1.5 py-0.5 shrink-0">
-                              L{role.profile?.roleLevel ?? "-"}
+                              {humanizeDerivedScope(role.profile?.scopeBasis ?? "SELF_ONLY")}
                             </span>
                           </div>
                         </button>
@@ -1117,25 +1095,8 @@ export function RoleMatrixShell({
                 </h3>
               </div>
 
-              <div className="grid gap-2 sm:grid-cols-3 lg:min-w-[420px]">
-                <div className="border border-border dark:border-white/5 bg-white dark:bg-card px-3 py-2">
-                  <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30">
-                    Level
-                  </p>
-                  <p className="text-[12px] font-mono text-foreground dark:text-foreground mt-0.5">{form.roleLevel || "-"}</p>
-                </div>
-                <div className="border border-border dark:border-white/5 bg-white dark:bg-card px-3 py-2">
-                  <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30">
-                    Approval
-                  </p>
-                  <p className="text-[12px] font-mono text-foreground dark:text-foreground mt-0.5">{form.approvalRank || "-"}</p>
-                </div>
-                <div className="border border-border dark:border-white/5 bg-white dark:bg-card px-3 py-2">
-                  <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30">
-                    Runtime Scope
-                  </p>
-                  <p className="text-[12px] font-mono text-foreground dark:text-foreground mt-0.5">{humanizeDerivedScope(derivedScopeBasis)}</p>
-                </div>
+              <div className="border border-border dark:border-white/5 bg-white dark:bg-card px-3 py-2 text-[12px] text-muted-foreground dark:text-foreground/55">
+                {humanizeDerivedScope(derivedScopeBasis)}
               </div>
             </div>
           </div>
@@ -1151,11 +1112,6 @@ export function RoleMatrixShell({
             <h1 className="text-[13px] font-mono text-foreground dark:text-foreground mt-0.5">
               {editorMode === "create" ? "Role Baru" : selectedRole?.roleName ?? "Pilih Role"}
             </h1>
-            {isReservedSuperAdmin ? (
-              <p className="mt-2 border border-primary/25 bg-primary/[0.04] px-2 py-1.5 text-[10px] font-mono text-app-accent-ink">
-                Role MIS dikunci sebagai Super Admin.
-              </p>
-            ) : null}
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -1177,8 +1133,7 @@ export function RoleMatrixShell({
                 isPending ||
                 !canEditProfile ||
                 !form.roleName.trim() ||
-                !form.roleLevel.trim() ||
-                (!form.webEnabled && !form.mobileEnabled)
+                !form.roleLevel.trim()
               }
               className="flex items-center gap-1.5 border border-primary/40 bg-primary/[0.06] px-3 py-1.5 text-[10px] font-mono uppercase tracking-[0.12em] text-app-accent-ink hover:bg-primary/10 transition-colors disabled:opacity-30"
             >
@@ -1201,7 +1156,7 @@ export function RoleMatrixShell({
                   roleName: event.target.value,
                 }))
               }
-              disabled={!canEditProfile || isReservedSuperAdmin}
+              disabled={!canEditProfile}
               className="h-8 w-full border border-border dark:border-white/10 bg-muted dark:bg-background px-2 text-[11px] font-mono text-foreground dark:text-foreground outline-none focus:border-primary/40 disabled:cursor-not-allowed disabled:opacity-70"
             />
           </label>
@@ -1218,7 +1173,7 @@ export function RoleMatrixShell({
                   description: event.target.value,
                 }))
               }
-              disabled={!canEditProfile || isReservedSuperAdmin}
+              disabled={!canEditProfile}
               className="h-8 w-full border border-border dark:border-white/10 bg-muted dark:bg-background px-2 text-[11px] font-mono text-foreground dark:text-foreground outline-none focus:border-primary/40 disabled:cursor-not-allowed disabled:opacity-70"
               placeholder="Contoh: QA upholstery, admin gudang bahan"
             />
@@ -1227,14 +1182,8 @@ export function RoleMatrixShell({
           <div className="md:col-span-2 border border-border dark:border-white/5 bg-muted dark:bg-background p-4">
             <div className="flex items-start justify-between gap-4">
               <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30">
-                Lane Approval &amp; Tingkatan
+                Tanggung Jawab Approval
               </p>
-              <div className="border border-border dark:border-white/5 bg-white dark:bg-card px-3 py-2 text-right shrink-0">
-                <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30">Nilai aktif</p>
-                <p className="text-[12px] font-mono text-foreground dark:text-foreground mt-0.5">
-                  Level {form.roleLevel || "-"} · Approval {form.approvalRank || "-"}
-                </p>
-              </div>
             </div>
 
             <div className="mt-4 grid gap-2 xl:grid-cols-3">
@@ -1245,7 +1194,7 @@ export function RoleMatrixShell({
                     key={blueprint.key}
                     type="button"
                     onClick={() => applyApprovalBlueprint(blueprint)}
-                    disabled={!canEditProfile || isReservedSuperAdmin}
+                    disabled={!canEditProfile}
                     className={[
                       "border px-4 py-3 text-left transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-40",
                       selected
@@ -1259,10 +1208,9 @@ export function RoleMatrixShell({
                         <ShieldCheck className="mt-0.5 h-3.5 w-3.5 text-app-accent-ink shrink-0" />
                       ) : null}
                     </div>
-                    <div className="mt-2 flex flex-wrap gap-2 text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30">
-                      <span>L{blueprint.roleLevel}</span>
-                      <span>Rank {blueprint.approvalRank || "-"}</span>
-                    </div>
+                    <p className="mt-2 text-[10px] text-muted-foreground dark:text-foreground/35">
+                      {blueprint.note}
+                    </p>
                   </button>
                 );
               })}
@@ -1286,7 +1234,7 @@ export function RoleMatrixShell({
                   <button
                     type="button"
                     onClick={() => setScopeDialog("division")}
-                    disabled={!canEditProfile || isReservedSuperAdmin}
+                    disabled={!canEditProfile}
                     className="border border-border dark:border-white/10 px-2 py-1 text-[10px] font-mono uppercase text-muted-foreground dark:text-foreground/40 hover:text-foreground dark:text-foreground transition-colors disabled:opacity-40"
                   >
                     Atur
@@ -1321,7 +1269,7 @@ export function RoleMatrixShell({
                   <button
                     type="button"
                     onClick={() => setScopeDialog("unit")}
-                    disabled={!canEditProfile || isReservedSuperAdmin}
+                    disabled={!canEditProfile}
                     className="border border-border dark:border-white/10 px-2 py-1 text-[10px] font-mono uppercase text-muted-foreground dark:text-foreground/40 hover:text-foreground dark:text-foreground transition-colors disabled:opacity-40"
                   >
                     Atur
@@ -1364,46 +1312,13 @@ export function RoleMatrixShell({
                   notes: event.target.value,
                 }))
               }
-              disabled={!canEditProfile || isReservedSuperAdmin}
+              disabled={!canEditProfile}
               rows={3}
               className="w-full border border-border dark:border-white/10 bg-muted dark:bg-background px-2 py-2 text-[11px] font-mono text-foreground dark:text-foreground outline-none focus:border-primary/40 disabled:cursor-not-allowed disabled:opacity-70"
               placeholder="Catatan teknis role..."
             />
           </label>
 
-          <div className="grid gap-2 md:col-span-2 md:grid-cols-2">
-            <label className="flex items-center gap-3 border border-border dark:border-white/5 bg-muted dark:bg-background px-4 py-2">
-              <input
-                type="checkbox"
-                checked={form.webEnabled}
-                onChange={(event) =>
-                  setForm((currentValue) => ({
-                    ...currentValue,
-                    webEnabled: event.target.checked,
-                  }))
-                }
-                disabled={!canEditProfile || isReservedSuperAdmin}
-                className="h-4 w-4 rounded border-white/20 bg-transparent text-app-accent-ink"
-              />
-              <p className="text-[11px] font-mono text-foreground dark:text-foreground">Aktif di Web</p>
-            </label>
-
-            <label className="flex items-center gap-3 border border-border dark:border-white/5 bg-muted dark:bg-background px-4 py-2">
-              <input
-                type="checkbox"
-                checked={form.mobileEnabled}
-                onChange={(event) =>
-                  setForm((currentValue) => ({
-                    ...currentValue,
-                    mobileEnabled: event.target.checked,
-                  }))
-                }
-                disabled={!canEditProfile || isReservedSuperAdmin}
-                className="h-4 w-4 rounded border-white/20 bg-transparent text-app-accent-ink"
-              />
-              <p className="text-[11px] font-mono text-foreground dark:text-foreground">Aktif di Mobile</p>
-            </label>
-          </div>
         </div>
       </div>
 
@@ -1416,11 +1331,6 @@ export function RoleMatrixShell({
             <h2 className="text-[13px] font-mono text-foreground dark:text-foreground/80 mt-0.5">
               Permission per Fitur
             </h2>
-            {isReservedSuperAdmin ? (
-              <p className="mt-1 text-[10px] font-mono text-app-accent-ink/80">
-                Checklist role MIS selalu penuh.
-              </p>
-            ) : null}
           </div>
 
           <button
@@ -1431,7 +1341,6 @@ export function RoleMatrixShell({
               isFetchingPermissions ||
               selectedRoleId <= 0 ||
               editorMode === "create" ||
-              isReservedSuperAdmin ||
               !canEditProfile
             }
             className="flex items-center gap-1.5 border border-primary/40 bg-primary/[0.06] px-3 py-1.5 text-[10px] font-mono uppercase tracking-[0.12em] text-app-accent-ink hover:bg-primary/10 transition-colors disabled:opacity-30"
@@ -1562,7 +1471,6 @@ export function RoleMatrixShell({
                                   onChange={() => togglePermission(permission.id)}
                                   disabled={
                                     editorMode === "create" ||
-                                    isReservedSuperAdmin ||
                                     !canEditProfile
                                   }
                                   className="h-4 w-4 rounded border-white/20 bg-transparent text-app-accent-ink disabled:opacity-40"
@@ -1587,7 +1495,7 @@ export function RoleMatrixShell({
       <ScopeDialog
         open={scopeDialog !== null}
         kind={scopeDialog}
-        canEdit={canEditProfile && !isReservedSuperAdmin}
+        canEdit={canEditProfile}
         options={scopeDialog === "division" ? references.divisions : references.units}
         initialMode={
           scopeDialog === "division"

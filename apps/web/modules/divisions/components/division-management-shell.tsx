@@ -1,5 +1,6 @@
 "use client";
 
+import type { ColDef } from "ag-grid-community";
 import type { DivisionManagementRecord, MasterJobTypeRecord } from "@/shared/api/divisions/divisions";
 import {
   createDivision,
@@ -11,6 +12,7 @@ import {
 } from "@/shared/api/divisions/divisions";
 import { Pencil, Plus, Search, Trash2, X } from "lucide-react";
 import { useMemo, useState } from "react";
+import { SmsAgGrid } from "@/shared/datagrid/sms-ag-grid";
 
 interface DivisionManagementShellProps {
   divisions: DivisionManagementRecord[];
@@ -301,6 +303,52 @@ export function DivisionManagementShell({ divisions, generalJobTypes }: Division
 
   const globalActiveUserCount = useMemo(() => rows.reduce((sum, div) => sum + div.activeUserCount, 0), [rows]);
   const globalJobdescCount = useMemo(() => rows.reduce((sum, div) => sum + div.jobTypes.length, 0) + generalRows.length, [rows, generalRows]);
+  const divisionColumnDefs = useMemo<ColDef<DivisionManagementRecord>[]>(
+    () => [
+      {
+        headerName: "Divisi / Team",
+        pinned: "left",
+        minWidth: 190,
+        flex: 1,
+        valueGetter: ({ data }) => {
+          if (!data) return "";
+          const parent = rows.find((division) => division.id === data.parentId);
+          return parent ? `${parent.name} / ${data.name}` : data.name;
+        },
+      },
+      { field: "code", headerName: "Kode", width: 92 },
+      { field: "userCount", headerName: "Pegawai", width: 96 },
+      { field: "activeUserCount", headerName: "Aktif", width: 82 },
+      { headerName: "Jobdesc", width: 100, valueGetter: ({ data }) => data?.jobTypes.length ?? 0 },
+      {
+        field: "isTeknis",
+        headerName: "Jenis",
+        width: 105,
+        valueFormatter: ({ value }) => (value ? "Teknis" : "Nonteknis"),
+      },
+      {
+        headerName: "Aksi",
+        pinned: "right",
+        sortable: false,
+        filter: false,
+        width: 82,
+        cellRenderer: ({ data }: { data?: DivisionManagementRecord }) => {
+          if (!data) return null;
+          return (
+            <div className="flex h-full items-center justify-center gap-1">
+              <button type="button" title="Ubah divisi atau team" aria-label={`Ubah ${data.name}`} onClick={(event) => { event.stopPropagation(); openEditDivision(data); }} className="inline-flex h-7 w-7 items-center justify-center border border-border text-muted-foreground hover:bg-muted hover:text-foreground">
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
+              <button type="button" title="Hapus divisi atau team" aria-label={`Hapus ${data.name}`} onClick={(event) => { event.stopPropagation(); void handleDeleteDivision(data); }} className="inline-flex h-7 w-7 items-center justify-center border border-destructive/35 text-destructive hover:bg-destructive/10">
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          );
+        },
+      },
+    ],
+    [rows],
+  );
 
   return (
     <div className="flex flex-col gap-4">
@@ -408,6 +456,23 @@ export function DivisionManagementShell({ divisions, generalJobTypes }: Division
                 className="h-8 border border-white/10 bg-card px-3 text-[11px] font-mono text-foreground/70 outline-none transition-colors placeholder:text-foreground/20 focus:border-primary/40"
               />
             </div>
+            <label className="block">
+              <span className="mb-1 block text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30">Divisi Induk</span>
+              <select
+                value={divisionForm.parentId}
+                onChange={(event) => setDivisionForm((current) => ({ ...current, parentId: event.target.value }))}
+                className="h-8 w-full border border-white/10 bg-card px-3 text-[11px] font-mono text-foreground/70 outline-none focus:border-primary/40"
+              >
+                <option value="">Tidak ada (divisi utama)</option>
+                {rows
+                  .filter((division) => division.id !== divisionForm.id)
+                  .map((division) => (
+                    <option key={division.id} value={division.id}>
+                      {division.name} ({division.code})
+                    </option>
+                  ))}
+              </select>
+            </label>
             <div className="flex items-center justify-between gap-2">
               <label className="flex items-center gap-2 text-[10px] font-mono text-foreground/45">
                 <input
@@ -429,99 +494,33 @@ export function DivisionManagementShell({ divisions, generalJobTypes }: Division
           </form>
         ) : null}
 
-        <div className="min-h-0 flex-1 overflow-y-auto border border-white/5 bg-background [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,0.2)_transparent] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-white/20 [&::-webkit-scrollbar-thumb]:hover:bg-white/30">
-          <table className="w-full text-left">
-            <thead>
-              <tr className="border-b border-white/5 bg-card">
-                <th className="px-4 py-2 text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30">Divisi</th>
-                <th className="px-4 py-2 text-center text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30">Total User</th>
-                <th className="px-4 py-2 text-center text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30">User Aktif</th>
-                <th className="px-4 py-2 text-center text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30">Jobdesc</th>
-                <th className="px-4 py-2 text-[10px] font-mono uppercase tracking-[0.12em] text-foreground/30">Status</th>
-                <th className="px-4 py-2 w-8"></th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr
-                onClick={() => setIsGeneralSelected(true)}
-                className={`cursor-pointer border-b-2 border-white/10 transition-colors ${
-                  isGeneralSelected ? "bg-primary/[0.04] border-l-2 border-l-amber-500" : "hover:bg-white/[0.02] border-l-2 border-l-transparent"
-                }`}
-              >
-                <td className="px-4 py-2">
-                  <p className="text-[12px] font-mono text-foreground/80">JOBDESC UMUM</p>
-                  <p className="mt-0.5 text-[10px] font-mono text-foreground/25">GLOBAL · division_id NULL</p>
-                </td>
-                <td className="px-4 py-2 text-center text-[11px] font-mono text-foreground/20">-</td>
-                <td className="px-4 py-2 text-center text-[11px] font-mono text-foreground/20">-</td>
-                <td className="px-4 py-2 text-center text-[11px] font-mono text-foreground/55">{generalRows.length}</td>
-                <td className="px-4 py-2">
-                  <span className="border border-primary/20 bg-primary/[0.04] px-2 py-0.5 text-[9px] font-mono text-app-accent-ink">
-                    UMUM
-                  </span>
-                </td>
-                <td className="px-4 py-2 text-right"></td>
-              </tr>
-              {filteredRows.map((division) => (
-                <tr
-                  key={division.id}
-                  onClick={() => {
-                    setIsGeneralSelected(false);
-                    setSelectedDivisionId(division.id);
-                  }}
-                  className={`cursor-pointer border-b border-white/[0.04] transition-colors ${
-                    selectedDivision?.id === division.id ? "bg-primary/[0.04] border-l-2 border-l-amber-500" : "hover:bg-white/[0.02] border-l-2 border-l-transparent"
-                  }`}
-                >
-                  <td className="px-4 py-2">
-                    <p className="text-[12px] font-mono text-foreground/80">{division.name}</p>
-                    <p className="mt-0.5 text-[10px] font-mono text-foreground/25">
-                      {division.code} · ID {division.id}
-                    </p>
-                  </td>
-                  <td className="px-4 py-2 text-center text-[11px] font-mono text-foreground/55">{division.userCount}</td>
-                  <td className="px-4 py-2 text-center text-[11px] font-mono text-foreground/55">{division.activeUserCount}</td>
-                  <td className="px-4 py-2 text-center text-[11px] font-mono text-foreground/55">{division.jobTypes.length}</td>
-                  <td className="px-4 py-2">
-                    {division.isTeknis ? (
-                      <span className="border border-success/20 bg-success/[0.04] px-2 py-0.5 text-[9px] font-mono text-success">
-                        TEKNIS
-                      </span>
-                    ) : (
-                      <span className="border border-white/10 px-2 py-0.5 text-[9px] font-mono text-foreground/25">
-                        NON TEKNIS
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-4 py-2 text-right">
-                    <button
-                      type="button"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        openEditDivision(division);
-                      }}
-                      className="mr-1 inline-flex h-6 w-6 items-center justify-center border border-white/10 text-foreground/30 transition-colors hover:border-white/25 hover:text-foreground/70"
-                      title="Edit divisi"
-                    >
-                      <Pencil className="h-3 w-3" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        void handleDeleteDivision(division);
-                      }}
-                      className="inline-flex h-6 w-6 items-center justify-center border border-destructive/20 text-destructive/45 transition-colors hover:border-destructive/40 hover:text-destructive"
-                      title="Hapus divisi"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <button
+          type="button"
+          onClick={() => setIsGeneralSelected(true)}
+          className={[
+            "flex items-center justify-between border px-3 py-2 text-left text-[11px] font-mono transition-colors",
+            isGeneralSelected
+              ? "border-primary/40 bg-primary/[0.06] text-app-accent-ink"
+              : "border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground",
+          ].join(" ")}
+        >
+          <span>Master jobdesc umum</span>
+          <span>{generalRows.length}</span>
+        </button>
+        <SmsAgGrid<DivisionManagementRecord>
+          rowData={filteredRows}
+          columnDefs={divisionColumnDefs}
+          getRowId={({ data }) => String(data.id)}
+          onRowClicked={({ data }) => {
+            if (!data) return;
+            setIsGeneralSelected(false);
+            setSelectedDivisionId(data.id);
+          }}
+          rowClassRules={{ "ag-row-selected": ({ data }) => data?.id === selectedDivision?.id && !isGeneralSelected }}
+          heightClassName="min-h-0 flex-1"
+          defaultColDef={{ filter: true, floatingFilter: true }}
+          emptyMessage="Belum ada divisi atau team."
+        />
       </div>
 
       <aside className="flex h-full min-h-0 flex-col border border-white/5 bg-background">

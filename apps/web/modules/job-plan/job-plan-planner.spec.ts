@@ -2,10 +2,12 @@ import { describe, expect, test } from "bun:test";
 import { jobPlanRuntimeReadItemSchema } from "@smsystem/contracts/job-plan-runtime";
 import {
   buildCountdownPanelOptions,
+  jobActualQcLabel,
   buildCreateJobPlanRuntimePayload,
   buildEditDraftJobPlanRuntimePayload,
   buildJobPlanDraftRecord,
   buildManualExecutionJobPlanRuntimePayload,
+  calculateJobPlanDeadlineDate,
   createEditDraftFromRow,
   createManualExecutionDraft,
   findJobPlanPanelValue,
@@ -16,16 +18,25 @@ import {
   jobPlanPanelNames,
   jobPlanPartNames,
   jobPlanWindowMinutes,
+  liveJobPlanActualMinutes,
+  liveJobPlanUnverifiedMinutes,
   isJobPlanCountdownPlannable,
   minutesToDuration,
   minutesToTime,
   resolveAdditionalJobTargetMinutes,
+  splitJobPlanRuntimeDraftForSchedule,
   toJobPlanDraftDisplayRows,
   toLocalDateValue,
   toJobPlanRuntimeDisplayRows,
   resolveJobPlanDivisionName,
   validateJobPlanRuntimeDraft,
 } from "./job-plan-planner";
+
+test("QC result distinguishes a KD pass awaiting QA from final QC", () => {
+  expect(jobActualQcLabel({ actualQcResult: "LOLOS", actualQcLevel: "QC_KD" } as never)).toBe("QC_KD · Menunggu QA");
+  expect(jobActualQcLabel({ actualQcResult: "LOLOS", actualQcLevel: "QC_QA" } as never)).toBe("Lolos QC");
+  expect(jobActualQcLabel({ actualQcResult: "TIDAK_LOLOS", actualQcLevel: "QC_QA" } as never)).toBe("Tidak lolos QC");
+});
 
 const countdown = {
   value: "CORE-1",
@@ -53,6 +64,13 @@ const employee = {
 };
 
 describe("Job Plan planner helpers", () => {
+  test("calculates deadline from target hours and workshop capacity", () => {
+    expect(calculateJobPlanDeadlineDate("2026-10-01", 16 * 60)).toBe("2026-10-02");
+    expect(calculateJobPlanDeadlineDate("2026-10-02", 16 * 60)).toBe("2026-10-05");
+    expect(calculateJobPlanDeadlineDate("2026-10-03", 6 * 60)).toBe("2026-10-05");
+    expect(calculateJobPlanDeadlineDate("2026-10-04", 60)).toBe("2026-10-05");
+  });
+
   test("normalizes the active job description response key at the contract boundary", () => {
     const result = jobPlanRuntimeReadItemSchema.parse({
       plan_id: "PLAN-1",
@@ -81,6 +99,99 @@ describe("Job Plan planner helpers", () => {
 
     expect(result.jobdescription).toBe("Repair bumper");
     expect("job_description" in result).toBe(false);
+  });
+
+  test("keeps runtime display metadata for execution rows without countdown lookup", () => {
+    const result = jobPlanRuntimeReadItemSchema.parse({
+      plan_id: "PLAN-1",
+      core_id: "CORE-MISSING",
+      car_id: "JAGUARXK120_MRJAMES",
+      panel_id: null,
+      division_id: 12,
+      employee_id: "SM-11.003",
+      task_date: "2026-09-30",
+      planned_start_minute: 480,
+      planned_finish_minute: 540,
+      planned_work_minutes: 60,
+      approval_state: "APPROVED",
+      execution_state: "NOT_STARTED",
+      ledger_state: "MATERIALIZED",
+      legacy_status: "PLAN",
+      urgent: false,
+      is_rework: false,
+      is_overtime: false,
+      is_priority: false,
+      jobdescription: "CLEANING",
+      unit_name: "JAGUAR XK120",
+      panel_name: "BODY DEPAN",
+      division_name: "INTERIOR",
+      employee_name: "AGUS RUSMAWAN",
+      note: null,
+      source: "MYSQL_V2_PROJECTION",
+      version: 4,
+      projection_ready: true,
+      accumulated_work_minutes: 0,
+      persisted_work_minutes: 0,
+      unverified_work_minutes: 0,
+      actual_start: "2026-09-30T08:00:00+07:00",
+      actual_finish: "2026-09-30T09:00:00+07:00",
+      active_segment_started_at: "2026-09-30T09:15:00+07:00",
+      live_state_available: true,
+      read_only: false,
+    });
+
+    const [row] = toJobPlanRuntimeDisplayRows([result], [], []);
+
+    expect(row).toMatchObject({
+      unitName: "JAGUAR XK120",
+      panelName: "BODY DEPAN",
+      divisionName: "INTERIOR",
+      employeeName: "AGUS RUSMAWAN",
+      actualStartAt: "2026-09-30T08:00:00+07:00",
+      actualFinishAt: "2026-09-30T09:00:00+07:00",
+      activeSegmentStartedAt: "2026-09-30T09:15:00+07:00",
+    });
+  });
+
+  test("projects running actual minutes from active segment start", () => {
+    const [row] = toJobPlanRuntimeDisplayRows([
+      {
+        plan_id: "PLAN-1",
+        core_id: "CORE-1",
+        car_id: "220S",
+        panel_id: 10,
+        division_id: 7,
+        employee_id: "EMP-1",
+        task_date: "2026-09-15",
+        planned_start_minute: 480,
+        planned_finish_minute: 600,
+        planned_work_minutes: 120,
+        approval_state: "APPROVED",
+        execution_state: "RUNNING",
+        ledger_state: "MATERIALIZED",
+        legacy_status: null,
+        urgent: false,
+        is_rework: false,
+        is_overtime: false,
+        is_priority: false,
+        jobdescription: "Repair bumper",
+        note: null,
+        source: "V2_REDIS",
+        version: 6,
+        projection_ready: true,
+        accumulated_work_minutes: 30,
+        persisted_work_minutes: 10,
+        unverified_work_minutes: 20,
+        active_segment_started_at: "2026-09-15T08:00:00+07:00",
+        live_state_available: true,
+        read_only: false,
+      },
+    ], [countdown], [employee]);
+
+    const now = new Date("2026-09-15T08:45:00+07:00");
+
+    expect(liveJobPlanActualMinutes(row, now)).toBe(75);
+    expect(liveJobPlanUnverifiedMinutes(row, now)).toBe(65);
   });
 
   test("formats runtime states without collapsing domains", () => {
@@ -503,6 +614,37 @@ describe("Job Plan planner helpers", () => {
     expect(jobPlanBreakMinutesForWindow("2026-09-04", "11:00", "11:30")).toBe(0);
   });
 
+  test("splits a normal draft that passes the overtime threshold", () => {
+    const draft = {
+      clientId: "draft-1",
+      isNew: true as const,
+      sourceType: "countdown" as const,
+      workMode: "normal" as const,
+      coreId: "CORE-1",
+      divisionId: 1,
+      carId: "CAR-1",
+      panelId: 10,
+      jobTypeId: "",
+      jobTypeName: "",
+      employeeId: "EMP-1",
+      taskDate: "2026-09-02",
+      startTime: "08:00",
+      durationText: "09:00",
+      jobDescription: "Repair bumper",
+      initialFinding: "",
+      note: "",
+      isOvertime: false,
+      isRework: false,
+      isPriority: false,
+      error: null,
+    };
+
+    expect(splitJobPlanRuntimeDraftForSchedule(draft)).toMatchObject([
+      { workMode: "normal", isOvertime: false, startTime: "08:00", durationText: "08:00" },
+      { workMode: "overtime", isOvertime: true, startTime: "17:00", durationText: "01:00" },
+    ]);
+  });
+
   test("builds edit draft mutation payload", () => {
     const draft = {
       clientId: "edit-1",
@@ -618,8 +760,9 @@ describe("Job Plan planner helpers", () => {
       ...createManualExecutionDraft(row),
       actualStart: "2026-09-15T08:00",
       actualFinish: "2026-09-15T10:00",
-      actualMinutesText: "01:30",
-      result: "Selesai",
+      breakMinutesText: "00:30",
+      status: "done" as const,
+      progressText: "100",
     };
 
     expect(buildManualExecutionJobPlanRuntimePayload(draft, "USER-1", "cmd-manual")).toMatchObject({
@@ -628,6 +771,7 @@ describe("Job Plan planner helpers", () => {
       expectedVersion: 5,
       actualMinutes: 90,
       result: "Selesai",
+      note: "Status: Selesai · Progress: 100% · Istirahat: 00:30",
     });
   });
 });

@@ -64,6 +64,11 @@ import {
   handleUnitWorkspaceRoute,
   handleUnitsListRoute,
   handleUnitClientsRoute,
+  handleUnitMediaDetailRoute,
+  handleUnitMediaFolderRoute,
+  handleUnitMediaRoute,
+  handleUnitMediaUploadTicketRoute,
+  handleUnitReferencesRoute,
 } from "@/routes/units/units.routes";
 import { DefaultUnitsService, type UnitsService } from "@/services/units/units.service";
 import {
@@ -164,6 +169,7 @@ import {
   handleWoPendingApprovalRoute,
   handleWoRejectRoute,
   handleWoUpdateRoute,
+  handleWoUploadTicketRoute,
   handleWoUrgentRoute,
 } from "@/routes/wo/wo.routes";
 import {
@@ -663,6 +669,7 @@ export function createApiFetchHandler(dependencies: AppDependencies = {}) {
     { method: "GET", pattern: "/api/wo/pending-approval", handler: (request) => handleWoPendingApprovalRoute(request, getAuthService(), getWoService()) },
     { method: "GET", pattern: "/api/wo/my-division", handler: (request) => handleWoMyDivisionRoute(request, getAuthService(), getWoService()) },
     { method: "GET", pattern: "/api/wo/urgent", handler: (request) => handleWoUrgentRoute(request, getAuthService(), getWoService()) },
+    { method: "GET", pattern: "/api/wo/upload-ticket", handler: (request) => handleWoUploadTicketRoute(request, getAuthService()) },
     { method: "POST", pattern: "/api/wo", handler: (request) => handleWoCreateRoute(request, getAuthService(), getWoService()) },
 
     // Purchase Request
@@ -850,6 +857,13 @@ export function createApiFetchHandler(dependencies: AppDependencies = {}) {
     { method: "POST", pattern: "/api/countdown/import", handler: (request) => handleCountdownImportRoute(request, getAuthService(), getCountdownService()) },
 
     // Unit workspace and catalog
+    { method: "GET", pattern: "/api/units/references", handler: (request) => handleUnitReferencesRoute(request, getAuthService(), getUnitsService()) },
+    { method: "GET", pattern: /^\/api\/units\/([^/]+)\/media$/, handler: (request, match) => handleUnitMediaRoute(request, match![1], getAuthService(), getUnitsService()) },
+    { method: "POST", pattern: /^\/api\/units\/([^/]+)\/media$/, handler: (request, match) => handleUnitMediaRoute(request, match![1], getAuthService(), getUnitsService()) },
+    { method: "POST", pattern: /^\/api\/units\/([^/]+)\/media\/folders$/, handler: (request, match) => handleUnitMediaFolderRoute(request, match![1], getAuthService(), getUnitsService()) },
+    { method: "GET", pattern: /^\/api\/units\/([^/]+)\/media\/upload-ticket$/, handler: (request, match) => handleUnitMediaUploadTicketRoute(request, match![1], getAuthService()) },
+    { method: "PUT", pattern: /^\/api\/units\/([^/]+)\/media\/([^/]+)$/, handler: (request, match) => handleUnitMediaDetailRoute(request, match![1], match![2], getAuthService(), getUnitsService()) },
+    { method: "DELETE", pattern: /^\/api\/units\/([^/]+)\/media\/([^/]+)$/, handler: (request, match) => handleUnitMediaDetailRoute(request, match![1], match![2], getAuthService(), getUnitsService()) },
     { method: "GET", pattern: /^\/api\/units\/([^/]+)\/workspace$/, handler: (request, match) => handleUnitWorkspaceRoute(request, match![1], getAuthService(), getUnitsService()) },
     { method: "GET", pattern: /^\/api\/units\/([^/]+)\/bom$/, handler: (request, match) => handleUnitBomRoute(request, match![1], getAuthService(), getUnitsService()) },
     { method: "GET", pattern: "/api/catalog/components", handler: (request) => handleCatalogComponentsRoute(request, getAuthService(), getUnitCatalogService()) },

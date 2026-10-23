@@ -94,9 +94,15 @@ interface JobPlanRow extends RowDataPacket {
   actualStatus: string | null;
   actualProgressPercent: number | null;
   actualBreakMinutes: number | null;
+  actualNote: string | null;
   actualValidationStatus: string | null;
   actualValidationProgress: number | null;
   actualValidationNote: string | null;
+  actualMonitoringNote: string | null;
+  actualQcNote: string | null;
+  actualQcResult: string | null;
+  actualQcLevel: string | null;
+  countdownStatus: string | null;
 }
 
 interface CountRow extends RowDataPacket {
@@ -307,12 +313,18 @@ function mapJobPlanRow(row: JobPlanRow): JobPlanRecord {
       row.actualBreakMinutes === null || row.actualBreakMinutes === undefined
         ? null
         : Number(row.actualBreakMinutes),
+    actualNote: row.actualNote ?? null,
     actualValidationStatus: row.actualValidationStatus ?? null,
     actualValidationProgress:
       row.actualValidationProgress === null || row.actualValidationProgress === undefined
         ? null
         : Number(row.actualValidationProgress),
     actualValidationNote: row.actualValidationNote ?? null,
+    actualMonitoringNote: row.actualMonitoringNote ?? null,
+    actualQcNote: row.actualQcNote ?? null,
+    actualQcResult: row.actualQcResult ?? null,
+    actualQcLevel: row.actualQcLevel ?? null,
+    countdownStatus: row.countdownStatus ?? null,
   };
 }
 
@@ -644,9 +656,16 @@ function buildListSelectSql(): string {
       END AS actualStatus,
       latest_actual.progres AS actualProgressPercent,
       latest_actual.break_duration_minutes AS actualBreakMinutes,
+      latest_actual.daily_notes AS actualNote,
       latest_validation.status AS actualValidationStatus,
       latest_validation.progress_final AS actualValidationProgress,
-      latest_validation.note AS actualValidationNote
+      latest_validation.note AS actualValidationNote,
+      latest_monitoring_validation.note AS actualMonitoringNote,
+      qc_inspection.qc_notes AS actualQcNote,
+      CASE WHEN UPPER(qc_inspection.result_status) = 'PASS' THEN 'LOLOS'
+        ELSE qc_inspection.result_status END AS actualQcResult,
+      qc_inspection.qc_level AS actualQcLevel,
+      jc.status AS countdownStatus
     FROM sm_jobdesc_plan p
     LEFT JOIN sm_jobdesc_countdown jc ON jc.id = p.core_id
     LEFT JOIN cars c ON c.id = jc.car_id
@@ -684,7 +703,7 @@ function buildListSelectSql(): string {
       GROUP BY p.core_id
     ) planCapacity ON planCapacity.core_id = jc.id
     LEFT JOIN (
-      SELECT a.id, a.plandaily_id, a.start_time, a.finish_time, a.status, a.progres, a.break_duration_minutes
+      SELECT a.id, a.created_at, a.plandaily_id, a.start_time, a.finish_time, a.status, a.progres, a.break_duration_minutes, a.daily_notes
       FROM sm_jobdesc_actual a
       JOIN (
         SELECT plandaily_id, MAX(created_at) AS latestCreatedAt
@@ -692,6 +711,12 @@ function buildListSelectSql(): string {
         GROUP BY plandaily_id
       ) la ON la.plandaily_id = a.plandaily_id AND la.latestCreatedAt = a.created_at
     ) latest_actual ON latest_actual.plandaily_id = p.id
+    LEFT JOIN sm_qc_inspections qc_inspection ON qc_inspection.id = (
+      SELECT q.id FROM sm_qc_inspections q
+      WHERE q.core_id = jc.id AND q.inspection_date >= latest_actual.created_at
+      ORDER BY (q.qc_level IN ('QC_QA', 'QC_ADVISOR')) DESC,
+        q.inspection_date DESC, q.id DESC LIMIT 1
+    )
     LEFT JOIN (
       SELECT v.actual_id, v.status, v.progress_final, v.note
       FROM sm_jobdesc_validation v
@@ -701,6 +726,17 @@ function buildListSelectSql(): string {
         GROUP BY actual_id
       ) lv ON lv.actual_id = v.actual_id AND lv.latestCreatedAt = v.created_at
     ) latest_validation ON latest_validation.actual_id = latest_actual.id
+    LEFT JOIN (
+      SELECT v.actual_id, v.note
+      FROM sm_jobdesc_validation v
+      JOIN (
+        SELECT actual_id, MAX(created_at) AS latestCreatedAt
+        FROM sm_jobdesc_validation
+        WHERE status <> 'done'
+        GROUP BY actual_id
+      ) lv ON lv.actual_id = v.actual_id AND lv.latestCreatedAt = v.created_at
+      WHERE v.status <> 'done'
+    ) latest_monitoring_validation ON latest_monitoring_validation.actual_id = latest_actual.id
   `;
 }
 
@@ -2539,6 +2575,7 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
           taskDate: input.taskDate,
           requestedMode: input.mode,
           targetHours: row.targetHours,
+          startTime: row.startTime,
         });
 
         await checkPanelLock(connection, countdown);
@@ -2764,6 +2801,7 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
             taskDate: draft.taskDate,
             requestedMode: draft.isOvertime ? "overtime" : "normal",
             targetHours: draft.targetHours,
+            startTime: draft.startTime,
           });
           const existingIdsBySegment = new Map<string, string>();
 
@@ -2870,6 +2908,7 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
           taskDate: draft.taskDate,
           requestedMode: draft.isOvertime ? "overtime" : "normal",
           targetHours: draft.targetHours,
+          startTime: draft.startTime,
         });
         const existingIdsBySegment = new Map<string, string>();
 

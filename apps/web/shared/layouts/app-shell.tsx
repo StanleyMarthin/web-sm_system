@@ -123,9 +123,7 @@ export function AppShell({ user, navigation, children }: AppShellProps) {
 
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const currentUnitSegment = unitDetailSegment(pathname);
-  const canUseUnitCatalog =
-    user.roleName?.trim().toLowerCase() === "mis" ||
-    user.permissions.includes(permissionCodes.unitCatalogView);
+  const canUseUnitCatalog = user.permissions.includes(permissionCodes.unitCatalogView);
   const sidebarNavigation = useMemo(() => {
     if (!currentUnitSegment) return navigation;
 
@@ -153,13 +151,13 @@ export function AppShell({ user, navigation, children }: AppShellProps) {
             : []),
           {
             id: "unit-parts-panels",
-            label: "Parts & Panels",
+            label: "Diagram Parts",
             href: `/units/${currentUnitSegment}?tab=parts-panels`,
             permission: permissionCodes.viewUnits,
           },
           {
             id: "unit-master-panel",
-            label: "Struktur Panel Unit",
+            label: "Tracking Panel & Part",
             href: `/units/${currentUnitSegment}?tab=master-panel`,
             permission: permissionCodes.viewUnits,
           },

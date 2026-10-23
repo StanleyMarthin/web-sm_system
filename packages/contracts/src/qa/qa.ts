@@ -26,6 +26,14 @@ export const qaIssueAreaSchema = z.enum([
   "LAINNYA",
 ]);
 export const qaResultStatusSchema = z.enum(["LOLOS", "TIDAK_LOLOS"]);
+export const qaInspectionLevelSchema = z.enum([
+  "QC_KD",
+  "QC_QA",
+  "QC_ADVISOR",
+  "QC_KP",
+  "QC_MP",
+  "QC_MO",
+]);
 
 export const qaInspectionRecordSchema = z.object({
   qcId: z.string(),
@@ -39,7 +47,9 @@ export const qaInspectionRecordSchema = z.object({
   jobName: z.string(),
   inspectorId: z.string().nullable(),
   inspectorName: z.string().nullable(),
+  qcLevel: qaInspectionLevelSchema.nullable().optional().default(null),
   resultStatus: qaResultStatusSchema,
+  inspectionDurationMinutes: z.number().nullable().optional().default(null),
   qcNotes: z.string().nullable(),
   photoBeforeUrl: z.string().nullable(),
   evidencePhotoUrl: z.string().nullable(),

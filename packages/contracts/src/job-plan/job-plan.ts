@@ -129,9 +129,15 @@ const jobPlanRecordBaseSchema = z.object({
   actualStatus: z.string().nullable().optional(),
   actualProgressPercent: z.number().nullable().optional(),
   actualBreakMinutes: z.number().nullable().optional(),
+  actualNote: z.string().nullable().optional(),
   actualValidationStatus: z.string().nullable().optional(),
   actualValidationProgress: z.number().nullable().optional(),
   actualValidationNote: z.string().nullable().optional(),
+  actualMonitoringNote: z.string().nullable().optional(),
+  actualQcNote: z.string().nullable().optional(),
+  actualQcResult: z.string().nullable().optional(),
+  actualQcLevel: z.string().nullable().optional(),
+  countdownStatus: z.string().nullable().optional(),
 });
 
 export const jobPlanRecordSchema = jobPlanRecordBaseSchema.transform((row) => ({

@@ -5,6 +5,7 @@ import {
   updateUserRequestSchema,
 } from "@smsystem/contracts/user";
 import { permissionCodes } from "@smsystem/permissions";
+import { isSystemSuperadminEmployee } from "@smsystem/contracts/auth";
 import { z } from "zod";
 import { parseJsonBody } from "@/http/request";
 import { getApiEnv } from "@/config/env";
@@ -97,6 +98,17 @@ async function requireManageUsersSession(
     return permissionResult;
   }
 
+  if (!isSystemSuperadminEmployee(sessionResult.session.user.employeeId)) {
+    return {
+      response: errorResponse(
+        request,
+        "Pengelolaan pengguna hanya tersedia untuk superadmin.",
+        403,
+        "SUPERADMIN_REQUIRED",
+      ),
+    };
+  }
+
   return { session: sessionResult.session };
 }
 
@@ -122,6 +134,10 @@ function mapUsersError(request: Request, error: unknown): Response {
         403,
         "SCOPE_FORBIDDEN",
       );
+    }
+
+    if (error.message === "SUPERADMIN_REQUIRED") {
+      return errorResponse(request, "Pengelolaan pengguna hanya tersedia untuk superadmin.", 403, "SUPERADMIN_REQUIRED");
     }
 
     if (error.message === "CANNOT_DEACTIVATE_SELF") {

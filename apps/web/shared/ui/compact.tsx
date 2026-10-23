@@ -152,11 +152,13 @@ export function CompactDateInput({
   onChange,
   className = "",
   panelClassName = "",
+  panelAlign = "right",
 }: {
   value: string;
   onChange: (value: string) => void;
   className?: string;
   panelClassName?: string;
+  panelAlign?: "left" | "right";
 }) {
   const [open, setOpen] = useState(false);
   const [viewMonth, setViewMonth] = useState(startOfUtcMonth(value));
@@ -191,31 +193,59 @@ export function CompactDateInput({
     });
   }
 
+  function shiftDay(days: number) {
+    const nextValue = addUtcDays(value, days);
+    onChange(nextValue);
+    setViewMonth(startOfUtcMonth(nextValue));
+  }
+
+  const panelAlignmentClass = panelAlign === "left" ? "left-0" : "right-0";
+
   return (
     <div ref={containerRef} className={`relative ${className}`}>
-      <button
-        type="button"
-        onClick={toggleOpen}
-        className={`${inputBase} flex items-center justify-between gap-2 pl-8 text-left`}
-      >
-        <CalendarDays className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground dark:text-foreground/30" />
-        <span className="truncate">{selectedLabel}</span>
-        <ChevronDown className={`h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform dark:text-foreground/30 ${open ? "rotate-180" : ""}`} />
-      </button>
+      <div className="flex w-full min-w-0 items-center gap-1">
+        <button
+          type="button"
+          onClick={() => shiftDay(-1)}
+          aria-label="Tanggal sebelumnya"
+          title="Tanggal sebelumnya"
+          className="inline-flex h-9 w-9 shrink-0 items-center justify-center border border-border bg-card text-muted-foreground transition-colors hover:border-primary/35 hover:text-foreground focus:border-primary/55 focus:outline-none dark:border-white/[0.08] dark:bg-muted dark:text-foreground/45 dark:hover:text-foreground"
+        >
+          <ChevronLeft className="h-3.5 w-3.5" />
+        </button>
+        <button
+          type="button"
+          onClick={toggleOpen}
+          className={`${inputBase} relative flex min-w-[8.5rem] flex-1 items-center justify-between gap-2 pl-8 pr-2 text-left`}
+        >
+          <CalendarDays className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground dark:text-foreground/30" />
+          <span className="min-w-0 truncate">{selectedLabel}</span>
+          <ChevronDown className={`h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform dark:text-foreground/30 ${open ? "rotate-180" : ""}`} />
+        </button>
+        <button
+          type="button"
+          onClick={() => shiftDay(1)}
+          aria-label="Tanggal berikutnya"
+          title="Tanggal berikutnya"
+          className="inline-flex h-9 w-9 shrink-0 items-center justify-center border border-border bg-card text-muted-foreground transition-colors hover:border-primary/35 hover:text-foreground focus:border-primary/55 focus:outline-none dark:border-white/[0.08] dark:bg-muted dark:text-foreground/45 dark:hover:text-foreground"
+        >
+          <ChevronRight className="h-3.5 w-3.5" />
+        </button>
+      </div>
 
       {open ? (
         <div
-          className={`absolute right-0 z-[100] mt-1 w-[17rem] overflow-hidden border border-border bg-popover shadow-lg dark:border-white/[0.08] dark:bg-popover ${panelClassName}`}
+          className={`absolute ${panelAlignmentClass} z-[100] mt-1 w-[18rem] max-w-[calc(100vw-2rem)] overflow-hidden border border-border bg-popover shadow-lg dark:border-white/[0.08] dark:bg-popover ${panelClassName}`}
         >
           <div className="border-b border-border bg-muted px-3 py-2 dark:border-white/[0.08] dark:bg-muted">
             <div className="flex items-center justify-between gap-3">
               <p className="font-mono text-[12px] font-semibold text-foreground">{monthLabel}</p>
-              <p className="font-mono text-[11px] text-muted-foreground">1 hari</p>
+              <p className="font-mono text-[11px] text-muted-foreground">Tanggal</p>
             </div>
             <p className="mt-1 text-[11px] text-muted-foreground">{selectedLabel}</p>
           </div>
 
-          <div className="space-y-3 p-3">
+          <div className="space-y-3 p-3.5">
             <div className="flex items-center justify-between">
               <button
                 type="button"
@@ -234,7 +264,7 @@ export function CompactDateInput({
               </button>
             </div>
 
-            <div className="grid grid-cols-7 gap-1 text-center">
+            <div className="grid grid-cols-7 gap-1.5 text-center">
               {["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"].map((label) => (
                 <span key={label} className="py-1 text-[11px] text-muted-foreground">
                   {label}
@@ -254,7 +284,7 @@ export function CompactDateInput({
                       setOpen(false);
                     }}
                     className={[
-                      "flex h-8 items-center justify-center text-[13px] transition-colors hover:bg-muted",
+                      "flex h-8 min-w-8 items-center justify-center text-[13px] transition-colors hover:bg-muted focus:border-primary/55 focus:outline-none",
                       "text-foreground",
                       isActive
                         ? "rounded-full bg-primary font-semibold text-primary-foreground hover:bg-primary"

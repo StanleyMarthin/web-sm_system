@@ -6,11 +6,17 @@ import type {
   WoRecord,
 } from "@smsystem/contracts/wo";
 import type { GridFilter } from "@smsystem/contracts/grid";
-import { AlertTriangle, ClipboardPlus, RefreshCcw } from "lucide-react";
+import {
+  AlertTriangle,
+  ClipboardPlus,
+  RefreshCcw,
+  UploadCloud,
+  X,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
-import { createWo } from "@/shared/api/wo/wo";
+import { createWo, requestWoUploadTicket } from "@/shared/api/wo/wo";
 import { SmartDataGrid } from "@/shared/datagrid/smart-data-grid";
 import type {
   SmartDataGridColumn,
@@ -47,6 +53,9 @@ interface WoItemState {
   addPanelToMaster: boolean;
   estimatedHours: string;
   notes: string;
+  issueNote: string;
+  mediaUrl: string;
+  mediaType: "image" | "video" | "";
 }
 
 interface WoFormState {
@@ -78,6 +87,9 @@ function emptyForm(): WoFormState {
         addPanelToMaster: false,
         estimatedHours: "",
         notes: "",
+        issueNote: "",
+        mediaUrl: "",
+        mediaType: "",
       },
     ],
   };
@@ -94,9 +106,17 @@ function SummaryCard({
 }) {
   return (
     <div className="border border-border dark:border-white/[0.05] bg-white dark:bg-card px-3 py-2">
-      <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30">{label}</p>
-      <p className="mt-1 font-mono text-[13px] text-foreground dark:text-foreground">{value}</p>
-      {helper ? <p className="mt-2 text-sm text-muted-foreground dark:text-foreground/40">{helper}</p> : null}
+      <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30">
+        {label}
+      </p>
+      <p className="mt-1 font-mono text-[13px] text-foreground dark:text-foreground">
+        {value}
+      </p>
+      {helper ? (
+        <p className="mt-2 text-sm text-muted-foreground dark:text-foreground/40">
+          {helper}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -171,7 +191,13 @@ const columns: SmartDataGridColumn[] = [
     key: "priority",
     label: "Prioritas",
     renderCell: (_value, row) => (
-      <span className={String(row.isPriority) === "true" ? "font-mono text-destructive" : "font-mono text-muted-foreground dark:text-foreground/35"}>
+      <span
+        className={
+          String(row.isPriority) === "true"
+            ? "font-mono text-destructive"
+            : "font-mono text-muted-foreground dark:text-foreground/35"
+        }
+      >
         {String(row.isPriority) === "true" ? "Tinggi" : "Normal"}
       </span>
     ),
@@ -200,6 +226,7 @@ export function WoListShell({
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+  const [uploadingIndex, setUploadingIndex] = useState<number | null>(null);
 
   const filters: SmartDataGridFilterDefinition[] = useMemo(
     () => [
@@ -263,8 +290,13 @@ export function WoListShell({
           sectionName: item.panelName.trim() || null,
           panelCategory: item.panelCategory.trim() || null,
           addPanelToMaster: item.addPanelToMaster,
-          estimatedHours: item.estimatedHours ? Number(item.estimatedHours) : null,
+          estimatedHours: item.estimatedHours
+            ? Number(item.estimatedHours)
+            : null,
           notes: item.notes.trim() || null,
+          issueNote: item.issueNote.trim() || null,
+          mediaUrl: item.mediaUrl || null,
+          mediaType: item.mediaType || null,
         })),
       });
 
@@ -279,6 +311,42 @@ export function WoListShell({
       router.refresh();
     } finally {
       setIsCreating(false);
+    }
+  }
+
+  async function handleMediaUpload(file: File, index: number) {
+    setError(null);
+    setUploadingIndex(index);
+    try {
+      const ticketResult = await requestWoUploadTicket({
+        filename: file.name,
+        contentType: file.type,
+        size: file.size,
+      });
+      if (!ticketResult.success) {
+        setError(ticketResult.message);
+        return;
+      }
+      const uploadResult = await fetch(ticketResult.result.uploadUrl, {
+        method: "PUT",
+        headers: { "Content-Type": file.type },
+        body: file,
+      });
+      if (!uploadResult.ok) {
+        setError("Media WO gagal diupload.");
+        return;
+      }
+      setForm((current) => {
+        const nextItems = [...current.items];
+        nextItems[index] = {
+          ...nextItems[index],
+          mediaUrl: ticketResult.result.publicUrl,
+          mediaType: ticketResult.result.mediaType,
+        };
+        return { ...current, items: nextItems };
+      });
+    } finally {
+      setUploadingIndex(null);
     }
   }
 
@@ -319,8 +387,8 @@ export function WoListShell({
               </div>
             </div>
             <p className="mt-2 text-[12px] text-muted-foreground dark:text-foreground/45">
-              WO tetap tiket berbasis tabel existing. Countdown terkait dibaca lewat relasi
-              `ref_taks_id`, bukan kolom baru.
+              WO tetap tiket berbasis tabel existing. Countdown terkait dibaca
+              lewat relasi `ref_taks_id`, bukan kolom baru.
             </p>
           </div>
 
@@ -376,15 +444,23 @@ export function WoListShell({
                     className="grid grid-cols-[1fr_0.9fr_0.5fr_0.5fr] gap-3 border-b border-white/[0.04] px-3 py-2 text-[12px] text-foreground dark:text-foreground/75 transition-colors hover:bg-muted dark:hover:bg-white/[0.02] last:border-b-0"
                   >
                     <div>
-                      <p className="font-mono text-[11px] text-app-accent-ink">{row.woNumber}</p>
+                      <p className="font-mono text-[11px] text-app-accent-ink">
+                        {row.woNumber}
+                      </p>
                       <p className="mt-1">{row.unitName}</p>
                     </div>
                     <div>
                       <p>{row.toDivisionName}</p>
-                      <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/35">{row.status}</p>
+                      <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/35">
+                        {row.status}
+                      </p>
                     </div>
-                    <div className="text-right font-mono tabular-nums">{row.agingHours}</div>
-                    <div className="text-right font-mono tabular-nums text-destructive">{row.agingScore}</div>
+                    <div className="text-right font-mono tabular-nums">
+                      {row.agingHours}
+                    </div>
+                    <div className="text-right font-mono tabular-nums text-destructive">
+                      {row.agingScore}
+                    </div>
                   </Link>
                 ))
               )}
@@ -403,7 +479,10 @@ export function WoListShell({
               <select
                 value={form.carId}
                 onChange={(event) =>
-                  setForm((currentValue) => ({ ...currentValue, carId: event.target.value }))
+                  setForm((currentValue) => ({
+                    ...currentValue,
+                    carId: event.target.value,
+                  }))
                 }
                 disabled={!canCreate}
                 className="h-8 w-full border border-border dark:border-white/[0.05] bg-muted dark:bg-background px-2.5 font-mono text-[11px] text-foreground dark:text-foreground outline-none transition-colors focus:border-primary/30 disabled:cursor-not-allowed disabled:opacity-50"
@@ -419,7 +498,10 @@ export function WoListShell({
               <select
                 value={form.toDivisionId}
                 onChange={(event) =>
-                  setForm((currentValue) => ({ ...currentValue, toDivisionId: event.target.value }))
+                  setForm((currentValue) => ({
+                    ...currentValue,
+                    toDivisionId: event.target.value,
+                  }))
                 }
                 disabled={!canCreate}
                 className="h-8 w-full border border-border dark:border-white/[0.05] bg-muted dark:bg-background px-2.5 font-mono text-[11px] text-foreground dark:text-foreground outline-none transition-colors focus:border-primary/30 disabled:cursor-not-allowed disabled:opacity-50"
@@ -434,12 +516,17 @@ export function WoListShell({
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="flex flex-col gap-1">
-                  <span className="pl-1 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30">Tanggal WO</span>
+                  <span className="pl-1 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30">
+                    Tanggal WO
+                  </span>
                   <input
                     type="date"
                     value={form.requestDate}
                     onChange={(event) =>
-                      setForm((currentValue) => ({ ...currentValue, requestDate: event.target.value }))
+                      setForm((currentValue) => ({
+                        ...currentValue,
+                        requestDate: event.target.value,
+                      }))
                     }
                     disabled={!canCreate}
                     className="h-8 w-full border border-border dark:border-white/[0.05] bg-muted dark:bg-background px-2.5 font-mono text-[11px] text-foreground dark:text-foreground outline-none transition-colors focus:border-primary/30 disabled:cursor-not-allowed disabled:opacity-50"
@@ -451,7 +538,10 @@ export function WoListShell({
                       type="checkbox"
                       checked={form.isPriority}
                       onChange={(event) =>
-                        setForm((currentValue) => ({ ...currentValue, isPriority: event.target.checked }))
+                        setForm((currentValue) => ({
+                          ...currentValue,
+                          isPriority: event.target.checked,
+                        }))
                       }
                       disabled={!canCreate}
                       className="h-4 w-4 border-white/20 bg-transparent text-app-accent-ink focus:ring-0"
@@ -463,13 +553,30 @@ export function WoListShell({
 
               <div className="border-t border-border dark:border-white/[0.06] my-2 pt-3">
                 <div className="flex items-center justify-between mb-3">
-                  <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30">List Pekerjaan ({form.items.length})</span>
+                  <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/30">
+                    List Pekerjaan ({form.items.length})
+                  </span>
                   <button
                     type="button"
-                    onClick={() => setForm((current) => ({
-                      ...current,
-                      items: [...current.items, { jobDetail: "", panelName: "", panelCategory: "", addPanelToMaster: false, estimatedHours: "", notes: "" }]
-                    }))}
+                    onClick={() =>
+                      setForm((current) => ({
+                        ...current,
+                        items: [
+                          ...current.items,
+                          {
+                            jobDetail: "",
+                            panelName: "",
+                            panelCategory: "",
+                            addPanelToMaster: false,
+                            estimatedHours: "",
+                            notes: "",
+                            issueNote: "",
+                            mediaUrl: "",
+                            mediaType: "",
+                          },
+                        ],
+                      }))
+                    }
                     className="font-mono text-[10px] uppercase tracking-[0.12em] text-app-accent-ink transition-colors hover:text-app-accent-ink"
                   >
                     + Tambah Pekerjaan
@@ -478,16 +585,25 @@ export function WoListShell({
 
                 <div className="max-h-[350px] space-y-3 overflow-y-auto pr-1">
                   {form.items.map((item, index) => (
-                    <div key={index} className="relative space-y-2 border border-border dark:border-white/[0.05] bg-muted dark:bg-background p-3">
+                    <div
+                      key={index}
+                      className="relative space-y-2 border border-border dark:border-white/[0.05] bg-muted dark:bg-background p-3"
+                    >
                       <div className="flex items-center justify-between">
-                        <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/40">Pekerjaan #{index + 1}</span>
+                        <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground dark:text-foreground/40">
+                          Pekerjaan #{index + 1}
+                        </span>
                         {form.items.length > 1 && (
                           <button
                             type="button"
-                            onClick={() => setForm((current) => ({
-                              ...current,
-                              items: current.items.filter((_, idx) => idx !== index)
-                            }))}
+                            onClick={() =>
+                              setForm((current) => ({
+                                ...current,
+                                items: current.items.filter(
+                                  (_, idx) => idx !== index,
+                                ),
+                              }))
+                            }
                             className="font-mono text-[10px] uppercase tracking-[0.12em] text-destructive transition-colors hover:text-destructive"
                           >
                             Hapus
@@ -501,7 +617,10 @@ export function WoListShell({
                           const val = event.target.value;
                           setForm((current) => {
                             const newItems = [...current.items];
-                            newItems[index] = { ...newItems[index], panelName: val };
+                            newItems[index] = {
+                              ...newItems[index],
+                              panelName: val,
+                            };
                             return { ...current, items: newItems };
                           });
                         }}
@@ -517,7 +636,10 @@ export function WoListShell({
                             const val = event.target.value;
                             setForm((current) => {
                               const newItems = [...current.items];
-                              newItems[index] = { ...newItems[index], panelCategory: val };
+                              newItems[index] = {
+                                ...newItems[index],
+                                panelCategory: val,
+                              };
                               return { ...current, items: newItems };
                             });
                           }}
@@ -534,7 +656,10 @@ export function WoListShell({
                             const val = event.target.value;
                             setForm((current) => {
                               const newItems = [...current.items];
-                              newItems[index] = { ...newItems[index], estimatedHours: val };
+                              newItems[index] = {
+                                ...newItems[index],
+                                estimatedHours: val,
+                              };
                               return { ...current, items: newItems };
                             });
                           }}
@@ -552,7 +677,10 @@ export function WoListShell({
                             const val = event.target.checked;
                             setForm((current) => {
                               const newItems = [...current.items];
-                              newItems[index] = { ...newItems[index], addPanelToMaster: val };
+                              newItems[index] = {
+                                ...newItems[index],
+                                addPanelToMaster: val,
+                              };
                               return { ...current, items: newItems };
                             });
                           }}
@@ -568,7 +696,10 @@ export function WoListShell({
                           const val = event.target.value;
                           setForm((current) => {
                             const newItems = [...current.items];
-                            newItems[index] = { ...newItems[index], jobDetail: val };
+                            newItems[index] = {
+                              ...newItems[index],
+                              jobDetail: val,
+                            };
                             return { ...current, items: newItems };
                           });
                         }}
@@ -578,12 +709,33 @@ export function WoListShell({
                       />
 
                       <textarea
+                        value={item.issueNote}
+                        onChange={(event) => {
+                          const val = event.target.value;
+                          setForm((current) => {
+                            const newItems = [...current.items];
+                            newItems[index] = {
+                              ...newItems[index],
+                              issueNote: val,
+                            };
+                            return { ...current, items: newItems };
+                          });
+                        }}
+                        disabled={!canCreate}
+                        placeholder="Temuan / masalah..."
+                        className="min-h-16 w-full border border-border dark:border-white/[0.05] bg-white dark:bg-card px-2.5 py-2 text-[11px] text-foreground dark:text-foreground outline-none placeholder:text-muted-foreground dark:text-foreground/20 focus:border-primary/30"
+                      />
+
+                      <textarea
                         value={item.notes}
                         onChange={(event) => {
                           const val = event.target.value;
                           setForm((current) => {
                             const newItems = [...current.items];
-                            newItems[index] = { ...newItems[index], notes: val };
+                            newItems[index] = {
+                              ...newItems[index],
+                              notes: val,
+                            };
                             return { ...current, items: newItems };
                           });
                         }}
@@ -591,6 +743,53 @@ export function WoListShell({
                         placeholder="Catatan opsional item"
                         className="min-h-16 w-full border border-border dark:border-white/[0.05] bg-white dark:bg-card px-2.5 py-2 text-[11px] text-foreground dark:text-foreground outline-none placeholder:text-muted-foreground dark:text-foreground/20 focus:border-primary/30"
                       />
+
+                      <div className="flex min-h-10 items-center justify-between gap-2 border border-border dark:border-white/[0.05] bg-white dark:bg-card px-2.5 py-2">
+                        <span className="min-w-0 truncate text-[11px] text-muted-foreground dark:text-foreground/50">
+                          {item.mediaUrl
+                            ? `${item.mediaType === "video" ? "Video" : "Foto"}: ${item.mediaUrl.split("/").pop()}`
+                            : uploadingIndex === index
+                              ? "Mengupload media..."
+                              : "Foto/video opsional"}
+                        </span>
+                        <div className="flex shrink-0 items-center gap-1.5">
+                          {item.mediaUrl ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setForm((current) => {
+                                  const newItems = [...current.items];
+                                  newItems[index] = {
+                                    ...newItems[index],
+                                    mediaUrl: "",
+                                    mediaType: "",
+                                  };
+                                  return { ...current, items: newItems };
+                                });
+                              }}
+                              className="flex h-7 w-7 items-center justify-center border border-border text-muted-foreground hover:text-destructive"
+                              title="Hapus media"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          ) : null}
+                          <label className="flex h-7 cursor-pointer items-center gap-1.5 border border-border px-2 text-[10px] font-mono uppercase tracking-[0.08em] text-muted-foreground hover:text-foreground">
+                            <UploadCloud className="h-3.5 w-3.5" />
+                            Upload
+                            <input
+                              type="file"
+                              accept="image/jpeg,image/png,image/webp,video/mp4"
+                              disabled={!canCreate || uploadingIndex !== null}
+                              onChange={(event) => {
+                                const file = event.target.files?.[0];
+                                event.target.value = "";
+                                if (file) void handleMediaUpload(file, index);
+                              }}
+                              className="hidden"
+                            />
+                          </label>
+                        </div>
+                      </div>
                     </div>
                   ))}
                 </div>

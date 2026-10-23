@@ -18,12 +18,13 @@ describe("SPF navigation permissions", () => {
     expect(spfItems([permissionCodes.spfAdmin])).toEqual(["spf-periods", "spf-clients"]);
   });
 
-  it("treats MIS as superadmin even before its permission rows are synchronized", () => {
+  it("shows administration only for the identity-bound superadmin", () => {
     expect(
-      buildNavigation([], "mis")
-        .find((item) => item.id === "spf")
+      buildNavigation([], { employeeId: "SM-03.004" })
+        .find((item) => item.id === "users")
         ?.subItems?.map((item) => item.id),
-    ).toEqual(["spf-periods", "spf-clients"]);
+    ).toEqual(["users-list", "roles-matrix", "divisions-management"]);
+    expect(buildNavigation([], { employeeId: "SM-03.005" }).find((item) => item.id === "users")).toBeUndefined();
   });
 });
 

@@ -1,8 +1,14 @@
 import type { GridQueryState } from "@smsystem/contracts/grid";
 import type {
+  CreateUnitMediaFolderRequest,
+  CreateUnitMediaRequest,
   CreateUnitRequest,
   UnitBoardRow,
+  UnitMedia,
+  UnitMediaFolder,
+  UnitReferenceOption,
   UnitWorkspace,
+  UpdateUnitMediaRequest,
   UpdateUnitRequest,
   UnitClient,
   UnitClientUnit,
@@ -39,6 +45,12 @@ export interface UnitsService {
   createUnit(session: WebSession, input: CreateUnitRequest): Promise<UnitBoardRow>;
   updateUnit(session: WebSession, unitId: string, input: UpdateUnitRequest): Promise<UnitBoardRow>;
   deleteUnit(session: WebSession, unitId: string): Promise<{ deletedUnitId: string }>;
+  getUnitReferences(session: WebSession): Promise<{ customers: UnitReferenceOption[]; kps: UnitReferenceOption[]; kds: UnitReferenceOption[]; qa: UnitReferenceOption | null }>;
+  getUnitMedia(session: WebSession, unitId: string): Promise<{ folders: UnitMediaFolder[]; media: UnitMedia[] }>;
+  createUnitMediaFolder(session: WebSession, unitId: string, input: CreateUnitMediaFolderRequest): Promise<UnitMediaFolder>;
+  createUnitMedia(session: WebSession, unitId: string, input: CreateUnitMediaRequest): Promise<UnitMedia>;
+  updateUnitMedia(session: WebSession, unitId: string, mediaId: string, input: UpdateUnitMediaRequest): Promise<UnitMedia>;
+  deleteUnitMedia(session: WebSession, unitId: string, mediaId: string): Promise<void>;
   getUnitPanels(session: WebSession, unitId: string): Promise<UnitPanelCollection | null>;
   getUnitPanelDetail(session: WebSession, unitId: string, panelId: number): Promise<UnitPanelDetail | null>;
   getGeneralUnitPanels(session: WebSession, query?: { q?: string; nodeType?: "PANEL" | "PART"; limit?: number }): Promise<UnitPanelGeneralCollection>;
@@ -163,6 +175,51 @@ export class DefaultUnitsService implements UnitsService {
     });
 
     return { deletedUnitId: unitId };
+  }
+
+  async getUnitReferences(_session: WebSession) {
+    return this.repository.findUnitReferences();
+  }
+
+  private async assertUnitInScope(session: WebSession, unitId: string): Promise<void> {
+    const unit = await this.repository.findUnitSummary({
+      employeeId: session.user.employeeId,
+      scope: session.user.scope,
+      unitId,
+    });
+    if (!unit) throw new Error("SCOPE_FORBIDDEN");
+  }
+
+  async getUnitMedia(session: WebSession, unitId: string) {
+    await this.assertUnitInScope(session, unitId);
+    return this.repository.findUnitMedia(unitId);
+  }
+
+  async createUnitMediaFolder(session: WebSession, unitId: string, input: CreateUnitMediaFolderRequest) {
+    await this.assertUnitInScope(session, unitId);
+    const folder = await this.repository.createUnitMediaFolder({ carId: unitId, actorId: session.user.employeeId, input });
+    await this.auditService.log({ actorId: session.user.employeeId, actorName: session.user.fullName, action: "unit_media_folder.create", module: "unit", recordId: folder.id, newValue: { unitId, folder } });
+    return folder;
+  }
+
+  async createUnitMedia(session: WebSession, unitId: string, input: CreateUnitMediaRequest) {
+    await this.assertUnitInScope(session, unitId);
+    const media = await this.repository.createUnitMedia({ carId: unitId, actorId: session.user.employeeId, input });
+    await this.auditService.log({ actorId: session.user.employeeId, actorName: session.user.fullName, action: "unit_media.create", module: "unit", recordId: media.id, newValue: { unitId, media } });
+    return media;
+  }
+
+  async updateUnitMedia(session: WebSession, unitId: string, mediaId: string, input: UpdateUnitMediaRequest) {
+    await this.assertUnitInScope(session, unitId);
+    const media = await this.repository.updateUnitMedia({ carId: unitId, mediaId, input });
+    await this.auditService.log({ actorId: session.user.employeeId, actorName: session.user.fullName, action: "unit_media.update", module: "unit", recordId: mediaId, newValue: { unitId, media } });
+    return media;
+  }
+
+  async deleteUnitMedia(session: WebSession, unitId: string, mediaId: string): Promise<void> {
+    await this.assertUnitInScope(session, unitId);
+    await this.repository.deleteUnitMedia({ carId: unitId, mediaId });
+    await this.auditService.log({ actorId: session.user.employeeId, actorName: session.user.fullName, action: "unit_media.delete", module: "unit", recordId: mediaId, newValue: { unitId, deleted: true } });
   }
 
   async getUnitPanels(session: WebSession, unitId: string): Promise<UnitPanelCollection | null> {

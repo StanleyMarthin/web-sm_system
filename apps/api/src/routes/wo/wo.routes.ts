@@ -7,6 +7,7 @@ import {
 import { parseJsonBody } from "@/http/request";
 import { ZodError } from "zod";
 import { errorResponse, successResponse, withCors } from "@/http/response";
+import { getApiEnv } from "@/config/env";
 import { requireSession } from "@/middleware/auth.middleware";
 import {
   requireAnyPermission,
@@ -17,6 +18,14 @@ import type { WoService } from "@/services/wo/wo.service";
 import { sanitizeWoGridQuery } from "@/services/wo/query";
 import { applyDefaultWoDivisionFilter } from "@/services/grid/division-default";
 import { applyRequestsVisibilityScope } from "@/services/requests/scope";
+import { S3GalleryUploadTicketProvider } from "@/services/storage/r2-upload.service";
+import {
+  createUploadNonce,
+  extensionForGalleryMediaContentType,
+  normalizeAllowedGalleryMediaContentType,
+  parseGalleryMediaContentLength,
+  storeUploadTicket,
+} from "@/security/upload-ticket";
 
 async function requireWoViewSession(
   request: Request,
@@ -116,7 +125,12 @@ async function requireWoRejectSession(
 
 function mapWoError(request: Request, error: unknown): Response {
   if (error instanceof ZodError) {
-    return errorResponse(request, "Query WO tidak valid.", 400, "INVALID_QUERY");
+    return errorResponse(
+      request,
+      "Query WO tidak valid.",
+      400,
+      "INVALID_QUERY",
+    );
   }
 
   if (error instanceof Error) {
@@ -195,6 +209,45 @@ function mapWoError(request: Request, error: unknown): Response {
         "WO_MASTER_PANEL_NOT_FOUND",
       );
     }
+
+    if (error.message === "INVALID_UPLOAD_CONTENT_TYPE") {
+      return errorResponse(
+        request,
+        "Tipe file harus foto atau video MP4.",
+        400,
+        "INVALID_UPLOAD_CONTENT_TYPE",
+      );
+    }
+
+    if (
+      error.message === "UPLOAD_SIZE_REQUIRED" ||
+      error.message === "INVALID_UPLOAD_SIZE"
+    ) {
+      return errorResponse(
+        request,
+        "Ukuran file upload tidak valid.",
+        400,
+        error.message,
+      );
+    }
+
+    if (error.message === "UPLOAD_TOO_LARGE") {
+      return errorResponse(
+        request,
+        "Ukuran foto maksimal 10MB dan video 25MB.",
+        413,
+        "UPLOAD_TOO_LARGE",
+      );
+    }
+
+    if (error.message === "GALLERY_UPLOAD_NOT_CONFIGURED") {
+      return errorResponse(
+        request,
+        "Upload media belum dikonfigurasi.",
+        503,
+        "UPLOAD_NOT_CONFIGURED",
+      );
+    }
   }
 
   return errorResponse(
@@ -203,6 +256,59 @@ function mapWoError(request: Request, error: unknown): Response {
     500,
     "WO_FAILED",
   );
+}
+
+export async function handleWoUploadTicketRoute(
+  request: Request,
+  authService: AuthService,
+): Promise<Response> {
+  const sessionResult = await requireWoCreateSession(request, authService);
+  if ("response" in sessionResult) {
+    return sessionResult.response;
+  }
+
+  try {
+    const url = new URL(request.url);
+    const filename = url.searchParams.get("filename")?.trim() ?? "";
+    const contentType =
+      url.searchParams.get("contentType")?.trim() ?? "image/jpeg";
+    if (!filename) {
+      return errorResponse(
+        request,
+        "filename wajib diisi.",
+        400,
+        "MISSING_FILENAME",
+      );
+    }
+
+    const allowedContentType =
+      normalizeAllowedGalleryMediaContentType(contentType);
+    const contentLength = parseGalleryMediaContentLength(
+      url.searchParams.get("size") ?? url.searchParams.get("contentLength"),
+      allowedContentType,
+    );
+    const nonce = createUploadNonce();
+    const extension = extensionForGalleryMediaContentType(allowedContentType);
+    const objectKey = `wo/${sessionResult.session.employeeId}/${nonce}.${extension}`;
+    const uploadTicketProvider = new S3GalleryUploadTicketProvider(getApiEnv());
+    const ticket = await uploadTicketProvider.createTicket({
+      objectKey,
+      contentType: allowedContentType,
+      contentLength,
+    });
+    await storeUploadTicket({
+      nonce,
+      employeeId: sessionResult.session.employeeId,
+      objectKey,
+    });
+
+    return successResponse(request, "WO upload ticket ready", {
+      ...ticket,
+      mediaType: allowedContentType === "video/mp4" ? "video" : "image",
+    });
+  } catch (error) {
+    return mapWoError(request, error);
+  }
 }
 
 export async function handleWoListRoute(
@@ -216,7 +322,9 @@ export async function handleWoListRoute(
   }
 
   try {
-    const visibilitySession = applyRequestsVisibilityScope(sessionResult.session);
+    const visibilitySession = applyRequestsVisibilityScope(
+      sessionResult.session,
+    );
     const query = applyDefaultWoDivisionFilter(
       visibilitySession,
       sanitizeWoGridQuery(new URL(request.url).searchParams),
@@ -251,7 +359,9 @@ export async function handleWoPendingApprovalRoute(
   }
 
   try {
-    const visibilitySession = applyRequestsVisibilityScope(sessionResult.session);
+    const visibilitySession = applyRequestsVisibilityScope(
+      sessionResult.session,
+    );
     const result = await woService.listPendingApproval(visibilitySession);
     return withCors(
       request,
@@ -281,7 +391,9 @@ export async function handleWoMyDivisionRoute(
   }
 
   try {
-    const visibilitySession = applyRequestsVisibilityScope(sessionResult.session);
+    const visibilitySession = applyRequestsVisibilityScope(
+      sessionResult.session,
+    );
     const result = await woService.listMyDivision(visibilitySession);
     return withCors(
       request,
@@ -311,7 +423,9 @@ export async function handleWoUrgentRoute(
   }
 
   try {
-    const visibilitySession = applyRequestsVisibilityScope(sessionResult.session);
+    const visibilitySession = applyRequestsVisibilityScope(
+      sessionResult.session,
+    );
     const result = await woService.listUrgent(visibilitySession);
     return withCors(
       request,
@@ -342,10 +456,18 @@ export async function handleWoCreateRoute(
   }
 
   try {
-    const result = await woService.create(sessionResult.session, parsedBody.data);
-    return successResponse(request, "WO berhasil dibuat.", { ...result }, {
-      status: 201,
-    });
+    const result = await woService.create(
+      sessionResult.session,
+      parsedBody.data,
+    );
+    return successResponse(
+      request,
+      "WO berhasil dibuat.",
+      { ...result },
+      {
+        status: 201,
+      },
+    );
   } catch (error) {
     return mapWoError(request, error);
   }
@@ -368,7 +490,11 @@ export async function handleWoUpdateRoute(
   }
 
   try {
-    const result = await woService.update(sessionResult.session, woId, parsedBody.data);
+    const result = await woService.update(
+      sessionResult.session,
+      woId,
+      parsedBody.data,
+    );
     return successResponse(request, "WO berhasil diperbarui.", { ...result });
   } catch (error) {
     return mapWoError(request, error);
@@ -387,7 +513,9 @@ export async function handleWoDetailRoute(
   }
 
   try {
-    const visibilitySession = applyRequestsVisibilityScope(sessionResult.session);
+    const visibilitySession = applyRequestsVisibilityScope(
+      sessionResult.session,
+    );
     const result = await woService.findDetail(visibilitySession, woId);
     if (!result) {
       return errorResponse(request, "WO tidak ditemukan.", 404, "WO_NOT_FOUND");
@@ -410,7 +538,9 @@ export async function handleWoApproveRoute(
     return sessionResult.response;
   }
 
-  const parsedBody = request.headers.get("content-type")?.includes("application/json")
+  const parsedBody = request.headers
+    .get("content-type")
+    ?.includes("application/json")
     ? await parseJsonBody(request, woApproveRequestSchema)
     : { success: true as const, data: woApproveRequestSchema.parse({}) };
   if (!parsedBody.success) {
@@ -418,8 +548,14 @@ export async function handleWoApproveRoute(
   }
 
   try {
-    const visibilitySession = applyRequestsVisibilityScope(sessionResult.session);
-    const result = await woService.approve(visibilitySession, woId, parsedBody.data);
+    const visibilitySession = applyRequestsVisibilityScope(
+      sessionResult.session,
+    );
+    const result = await woService.approve(
+      visibilitySession,
+      woId,
+      parsedBody.data,
+    );
     return successResponse(request, "WO berhasil diapprove.", { ...result });
   } catch (error) {
     return mapWoError(request, error);
@@ -443,7 +579,9 @@ export async function handleWoRejectRoute(
   }
 
   try {
-    const visibilitySession = applyRequestsVisibilityScope(sessionResult.session);
+    const visibilitySession = applyRequestsVisibilityScope(
+      sessionResult.session,
+    );
     const result = await woService.reject(
       visibilitySession,
       woId,
@@ -467,7 +605,9 @@ export async function handleWoDoneRoute(
   }
 
   try {
-    const visibilitySession = applyRequestsVisibilityScope(sessionResult.session);
+    const visibilitySession = applyRequestsVisibilityScope(
+      sessionResult.session,
+    );
     const result = await woService.markDone(visibilitySession, woId);
     return successResponse(request, "WO ditandai selesai.", { ...result });
   } catch (error) {
@@ -487,8 +627,13 @@ export async function handleWoLinkedCountdownsRoute(
   }
 
   try {
-    const visibilitySession = applyRequestsVisibilityScope(sessionResult.session);
-    const result = await woService.findLinkedCountdowns(visibilitySession, woId);
+    const visibilitySession = applyRequestsVisibilityScope(
+      sessionResult.session,
+    );
+    const result = await woService.findLinkedCountdowns(
+      visibilitySession,
+      woId,
+    );
     return withCors(
       request,
       Response.json({

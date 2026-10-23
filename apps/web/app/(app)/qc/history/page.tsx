@@ -14,7 +14,7 @@ const QaWorkspaceShell = dynamic(
       (mod) => mod.QaWorkspaceShell,
     ),
   {
-    loading: () => <PageDataSkeleton title="Memuat riwayat QA" rows={10} />,
+    loading: () => <PageDataSkeleton title="Memuat riwayat QC" rows={10} />,
   },
 );
 
@@ -57,11 +57,6 @@ function buildApiParams(input: Record<string, string | string[] | undefined>) {
 async function QaHistoryContent({ searchParams }: QaHistoryPageProps) {
   const resolvedSearchParams = await searchParams;
 
-  // Set default filter to only show "TIDAK_LOLOS" if no params are present
-  if (Object.keys(resolvedSearchParams).length === 0) {
-    redirect("/qc/history?filter=resultStatus%3Aeq%3ATIDAK_LOLOS");
-  }
-
   const divisionId = firstParam(resolvedSearchParams.divisionId) ?? "";
   const dateFrom = firstParam(resolvedSearchParams.dateFrom) ?? "";
   const dateTo = firstParam(resolvedSearchParams.dateTo) ?? "";
@@ -79,8 +74,8 @@ async function QaHistoryContent({ searchParams }: QaHistoryPageProps) {
   if (!payload || !user) {
     return (
       <ModuleUnavailableState
-        module="QA"
-        title="Riwayat QA belum bisa dimuat"
+        module="QC"
+        title="Riwayat QC belum bisa dimuat"
         message="Data inspeksi QA atau sesi aktif belum terbaca saat ini. Coba muat ulang beberapa saat lagi."
       />
     );
@@ -89,7 +84,7 @@ async function QaHistoryContent({ searchParams }: QaHistoryPageProps) {
   return (
     <div className="space-y-5">
       <QaHistoryFilterBar
-        title="Riwayat Inspeksi"
+        title="Riwayat QC"
         references={payload.references}
         divisionId={divisionId}
         dateFrom={dateFrom}

@@ -18,6 +18,7 @@ import { SmartSelectCellEditor, type SmartSelectOption } from "@/modules/units/c
 import {
   buildCountdownPanelOptions,
   buildJobPlanDraftRecord,
+  calculateJobPlanDeadlineDate,
   buildEditDraftJobPlanRuntimePayload,
   createJobPlanRuntimeDraft,
   createEditDraftFromRow,
@@ -32,6 +33,7 @@ import {
   minutesToTime,
   resolveAdditionalJobTargetMinutes,
   resolveJobPlanDivisionName,
+  splitJobPlanRuntimeDraftForSchedule,
   toLocalDateValue,
   toJobPlanRuntimeDisplayRows,
   toJobPlanDraftDisplayRows,
@@ -44,7 +46,7 @@ import {
   type JobPlanRuntimePlannerDraft,
 } from "../job-plan-planner";
 import { parseClipboardTsv } from "@/shared/datagrid/clipboard";
-import { parseSmsDurationMinutes, parseSmsReference } from "@/shared/datagrid/parsers";
+import { normalizeSmsDurationText, normalizeSmsTimeText, parseSmsDurationMinutes, parseSmsReference } from "@/shared/datagrid/parsers";
 
 type PlannerMode = "planner" | "approval";
 type WorkMode = "normal" | "overtime";
@@ -61,6 +63,7 @@ interface AdditionalJobFormState {
   employeeId: string;
   jobDescription: string;
   targetText: string;
+  deadlineDate: string;
   breakText: string;
   startTime: string;
   finishTime: string;
@@ -183,6 +186,10 @@ function draftToDisplay(
     accumulatedWorkMinutes: 0,
     persistedWorkMinutes: 0,
     unverifiedWorkMinutes: 0,
+    monitoringHistory: [],
+    actualStartAt: null,
+    actualFinishAt: null,
+    activeSegmentStartedAt: null,
     isPriority: draft.isPriority,
   };
 }
@@ -642,6 +649,15 @@ function AdditionalJobDialog({
             disabled={!value.panelName || partOptions.length === 0}
             onChange={onPartChange}
           />
+          <label className="sm:col-span-2 text-[11px] text-muted-foreground">
+            Temuan awal
+            <textarea
+              value={value.initialFinding}
+              onChange={(event) => update({ initialFinding: event.target.value })}
+              className="mt-1 min-h-16 w-full resize-y border border-border bg-background px-2 py-2 text-[13px] text-foreground outline-none focus:border-primary/45"
+              placeholder="Opsional, contoh: retak halus di panel bawah"
+            />
+          </label>
           <div className="sm:col-span-2">
             <SearchSelectField
               label="Jobdesc"
@@ -652,15 +668,6 @@ function AdditionalJobDialog({
               allowCustom
             />
           </div>
-          <label className="sm:col-span-2 text-[11px] text-muted-foreground">
-            Temuan awal
-            <textarea
-              value={value.initialFinding}
-              onChange={(event) => update({ initialFinding: event.target.value })}
-              className="mt-1 min-h-16 w-full resize-y border border-border bg-background px-2 py-2 text-[13px] text-foreground outline-none focus:border-primary/45"
-              placeholder="Opsional, contoh: retak halus di panel bawah"
-            />
-          </label>
           <label className="sm:col-span-2 text-[11px] text-muted-foreground">
             detail pekerjaan
             <input
@@ -675,8 +682,21 @@ function AdditionalJobDialog({
             <input
               value={value.targetText}
               onChange={(event) => update({ targetText: event.target.value })}
+              onBlur={(event) => {
+                const normalized = normalizeSmsDurationText(event.target.value, "Target awal");
+                if (normalized.value) update({ targetText: normalized.value });
+              }}
               className="mt-1 h-9 w-full border border-border bg-background px-2 font-mono text-[13px] text-foreground outline-none focus:border-primary/45"
-              placeholder="Kosong = target hari ini"
+              placeholder="Contoh: 32 atau 32:00"
+            />
+          </label>
+          <label className="text-[11px] text-muted-foreground">
+            Deadline (opsional)
+            <input
+              type="date"
+              value={value.deadlineDate}
+              onChange={(event) => update({ deadlineDate: event.target.value })}
+              className="mt-1 h-9 w-full border border-border bg-background px-2 font-mono text-[13px] text-foreground outline-none focus:border-primary/45"
             />
           </label>
           <label className="text-[11px] text-muted-foreground">
@@ -684,8 +704,12 @@ function AdditionalJobDialog({
             <input
               value={value.startTime}
               onChange={(event) => onTimeChange({ startTime: event.target.value })}
+              onBlur={(event) => {
+                const normalized = normalizeSmsTimeText(event.target.value, "Jam mulai");
+                if (normalized.value) onTimeChange({ startTime: normalized.value });
+              }}
               className="mt-1 h-9 w-full border border-border bg-background px-2 font-mono text-[13px] text-foreground outline-none focus:border-primary/45"
-              placeholder="08:00"
+              placeholder="Contoh: 8 atau 08:30"
             />
           </label>
           <label className="text-[11px] text-muted-foreground">
@@ -693,8 +717,12 @@ function AdditionalJobDialog({
             <input
               value={value.finishTime}
               onChange={(event) => onTimeChange({ finishTime: event.target.value })}
+              onBlur={(event) => {
+                const normalized = normalizeSmsTimeText(event.target.value, "Jam selesai");
+                if (normalized.value) onTimeChange({ finishTime: normalized.value });
+              }}
               className="mt-1 h-9 w-full border border-border bg-background px-2 font-mono text-[13px] text-foreground outline-none focus:border-primary/45"
-              placeholder="09:00"
+              placeholder="Contoh: 17 atau 17:00"
             />
           </label>
           <label className="text-[11px] text-muted-foreground">
@@ -702,8 +730,12 @@ function AdditionalJobDialog({
             <input
               value={value.breakText}
               onChange={(event) => update({ breakText: event.target.value })}
+              onBlur={(event) => {
+                const normalized = normalizeSmsDurationText(event.target.value, "Jam istirahat");
+                if (normalized.value) update({ breakText: normalized.value });
+              }}
               className="mt-1 h-9 w-full border border-border bg-background px-2 font-mono text-[13px] text-foreground outline-none focus:border-primary/45"
-              placeholder="01:00"
+              placeholder="Contoh: 1 atau 01:00"
             />
           </label>
           <div className="border border-border bg-card px-3 py-2 text-[11px] text-muted-foreground">
@@ -775,9 +807,10 @@ export function JobPlanPlannerShell({
     employeeId: "",
     jobDescription: "",
     targetText: "",
+    deadlineDate: "",
     breakText: "00:00",
     startTime: "08:00",
-    finishTime: "09:00",
+    finishTime: "17:00",
     initialFinding: "",
     note: "",
   });
@@ -1482,6 +1515,7 @@ export function JobPlanPlannerShell({
       startTime: additionalJobForm.startTime,
       durationText,
       targetTotalText: minutesToDuration(target.value),
+      deadlineDate: additionalJobForm.deadlineDate.trim() || null,
       jobDescription: description,
       initialFinding: additionalJobForm.initialFinding.trim(),
       note: additionalJobForm.note.trim(),
@@ -1500,6 +1534,7 @@ export function JobPlanPlannerShell({
       employeeId: "",
       jobDescription: "",
       targetText: "",
+      deadlineDate: "",
       breakText: "00:00",
       startTime: "08:00",
       finishTime: "09:00",
@@ -1729,7 +1764,8 @@ export function JobPlanPlannerShell({
         }
         if (targetField === "durationText") {
           const parsed = parseSmsDurationMinutes(rawValue, "Durasi");
-          draft = parsed.error ? { ...draft, error: parsed.error } : { ...draft, durationText: rawValue.trim() };
+          const normalized = normalizeSmsDurationText(rawValue, "Durasi");
+          draft = parsed.error ? { ...draft, error: parsed.error } : { ...draft, durationText: normalized.value ?? rawValue.trim() };
         }
         if (targetField === "workMode") {
           const parsed = resolveOption(rawValue, workModeOptions, "Mode");
@@ -1782,7 +1818,7 @@ export function JobPlanPlannerShell({
             jobTypeId: row.jobTypeId || null,
             jobTypeName: row.jobTypeName.trim() || null,
             taskDate: row.taskDate,
-            deadlineDate: row.taskDate,
+            deadlineDate: row.deadlineDate?.trim() || calculateJobPlanDeadlineDate(row.taskDate, targetMinutes),
             targetHours: targetMinutes / 60,
             jobDescription: row.jobDescription,
             initialFinding: row.initialFinding.trim() || null,
@@ -1804,15 +1840,16 @@ export function JobPlanPlannerShell({
         };
       }
 
+      const rowsToSave = splitJobPlanRuntimeDraftForSchedule(rowToCreate);
       const result = await saveJobPlanDraft({
         replaceItems: false,
-        items: [buildJobPlanDraftRecord(rowToCreate, {
+        items: rowsToSave.map((item) => buildJobPlanDraftRecord(item, {
           countdowns: activeCountdowns,
           employees,
           divisions,
           panels,
           jobTypes,
-        })],
+        })),
       });
       if (!result.success) {
         failed.push({ ...row, error: result.message });
@@ -2135,9 +2172,9 @@ export function JobPlanPlannerShell({
         </div>
       </div>
       <div className="relative z-40 flex flex-wrap items-end gap-2 border border-border bg-card px-3 py-2">
-        <div className="min-w-[9rem] flex-1">
+        <div className="min-w-[15.5rem] flex-1">
           <span className="text-[11px] text-muted-foreground">Tanggal</span>
-          <CompactDateInput value={dateFilter} onChange={setDateFilter} className="mt-1" panelClassName="z-[100] w-[17rem]" />
+          <CompactDateInput value={dateFilter} onChange={setDateFilter} className="mt-1" panelAlign="left" />
         </div>
         <label className="min-w-[8.5rem] flex-1 text-[11px] text-muted-foreground">
           KP

@@ -78,6 +78,20 @@ function mapQcError(request: Request, error: unknown): Response {
   }
 
   if (error instanceof Error) {
+    if (error.message === "QC_REWORK_REQUIRED") {
+      return errorResponse(request, "PIC perbaikan wajib diisi untuk penolakan QA.", 400, error.message);
+    }
+    if (error.message === "QC_WORK_NOT_COMPLETED") {
+      return errorResponse(request, "QC hanya dapat dilakukan pada hasil pekerjaan yang sudah selesai 100%.", 409, error.message);
+    }
+    if (error.message === "UNIT_ON_HOLD") {
+      return errorResponse(
+        request,
+        "Unit sedang ditahan. Buka status Unit sebelum memproses QC.",
+        409,
+        error.message,
+      );
+    }
     if (error.message === "QC_NOT_FOUND" || error.message === "FINAL_CHECKLIST_NOT_FOUND") {
       return errorResponse(request, "Data QC tidak ditemukan.", 404, error.message);
     }
@@ -214,7 +228,7 @@ export async function handleQcDetailRoute(
   }
 
   try {
-    const detail = await qcService.findDetail(sessionResult.session, coreId);
+    const detail = await qcService.findDetail(sessionResult.session, coreId, true);
     if (!detail) {
       return errorResponse(request, "Data QC tidak ditemukan.", 404, "QC_NOT_FOUND");
     }

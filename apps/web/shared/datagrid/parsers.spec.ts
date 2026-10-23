@@ -1,5 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import {
+  normalizeSmsDurationText,
+  normalizeSmsTimeText,
   parseSmsBoolean,
   parseSmsDate,
   parseSmsDurationMinutes,
@@ -24,7 +26,14 @@ describe("sms grid parsers", () => {
   it("parses date, time, and duration", () => {
     expect(parseSmsDate("14/09/2026").value).toBe("2026-09-14");
     expect(parseSmsTime("8:05").value).toBe("08:05");
+    expect(parseSmsTime("8").value).toBe("08:00");
+    expect(parseSmsTime("830").value).toBe("08:30");
+    expect(normalizeSmsTimeText("8:5").value).toBe("08:05");
+    expect(parseSmsTime("2360").error).toBe("Jam tidak valid.");
     expect(parseSmsDurationMinutes("03:30").value).toBe(210);
+    expect(parseSmsDurationMinutes("32").value).toBe(1920);
+    expect(normalizeSmsDurationText("32").value).toBe("32:00");
+    expect(normalizeSmsDurationText("10:5").value).toBe("10:05");
   });
 
   it("parses human boolean aliases", () => {

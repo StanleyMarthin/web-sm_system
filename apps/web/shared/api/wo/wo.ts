@@ -189,6 +189,49 @@ export async function createWo(input: WoCreateRequest) {
   };
 }
 
+export async function requestWoUploadTicket(input: {
+  filename: string;
+  contentType: string;
+  size: number;
+}) {
+  const params = new URLSearchParams({
+    filename: input.filename,
+    contentType: input.contentType,
+    size: String(input.size),
+  });
+
+  const response = await fetch(
+    `${getApiBaseUrl()}/api/wo/upload-ticket?${params}`,
+    {
+      credentials: "include",
+      cache: "no-store",
+    },
+  );
+
+  if (!response.ok) {
+    return {
+      ...(await parseFailure(response)),
+      success: false as const,
+    };
+  }
+
+  const payload = (await response.json()) as {
+    success: boolean;
+    message: string;
+    data: {
+      uploadUrl: string;
+      publicUrl: string;
+      objectKey: string;
+      mediaType: "image" | "video";
+    };
+  };
+
+  return {
+    success: true as const,
+    result: payload.data,
+  };
+}
+
 export async function updateWo(woId: string, input: WoCreateRequest) {
   const response = await fetch(`${getApiBaseUrl()}/api/wo/${woId}`, {
     method: "PUT",

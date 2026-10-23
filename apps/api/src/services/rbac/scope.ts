@@ -51,6 +51,44 @@ function collectDescendants(
   return [...visited].sort((left, right) => left - right);
 }
 
+function capDivisionScope(
+  divisions: DivisionNode[],
+  ownDivisionIds: number[],
+  divisionIds: number[],
+  roleProfile: RoleProfile | null | undefined,
+): number[] {
+  const preset = roleProfile?.scopePreset;
+  switch (preset?.divisionMode) {
+    case "NONE":
+      return [];
+    case "OWN_DIVISION":
+      return collectDescendants(divisions, ownDivisionIds);
+    case "ASSIGNED_DIVISIONS": {
+      const permittedIds = new Set(collectDescendants(divisions, preset.divisionIds));
+      return divisionIds.filter((divisionId) => permittedIds.has(divisionId));
+    }
+    default:
+      return divisionIds;
+  }
+}
+
+function capUnitScope(
+  unitIds: string[],
+  roleProfile: RoleProfile | null | undefined,
+): string[] {
+  const preset = roleProfile?.scopePreset;
+  switch (preset?.unitMode) {
+    case "NONE":
+      return [];
+    case "ASSIGNED_UNITS": {
+      const permittedIds = new Set(preset.unitIds);
+      return unitIds.filter((unitId) => permittedIds.has(unitId));
+    }
+    default:
+      return unitIds;
+  }
+}
+
 export function buildUserScope(input: BuildUserScopeInput): AuthScope {
   const managedDivisionIds = [...new Set(input.managedDivisionIds)].sort(
     (left, right) => left - right,
@@ -59,15 +97,31 @@ export function buildUserScope(input: BuildUserScopeInput): AuthScope {
   const scopeBasis = input.roleProfile?.scopeBasis ?? "OWN_DIVISION";
   const ownDivisionIds = input.divisionId !== null ? [input.divisionId] : [];
   const seedDivisionIds =
-    scopeBasis === "OWN_DIVISION" || scopeBasis === "SELF_ONLY"
+    scopeBasis === "ASSIGNED_UNITS"
+      ? []
+      : scopeBasis === "OWN_DIVISION" || scopeBasis === "SELF_ONLY"
       ? ownDivisionIds
       : [...ownDivisionIds, ...managedDivisionIds];
-  const divisionIds = collectDescendants(input.divisions, seedDivisionIds);
+  const divisionIds = capDivisionScope(
+    input.divisions,
+    ownDivisionIds,
+    collectDescendants(input.divisions, seedDivisionIds),
+    input.roleProfile,
+  );
+  const hasLimitedPreset =
+    input.roleProfile?.scopePreset !== undefined &&
+    input.roleProfile.scopePreset.divisionMode !== "GLOBAL" &&
+    input.roleProfile.scopePreset.unitMode !== "GLOBAL";
+  const hasNoScopePreset =
+    input.roleProfile?.scopePreset?.divisionMode === "NONE" &&
+    input.roleProfile.scopePreset.unitMode === "NONE";
   const canViewAllUnits =
-    hasPermission(input.permissions, input.viewAllUnitsPermission) ||
-    scopeBasis === "GLOBAL";
+    !hasLimitedPreset &&
+    (hasPermission(input.permissions, input.viewAllUnitsPermission) ||
+      scopeBasis === "GLOBAL");
   const canViewAssignedUnits =
     !canViewAllUnits &&
+    !hasNoScopePreset &&
     (hasPermission(input.permissions, input.viewAssignedUnitsPermission) ||
       scopeBasis !== "SELF_ONLY");
 
@@ -75,7 +129,9 @@ export function buildUserScope(input: BuildUserScopeInput): AuthScope {
     canViewAllUnits,
     canViewAssignedUnits,
     divisionIds,
-    managedDivisionIds,
-    unitIds: managedUnitIds,
+    managedDivisionIds: managedDivisionIds.filter((divisionId) =>
+      divisionIds.includes(divisionId),
+    ),
+    unitIds: capUnitScope(managedUnitIds, input.roleProfile),
   };
 }

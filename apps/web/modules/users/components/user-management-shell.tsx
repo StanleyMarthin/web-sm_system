@@ -1,118 +1,37 @@
 "use client";
 
-import type { GridFilter, GridQueryState } from "@smsystem/contracts/grid";
+import type { ColDef } from "ag-grid-community";
 import type { UserGridReference, UserRecord } from "@smsystem/contracts/user";
-import { Plus, RefreshCcw, UserCog } from "lucide-react";
+import { KeyRound, Pencil, Plus, RefreshCcw, Search, UserX } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { deactivateUser } from "@/shared/api/users/users";
+import { SmsAgGrid } from "@/shared/datagrid/sms-ag-grid";
+import { useSweetAlert } from "@/shared/ui/sweet-alert";
 import { UserCreateForm } from "./forms/user-create-form";
 import { UserEditForm } from "./forms/user-edit-form";
 import { UserResetPasswordForm } from "./forms/user-reset-password-form";
-import { SmartDataGrid } from "@/shared/datagrid/smart-data-grid";
-import type {
-  SmartDataGridColumn,
-  SmartDataGridFilterDefinition,
-  SmartDataGridSavedView,
-  SmartDataGridSortOption,
-} from "@/shared/datagrid/types";
-import { useSweetAlert } from "@/shared/ui/sweet-alert";
 
 interface UserManagementShellProps {
   rows: UserRecord[];
-  meta: {
-    page: number;
-    limit: number;
-    total: number;
-    totalPages: number;
-    hasNext: boolean;
-    hasPrev: boolean;
-  };
-  state: GridQueryState;
   references: UserGridReference;
-  exportHref: string;
 }
 
 type EditorMode = "create" | "edit" | "reset" | null;
-type RoleReference = UserGridReference["roles"][number];
-
-const sortOptions: SmartDataGridSortOption[] = [
-  { label: "ID Pegawai", value: "employeeId" },
-  { label: "Nama Lengkap", value: "fullName" },
-  { label: "Email", value: "email" },
-  { label: "Role", value: "roleName" },
-  { label: "Divisi", value: "divisionName" },
-  { label: "Golongan", value: "grade" },
-  { label: "Status", value: "status" },
-  { label: "Login Terakhir", value: "lastLoginAt" },
-  { label: "Jumlah Perangkat", value: "deviceCount" },
-  { label: "Dibuat", value: "createdAt" },
-];
-
-const savedViews: SmartDataGridSavedView[] = [
-  {
-    id: "all-records",
-    label: "Semua",
-    sortBy: "employeeId",
-    sortDirection: "asc",
-    filters: [],
-  },
-  {
-    id: "active-only",
-    label: "Aktif",
-    sortBy: "fullName",
-    sortDirection: "asc",
-    filters: [
-      {
-        field: "status",
-        operator: "eq",
-        value: "ACTIVE",
-      } satisfies GridFilter,
-    ],
-  },
-  {
-    id: "inactive-only",
-    label: "Nonaktif",
-    sortBy: "fullName",
-    sortDirection: "asc",
-    filters: [
-      {
-        field: "status",
-        operator: "eq",
-        value: "INACTIVE",
-      } satisfies GridFilter,
-    ],
-  },
-];
 
 function buildScopeSummary(row: UserRecord): string {
-  if (row.managedDivisionNames.length > 0) {
-    return `Divisi: ${row.managedDivisionNames.join(", ")}`;
-  }
-
-  if (row.activeUnitIds.length > 0) {
-    return `Unit aktif: ${row.activeUnitIds.length}`;
-  }
-
-  if (row.divisionName) {
-    return `Divisi utama: ${row.divisionName}`;
-  }
-
-  return "Mengikuti data pegawai";
+  if (row.managedDivisionNames.length > 0) return row.managedDivisionNames.join(", ");
+  if (row.activeUnitIds.length > 0) return `${row.activeUnitIds.length} unit aktif`;
+  return row.divisionName || "-";
 }
 
-export function UserManagementShell({
-  rows,
-  meta,
-  state,
-  references,
-  exportHref,
-}: UserManagementShellProps) {
+export function UserManagementShell({ rows, references }: UserManagementShellProps) {
   const router = useRouter();
   const sweetAlert = useSweetAlert();
   const [isPending, startTransition] = useTransition();
   const [editorMode, setEditorMode] = useState<EditorMode>(null);
   const [activeUser, setActiveUser] = useState<UserRecord | null>(null);
+  const [quickFilterText, setQuickFilterText] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -130,72 +49,26 @@ export function UserManagementShell({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [error]);
 
-  const filters: SmartDataGridFilterDefinition[] = [
-    {
-      field: "status",
-      label: "Status",
-      options: [
-        { label: "Aktif", value: "ACTIVE" },
-        { label: "Nonaktif", value: "INACTIVE" },
-      ],
-    },
-    {
-      field: "roleId",
-      label: "Role",
-      options: references.roles,
-    },
-    {
-      field: "divisionId",
-      label: "Divisi",
-      options: references.divisions,
-    },
-  ];
-
   function closeEditor() {
     setEditorMode(null);
     setActiveUser(null);
   }
 
-  function openCreateEditor() {
+  function openEditor(mode: Exclude<EditorMode, null>, user: UserRecord | null = null) {
     setError(null);
     setMessage(null);
-    setEditorMode("create");
-    setActiveUser(null);
-  }
-
-  function openEditEditor(user: UserRecord) {
-    setError(null);
-    setMessage(null);
-    setEditorMode("edit");
+    setEditorMode(mode);
     setActiveUser(user);
-  }
-
-  function openResetEditor(user: UserRecord) {
-    setError(null);
-    setMessage(null);
-    setEditorMode("reset");
-    setActiveUser(user);
-  }
-
-  function runAsyncAction(action: () => Promise<void>) {
-    startTransition(() => {
-      void action();
-    });
   }
 
   async function submitDeactivate(user: UserRecord) {
-    setError(null);
-    setMessage(null);
-
     const shouldDeactivate = await sweetAlert.confirm({
       title: "Nonaktifkan pengguna?",
-      description: `${user.employeeId} · ${user.fullName} tidak akan bisa login lagi sampai diaktifkan ulang.`,
+      description: `${user.employeeId} · ${user.fullName} tidak akan bisa login sampai diaktifkan kembali.`,
       tone: "warning",
       confirmLabel: "Nonaktifkan",
     });
-    if (!shouldDeactivate) {
-      return;
-    }
+    if (!shouldDeactivate) return;
 
     const result = await deactivateUser(user.employeeId);
     if (!result.success) {
@@ -207,155 +80,92 @@ export function UserManagementShell({
     router.refresh();
   }
 
-  const columns: SmartDataGridColumn[] = [
-    { key: "employeeId", label: "ID Pegawai", kind: "mono", sticky: true },
-    { key: "fullName", label: "Nama Lengkap" },
-    { key: "email", label: "Email" },
-    { key: "roleName", label: "Role" },
-    { key: "divisionName", label: "Divisi" },
-    { key: "grade", label: "Golongan" },
-    { key: "scopeSummary", label: "Lingkup Akses" },
-    { key: "activeUnitsText", label: "Unit Aktif" },
-    { key: "status", label: "Status", kind: "status", align: "center" },
-    { key: "lastLoginAt", label: "Login Terakhir" },
-    { key: "deviceCount", label: "Perangkat", kind: "number", align: "right" },
-    { key: "createdAt", label: "Dibuat" },
-    {
-      key: "actions",
-      label: "Tindakan",
-      renderCell: (_value, row) => {
-        const employeeId = String(row.employeeId ?? "");
-        const user = rows.find((item) => item.employeeId === employeeId);
-        if (!user) {
-          return null;
-        }
-
-        return (
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => openEditEditor(user)}
-              className="rounded-full border border-border dark:border-white/[0.08] px-3 py-1 text-[11px] uppercase tracking-[0.13em] text-foreground dark:text-foreground/70 hover:text-foreground dark:text-foreground"
-            >
-              Ubah
-            </button>
-            <button
-              type="button"
-              onClick={() => openResetEditor(user)}
-              className="rounded-full border border-primary/30 px-3 py-1 text-[11px] uppercase tracking-[0.13em] text-app-accent-ink hover:text-app-accent-ink"
-            >
-              Reset Sandi
-            </button>
-            <button
-              type="button"
-              onClick={() => runAsyncAction(() => submitDeactivate(user))}
-              className="rounded-full border border-destructive/30 px-3 py-1 text-[11px] uppercase tracking-[0.13em] text-destructive hover:text-destructive"
-            >
-              Nonaktifkan
-            </button>
-          </div>
-        );
+  const columnDefs = useMemo<ColDef<UserRecord>[]>(
+    () => [
+      { field: "employeeId", headerName: "ID Pegawai", pinned: "left", width: 145 },
+      { field: "fullName", headerName: "Nama", minWidth: 190, flex: 1 },
+      { field: "roleName", headerName: "Role", minWidth: 150 },
+      { field: "divisionName", headerName: "Divisi / Team", minWidth: 165 },
+      { field: "grade", headerName: "Jabatan", minWidth: 145, valueFormatter: ({ value }) => value || "-" },
+      { headerName: "Pegangan", minWidth: 190, valueGetter: ({ data }) => (data ? buildScopeSummary(data) : "-") },
+      {
+        field: "status",
+        headerName: "Status",
+        width: 110,
+        valueFormatter: ({ value }) => (value === "ACTIVE" ? "Aktif" : "Nonaktif"),
+        cellClass: ({ value }) => (value === "ACTIVE" ? "text-success font-medium" : "text-muted-foreground"),
       },
-      align: "right",
-      widthClassName: "min-w-[250px]",
-    },
-  ];
-
-  const gridRows = rows.map((row) => ({
-    employeeId: row.employeeId,
-    fullName: row.fullName,
-    email: row.email,
-    roleName: row.roleName,
-    divisionName: row.divisionName,
-    grade: row.grade,
-    scopeSummary: buildScopeSummary(row),
-    activeUnitsText:
-      row.activeUnitIds.length > 0 ? row.activeUnitIds.join(", ") : "-",
-    status: row.status,
-    lastLoginAt: row.lastLoginAt,
-    deviceCount: row.deviceCount,
-    createdAt: row.createdAt,
-    actions: row.employeeId,
-  }));
+      { field: "lastLoginAt", headerName: "Login Terakhir", minWidth: 165, valueFormatter: ({ value }) => value || "-" },
+      {
+        headerName: "Aksi",
+        pinned: "right",
+        sortable: false,
+        filter: false,
+        width: 130,
+        cellRenderer: ({ data }: { data?: UserRecord }) => {
+          if (!data) return null;
+          return (
+            <div className="flex h-full items-center justify-center gap-1">
+              <button type="button" title="Ubah pengguna" aria-label={`Ubah ${data.fullName}`} onClick={() => openEditor("edit", data)} className="inline-flex h-7 w-7 items-center justify-center border border-border text-muted-foreground hover:bg-muted hover:text-foreground">
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
+              <button type="button" title="Reset kata sandi" aria-label={`Reset kata sandi ${data.fullName}`} onClick={() => openEditor("reset", data)} className="inline-flex h-7 w-7 items-center justify-center border border-border text-muted-foreground hover:bg-muted hover:text-foreground">
+                <KeyRound className="h-3.5 w-3.5" />
+              </button>
+              {data.status === "ACTIVE" ? (
+                <button type="button" title="Nonaktifkan pengguna" aria-label={`Nonaktifkan ${data.fullName}`} disabled={isPending} onClick={() => startTransition(() => void submitDeactivate(data))} className="inline-flex h-7 w-7 items-center justify-center border border-destructive/35 text-destructive hover:bg-destructive/10 disabled:opacity-40">
+                  <UserX className="h-3.5 w-3.5" />
+                </button>
+              ) : null}
+            </div>
+          );
+        },
+      },
+    ],
+    [isPending],
+  );
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {sweetAlert.alertElement}
-
-      <SmartDataGrid
-        viewportClassName="max-h-[calc(100svh-260px)]"
-        title="Pengguna"
-        description=""
-        columns={columns}
-        rows={gridRows}
-        meta={meta}
-        state={state}
-        searchPlaceholder="Cari ID pegawai, nama, email, role, divisi, atau jabatan..."
-        filters={filters}
-        sortOptions={sortOptions}
-        savedViews={savedViews}
-        exportHref={exportHref}
-        headerActions={
-          <button
-            type="button"
-            onClick={openCreateEditor}
-            className="inline-flex items-center gap-2 rounded-full border border-success/35 bg-success/10 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-success hover:bg-success/20"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Tambah Pengguna
+      <div className="flex flex-col gap-2 border border-border bg-card p-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="relative w-full lg:max-w-md">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <input value={quickFilterText} onChange={(event) => setQuickFilterText(event.target.value)} placeholder="Cari ID, nama, role, divisi, atau jabatan" className="h-9 w-full border border-border bg-background pl-9 pr-3 text-sm outline-none focus:border-primary/55" />
+        </div>
+        <div className="flex items-center gap-2">
+          <button type="button" title="Muat ulang" aria-label="Muat ulang daftar pengguna" onClick={() => router.refresh()} className="inline-flex h-9 w-9 items-center justify-center border border-border text-muted-foreground hover:bg-muted hover:text-foreground">
+            <RefreshCcw className="h-4 w-4" />
           </button>
-        }
+          <button type="button" onClick={() => openEditor("create")} className="inline-flex h-9 items-center gap-2 border border-primary/40 bg-primary/[0.06] px-3 text-[12px] font-medium text-app-accent-ink hover:bg-primary/10">
+            <Plus className="h-4 w-4" /> Tambah pengguna
+          </button>
+        </div>
+      </div>
+
+      <SmsAgGrid<UserRecord>
+        rowData={rows}
+        columnDefs={columnDefs}
+        quickFilterText={quickFilterText}
+        getRowId={({ data }) => data.employeeId}
+        heightClassName="h-[calc(100svh-250px)] min-h-[28rem]"
+        defaultColDef={{ filter: true, floatingFilter: true }}
+        emptyMessage="Belum ada pengguna."
       />
 
       {editorMode ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-2 backdrop-blur-[1px] sm:p-4">
-          <div
-            className="flex max-h-[calc(100svh-1rem)] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-border bg-background p-4 dark:border-white/[0.08] sm:max-h-[calc(100svh-2rem)] sm:rounded-3xl sm:p-6"
-          >
+          <div className="flex max-h-[calc(100svh-1rem)] w-full max-w-3xl flex-col overflow-hidden border border-border bg-background p-4 dark:border-white/[0.08] sm:max-h-[calc(100svh-2rem)] sm:p-6">
             <div className="flex shrink-0 items-center justify-between gap-4">
               <h3 className="min-w-0 break-words text-lg text-foreground">
-                {editorMode === "create"
-                  ? "Buat Pengguna"
-                  : editorMode === "edit"
-                    ? `Ubah ${activeUser?.employeeId ?? ""}`
-                    : `Reset Sandi ${activeUser?.employeeId ?? ""}`}
+                {editorMode === "create" ? "Tambah Pengguna" : editorMode === "edit" ? `Ubah ${activeUser?.employeeId ?? ""}` : `Reset Sandi ${activeUser?.employeeId ?? ""}`}
               </h3>
-              <button
-                type="button"
-                onClick={closeEditor}
-                className="shrink-0 whitespace-nowrap rounded-full border border-border px-3 py-1 text-xs uppercase tracking-[0.15em] text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring dark:border-white/[0.08] dark:text-foreground/50 dark:hover:text-foreground"
-              >
-                Tutup
-              </button>
+              <button type="button" onClick={closeEditor} className="h-9 border border-border px-3 text-xs text-muted-foreground hover:text-foreground">Tutup</button>
             </div>
 
-            {editorMode === "reset" && activeUser && (
-              <UserResetPasswordForm
-                user={activeUser}
-                onSuccess={setMessage}
-                onError={setError}
-                onClose={closeEditor}
-              />
-            )}
-            
-            {editorMode === "create" && (
-              <UserCreateForm
-                references={references}
-                onSuccess={setMessage}
-                onError={setError}
-                onClose={closeEditor}
-              />
-            )}
-            
-            {editorMode === "edit" && activeUser && (
-              <UserEditForm
-                user={activeUser}
-                references={references}
-                onSuccess={setMessage}
-                onError={setError}
-                onClose={closeEditor}
-              />
-            )}
+            {editorMode === "reset" && activeUser ? <UserResetPasswordForm user={activeUser} onSuccess={setMessage} onError={setError} onClose={closeEditor} /> : null}
+            {editorMode === "create" ? <UserCreateForm references={references} onSuccess={setMessage} onError={setError} onClose={closeEditor} /> : null}
+            {editorMode === "edit" && activeUser ? <UserEditForm user={activeUser} references={references} onSuccess={setMessage} onError={setError} onClose={closeEditor} /> : null}
           </div>
         </div>
       ) : null}

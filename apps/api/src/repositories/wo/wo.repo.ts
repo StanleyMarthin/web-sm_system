@@ -56,6 +56,9 @@ interface WoRow extends RowDataPacket {
   approvalDate: string | null;
   createdAt: string | null;
   notes: string | null;
+  issueNote: string | null;
+  mediaUrl: string | null;
+  mediaType: string | null;
   picId: string | null;
   picName: string | null;
   approverId: string | null;
@@ -114,7 +117,12 @@ function computeWoRisk(params: {
 }): { agingScore: number; isUrgent: boolean } {
   let score = Math.min(40, Math.max(0, Math.round(params.agingHours * 2)));
 
-  if (WO_KD_STATUSES.has(params.status) || params.status === WO_ADVISOR_STATUS || params.status === WO_KP_STATUS || params.status === WO_PM_STATUS) {
+  if (
+    WO_KD_STATUSES.has(params.status) ||
+    params.status === WO_ADVISOR_STATUS ||
+    params.status === WO_KP_STATUS ||
+    params.status === WO_PM_STATUS
+  ) {
     score += 20;
   }
 
@@ -134,7 +142,10 @@ function computeWoRisk(params: {
   const isUrgent =
     params.isPriority ||
     agingScore >= 70 ||
-    ((WO_KD_STATUSES.has(params.status) || params.status === WO_ADVISOR_STATUS || params.status === WO_KP_STATUS || params.status === WO_PM_STATUS) &&
+    ((WO_KD_STATUSES.has(params.status) ||
+      params.status === WO_ADVISOR_STATUS ||
+      params.status === WO_KP_STATUS ||
+      params.status === WO_PM_STATUS) &&
       params.agingHours >= 24);
 
   return {
@@ -163,16 +174,26 @@ function mapWoRow(row: WoRow): WoRecord {
     fromDivisionName: row.fromDivisionName ?? "-",
     toDivisionId: row.toDivisionId,
     toDivisionName: row.toDivisionName ?? "-",
-    masterPanelId: row.masterPanelId === null ? null : Number(row.masterPanelId),
+    masterPanelId:
+      row.masterPanelId === null ? null : Number(row.masterPanelId),
     panelName: row.panelName,
     jobDetail: row.jobDetail ?? "",
-    estimatedHours: row.estimatedHours === null ? null : Number(row.estimatedHours),
+    estimatedHours:
+      row.estimatedHours === null ? null : Number(row.estimatedHours),
     isPriority,
     status: (row.status ?? "SUBMITTED") as WoStatus,
     requestDate: row.requestDate ?? "",
     approvalDate: row.approvalDate,
     createdAt: row.createdAt ?? "",
     notes: row.notes,
+    issueNote: row.issueNote,
+    mediaUrl: row.mediaUrl,
+    mediaType:
+      row.mediaType === "video"
+        ? "video"
+        : row.mediaType === "image"
+          ? "image"
+          : null,
     picId: row.picId,
     picName: row.picName,
     approverId: row.approverId,
@@ -206,6 +227,9 @@ function buildWoSelectSql(): string {
       DATE_FORMAT(w.approval_date, '%Y-%m-%d %H:%i:%s') AS approvalDate,
       DATE_FORMAT(w.created_at, '%Y-%m-%d %H:%i:%s') AS createdAt,
       w.notes AS notes,
+      w.issue_note AS issueNote,
+      w.media_url AS mediaUrl,
+      w.media_type AS mediaType,
       w.pic_id AS picId,
       COALESCE(ep.full_name, NULL) AS picName,
       w.approver_id AS approverId,
@@ -287,9 +311,13 @@ function buildFilterClauses(query: WoGridQuery, params: unknown[]): string[] {
   const clauses: string[] = [];
 
   if (query.viewMode === "active") {
-    clauses.push("COALESCE(w.status, 'SUBMITTED') NOT IN ('DONE', 'REJECTED', 'CLOSED')");
+    clauses.push(
+      "COALESCE(w.status, 'SUBMITTED') NOT IN ('DONE', 'REJECTED', 'CLOSED')",
+    );
   } else if (query.viewMode === "done") {
-    clauses.push("COALESCE(w.status, 'SUBMITTED') IN ('DONE', 'REJECTED', 'CLOSED')");
+    clauses.push(
+      "COALESCE(w.status, 'SUBMITTED') IN ('DONE', 'REJECTED', 'CLOSED')",
+    );
   }
 
   if (query.search) {
@@ -350,7 +378,8 @@ function buildOrderBy(query: WoGridQuery): string {
     fromDivisionName: "COALESCE(fd.name, '')",
     toDivisionName: "COALESCE(td.name, '')",
     estimatedHours: "COALESCE(w.estimated_hours, 0)",
-    agingHours: "TIMESTAMPDIFF(HOUR, COALESCE(w.created_at, TIMESTAMP(w.request_date)), CURRENT_TIMESTAMP)",
+    agingHours:
+      "TIMESTAMPDIFF(HOUR, COALESCE(w.created_at, TIMESTAMP(w.request_date)), CURRENT_TIMESTAMP)",
     createdAt: "w.created_at",
   };
 
@@ -531,7 +560,8 @@ export class MySqlWoRepository implements WoRepository {
       queryParams.push(...options.extraParams);
     }
 
-    const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
+    const whereSql =
+      whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
     const limit = options.limit ?? query.limit;
 
     const [[rows], [countRows], [summaryRows]] = (await Promise.all([
@@ -577,11 +607,7 @@ export class MySqlWoRepository implements WoRepository {
         `,
         queryParams,
       ),
-    ])) as [
-      [WoRow[], unknown],
-      [CountRow[], unknown],
-      [SummaryRow[], unknown],
-    ];
+    ])) as [[WoRow[], unknown], [CountRow[], unknown], [SummaryRow[], unknown]];
 
     return {
       rows: rows.map(mapWoRow),
@@ -622,7 +648,9 @@ export class MySqlWoRepository implements WoRepository {
         viewMode: "active",
       },
       {
-        extraClauses: ["COALESCE(w.status, 'SUBMITTED') IN ('OPEN', 'SUBMITTED', 'PENDING_TARGET_KD_APPROVAL', 'PENDING_ADVISOR_APPROVAL', 'PENDING_KP_APPROVAL', 'PENDING_PM_APPROVAL')"],
+        extraClauses: [
+          "COALESCE(w.status, 'SUBMITTED') IN ('OPEN', 'SUBMITTED', 'PENDING_TARGET_KD_APPROVAL', 'PENDING_ADVISOR_APPROVAL', 'PENDING_KP_APPROVAL', 'PENDING_PM_APPROVAL')",
+        ],
       },
     );
   }
@@ -701,7 +729,9 @@ export class MySqlWoRepository implements WoRepository {
     if (!params.scope.canViewAllUnits) {
       const unitClauses: string[] = [];
       if (params.scope.unitIds.length > 0) {
-        unitClauses.push(`c.id IN (${params.scope.unitIds.map(() => "?").join(", ")})`);
+        unitClauses.push(
+          `c.id IN (${params.scope.unitIds.map(() => "?").join(", ")})`,
+        );
         unitParams.push(...params.scope.unitIds);
       }
       if (params.scope.canViewAssignedUnits) {
@@ -714,7 +744,11 @@ export class MySqlWoRepository implements WoRepository {
               AND (cpa.kp_id = ? OR cpa.advisor_id = ? OR cpa.kd_id = ?)
           )`,
         );
-        unitParams.push(params.employeeId, params.employeeId, params.employeeId);
+        unitParams.push(
+          params.employeeId,
+          params.employeeId,
+          params.employeeId,
+        );
       }
 
       if (unitClauses.length > 0) {
@@ -746,8 +780,14 @@ export class MySqlWoRepository implements WoRepository {
 
     return {
       units: unitRows.map((row) => ({ value: row.value, label: row.label })),
-      divisions: divisionRows.map((row) => ({ value: row.value, label: row.label })),
-      statuses: statusRows.map((row) => ({ value: row.value, label: row.label })),
+      divisions: divisionRows.map((row) => ({
+        value: row.value,
+        label: row.label,
+      })),
+      statuses: statusRows.map((row) => ({
+        value: row.value,
+        label: row.label,
+      })),
     };
   }
 
@@ -782,19 +822,21 @@ export class MySqlWoRepository implements WoRepository {
         }
       }
 
-      const createItems = input.items && input.items.length > 0
-        ? input.items
-        : [
-            {
-              jobDetail: input.jobDetail || "",
-              panelName: input.panelName,
-              sectionName: null,
-              panelCategory: null,
-              addPanelToMaster: false,
-              notes: input.notes,
-              estimatedHours: input.estimatedHours,
-            },
-          ];
+      const createItems =
+        input.items && input.items.length > 0
+          ? input.items
+          : [
+              {
+                jobDetail: input.jobDetail || "",
+                panelName: input.panelName,
+                sectionName: null,
+                panelCategory: null,
+                addPanelToMaster: false,
+                notes: input.notes,
+                issueNote: input.issueNote,
+                estimatedHours: input.estimatedHours,
+              },
+            ];
 
       const createdIds: string[] = [];
 
@@ -809,7 +851,9 @@ export class MySqlWoRepository implements WoRepository {
           `,
           [input.requestDate, input.requestDate],
         )) as [CountRow[], unknown];
-        const sequence = String(toNumber(sequenceRows[0]?.total, 0) + 1).padStart(3, "0");
+        const sequence = String(
+          toNumber(sequenceRows[0]?.total, 0) + 1,
+        ).padStart(3, "0");
         const requestDate = new Date(`${input.requestDate}T00:00:00.000Z`);
         const month = String(requestDate.getUTCMonth() + 1).padStart(2, "0");
         const year = String(requestDate.getUTCFullYear());
@@ -842,8 +886,11 @@ export class MySqlWoRepository implements WoRepository {
               is_priority,
               status,
               acc_tracking,
-              notes
-            ) VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, 'PENDING_TARGET_KD_APPROVAL', 0, ?)
+              notes,
+              issue_note,
+              media_url,
+              media_type
+            ) VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, 'PENDING_TARGET_KD_APPROVAL', 0, ?, ?, ?, ?)
           `,
           [
             woId,
@@ -858,6 +905,9 @@ export class MySqlWoRepository implements WoRepository {
             item.estimatedHours,
             input.isPriority ? 1 : 0,
             item.notes,
+            item.issueNote ?? input.issueNote ?? null,
+            item.mediaUrl ?? input.mediaUrl ?? null,
+            item.mediaType ?? input.mediaType ?? null,
           ],
         );
 
@@ -874,9 +924,13 @@ export class MySqlWoRepository implements WoRepository {
     }
   }
 
-  async update(woId: string, input: WoCreateRequest): Promise<{ woId: string }> {
+  async update(
+    woId: string,
+    input: WoCreateRequest,
+  ): Promise<{ woId: string }> {
     const item = input.items?.[0];
-    const panelName = item?.panelName?.trim() || input.panelName?.trim() || null;
+    const panelName =
+      item?.panelName?.trim() || input.panelName?.trim() || null;
     if (!panelName) throw new Error("WO_PANEL_REQUIRED");
 
     const pool = this.poolFactory();
@@ -890,7 +944,10 @@ export class MySqlWoRepository implements WoRepository {
             job_detail = ?,
             estimated_hours = ?,
             is_priority = ?,
-            notes = ?
+            notes = ?,
+            issue_note = ?,
+            media_url = ?,
+            media_type = ?
         WHERE id = ?
       `,
       [
@@ -902,6 +959,9 @@ export class MySqlWoRepository implements WoRepository {
         item?.estimatedHours ?? input.estimatedHours ?? null,
         input.isPriority ? 1 : 0,
         item?.notes ?? input.notes ?? null,
+        item?.issueNote ?? input.issueNote ?? null,
+        item?.mediaUrl ?? input.mediaUrl ?? null,
+        item?.mediaType ?? input.mediaType ?? null,
         woId,
       ],
     );
@@ -982,7 +1042,12 @@ export class MySqlWoRepository implements WoRepository {
             END
           WHERE id = ?
         `,
-        [input?.actorId ?? null, input?.reason ?? null, input?.reason ?? null, woId],
+        [
+          input?.actorId ?? null,
+          input?.reason ?? null,
+          input?.reason ?? null,
+          woId,
+        ],
       );
       return;
     }
@@ -1050,19 +1115,24 @@ export class MySqlWoRepository implements WoRepository {
         const canApproveKd =
           options.permissions.includes(permissionCodes.woApprove) &&
           row.toDivisionId !== null &&
-          (
-            options.actorDivisionId === row.toDivisionId ||
+          (options.actorDivisionId === row.toDivisionId ||
             params.scope.divisionIds.includes(row.toDivisionId) ||
-            params.scope.managedDivisionIds.includes(row.toDivisionId)
-          );
+            params.scope.managedDivisionIds.includes(row.toDivisionId));
         if (!canApproveKd) {
           throw new Error("WO_APPROVAL_FORBIDDEN");
         }
-        if (!options.input.picId || !options.input.estimatedHours || options.input.estimatedHours <= 0) {
+        if (
+          !options.input.picId ||
+          !options.input.estimatedHours ||
+          options.input.estimatedHours <= 0
+        ) {
           throw new Error("MISSING_KD_ASSIGNMENT");
         }
 
-        const nextStatus = (await hasAdvisorForDivision(connection, row.toDivisionId))
+        const nextStatus = (await hasAdvisorForDivision(
+          connection,
+          row.toDivisionId,
+        ))
           ? WO_ADVISOR_STATUS
           : WO_KP_STATUS;
 
@@ -1154,7 +1224,9 @@ export class MySqlWoRepository implements WoRepository {
           throw new Error("WO_APPROVAL_FORBIDDEN");
         }
 
-        const targetHours = Number(options.input.estimatedHours ?? row.estimatedHours ?? 0);
+        const targetHours = Number(
+          options.input.estimatedHours ?? row.estimatedHours ?? 0,
+        );
         if (!Number.isFinite(targetHours) || targetHours <= 0) {
           throw new Error("MISSING_KD_ASSIGNMENT");
         }
@@ -1188,7 +1260,8 @@ export class MySqlWoRepository implements WoRepository {
           const sectionName = row.panelName
             ? `WO: ${row.panelName} - ${row.woNumber}`
             : `WO: ${row.woNumber}`;
-          const deadlineDate = row.requestDate || new Date().toISOString().slice(0, 10);
+          const deadlineDate =
+            row.requestDate || new Date().toISOString().slice(0, 10);
 
           await connection.execute(
             `
@@ -1206,8 +1279,10 @@ export class MySqlWoRepository implements WoRepository {
                 status,
                 start_date,
                 deadline_date,
+                temuan_awal,
+                keterangan,
                 user_update
-              ) VALUES (?, ?, ?, 'WO', ?, ?, ?, ?, ?, ?, 'PLAN', CURRENT_DATE, ?, ?)
+              ) VALUES (?, ?, ?, 'WO', ?, ?, ?, ?, ?, ?, 'PLAN', CURRENT_DATE, ?, ?, ?, ?)
             `,
             [
               linkedCountdownId,
@@ -1220,6 +1295,8 @@ export class MySqlWoRepository implements WoRepository {
               targetHours,
               targetHours,
               deadlineDate,
+              row.issueNote,
+              row.jobDetail,
               options.actorId,
             ],
           );
@@ -1237,12 +1314,7 @@ export class MySqlWoRepository implements WoRepository {
               ${noteSql}
             WHERE id = ?
           `,
-          [
-            targetHours,
-            options.actorId,
-            ...noteParams,
-            params.woId,
-          ],
+          [targetHours, options.actorId, ...noteParams, params.woId],
         );
         await connection.commit();
         return { status: "APPROVED", linkedCountdownId };

@@ -2,7 +2,14 @@
 
 import Image from "next/image";
 import { ChevronDown, Search, UploadCloud, X } from "lucide-react";
-import { useEffect, useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type Dispatch,
+  type ReactNode,
+  type SetStateAction,
+} from "react";
 import {
   createWorkflowJobForm,
   submitWorkflowJobCreate,
@@ -14,6 +21,7 @@ import {
   type WorkflowJobCreateReferences,
 } from "@/modules/workflow-job/workflow-job-create";
 import { requestPrUploadTicket } from "@/shared/api/pr/pr";
+import { requestWoUploadTicket } from "@/shared/api/wo/wo";
 
 interface WorkflowJobCreateFormProps {
   context: WorkflowJobCreateContext;
@@ -25,8 +33,13 @@ interface WorkflowJobCreateFormProps {
   isSaving: boolean;
   onSavingChange: (isSaving: boolean) => void;
   onCancel: () => void;
-  onCreated?: (created: CreatedWorkflowJob, form: WorkflowJobCreateFormState) => void;
-  onSubmit?: (form: WorkflowJobCreateFormState) => Promise<string | null> | string | null;
+  onCreated?: (
+    created: CreatedWorkflowJob,
+    form: WorkflowJobCreateFormState,
+  ) => void;
+  onSubmit?: (
+    form: WorkflowJobCreateFormState,
+  ) => Promise<string | null> | string | null;
 }
 
 const createTypeLabels: Record<WorkflowCreateType, string> = {
@@ -65,10 +78,17 @@ interface AdaptiveSelectProps {
   className?: string;
 }
 
-function AdaptiveSelect({ value, options, onChange, placeholder, className = "" }: AdaptiveSelectProps) {
+function AdaptiveSelect({
+  value,
+  options,
+  onChange,
+  placeholder,
+  className = "",
+}: AdaptiveSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const selectedOption = options.find((option) => option.value === value) ?? null;
+  const selectedOption =
+    options.find((option) => option.value === value) ?? null;
   const normalizedQuery = query.trim().toLowerCase();
   const filteredOptions = options.filter((option) => {
     const haystack = `${option.label} ${option.value}`.toLowerCase();
@@ -84,7 +104,9 @@ function AdaptiveSelect({ value, options, onChange, placeholder, className = "" 
       >
         <option value="">{placeholder}</option>
         {options.map((option) => (
-          <option key={option.value} value={option.value}>{option.label}</option>
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
         ))}
       </select>
     );
@@ -95,7 +117,7 @@ function AdaptiveSelect({ value, options, onChange, placeholder, className = "" 
       <div className="flex h-10 items-center border border-border bg-card focus-within:border-primary/45">
         <Search className="ml-3 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
         <input
-          value={isOpen ? query : selectedOption?.label ?? ""}
+          value={isOpen ? query : (selectedOption?.label ?? "")}
           onFocus={() => {
             setQuery("");
             setIsOpen(true);
@@ -136,7 +158,9 @@ function AdaptiveSelect({ value, options, onChange, placeholder, className = "" 
               </button>
             ))
           ) : (
-            <div className="px-3 py-2 text-[14px] text-muted-foreground">Tidak ada data cocok.</div>
+            <div className="px-3 py-2 text-[14px] text-muted-foreground">
+              Tidak ada data cocok.
+            </div>
           )}
         </div>
       ) : null}
@@ -157,8 +181,13 @@ export function WorkflowJobCreateForm({
   onCreated,
   onSubmit,
 }: WorkflowJobCreateFormProps) {
-  const defaultType = defaultTypeProp && allowedTypes.includes(defaultTypeProp) ? defaultTypeProp : allowedTypes[0] ?? "COUNTDOWN";
-  const [form, setForm] = useState<WorkflowJobCreateFormState>(() => initialForm ?? createWorkflowJobForm(context, defaultType));
+  const defaultType =
+    defaultTypeProp && allowedTypes.includes(defaultTypeProp)
+      ? defaultTypeProp
+      : (allowedTypes[0] ?? "COUNTDOWN");
+  const [form, setForm] = useState<WorkflowJobCreateFormState>(
+    () => initialForm ?? createWorkflowJobForm(context, defaultType),
+  );
   const [error, setError] = useState<string | null>(null);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const visibleJobTypes = useMemo(
@@ -166,9 +195,18 @@ export function WorkflowJobCreateForm({
     [form.divisionId, references],
   );
   const sectionOptions = useMemo(() => {
-    const options = references.sections.map((section) => ({ value: section.value, label: section.label }));
-    if (context.sectionName && !options.some((section) => section.value === context.sectionName)) {
-      return [...options, { value: context.sectionName, label: context.sectionName }];
+    const options = references.sections.map((section) => ({
+      value: section.value,
+      label: section.label,
+    }));
+    if (
+      context.sectionName &&
+      !options.some((section) => section.value === context.sectionName)
+    ) {
+      return [
+        ...options,
+        { value: context.sectionName, label: context.sectionName },
+      ];
     }
     return options;
   }, [context.sectionName, references.sections]);
@@ -179,15 +217,22 @@ export function WorkflowJobCreateForm({
     setIsUploadingPhoto(false);
   }, [context, defaultType, initialForm]);
 
-  async function handlePrPhotoUpload(file: File) {
+  async function handleMediaUpload(file: File) {
     setError(null);
     setIsUploadingPhoto(true);
     try {
-      const ticketResult = await requestPrUploadTicket({
-        filename: file.name,
-        contentType: file.type,
-        size: file.size,
-      });
+      const ticketResult =
+        form.type === "WO"
+          ? await requestWoUploadTicket({
+              filename: file.name,
+              contentType: file.type,
+              size: file.size,
+            })
+          : await requestPrUploadTicket({
+              filename: file.name,
+              contentType: file.type,
+              size: file.size,
+            });
       if (!ticketResult.success) {
         setError(ticketResult.message || "Gagal mendapatkan upload ticket.");
         return;
@@ -198,12 +243,12 @@ export function WorkflowJobCreateForm({
         body: file,
       });
       if (!uploadResult.ok) {
-        setError("Gagal mengunggah foto PR.");
+        setError("Gagal mengunggah media.");
         return;
       }
       updateItem(setForm, "photoUrl", ticketResult.result.publicUrl);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Gagal mengunggah foto PR.");
+      setError(err instanceof Error ? err.message : "Gagal mengunggah media.");
     } finally {
       setIsUploadingPhoto(false);
     }
@@ -218,7 +263,11 @@ export function WorkflowJobCreateForm({
         if (message) setError(message);
         return;
       }
-      const result = await submitWorkflowJobCreate({ form, context, references });
+      const result = await submitWorkflowJobCreate({
+        form,
+        context,
+        references,
+      });
       if (!result.success) {
         setError(result.message);
         return;
@@ -226,7 +275,9 @@ export function WorkflowJobCreateForm({
       onCreated?.(result.created, form);
       setForm(createWorkflowJobForm(context, defaultType));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Sumber job belum bisa dibuat.");
+      setError(
+        err instanceof Error ? err.message : "Sumber job belum bisa dibuat.",
+      );
     } finally {
       onSavingChange(false);
     }
@@ -302,10 +353,18 @@ export function WorkflowJobCreateForm({
         ) : null}
 
         <label className="space-y-1.5 sm:col-span-2">
-          <FieldLabel>{form.type === "PR" ? "Deskripsi Item" : form.type === "WOV" ? "Item / Pekerjaan Vendor" : "Pekerjaan"}</FieldLabel>
+          <FieldLabel>
+            {form.type === "PR"
+              ? "Deskripsi Item"
+              : form.type === "WOV"
+                ? "Item / Pekerjaan Vendor"
+                : "Pekerjaan"}
+          </FieldLabel>
           <input
             value={form.title}
-            onChange={(event) => updateItem(setForm, "title", event.target.value)}
+            onChange={(event) =>
+              updateItem(setForm, "title", event.target.value)
+            }
             className="h-10 w-full border border-border bg-card px-3 text-[15px] text-foreground outline-none focus:border-primary/45"
           />
         </label>
@@ -320,7 +379,13 @@ export function WorkflowJobCreateForm({
                   { value: "MAIN", label: "Main" },
                   { value: "ADDITIONAL", label: "Additional" },
                 ]}
-                onChange={(value) => updateItem(setForm, "taskCategory", value as WorkflowJobCreateFormState["taskCategory"])}
+                onChange={(value) =>
+                  updateItem(
+                    setForm,
+                    "taskCategory",
+                    value as WorkflowJobCreateFormState["taskCategory"],
+                  )
+                }
                 placeholder="Pilih tipe"
               />
             </label>
@@ -346,7 +411,9 @@ export function WorkflowJobCreateForm({
               <FieldLabel>Target Awal</FieldLabel>
               <input
                 value={form.targetHours}
-                onChange={(event) => updateItem(setForm, "targetHours", event.target.value)}
+                onChange={(event) =>
+                  updateItem(setForm, "targetHours", event.target.value)
+                }
                 placeholder="001:00"
                 className="h-10 w-full border border-border bg-card px-3 text-[15px] text-foreground outline-none focus:border-primary/45"
               />
@@ -356,7 +423,9 @@ export function WorkflowJobCreateForm({
               <input
                 type="date"
                 value={form.startDate}
-                onChange={(event) => updateItem(setForm, "startDate", event.target.value)}
+                onChange={(event) =>
+                  updateItem(setForm, "startDate", event.target.value)
+                }
                 className="h-10 w-full border border-border bg-card px-3 text-[15px] text-foreground outline-none focus:border-primary/45 dark:[color-scheme:dark]"
               />
             </label>
@@ -364,7 +433,9 @@ export function WorkflowJobCreateForm({
               <FieldLabel>Temuan Awal</FieldLabel>
               <textarea
                 value={form.temuanAwal}
-                onChange={(event) => updateItem(setForm, "temuanAwal", event.target.value)}
+                onChange={(event) =>
+                  updateItem(setForm, "temuanAwal", event.target.value)
+                }
                 rows={2}
                 className="w-full resize-none border border-border bg-card px-3 py-2 text-[15px] text-foreground outline-none focus:border-primary/45"
               />
@@ -373,7 +444,9 @@ export function WorkflowJobCreateForm({
               <FieldLabel>Keterangan</FieldLabel>
               <textarea
                 value={form.keterangan}
-                onChange={(event) => updateItem(setForm, "keterangan", event.target.value)}
+                onChange={(event) =>
+                  updateItem(setForm, "keterangan", event.target.value)
+                }
                 rows={2}
                 className="w-full resize-none border border-border bg-card px-3 py-2 text-[15px] text-foreground outline-none focus:border-primary/45"
               />
@@ -390,7 +463,9 @@ export function WorkflowJobCreateForm({
                 min="0"
                 step="0.25"
                 value={form.estimatedHours}
-                onChange={(event) => updateItem(setForm, "estimatedHours", event.target.value)}
+                onChange={(event) =>
+                  updateItem(setForm, "estimatedHours", event.target.value)
+                }
                 className="h-10 w-full border border-border bg-card px-3 text-[15px] text-foreground outline-none focus:border-primary/45"
               />
             </label>
@@ -398,10 +473,23 @@ export function WorkflowJobCreateForm({
               <input
                 type="checkbox"
                 checked={form.isPriority}
-                onChange={(event) => updateItem(setForm, "isPriority", event.target.checked)}
+                onChange={(event) =>
+                  updateItem(setForm, "isPriority", event.target.checked)
+                }
                 className="h-4 w-4 accent-primary"
               />
               Urgent / Prioritas
+            </label>
+            <label className="space-y-1.5 sm:col-span-2">
+              <FieldLabel>Temuan / Masalah</FieldLabel>
+              <textarea
+                value={form.temuanAwal}
+                onChange={(event) =>
+                  updateItem(setForm, "temuanAwal", event.target.value)
+                }
+                rows={2}
+                className="w-full resize-none border border-border bg-card px-3 py-2 text-[15px] text-foreground outline-none focus:border-primary/45"
+              />
             </label>
           </>
         ) : null}
@@ -415,7 +503,9 @@ export function WorkflowJobCreateForm({
                 min="1"
                 step="1"
                 value={form.qty}
-                onChange={(event) => updateItem(setForm, "qty", event.target.value)}
+                onChange={(event) =>
+                  updateItem(setForm, "qty", event.target.value)
+                }
                 className="h-10 w-full border border-border bg-card px-3 text-[15px] text-foreground outline-none focus:border-primary/45"
               />
             </label>
@@ -423,7 +513,9 @@ export function WorkflowJobCreateForm({
               <FieldLabel>Satuan</FieldLabel>
               <input
                 value={form.uom}
-                onChange={(event) => updateItem(setForm, "uom", event.target.value)}
+                onChange={(event) =>
+                  updateItem(setForm, "uom", event.target.value)
+                }
                 className="h-10 w-full border border-border bg-card px-3 text-[15px] text-foreground outline-none focus:border-primary/45"
               />
             </label>
@@ -440,7 +532,13 @@ export function WorkflowJobCreateForm({
                   { value: "NORMAL", label: "NORMAL" },
                   { value: "URGENT", label: "URGENT" },
                 ]}
-                onChange={(value) => updateItem(setForm, "priority", value as WorkflowJobCreateFormState["priority"])}
+                onChange={(value) =>
+                  updateItem(
+                    setForm,
+                    "priority",
+                    value as WorkflowJobCreateFormState["priority"],
+                  )
+                }
                 placeholder="Pilih prioritas"
               />
             </label>
@@ -450,53 +548,80 @@ export function WorkflowJobCreateForm({
                 type="number"
                 min="0"
                 value={form.estimatedPrice}
-                onChange={(event) => updateItem(setForm, "estimatedPrice", event.target.value)}
+                onChange={(event) =>
+                  updateItem(setForm, "estimatedPrice", event.target.value)
+                }
                 className="h-10 w-full border border-border bg-card px-3 text-[15px] text-foreground outline-none focus:border-primary/45"
               />
             </label>
-            <div className="space-y-1.5 sm:col-span-2">
-              <FieldLabel>Foto PR</FieldLabel>
-              <div className="flex min-h-12 items-center justify-between gap-3 border border-border bg-card px-3 py-2">
-                {form.photoUrl ? (
-                  <div className="flex min-w-0 items-center gap-2">
-                    <div className="relative h-9 w-9 shrink-0 overflow-hidden border border-border">
-                      <Image src={form.photoUrl} alt="Foto PR" fill sizes="36px" className="object-cover" />
+          </>
+        ) : null}
+
+        {form.type === "PR" || form.type === "WO" ? (
+          <div className="space-y-1.5 sm:col-span-2">
+            <FieldLabel>
+              {form.type === "WO" ? "Foto / Video WO" : "Foto PR"}
+            </FieldLabel>
+            <div className="flex min-h-12 items-center justify-between gap-3 border border-border bg-card px-3 py-2">
+              {form.photoUrl ? (
+                <div className="flex min-w-0 items-center gap-2">
+                  {form.photoUrl.toLowerCase().endsWith(".mp4") ? (
+                    <div className="flex h-9 w-12 shrink-0 items-center justify-center border border-border font-mono text-[11px] text-muted-foreground">
+                      MP4
                     </div>
-                    <span className="truncate text-[14px] text-foreground">{form.photoUrl.split("/").pop()}</span>
-                  </div>
-                ) : (
-                  <span className="text-[14px] text-muted-foreground">{isUploadingPhoto ? "Uploading..." : "Belum ada foto"}</span>
-                )}
-                <div className="flex shrink-0 items-center gap-2">
-                  {form.photoUrl ? (
-                    <button
-                      type="button"
-                      onClick={() => updateItem(setForm, "photoUrl", "")}
-                      className="flex h-8 w-8 items-center justify-center border border-border text-muted-foreground hover:text-destructive"
-                      title="Hapus foto"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  ) : null}
-                  <label className="flex h-8 cursor-pointer items-center gap-1.5 border border-border px-2.5 text-[13px] font-mono uppercase tracking-[0.08em] text-muted-foreground hover:text-foreground">
-                    <UploadCloud className="h-3.5 w-3.5" />
-                    {isUploadingPhoto ? "Upload..." : "Upload"}
-                    <input
-                      type="file"
-                      accept="image/*"
-                      disabled={isUploadingPhoto}
-                      onChange={(event) => {
-                        const file = event.target.files?.[0];
-                        event.target.value = "";
-                        if (file) void handlePrPhotoUpload(file);
-                      }}
-                      className="hidden"
-                    />
-                  </label>
+                  ) : (
+                    <div className="relative h-9 w-9 shrink-0 overflow-hidden border border-border">
+                      <Image
+                        src={form.photoUrl}
+                        alt={form.type === "WO" ? "Media WO" : "Foto PR"}
+                        fill
+                        sizes="36px"
+                        className="object-cover"
+                      />
+                    </div>
+                  )}
+                  <span className="truncate text-[14px] text-foreground">
+                    {form.photoUrl.split("/").pop()}
+                  </span>
                 </div>
+              ) : (
+                <span className="text-[14px] text-muted-foreground">
+                  {isUploadingPhoto ? "Uploading..." : "Opsional"}
+                </span>
+              )}
+              <div className="flex shrink-0 items-center gap-2">
+                {form.photoUrl ? (
+                  <button
+                    type="button"
+                    onClick={() => updateItem(setForm, "photoUrl", "")}
+                    className="flex h-8 w-8 items-center justify-center border border-border text-muted-foreground hover:text-destructive"
+                    title="Hapus media"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                ) : null}
+                <label className="flex h-8 cursor-pointer items-center gap-1.5 border border-border px-2.5 text-[13px] font-mono uppercase tracking-[0.08em] text-muted-foreground hover:text-foreground">
+                  <UploadCloud className="h-3.5 w-3.5" />
+                  {isUploadingPhoto ? "Upload..." : "Upload"}
+                  <input
+                    type="file"
+                    accept={
+                      form.type === "WO"
+                        ? "image/jpeg,image/png,image/webp,video/mp4"
+                        : "image/*"
+                    }
+                    disabled={isUploadingPhoto}
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      event.target.value = "";
+                      if (file) void handleMediaUpload(file);
+                    }}
+                    className="hidden"
+                  />
+                </label>
               </div>
             </div>
-          </>
+          </div>
         ) : null}
 
         {form.type === "WOV" ? (
@@ -505,7 +630,9 @@ export function WorkflowJobCreateForm({
               <FieldLabel>Vendor</FieldLabel>
               <input
                 value={form.vendorName}
-                onChange={(event) => updateItem(setForm, "vendorName", event.target.value)}
+                onChange={(event) =>
+                  updateItem(setForm, "vendorName", event.target.value)
+                }
                 className="h-10 w-full border border-border bg-card px-3 text-[15px] text-foreground outline-none focus:border-primary/45"
               />
             </label>
@@ -515,7 +642,9 @@ export function WorkflowJobCreateForm({
                 type="number"
                 min="0"
                 value={form.estimatedCost}
-                onChange={(event) => updateItem(setForm, "estimatedCost", event.target.value)}
+                onChange={(event) =>
+                  updateItem(setForm, "estimatedCost", event.target.value)
+                }
                 className="h-10 w-full border border-border bg-card px-3 text-[15px] text-foreground outline-none focus:border-primary/45"
               />
             </label>
@@ -523,7 +652,9 @@ export function WorkflowJobCreateForm({
               <FieldLabel>Kondisi Barang Keluar</FieldLabel>
               <textarea
                 value={form.goodsConditionOut}
-                onChange={(event) => updateItem(setForm, "goodsConditionOut", event.target.value)}
+                onChange={(event) =>
+                  updateItem(setForm, "goodsConditionOut", event.target.value)
+                }
                 rows={2}
                 className="w-full resize-none border border-border bg-card px-3 py-2 text-[15px] text-foreground outline-none focus:border-primary/45"
               />
@@ -532,11 +663,19 @@ export function WorkflowJobCreateForm({
         ) : null}
 
         <label className="space-y-1.5">
-          <FieldLabel>{form.type === "WOV" ? "Target Kembali" : form.type === "WO" ? "Tanggal WO" : "Deadline"}</FieldLabel>
+          <FieldLabel>
+            {form.type === "WOV"
+              ? "Target Kembali"
+              : form.type === "WO"
+                ? "Tanggal WO"
+                : "Deadline"}
+          </FieldLabel>
           <input
             type="date"
             value={form.targetDate}
-            onChange={(event) => updateItem(setForm, "targetDate", event.target.value)}
+            onChange={(event) =>
+              updateItem(setForm, "targetDate", event.target.value)
+            }
             className="h-10 w-full border border-border bg-card px-3 text-[15px] text-foreground outline-none focus:border-primary/45 dark:[color-scheme:dark]"
           />
         </label>
@@ -544,7 +683,9 @@ export function WorkflowJobCreateForm({
           <FieldLabel>{form.type === "WOV" ? "Remarks" : "Catatan"}</FieldLabel>
           <textarea
             value={form.notes}
-            onChange={(event) => updateItem(setForm, "notes", event.target.value)}
+            onChange={(event) =>
+              updateItem(setForm, "notes", event.target.value)
+            }
             rows={2}
             className="w-full resize-none border border-border bg-card px-3 py-2 text-[15px] text-foreground outline-none focus:border-primary/45"
           />

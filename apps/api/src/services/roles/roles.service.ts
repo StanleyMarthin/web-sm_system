@@ -7,16 +7,15 @@ import type {
   UpdateRoleRequest,
 } from "@smsystem/contracts/rbac";
 import type { WebSession } from "@/services/auth/session.service";
+import { isSystemSuperadminEmployee } from "@smsystem/contracts/auth";
 import {
   MySqlRolesRepository,
   type RolesRepository,
 } from "@/repositories/roles/roles.repo";
-import {
-  RESERVED_SUPERADMIN_PROFILE,
-  RESERVED_SUPERADMIN_ROLE,
-  isReservedSuperadminRole,
-} from "@/services/rbac/reserved-role";
 import { TtlCache } from "@/lib/ttl-cache";
+import type { AuditService } from "@/services/audit/audit.service";
+import { DefaultAuditService } from "@/services/audit/audit.service";
+import { MySqlAuditRepository } from "@/repositories/audit/audit.repo";
 
 export interface RolesService {
   listRoles(session: WebSession): Promise<RoleRecord[]>;
@@ -56,9 +55,24 @@ function invalidateRoleCaches(roleId?: number): void {
   }
 }
 
-function assertGlobalScope(session: WebSession): void {
-  if (!session.user.scope.canViewAllUnits) {
-    throw new Error("SCOPE_FORBIDDEN");
+function assertSystemSuperadmin(session: WebSession): void {
+  if (!isSystemSuperadminEmployee(session.user.employeeId)) {
+    throw new Error("SUPERADMIN_REQUIRED");
+  }
+}
+
+function normalizeRoleName(roleName: string): string {
+  return roleName.trim().toLowerCase().replace(/[\s-]+/gu, "_");
+}
+
+function assertRoleNameAvailable(roleName: string, currentRoleName?: string): void {
+  const normalized = normalizeRoleName(roleName);
+  const currentNormalized = currentRoleName ? normalizeRoleName(currentRoleName) : null;
+  if (
+    currentNormalized !== normalized &&
+    ["mis", "superadmin", "management_information_system"].includes(normalized)
+  ) {
+    throw new Error("RESERVED_ROLE_NAME");
   }
 }
 
@@ -88,44 +102,16 @@ function mergeRoleProfile(
   };
 }
 
-function enforceReservedSuperadminProfile(
-  existingRole: RoleRecord | null,
-  input: UpdateRoleRequest,
-): UpdateRoleRequest {
-  if (!existingRole || !isReservedSuperadminRole(existingRole.roleName)) {
-    return input;
-  }
-
-  return {
-    ...input,
-    roleName: existingRole.roleName,
-    profile: {
-      ...RESERVED_SUPERADMIN_PROFILE,
-    },
-  };
-}
-
-function buildCreateRolePayload(input: CreateRoleRequest): CreateRoleRequest {
-  if (!isReservedSuperadminRole(input.roleName)) {
-    return input;
-  }
-
-  return {
-    ...input,
-    roleName: RESERVED_SUPERADMIN_ROLE,
-    profile: {
-      ...RESERVED_SUPERADMIN_PROFILE,
-    },
-  };
-}
-
 export class DefaultRolesService implements RolesService {
   constructor(
     private readonly repository: RolesRepository = new MySqlRolesRepository(),
+    private readonly auditService: AuditService = new DefaultAuditService(
+      new MySqlAuditRepository(),
+    ),
   ) {}
 
   async listRoles(session: WebSession): Promise<RoleRecord[]> {
-    assertGlobalScope(session);
+    assertSystemSuperadmin(session);
     return rolesListCache.getOrCreate("global", () => this.repository.listRoles());
   }
 
@@ -133,9 +119,18 @@ export class DefaultRolesService implements RolesService {
     session: WebSession,
     input: CreateRoleRequest,
   ): Promise<RoleRecord> {
-    assertGlobalScope(session);
-    const role = await this.repository.createRole(buildCreateRolePayload(input));
+    assertSystemSuperadmin(session);
+    assertRoleNameAvailable(input.roleName);
+    const role = await this.repository.createRole(input);
     invalidateRoleCaches(role.id);
+    await this.auditService.log({
+      actorId: session.user.employeeId,
+      actorName: session.user.fullName,
+      action: "role.create",
+      module: "rbac",
+      recordId: String(role.id),
+      newValue: role,
+    });
     return role;
   }
 
@@ -143,7 +138,7 @@ export class DefaultRolesService implements RolesService {
     divisions: RoleReferenceOption[];
     units: RoleReferenceOption[];
   }> {
-    assertGlobalScope(session);
+    assertSystemSuperadmin(session);
     return roleReferencesCache.getOrCreate("global", () =>
       this.repository.listRoleReferences(),
     );
@@ -154,26 +149,32 @@ export class DefaultRolesService implements RolesService {
     roleId: number,
     input: UpdateRoleRequest,
   ): Promise<RoleRecord> {
-    assertGlobalScope(session);
+    assertSystemSuperadmin(session);
 
     const existingRole = await this.repository.findRoleById(roleId);
     if (!existingRole) {
       throw new Error("ROLE_NOT_FOUND");
     }
+    if (input.roleName !== undefined) {
+      assertRoleNameAvailable(input.roleName, existingRole.roleName);
+    }
 
-    const role = await this.repository.updateRole(
-      roleId,
-      enforceReservedSuperadminProfile(
-        existingRole,
-        mergeRoleProfile(existingRole, input),
-      ),
-    );
+    const role = await this.repository.updateRole(roleId, mergeRoleProfile(existingRole, input));
     invalidateRoleCaches(roleId);
+    await this.auditService.log({
+      actorId: session.user.employeeId,
+      actorName: session.user.fullName,
+      action: "role.update",
+      module: "rbac",
+      recordId: String(roleId),
+      oldValue: existingRole,
+      newValue: role,
+    });
     return role;
   }
 
   async listPermissions(session: WebSession): Promise<PermissionRecord[]> {
-    assertGlobalScope(session);
+    assertSystemSuperadmin(session);
     return permissionCatalogCache.getOrCreate("global", () =>
       this.repository.listPermissions(),
     );
@@ -183,19 +184,11 @@ export class DefaultRolesService implements RolesService {
     session: WebSession,
     roleId: number,
   ): Promise<number[]> {
-    assertGlobalScope(session);
+    assertSystemSuperadmin(session);
 
     const existingRole = await this.repository.findRoleById(roleId);
     if (!existingRole) {
       throw new Error("ROLE_NOT_FOUND");
-    }
-
-    if (isReservedSuperadminRole(existingRole.roleName)) {
-      const permissionCatalog = await permissionCatalogCache.getOrCreate(
-        "global",
-        () => this.repository.listPermissions(),
-      );
-      return permissionCatalog.map((permission) => permission.id);
     }
 
     return rolePermissionCache.getOrCreate(`role:${roleId}`, () =>
@@ -208,24 +201,11 @@ export class DefaultRolesService implements RolesService {
     roleId: number,
     input: UpdateRolePermissionsRequest,
   ): Promise<number[]> {
-    assertGlobalScope(session);
+    assertSystemSuperadmin(session);
 
     const existingRole = await this.repository.findRoleById(roleId);
     if (!existingRole) {
       throw new Error("ROLE_NOT_FOUND");
-    }
-
-    if (isReservedSuperadminRole(existingRole.roleName)) {
-      const permissionCatalog = await permissionCatalogCache.getOrCreate(
-        "global",
-        () => this.repository.listPermissions(),
-      );
-      const permissionIds = await this.repository.updateRolePermissions(
-        roleId,
-        permissionCatalog.map((permission) => permission.id),
-      );
-      rolePermissionCache.delete(`role:${roleId}`);
-      return permissionIds;
     }
 
     const permissionIds = await this.repository.updateRolePermissions(
@@ -233,6 +213,14 @@ export class DefaultRolesService implements RolesService {
       input.permissionIds,
     );
     rolePermissionCache.delete(`role:${roleId}`);
+    await this.auditService.log({
+      actorId: session.user.employeeId,
+      actorName: session.user.fullName,
+      action: "role.permissions.update",
+      module: "rbac",
+      recordId: String(roleId),
+      newValue: { permissionIds },
+    });
     return permissionIds;
   }
 }

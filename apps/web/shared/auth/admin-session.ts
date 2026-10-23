@@ -23,12 +23,11 @@ export type AdminSession = Readonly<{
 // Mapping ini mencegah UI dan BFF membuat claim berbeda.
 export type SpfCapabilities = Pick<AdminSession, "canAdmin" | "canApprove" | "canPublish">;
 
-function deriveSpfCapabilities(permissions: readonly string[], roleName?: string): SpfCapabilities {
-  const isMis = roleName?.trim().toLowerCase() === "mis";
+function deriveSpfCapabilities(permissions: readonly string[]): SpfCapabilities {
   return {
-    canAdmin: isMis || permissions.includes(permissionCodes.spfAdmin),
-    canApprove: isMis || permissions.includes(permissionCodes.spfApprove),
-    canPublish: isMis || permissions.includes(permissionCodes.spfPublish),
+    canAdmin: permissions.includes(permissionCodes.spfAdmin),
+    canApprove: permissions.includes(permissionCodes.spfApprove),
+    canPublish: permissions.includes(permissionCodes.spfPublish),
   };
 }
 
@@ -48,7 +47,7 @@ export const requireAdminSession = cache(
       return null;
     }
 
-    const capabilities = deriveSpfCapabilities(user.permissions, user.roleName);
+    const capabilities = deriveSpfCapabilities(user.permissions);
     if (!capabilities.canAdmin && !capabilities.canApprove && !capabilities.canPublish) {
       return null;
     }

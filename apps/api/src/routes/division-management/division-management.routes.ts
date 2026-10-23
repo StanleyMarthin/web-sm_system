@@ -2,12 +2,18 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { ResultSetHeader, RowDataPacket } from "mysql2";
 import { permissionCodes } from "@smsystem/permissions";
+import { isSystemSuperadminEmployee } from "@smsystem/contracts/auth";
 import { getMySqlPool } from "@/db/mysql";
 import { parseJsonBody } from "@/http/request";
 import { errorResponse, successResponse } from "@/http/response";
 import { requireSession } from "@/middleware/auth.middleware";
 import { requirePermission } from "@/middleware/permission.middleware";
 import type { AuthService } from "@/services/auth/auth.service";
+import { DefaultAuditService } from "@/services/audit/audit.service";
+import { MySqlAuditRepository } from "@/repositories/audit/audit.repo";
+import { createsDivisionCycle } from "./division-management.helpers";
+
+const divisionAuditService = new DefaultAuditService(new MySqlAuditRepository());
 
 const createMasterJobdescRequestSchema = z.object({
   jobName: z.string().trim().min(1).max(255),
@@ -43,6 +49,15 @@ interface JobTypeRow extends RowDataPacket {
   isTeknis: number;
 }
 
+function toJobTypePayload(row: JobTypeRow) {
+  return {
+    id: row.id,
+    divisionId: row.divisionId,
+    jobName: row.jobName,
+    isTeknis: row.isTeknis === 1,
+  };
+}
+
 async function requireDivisionManagementSession(
   request: Request,
   authService: AuthService,
@@ -61,13 +76,13 @@ async function requireDivisionManagementSession(
     return permissionResult;
   }
 
-  if (!sessionResult.session.user.scope.canViewAllUnits) {
+  if (!isSystemSuperadminEmployee(sessionResult.session.user.employeeId)) {
     return {
       response: errorResponse(
         request,
-        "Divisi management hanya boleh untuk scope global.",
+        "Pengelolaan divisi hanya tersedia untuk superadmin.",
         403,
-        "SCOPE_FORBIDDEN",
+        "SUPERADMIN_REQUIRED",
       ),
     };
   }
@@ -88,6 +103,18 @@ function mapDivisionManagementError(request: Request, error: unknown): Response 
         409,
         "DIVISION_IN_USE",
       );
+    }
+
+    if (error.message === "DIVISION_PARENT_NOT_FOUND") {
+      return errorResponse(request, "Divisi induk tidak ditemukan.", 400, "DIVISION_PARENT_NOT_FOUND");
+    }
+
+    if (error.message === "INVALID_DIVISION_PARENT") {
+      return errorResponse(request, "Team tidak boleh menjadi induk bagi dirinya sendiri atau induknya.", 400, "INVALID_DIVISION_PARENT");
+    }
+
+    if (error.message === "SUPERADMIN_REQUIRED") {
+      return errorResponse(request, "Pengelolaan divisi hanya tersedia untuk superadmin.", 403, "SUPERADMIN_REQUIRED");
     }
 
     if (error.message === "JOB_TYPE_NOT_FOUND") {
@@ -128,12 +155,33 @@ async function findDivisionUsageCount(divisionId: number): Promise<number> {
         UNION ALL SELECT COUNT(*) FROM sm_issue_log WHERE division_id = ?
         UNION ALL SELECT COUNT(*) FROM sm_work_ledger WHERE division_id = ?
         UNION ALL SELECT COUNT(*) FROM sm_unit_budgets WHERE division_id = ?
+        UNION ALL SELECT COUNT(*) FROM sm_divisi WHERE parent_id = ?
       ) usage_counts
     `,
-    Array.from({ length: 10 }, () => divisionId),
+    Array.from({ length: 11 }, () => divisionId),
   );
 
   return Number(rows[0]?.total ?? 0);
+}
+
+async function assertValidDivisionParent(
+  divisionId: number | null,
+  parentId: number | null,
+): Promise<void> {
+  if (parentId === null) return;
+
+  const pool = getMySqlPool();
+  const [rows] = await pool.query<Array<RowDataPacket & { id: number; parentId: number | null }>>(
+    "SELECT id, parent_id AS parentId FROM sm_divisi",
+  );
+  const parents = new Map(rows.map((row) => [row.id, row.parentId]));
+  if (!parents.has(parentId)) {
+    throw new Error("DIVISION_PARENT_NOT_FOUND");
+  }
+
+  if (createsDivisionCycle(divisionId, parentId, parents)) {
+    throw new Error("INVALID_DIVISION_PARENT");
+  }
 }
 
 async function readDivisionById(divisionId: number) {
@@ -208,6 +256,7 @@ export async function handleDivisionCreateRoute(
   }
 
   try {
+    await assertValidDivisionParent(null, parsedBody.data.parentId);
     const pool = getMySqlPool();
     const [result] = await pool.query<ResultSetHeader>(
       `
@@ -223,6 +272,14 @@ export async function handleDivisionCreateRoute(
     );
 
     const division = await readDivisionById(result.insertId);
+    await divisionAuditService.log({
+      actorId: sessionResult.session.user.employeeId,
+      actorName: sessionResult.session.user.fullName,
+      action: "division.create",
+      module: "division",
+      recordId: String(result.insertId),
+      newValue: division,
+    });
     return successResponse(request, "Divisi berhasil ditambahkan.", { division }, { status: 201 });
   } catch (error) {
     return mapDivisionManagementError(request, error);
@@ -329,6 +386,11 @@ export async function handleDivisionUpdateRoute(
   }
 
   try {
+    const previousDivision = await readDivisionById(divisionId);
+    if (!previousDivision) {
+      throw new Error("DIVISION_NOT_FOUND");
+    }
+    await assertValidDivisionParent(divisionId, parsedBody.data.parentId);
     const pool = getMySqlPool();
     const [result] = await pool.query<ResultSetHeader>(
       `
@@ -350,6 +412,15 @@ export async function handleDivisionUpdateRoute(
     }
 
     const division = await readDivisionById(divisionId);
+    await divisionAuditService.log({
+      actorId: sessionResult.session.user.employeeId,
+      actorName: sessionResult.session.user.fullName,
+      action: "division.update",
+      module: "division",
+      recordId: String(divisionId),
+      oldValue: previousDivision,
+      newValue: division,
+    });
     return successResponse(request, "Divisi berhasil diperbarui.", { division });
   } catch (error) {
     return mapDivisionManagementError(request, error);
@@ -367,6 +438,10 @@ export async function handleDivisionDeleteRoute(
   }
 
   try {
+    const division = await readDivisionById(divisionId);
+    if (!division) {
+      throw new Error("DIVISION_NOT_FOUND");
+    }
     const usageCount = await findDivisionUsageCount(divisionId);
     if (usageCount > 0) {
       throw new Error("DIVISION_IN_USE");
@@ -381,6 +456,15 @@ export async function handleDivisionDeleteRoute(
     if (result.affectedRows === 0) {
       throw new Error("DIVISION_NOT_FOUND");
     }
+
+    await divisionAuditService.log({
+      actorId: sessionResult.session.user.employeeId,
+      actorName: sessionResult.session.user.fullName,
+      action: "division.delete",
+      module: "division",
+      recordId: String(divisionId),
+      oldValue: division,
+    });
 
     return successResponse(request, "Divisi berhasil dihapus.", {
       deletedId: divisionId,
@@ -407,6 +491,20 @@ export async function handleJobTypeUpdateRoute(
 
   try {
     const pool = getMySqlPool();
+    const [previousRows] = await pool.query<JobTypeRow[]>(
+      `
+        SELECT id, division_id AS divisionId, job_name AS jobName, is_teknis AS isTeknis
+        FROM master_job_types
+        WHERE id = ?
+        LIMIT 1
+      `,
+      [jobTypeId],
+    );
+    const previousRow = previousRows[0];
+    if (!previousRow) {
+      throw new Error("JOB_TYPE_NOT_FOUND");
+    }
+
     const [result] = await pool.query<ResultSetHeader>(
       `
         UPDATE master_job_types
@@ -438,14 +536,22 @@ export async function handleJobTypeUpdateRoute(
       [jobTypeId],
     );
     const row = rows[0];
+    if (!row) {
+      throw new Error("JOB_TYPE_NOT_FOUND");
+    }
+    const jobType = toJobTypePayload(row);
+    await divisionAuditService.log({
+      actorId: sessionResult.session.user.employeeId,
+      actorName: sessionResult.session.user.fullName,
+      action: "division.jobdesc.update",
+      module: "division_jobdesc",
+      recordId: jobTypeId,
+      oldValue: toJobTypePayload(previousRow),
+      newValue: jobType,
+    });
 
     return successResponse(request, "Master jobdesc berhasil diperbarui.", {
-      jobType: {
-        id: row.id,
-        divisionId: row.divisionId,
-        jobName: row.jobName,
-        isTeknis: row.isTeknis === 1,
-      },
+      jobType,
     });
   } catch (error) {
     return mapDivisionManagementError(request, error);
@@ -464,6 +570,20 @@ export async function handleJobTypeDeleteRoute(
 
   try {
     const pool = getMySqlPool();
+    const [rows] = await pool.query<JobTypeRow[]>(
+      `
+        SELECT id, division_id AS divisionId, job_name AS jobName, is_teknis AS isTeknis
+        FROM master_job_types
+        WHERE id = ?
+        LIMIT 1
+      `,
+      [jobTypeId],
+    );
+    const jobType = rows[0];
+    if (!jobType) {
+      throw new Error("JOB_TYPE_NOT_FOUND");
+    }
+
     const [usageRows] = await pool.query<Array<RowDataPacket & { total: number }>>(
       "SELECT COUNT(*) AS total FROM sm_jobdesc_countdown WHERE job_type_id = ?",
       [jobTypeId],
@@ -481,6 +601,15 @@ export async function handleJobTypeDeleteRoute(
     if (result.affectedRows === 0) {
       throw new Error("JOB_TYPE_NOT_FOUND");
     }
+
+    await divisionAuditService.log({
+      actorId: sessionResult.session.user.employeeId,
+      actorName: sessionResult.session.user.fullName,
+      action: "division.jobdesc.delete",
+      module: "division_jobdesc",
+      recordId: jobTypeId,
+      oldValue: toJobTypePayload(jobType),
+    });
 
     return successResponse(request, "Master jobdesc berhasil dihapus.", {
       deletedId: jobTypeId,
@@ -532,16 +661,26 @@ async function createMasterJobdesc(
       ],
     );
 
+    const jobType = {
+      id: jobTypeId,
+      divisionId,
+      jobName: parsedBody.data.jobName,
+      isTeknis: parsedBody.data.isTeknis,
+    };
+    await divisionAuditService.log({
+      actorId: sessionResult.session.user.employeeId,
+      actorName: sessionResult.session.user.fullName,
+      action: "division.jobdesc.create",
+      module: "division_jobdesc",
+      recordId: jobTypeId,
+      newValue: jobType,
+    });
+
     return successResponse(
       request,
       "Master jobdesc berhasil ditambahkan.",
       {
-        jobType: {
-          id: jobTypeId,
-          divisionId,
-          jobName: parsedBody.data.jobName,
-          isTeknis: parsedBody.data.isTeknis,
-        },
+        jobType,
       },
       { status: 201 },
     );

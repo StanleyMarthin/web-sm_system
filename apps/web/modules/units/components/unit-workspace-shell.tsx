@@ -24,6 +24,7 @@ import { BomTrackerTab } from "@/modules/units/components/bom-tracker-tab";
 import { CountdownBoardShell } from "@/modules/countdown/components/countdown-board-shell";
 import { MasterPanelManager } from "@/modules/units/components/master-panel-manager";
 import { UnitCatalogTab } from "@/modules/units/components/unit-catalog-tab";
+import { UnitDocumentationPanel } from "@/modules/units/components/unit-documentation-panel";
 import { humanizeCodeLabel } from "@/shared/format/humanize";
 
 interface UnitWorkspaceShellProps {
@@ -508,7 +509,9 @@ export function UnitWorkspaceShell({
       </section>
 
       {activeTab === "summary" ? (
-        <div className="space-y-4 xl:h-[calc(100vh-250px)] xl:overflow-hidden">
+        <div className="space-y-4">
+          {unit.vehicleNotes ? <details className="border border-border bg-card px-4 py-3"><summary className="cursor-pointer text-sm font-semibold text-foreground">Info Tambahan Kendaraan</summary><p className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-muted-foreground">{unit.vehicleNotes}</p></details> : null}
+          <UnitDocumentationPanel unitId={unit.unitId} canManage={canManagePanels} />
           <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
             <MetricCard
               icon={Gauge}

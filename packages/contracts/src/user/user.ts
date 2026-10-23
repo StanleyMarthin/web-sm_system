@@ -17,7 +17,6 @@ export const userReferenceOptionSchema = z.object({
 });
 
 export const createUserRequestSchema = z.object({
-  employeeId: z.string().trim().min(1).max(50),
   fullName: z.string().trim().min(1).max(255),
   email: z.string().email().nullable().optional(),
   password: z.string().trim().min(8).max(255),

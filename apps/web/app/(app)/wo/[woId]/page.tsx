@@ -43,16 +43,38 @@ async function WoDetailPageContent({ params }: WoDetailPageProps) {
     );
   }
 
+  const ticket = payload.data.ticket;
+  const targetDivisionIds = new Set(
+    [
+      user.divisionId,
+      ...user.scope.divisionIds,
+      ...user.scope.managedDivisionIds,
+    ].filter((value): value is number => typeof value === "number"),
+  );
+  const isKdApprovalStatus = [
+    "OPEN",
+    "SUBMITTED",
+    "PENDING_TARGET_KD_APPROVAL",
+  ].includes(ticket.status);
+  const canApproveKd =
+    user.permissions.includes(permissionCodes.woApprove) &&
+    isKdApprovalStatus &&
+    ticket.toDivisionId !== null &&
+    targetDivisionIds.has(ticket.toDivisionId);
+
   return (
     <WoDetailShell
-      ticket={payload.data.ticket}
+      ticket={ticket}
       linkedCountdowns={payload.data.linkedCountdowns}
       canApprove={user.permissions.includes(permissionCodes.woApprove)}
-      canReject={user.permissions.includes(permissionCodes.woReject)}
+      canApproveKd={canApproveKd}
+      canReject={
+        user.permissions.includes(permissionCodes.woReject) &&
+        (!isKdApprovalStatus || canApproveKd)
+      }
     />
   );
 }
-
 
 export default function WoDetailPage(props: WoDetailPageProps) {
   return <WoDetailPageContent {...props} />;

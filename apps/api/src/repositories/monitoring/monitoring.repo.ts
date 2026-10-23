@@ -11,7 +11,7 @@ import type {
 } from "@smsystem/contracts/monitoring";
 import { randomUUID } from "node:crypto";
 import { isNonTechnicalDivisionReference } from "@smsystem/contracts/division";
-import type { Pool, RowDataPacket } from "mysql2/promise";
+import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
 import { getMySqlPool } from "@/db/mysql";
 
 type MonitoringMode =
@@ -642,6 +642,48 @@ function calculateActualHours(date: string, startTime: string, finishTime: strin
   return Number((minutes / 60).toFixed(2));
 }
 
+function calculateActualOvertimeHours(date: string, startTime: string, finishTime: string, breakMinutes: number): number {
+  const start = combineDateTime(date, startTime).getTime();
+  let finish = combineDateTime(date, finishTime).getTime();
+  if (finish < start) {
+    finish += 86_400_000;
+  }
+
+  const activation = combineDateTime(date, "18:00").getTime();
+  if (finish < activation) return 0;
+
+  const overtimeStart = combineDateTime(date, "17:00").getTime();
+  const actualMinutes = Math.max(0, (finish - start) / 60_000 - breakMinutes);
+  const overtimeMinutes = Math.min(actualMinutes, Math.max(0, (finish - overtimeStart) / 60_000));
+  return Number((overtimeMinutes / 60).toFixed(2));
+}
+
+async function assertUnitCanProgress(
+  connection: PoolConnection,
+  planId: string,
+  carId: string | null,
+) {
+  const [rows] = planId
+    ? await connection.query<RowDataPacket[]>(
+      `
+        SELECT c.status
+        FROM sm_jobdesc_plan p
+        JOIN sm_jobdesc_countdown cd ON cd.id = p.core_id
+        JOIN cars c ON c.id = cd.car_id
+        WHERE p.id = ?
+        FOR UPDATE
+      `,
+      [planId],
+    )
+    : carId
+      ? await connection.query<RowDataPacket[]>("SELECT status FROM cars WHERE id = ? FOR UPDATE", [carId])
+      : [[]];
+
+  if (String(rows[0]?.status ?? "").toUpperCase() === "HOLD") {
+    throw new Error("UNIT_ON_HOLD");
+  }
+}
+
 function mapActualStatus(status: CreateMonitoringActualRequest["taskStatus"]): "pending" | "onprogress" | "done" | "cancel" {
   if (status === "DONE" || status === "READY_QC") {
     return "done";
@@ -808,6 +850,12 @@ export class MySqlMonitoringRepository implements MonitoringRepository {
       input.finishTime,
       input.breakMinutes,
     );
+    const actualOvertimeHours = calculateActualOvertimeHours(
+      input.date,
+      input.startTime,
+      input.finishTime,
+      input.breakMinutes,
+    );
     const planStatus = input.taskStatus === "DONE"
       ? "DONE"
       : input.taskStatus === "READY_QC"
@@ -822,6 +870,7 @@ export class MySqlMonitoringRepository implements MonitoringRepository {
       await connection.beginTransaction();
 
       let planId = input.planId?.trim() || "";
+      await assertUnitCanProgress(connection, planId, input.carId);
       if (!planId) {
         const coreId = await createManualCountdown(connection, params, input);
         planId = `PLAN-${randomUUID().replace(/-/gu, "").slice(0, 20).toUpperCase()}`;
@@ -911,7 +960,7 @@ export class MySqlMonitoringRepository implements MonitoringRepository {
           input.breakMinutes,
           actualHours,
           actualHours,
-          input.isOvertime ? 1 : 0,
+          actualOvertimeHours > 0 ? 1 : 0,
           input.resultNote || input.jobDescription,
           mapActualStatus(input.taskStatus),
           Math.round(input.progressPercent),
@@ -964,7 +1013,14 @@ export class MySqlMonitoringRepository implements MonitoringRepository {
           DATE(COALESCE(a.start_time, p.task_date)) workDate, TIME(a.start_time) startTime,
           TIME(a.finish_time) finishTime, COALESCE(a.break_duration_minutes, 0) / 60 breakHours,
           COALESCE(a.billed_duration_hours, a.duration_hours, 0) durationHours,
-          IF(a.is_overtime = 1, COALESCE(a.billed_duration_hours, a.duration_hours, 0), 0) overtimeHours,
+          LEAST(
+            COALESCE(a.billed_duration_hours, a.duration_hours, 0),
+            CASE
+              WHEN a.finish_time >= TIMESTAMP(DATE(a.start_time), '18:00:00')
+              THEN GREATEST(0, TIMESTAMPDIFF(MINUTE, TIMESTAMP(DATE(a.start_time), '17:00:00'), a.finish_time)) / 60
+              ELSE 0
+            END
+          ) overtimeHours,
           a.progres progressPercent, a.daily_notes progressNotes, a.status actualStatus
         FROM sm_jobdesc_actual a JOIN sm_jobdesc_plan p ON p.id = a.plandaily_id
         LEFT JOIN sm_jobdesc_countdown cd ON cd.id = p.core_id

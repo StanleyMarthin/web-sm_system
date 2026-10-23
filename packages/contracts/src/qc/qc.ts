@@ -8,6 +8,7 @@ const optionSchema = z.object({
 
 export const qcInspectionLevelSchema = z.enum([
   "QC_KD",
+  "QC_QA",
   "QC_ADVISOR",
   "QC_KP",
   "QC_MP",
@@ -15,6 +16,19 @@ export const qcInspectionLevelSchema = z.enum([
 ]);
 
 export const qcResultStatusSchema = z.enum(["LOLOS", "TIDAK_LOLOS"]);
+
+export const qcInspectionRecordSchema = z.object({
+  qcId: z.string(),
+  qcLevel: qcInspectionLevelSchema.nullable(),
+  resultStatus: qcResultStatusSchema,
+  inspectionDate: z.string().nullable(),
+  inspectorId: z.string().nullable(),
+  inspectorName: z.string().nullable(),
+  inspectionDurationMinutes: z.number().nullable(),
+  notes: z.string().nullable(),
+  photoBeforeUrl: z.string().nullable(),
+  evidencePhotoUrl: z.string().nullable(),
+});
 
 export const qcQueueRecordSchema = z.object({
   coreId: z.string(),
@@ -80,6 +94,7 @@ export const qcDetailEnvelopeSchema = z.object({
   message: z.string(),
   data: z.object({
     item: qcQueueRecordSchema,
+    history: z.array(qcInspectionRecordSchema).optional().default([]),
   }),
 });
 
@@ -100,7 +115,7 @@ const optionalTimeSchema = z
 
 export const qcRejectRequestSchema = qcPassRequestSchema.extend({
   reworkDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u),
-  reworkAssignedUser: z.string().trim().min(1).max(50),
+  reworkAssignedUser: z.string().trim().max(50),
   reworkDailyHours: z.string().trim().regex(/^\d{2}:\d{2}$/u),
   reworkStartTime: optionalTimeSchema,
   reworkFinishTime: optionalTimeSchema,
@@ -175,6 +190,7 @@ export const qcFinalApproveEnvelopeSchema = z.object({
 });
 
 export type QcInspectionLevel = z.infer<typeof qcInspectionLevelSchema>;
+export type QcInspectionRecord = z.infer<typeof qcInspectionRecordSchema>;
 export type QcResultStatus = z.infer<typeof qcResultStatusSchema>;
 export type QcQueueRecord = z.infer<typeof qcQueueRecordSchema>;
 export type QcSummary = z.infer<typeof qcSummarySchema>;

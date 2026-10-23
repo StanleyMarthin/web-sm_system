@@ -160,9 +160,20 @@ describe("countdown revision schemas", () => {
     });
   });
 
-  it("rejects non-positive hours, malformed dates, and blank reasons", () => {
-    expect(countdownRevisionRequestSchema.safeParse({
+  it("accepts zero hours so deadline-only revisions can be submitted", () => {
+    expect(countdownRevisionRequestSchema.parse({
       requestedHours: 0,
+      requestedDeadline: "2026-08-21",
+      reason: "Deadline perlu digeser tanpa tambahan jam.",
+    })).toMatchObject({
+      requestedHours: 0,
+      requestedDeadline: "2026-08-21",
+    });
+  });
+
+  it("rejects negative hours, malformed dates, and blank reasons", () => {
+    expect(countdownRevisionRequestSchema.safeParse({
+      requestedHours: -1,
       requestedDeadline: "20-08-2026",
       reason: " ",
     }).success).toBe(false);

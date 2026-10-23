@@ -33,6 +33,7 @@ function normalizeQuery(query: QaGridQuery): QaGridQuery {
     "followupStatus",
   ]);
   const allowedFilters = new Set([
+    "unitId",
     "divisionId",
     "resultStatus",
     "priorityLevel",

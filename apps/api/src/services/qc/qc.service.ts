@@ -3,6 +3,7 @@ import type {
   QcFinalChecklist,
   QcFinalChecklistItem,
   QcGridQuery,
+  QcInspectionRecord,
   QcPassRequest,
   QcQueueRecord,
   QcRejectRequest,
@@ -39,6 +40,7 @@ interface QcListResult {
 
 interface QcDetailResult {
   item: QcQueueRecord;
+  history?: QcInspectionRecord[];
 }
 
 interface QcMutationResult {
@@ -62,7 +64,7 @@ export interface QcService {
   listQueue(session: WebSession, query: QcGridQuery): Promise<QcListResult>;
   listRework(session: WebSession, query: QcGridQuery): Promise<QcListResult>;
   listRecheck(session: WebSession, query: QcGridQuery): Promise<QcListResult>;
-  findDetail(session: WebSession, coreId: string): Promise<QcDetailResult | null>;
+  findDetail(session: WebSession, coreId: string, includeHistory?: boolean): Promise<QcDetailResult | null>;
   pass(session: WebSession, coreId: string, input: QcPassRequest): Promise<QcMutationResult>;
   reject(session: WebSession, coreId: string, input: QcRejectRequest): Promise<QcMutationResult>;
   getFinalChecklist(session: WebSession, carId: string): Promise<QcFinalChecklistResult | null>;
@@ -105,36 +107,41 @@ function normalizeQuery(query: QcGridQuery): QcGridQuery {
   };
 }
 
-function deriveQcLevel(session: WebSession): "QC_KD" | "QC_ADVISOR" | "QC_KP" | "QC_MP" | "QC_MO" {
+function deriveQcLevel(session: WebSession): "QC_KD" | "QC_QA" {
   const permissions = session.user.permissions;
+  const role = (session.user.roleName ?? "").replaceAll("_", " ");
+  if (/ketua divisi|kepala divisi|^kd$/i.test(role)) {
+    return "QC_KD";
+  }
+  if (/^qa$|advisor|quality assurance/i.test(role)) return "QC_QA";
 
   if (
     session.user.scope.canViewAllUnits &&
     permissions.includes(permissionCodes.qcValidate)
   ) {
-    return "QC_MO";
+    return "QC_QA";
   }
 
   if (session.user.scope.canViewAssignedUnits && session.user.scope.managedDivisionIds.length > 0) {
-    return "QC_ADVISOR";
+    return "QC_QA";
   }
 
   if (
     session.user.scope.managedDivisionIds.length > 0 &&
     permissions.includes(permissionCodes.qcValidate)
   ) {
-    return "QC_KP";
+    return "QC_QA";
   }
 
   if (permissions.includes(permissionCodes.qcSubmit)) {
     return "QC_KD";
   }
 
-  return "QC_MP";
+  return "QC_QA";
 }
 
 function isFinalQcLevel(qcLevel: string): boolean {
-  return qcLevel === "QC_ADVISOR";
+  return qcLevel === "QC_QA" || qcLevel === "QC_ADVISOR";
 }
 
 function buildQcPassBody(qcLevel: string, unitName: string, panelName: string): string {
@@ -164,13 +171,15 @@ export class DefaultQcService implements QcService {
     return this.listMode("recheck", session, query);
   }
 
-  async findDetail(session: WebSession, coreId: string): Promise<QcDetailResult | null> {
-    const item = await this.repository.findByCoreId({
+  async findDetail(session: WebSession, coreId: string, includeHistory = false): Promise<QcDetailResult | null> {
+    const params = {
       employeeId: session.user.employeeId,
       scope: session.user.scope,
       coreId,
-    });
-    return item ? { item } : null;
+    };
+    const item = await this.repository.findByCoreId(params);
+    if (!item) return null;
+    return { item, ...(includeHistory ? { history: await this.repository.listInspectionHistory(params) } : {}) };
   }
 
   async pass(
@@ -195,7 +204,7 @@ export class DefaultQcService implements QcService {
       },
     );
 
-    if (detail.item.linkedIssueId && detail.item.qcLastStatus === "TIDAK_LOLOS") {
+    if (result.applied !== false && isFinalQcLevel(qcLevel) && detail.item.linkedIssueId && detail.item.qcLastStatus === "TIDAK_LOLOS") {
       try {
         await this.issueRepository.updateStatus(detail.item.linkedIssueId, "RESOLVED", {
           actorId: session.user.employeeId,
@@ -222,6 +231,7 @@ export class DefaultQcService implements QcService {
       newValue: result,
     });
 
+    if (result.applied === false) return result;
     try {
       const recipients = isFinalQcLevel(qcLevel)
         ? [...new Set([
@@ -266,6 +276,12 @@ export class DefaultQcService implements QcService {
         payload: input,
       },
     );
+
+    if (result.applied === false) {
+      await this.auditService.log({ actorId: session.user.employeeId, actorName: session.user.fullName,
+        action: "qc.reject", module: "qc", recordId: coreId, newValue: result });
+      return result;
+    }
 
     let issueId: string | null = null;
     try {
@@ -397,6 +413,7 @@ export class DefaultQcService implements QcService {
         ? this.repository.listQueue({
             employeeId: session.user.employeeId,
             scope: session.user.scope,
+            qcLevel: deriveQcLevel(session),
             query: normalized,
           })
         : mode === "rework"

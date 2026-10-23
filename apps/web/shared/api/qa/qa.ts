@@ -48,7 +48,7 @@ function buildQaGridQueryString(searchParams: Record<string, string | string[] |
   const params = toUrlSearchParams(searchParams);
 
   if (!params.has("page")) params.set("page", "1");
-  if (!params.has("limit")) params.set("limit", "25");
+  if (!params.has("limit")) params.set("limit", "100");
   if (!params.has("sortBy")) params.set("sortBy", "inspectionDate");
   if (!params.has("sortDirection")) params.set("sortDirection", "desc");
 

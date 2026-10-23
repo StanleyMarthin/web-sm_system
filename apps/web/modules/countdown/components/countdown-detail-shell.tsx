@@ -127,6 +127,37 @@ function formatHours(value: number | null | undefined) {
   return `${Number(value ?? 0).toFixed(2)} jam`;
 }
 
+function formatRevisionHours(value: number | null | undefined) {
+  const hours = Number(value ?? 0);
+  return hours > 0 ? `${hours.toFixed(2)} jam` : "Tidak ada tambahan jam";
+}
+
+function isoDateFromDate(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function defaultRevisionDeadline(currentDeadline: string | null | undefined) {
+  const base = currentDeadline ? new Date(`${currentDeadline}T00:00:00`) : new Date();
+  if (Number.isNaN(base.getTime())) return todayDate();
+  base.setDate(base.getDate() + 1);
+  return isoDateFromDate(base);
+}
+
+function normalizeDecimalInput(value: string) {
+  return value.trim().replace(",", ".");
+}
+
+function isActiveRevisionStatus(status: string | null | undefined) {
+  return status === "REQUESTED" || status === "MO_REVIEW";
+}
+
+function revisionStatusTone(status: string | null | undefined) {
+  if (status === "APPROVED") return "border-success/25 bg-success/10 text-success";
+  if (status === "REJECTED") return "border-destructive/25 bg-destructive/10 text-destructive";
+  if (status === "REQUESTED" || status === "MO_REVIEW") return "border-warning/30 bg-warning/15 text-warning";
+  return "border-border bg-background text-muted-foreground dark:border-white/[0.08]";
+}
+
 function todayDate() {
   const date = new Date();
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -299,7 +330,22 @@ function MetricField({ label, value }: { label: string; value: string }) {
   );
 }
 
-function CountdownWorkCard({ countdown }: { countdown: CountdownDetail }) {
+function CountdownWorkCard({
+  countdown,
+  canRequestRevision,
+  hasActiveRevision,
+  onRequestRevision,
+}: {
+  countdown: CountdownDetail;
+  canRequestRevision: boolean;
+  hasActiveRevision: boolean;
+  onRequestRevision: () => void;
+}) {
+  const shouldShowRevision =
+    canRequestRevision ||
+    Boolean(countdown.extensionRequestStatus) ||
+    Number(countdown.countRevision ?? 0) > 0;
+
   return (
     <article className="border border-border bg-background dark:border-white/[0.06]">
       <div className="border-b border-border px-3 py-2 dark:border-white/[0.06]">
@@ -319,9 +365,33 @@ function CountdownWorkCard({ countdown }: { countdown: CountdownDetail }) {
         <MetricField label="Keterangan" value={countdown.keterangan ?? countdown.note ?? "-"} />
         <MetricField label="Mulai" value={countdown.startDate ?? "-"} />
         <MetricField label="Deadline" value={countdown.deadlineDate ?? "-"} />
+        {shouldShowRevision ? (
+          <>
+            <MetricField label="Revisi Waktu" value={formatCountdownRevisionStatus(countdown.extensionRequestStatus)} />
+            {countdown.extensionRequestStatus ? (
+              <>
+                <MetricField label="Usulan Jam" value={formatRevisionHours(countdown.requestedExtensionHours)} />
+                <MetricField label="Deadline Usulan" value={countdown.requestedDeadline ?? "-"} />
+                <MetricField label="Alasan Revisi" value={countdown.revisionReason ?? "-"} />
+              </>
+            ) : null}
+            {Number(countdown.countRevision ?? 0) > 0 ? (
+              <MetricField label="Riwayat Revisi" value={`${countdown.countRevision ?? 0} kali`} />
+            ) : null}
+          </>
+        ) : null}
       </dl>
-      <div className="border-t border-border px-3 py-2 dark:border-white/[0.06]">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-3 py-2 dark:border-white/[0.06]">
         <DataGridStatusBadge value={humanizeCodeLabel(countdown.status)} />
+        {canRequestRevision ? (
+          <ActionButton variant="primary" onClick={onRequestRevision}>
+            <RotateCcw className="h-3.5 w-3.5" />Ajukan tambahan waktu
+          </ActionButton>
+        ) : hasActiveRevision ? (
+          <span className={`inline-flex h-9 items-center border px-3 font-mono text-[11px] uppercase tracking-[0.08em] ${revisionStatusTone(countdown.extensionRequestStatus)}`}>
+            Menunggu keputusan
+          </span>
+        ) : null}
       </div>
     </article>
   );
@@ -409,7 +479,7 @@ export function CountdownDetailShell({
   const sweetAlert = useSweetAlert();
   const [revisionOpen, setRevisionOpen] = useState(false);
   const [requestedHours, setRequestedHours] = useState("");
-  const [requestedDeadline, setRequestedDeadline] = useState(countdown.deadlineDate ?? "");
+  const [requestedDeadline, setRequestedDeadline] = useState(defaultRevisionDeadline(countdown.deadlineDate));
   const [revisionReason, setRevisionReason] = useState("");
   const [isSubmittingRevision, setIsSubmittingRevision] = useState(false);
   const [isDecidingRevision, setIsDecidingRevision] = useState(false);
@@ -432,6 +502,8 @@ export function CountdownDetailShell({
     canApproveMoRevision,
   });
   const approvalRole = revisionActions.canApprove ? "KP" : revisionActions.canApproveMo ? "MO" : null;
+  const currentDeadline = countdown.deadlineDate ?? "";
+  const hasActiveRevision = isActiveRevisionStatus(countdown.extensionRequestStatus);
   const jobPlanColumnDefs = useMemo<ColDef<JobPlanDraftRow>[]>(() => [
     {
       headerName: "Divisi",
@@ -550,12 +622,31 @@ export function CountdownDetailShell({
     if (!revisionOpen && dialog?.open) dialog.close();
   }, [revisionOpen]);
 
+  function openRevisionDialog() {
+    setRequestedHours("");
+    setRequestedDeadline(defaultRevisionDeadline(countdown.deadlineDate));
+    setRevisionReason("");
+    setRevisionOpen(true);
+  }
+
   async function handleRevisionRequest() {
-    const hours = Number(requestedHours);
-    if (!Number.isFinite(hours) || hours <= 0 || !requestedDeadline || !revisionReason.trim()) {
-      sweetAlert.notifyError("Pengajuan belum lengkap", "Jam tambahan, deadline, dan alasan wajib diisi.");
+    const normalizedHours = normalizeDecimalInput(requestedHours);
+    const hours = normalizedHours ? Number(normalizedHours) : 0;
+    const deadlineChanged = Boolean(requestedDeadline && requestedDeadline !== currentDeadline);
+
+    if (!Number.isFinite(hours) || hours < 0) {
+      sweetAlert.notifyError("Jam belum valid", "Isi angka jam yang benar. Contoh: 2.5 untuk 2 jam 30 menit.");
       return;
     }
+    if (!requestedDeadline || !revisionReason.trim()) {
+      sweetAlert.notifyError("Pengajuan belum lengkap", "Deadline baru dan alasan wajib diisi.");
+      return;
+    }
+    if (hours <= 0 && !deadlineChanged) {
+      sweetAlert.notifyError("Belum ada perubahan", "Isi tambahan jam atau ubah deadline terlebih dahulu.");
+      return;
+    }
+
     setIsSubmittingRevision(true);
     try {
       const result = await requestCountdownRevision(countdown.countdownId, {
@@ -973,11 +1064,6 @@ export function CountdownDetailShell({
             <p className="truncate pl-6 text-xs text-muted-foreground">KD: {countdown.kdName || "-"}</p>
           </div>
           <div className="flex flex-wrap items-center gap-1.5">
-            {revisionActions.canRequest ? (
-              <ActionButton variant="primary" onClick={() => setRevisionOpen(true)}>
-                <RotateCcw className="h-3.5 w-3.5" />Ajukan Revisi
-              </ActionButton>
-            ) : null}
             {approvalRole ? (
               <>
                 <ActionButton variant="success" disabled={isDecidingRevision} onClick={() => void handleRevisionDecision(true)}>
@@ -1024,26 +1110,15 @@ export function CountdownDetailShell({
 
       {sweetAlert.alertElement}
 
-      {countdown.extensionRequestStatus || countdown.countRevision > 0 ? (
-        <section className="border border-border bg-card px-3 py-2.5 dark:border-white/[0.06]">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm text-foreground"><span className="font-semibold">Revisi:</span> {formatCountdownRevisionStatus(countdown.extensionRequestStatus)}</p>
-            <span className="text-xs text-muted-foreground">{countdown.countRevision ?? 0} kali</span>
-          </div>
-          {countdown.extensionRequestStatus ? (
-            <div className="mt-2 grid gap-1 border-t border-border pt-2 text-xs text-muted-foreground md:grid-cols-[auto_auto_1fr] md:gap-4 dark:border-white/[0.06]">
-              <p>Tambahan jam: {countdown.requestedExtensionHours ?? 0} jam</p>
-              <p>Deadline diminta: {countdown.requestedDeadline ?? "-"}</p>
-              <p>Alasan: {countdown.revisionReason ?? "-"}</p>
-            </div>
-          ) : null}
-        </section>
-      ) : null}
-
       <main className="min-w-0 space-y-3">
         <SectionCard label="Detail pekerjaan">
           <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_24rem]">
-            <CountdownWorkCard countdown={countdown} />
+            <CountdownWorkCard
+              countdown={countdown}
+              canRequestRevision={revisionActions.canRequest}
+              hasActiveRevision={hasActiveRevision}
+              onRequestRevision={openRevisionDialog}
+            />
             <CountdownGallery countdown={countdown} />
           </div>
         </SectionCard>
@@ -1163,15 +1238,34 @@ export function CountdownDetailShell({
             className="flex max-h-[calc(100svh-2rem)] w-full flex-col overflow-hidden"
           >
             <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-3">
-              <p id="countdown-revision-title" className="text-sm font-semibold text-foreground">Ajukan Revisi Countdown</p>
+              <p id="countdown-revision-title" className="text-sm font-semibold text-foreground">Ajukan Tambahan Waktu</p>
               <ActionButton onClick={() => setRevisionOpen(false)} disabled={isSubmittingRevision}>
                 <X className="h-3 w-3" />Tutup
               </ActionButton>
             </div>
             <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
+              <div className="border border-border bg-background px-3 py-2 dark:border-white/[0.06]">
+                <p className="text-sm font-semibold text-foreground">{countdown.unitName}</p>
+                <p className="mt-1 text-[12px] text-muted-foreground">{countdown.panelName ?? "Panel belum ditentukan"} · {countdown.jobTypeName ?? humanizeCodeLabel(countdown.taskCategory)}</p>
+                <div className="mt-3 grid gap-2 text-[12px] sm:grid-cols-3">
+                  <div>
+                    <p className="text-muted-foreground">Target</p>
+                    <p className="font-mono text-foreground">{formatHours(countdown.targetHoursRevised)}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Sisa</p>
+                    <p className="font-mono text-foreground">{formatHours(countdown.remainingHours)}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Deadline</p>
+                    <p className="font-mono text-foreground">{countdown.deadlineDate ?? "-"}</p>
+                  </div>
+                </div>
+              </div>
               <div>
-                <FieldLabel required>Tambahan Jam</FieldLabel>
-                <CompactInput aria-label="Tambahan jam" autoFocus type="number" min="0.01" step="0.01" value={requestedHours} onChange={(event) => setRequestedHours(event.target.value)} />
+                <FieldLabel>Tambahan Jam Kerja</FieldLabel>
+                <CompactInput aria-label="Tambahan jam kerja" autoFocus type="number" min="0" step="0.25" inputMode="decimal" placeholder="Contoh: 2.5" value={requestedHours} onChange={(event) => setRequestedHours(event.target.value)} />
+                <p className="mt-1 text-[12px] text-muted-foreground">Kosongkan jika hanya ingin mengubah deadline.</p>
               </div>
               <div>
                 <FieldLabel required>Deadline Baru</FieldLabel>
@@ -1179,12 +1273,12 @@ export function CountdownDetailShell({
               </div>
               <div>
                 <FieldLabel required>Alasan</FieldLabel>
-                <CompactTextarea aria-label="Alasan revisi" rows={4} maxLength={1000} value={revisionReason} onChange={(event) => setRevisionReason(event.target.value)} />
+                <CompactTextarea aria-label="Alasan tambahan waktu" rows={4} maxLength={1000} placeholder="Tulis alasan singkat agar KP/MO bisa menilai konteksnya." value={revisionReason} onChange={(event) => setRevisionReason(event.target.value)} />
               </div>
             </div>
             <div className="flex shrink-0 justify-end border-t border-border px-4 py-3">
               <ActionButton variant="primary" disabled={isSubmittingRevision} onClick={() => void handleRevisionRequest()}>
-                <RotateCcw className="h-3 w-3" />{isSubmittingRevision ? "Mengajukan…" : "Ajukan Revisi"}
+                <RotateCcw className="h-3 w-3" />{isSubmittingRevision ? "Mengajukan..." : "Kirim pengajuan"}
               </ActionButton>
             </div>
           </div>

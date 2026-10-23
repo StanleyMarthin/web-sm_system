@@ -1,8 +1,21 @@
 import { parseGridQueryParams } from "@smsystem/contracts/grid";
 import {
+  createUnitMediaFolderRequestSchema,
+  createUnitMediaRequestSchema,
   createUnitRequestSchema,
+  updateUnitMediaRequestSchema,
   updateUnitRequestSchema,
 } from "@smsystem/contracts/unit";
+import {
+  consumeUploadTicketForPublicUrl,
+  createUploadNonce,
+  extensionForGalleryMediaContentType,
+  normalizeAllowedGalleryMediaContentType,
+  parseGalleryMediaContentLength,
+  storeUploadTicket,
+} from "@/security/upload-ticket";
+import { getApiEnv } from "@/config/env";
+import { S3GalleryUploadTicketProvider } from "@/services/storage/r2-upload.service";
 import {
   createUnitPanelRequestSchema,
   renameUnitPanelCategoryRequestSchema,
@@ -145,6 +158,14 @@ function mapUnitsError(request: Request, error: unknown): Response {
       return errorResponse(request, "ID unit sudah terdaftar.", 409, "UNIT_ALREADY_EXISTS");
     }
 
+    if (error.message === "UNIT_MEDIA_FOLDER_DUPLICATE") return errorResponse(request, "Nama kategori dokumentasi sudah ada.", 409, "UNIT_MEDIA_FOLDER_DUPLICATE");
+    if (error.message === "UNIT_MEDIA_FOLDER_NOT_FOUND") return errorResponse(request, "Kategori dokumentasi tidak ditemukan.", 404, "UNIT_MEDIA_FOLDER_NOT_FOUND");
+    if (error.message === "UNIT_MEDIA_NOT_FOUND") return errorResponse(request, "Dokumentasi tidak ditemukan.", 404, "UNIT_MEDIA_NOT_FOUND");
+    if (error.message === "UNIT_MEDIA_COVER_MUST_BE_PHOTO") return errorResponse(request, "Sampul Unit harus berupa foto.", 422, "UNIT_MEDIA_COVER_MUST_BE_PHOTO");
+    if (error.message === "INVALID_GOOGLE_DRIVE_URL") return errorResponse(request, "Gunakan tautan Google Drive yang valid.", 422, "INVALID_GOOGLE_DRIVE_URL");
+    if (["INVALID_UPLOAD_CONTENT_TYPE", "UPLOAD_SIZE_REQUIRED", "INVALID_UPLOAD_SIZE", "UPLOAD_TOO_LARGE", "INVALID_UPLOAD_TICKET"].includes(error.message)) return errorResponse(request, "File unggahan tidak valid atau melebihi batas ukuran.", 422, error.message);
+    if (error.message === "GALLERY_UPLOAD_NOT_CONFIGURED") return errorResponse(request, "Penyimpanan unggahan belum tersedia.", 503, "GALLERY_UPLOAD_NOT_CONFIGURED");
+
     if (error.message === "UNIT_IN_USE") {
       const dependencySummary =
         "dependencySummary" in error && Array.isArray(error.dependencySummary)
@@ -210,6 +231,76 @@ function mapUnitsError(request: Request, error: unknown): Response {
     500,
     "UNITS_MODULE_FAILED",
   );
+}
+
+function assertGoogleDriveUrl(value: string): void {
+  const hostname = new URL(value).hostname.toLowerCase();
+  if (hostname !== "drive.google.com" && hostname !== "docs.google.com") throw new Error("INVALID_GOOGLE_DRIVE_URL");
+}
+
+export async function handleUnitReferencesRoute(request: Request, authService: AuthService, unitsService: UnitsService): Promise<Response> {
+  const sessionResult = await requireUnitManageSession(request, authService);
+  if ("response" in sessionResult) return sessionResult.response;
+  try {
+    return successResponse(request, "Referensi unit siap.", await unitsService.getUnitReferences(sessionResult.session));
+  } catch (error) { return mapUnitsError(request, error); }
+}
+
+export async function handleUnitMediaRoute(request: Request, unitId: string, authService: AuthService, unitsService: UnitsService): Promise<Response> {
+  const sessionResult = request.method === "GET" ? await requireUnitDetailSession(request, authService) : await requireUnitManageSession(request, authService);
+  if ("response" in sessionResult) return sessionResult.response;
+  try {
+    if (request.method === "GET") return successResponse(request, "Dokumentasi unit siap.", await unitsService.getUnitMedia(sessionResult.session, unitId));
+    const body = await parseJsonBody(request, createUnitMediaRequestSchema);
+    if (!body.success) return withCors(request, body.response);
+    if (body.data.source === "GOOGLE_DRIVE") assertGoogleDriveUrl(body.data.mediaUrl);
+    if (body.data.source === "UPLOAD") await consumeUploadTicketForPublicUrl({ employeeId: sessionResult.session.user.employeeId, publicUrl: body.data.mediaUrl });
+    const media = await unitsService.createUnitMedia(sessionResult.session, unitId, body.data);
+    return successResponse(request, "Dokumentasi berhasil disimpan.", { media }, { status: 201 });
+  } catch (error) { return mapUnitsError(request, error); }
+}
+
+export async function handleUnitMediaFolderRoute(request: Request, unitId: string, authService: AuthService, unitsService: UnitsService): Promise<Response> {
+  const sessionResult = await requireUnitManageSession(request, authService);
+  if ("response" in sessionResult) return sessionResult.response;
+  const body = await parseJsonBody(request, createUnitMediaFolderRequestSchema);
+  if (!body.success) return withCors(request, body.response);
+  try {
+    const folder = await unitsService.createUnitMediaFolder(sessionResult.session, unitId, body.data);
+    return successResponse(request, "Kategori dokumentasi dibuat.", { folder }, { status: 201 });
+  } catch (error) { return mapUnitsError(request, error); }
+}
+
+export async function handleUnitMediaDetailRoute(request: Request, unitId: string, mediaId: string, authService: AuthService, unitsService: UnitsService): Promise<Response> {
+  const sessionResult = await requireUnitManageSession(request, authService);
+  if ("response" in sessionResult) return sessionResult.response;
+  try {
+    if (request.method === "DELETE") {
+      await unitsService.deleteUnitMedia(sessionResult.session, unitId, mediaId);
+      return successResponse(request, "Dokumentasi dihapus.", { mediaId });
+    }
+    const body = await parseJsonBody(request, updateUnitMediaRequestSchema);
+    if (!body.success) return withCors(request, body.response);
+    const media = await unitsService.updateUnitMedia(sessionResult.session, unitId, mediaId, body.data);
+    return successResponse(request, "Dokumentasi diperbarui.", { media });
+  } catch (error) { return mapUnitsError(request, error); }
+}
+
+export async function handleUnitMediaUploadTicketRoute(request: Request, unitId: string, authService: AuthService): Promise<Response> {
+  const sessionResult = await requireUnitManageSession(request, authService);
+  if ("response" in sessionResult) return sessionResult.response;
+  try {
+    const url = new URL(request.url);
+    const filename = url.searchParams.get("filename")?.trim() ?? "";
+    if (!filename) return errorResponse(request, "Nama file wajib diisi.", 400, "MISSING_FILENAME");
+    const contentType = normalizeAllowedGalleryMediaContentType(url.searchParams.get("contentType") ?? "image/jpeg");
+    const size = parseGalleryMediaContentLength(url.searchParams.get("size"), contentType);
+    const nonce = createUploadNonce();
+    const objectKey = `unit-documentation/${encodeURIComponent(unitId)}/${sessionResult.session.user.employeeId}/${nonce}.${extensionForGalleryMediaContentType(contentType)}`;
+    const ticket = await new S3GalleryUploadTicketProvider(getApiEnv()).createTicket({ objectKey, contentType, contentLength: size });
+    await storeUploadTicket({ nonce, employeeId: sessionResult.session.user.employeeId, objectKey });
+    return successResponse(request, "Tiket unggah siap.", ticket as unknown as Record<string, unknown>);
+  } catch (error) { return mapUnitsError(request, error); }
 }
 
 export async function handleUnitsListRoute(

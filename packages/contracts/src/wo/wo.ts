@@ -1,8 +1,5 @@
 import { z } from "zod";
-import {
-  gridMetaSchema,
-  gridQueryStateSchema,
-} from "../grid/grid";
+import { gridMetaSchema, gridQueryStateSchema } from "../grid/grid";
 
 export const woStatusSchema = z.enum([
   "OPEN",
@@ -17,11 +14,7 @@ export const woStatusSchema = z.enum([
   "CLOSED",
 ]);
 
-export const woViewModeSchema = z.enum([
-  "active",
-  "done",
-  "all",
-]);
+export const woViewModeSchema = z.enum(["active", "done", "all"]);
 
 export const woReferenceOptionSchema = z.object({
   value: z.string(),
@@ -48,6 +41,9 @@ export const woRecordSchema = z.object({
   approvalDate: z.string().nullable(),
   createdAt: z.string(),
   notes: z.string().nullable(),
+  issueNote: z.string().nullable(),
+  mediaUrl: z.string().nullable(),
+  mediaType: z.enum(["image", "video"]).nullable(),
   picId: z.string().nullable(),
   picName: z.string().nullable(),
   approverId: z.string().nullable(),
@@ -120,7 +116,16 @@ export const woCreateItemSchema = z.object({
   panelCategory: z.string().trim().max(100).nullable().optional().default(null),
   addPanelToMaster: z.boolean().nullable().optional().default(false),
   notes: z.string().trim().max(1000).nullable().optional().default(null),
-  estimatedHours: z.number().positive().max(72).nullable().optional().default(null),
+  issueNote: z.string().trim().max(1000).nullable().optional(),
+  estimatedHours: z
+    .number()
+    .positive()
+    .max(72)
+    .nullable()
+    .optional()
+    .default(null),
+  mediaUrl: z.string().trim().url().nullable().optional(),
+  mediaType: z.enum(["image", "video"]).nullable().optional(),
 });
 
 export const woCreateRequestSchema = z.object({
@@ -131,8 +136,17 @@ export const woCreateRequestSchema = z.object({
   masterPanelId: z.number().int().positive().nullable().optional(),
   panelName: z.string().trim().max(255).nullable().optional().default(null),
   jobDetail: z.string().trim().max(1000).nullable().optional().default(null),
-  estimatedHours: z.number().positive().max(72).nullable().optional().default(null),
+  estimatedHours: z
+    .number()
+    .positive()
+    .max(72)
+    .nullable()
+    .optional()
+    .default(null),
   notes: z.string().trim().max(1000).nullable().optional().default(null),
+  issueNote: z.string().trim().max(1000).nullable().optional(),
+  mediaUrl: z.string().trim().url().nullable().optional(),
+  mediaType: z.enum(["image", "video"]).nullable().optional(),
   items: z.array(woCreateItemSchema).optional().default([]),
 });
 
@@ -142,7 +156,13 @@ export const woRejectRequestSchema = z.object({
 
 export const woApproveRequestSchema = z.object({
   picId: z.string().trim().min(1).max(50).nullable().optional().default(null),
-  estimatedHours: z.number().positive().max(72).nullable().optional().default(null),
+  estimatedHours: z
+    .number()
+    .positive()
+    .max(72)
+    .nullable()
+    .optional()
+    .default(null),
   notes: z.string().trim().max(1000).nullable().optional().default(null),
 });
 

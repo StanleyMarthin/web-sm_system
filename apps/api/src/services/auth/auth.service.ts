@@ -43,6 +43,17 @@ function getRefreshToken(request: Request): string | null {
   return getCookie(request, REFRESH_COOKIE_NAME);
 }
 
+function assertWebAccess(user: AuthUser): void {
+  if (user.roleProfile?.webEnabled === false) {
+    throw new SmLoginAdapterError(
+      "Role ini tidak diaktifkan untuk Web.",
+      403,
+      "WEB_ACCESS_DISABLED",
+      {},
+    );
+  }
+}
+
 export class DefaultAuthService implements AuthService {
   constructor(
     private readonly adapter: SmLoginAdapter,
@@ -95,6 +106,7 @@ export class DefaultAuthService implements AuthService {
     if (!user) {
       throw new Error("Authenticated user context was not found.");
     }
+    assertWebAccess(user);
 
     const session = await this.sessionStore.createSession({
       user,
@@ -168,6 +180,7 @@ export class DefaultAuthService implements AuthService {
     if (!user) {
       throw new Error("Authenticated user context was not found.");
     }
+    assertWebAccess(user);
 
     const session = await this.sessionStore.createSession({
       user,

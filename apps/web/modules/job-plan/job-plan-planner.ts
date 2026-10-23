@@ -8,7 +8,7 @@ import type {
   MutateJobPlanRuntimeApprovalRequest,
 } from "@smsystem/contracts/job-plan-runtime";
 import { jobPlanCountdownOptionSchema, jobPlanEmployeeOptionSchema, jobPlanJobTypeOptionSchema, jobPlanPanelOptionSchema, type JobPlanDraftRecord, type JobPlanRecord } from "@smsystem/contracts/job-plan";
-import { breakMinutesForJobPlanDate, breakStartMinutesForJobPlanDate } from "@smsystem/contracts/job-plan-schedule";
+import { breakMinutesForJobPlanDate, breakStartMinutesForJobPlanDate, buildJobPlanScheduleSegments } from "@smsystem/contracts/job-plan-schedule";
 import type { z } from "zod";
 import { parseSmsDate, parseSmsDurationMinutes, parseSmsTime } from "@/shared/datagrid/parsers";
 
@@ -16,6 +16,14 @@ export type JobPlanCountdownOption = z.infer<typeof jobPlanCountdownOptionSchema
 export type JobPlanEmployeeOption = z.infer<typeof jobPlanEmployeeOptionSchema>;
 export type JobPlanJobTypeOption = z.infer<typeof jobPlanJobTypeOptionSchema>;
 export type JobPlanPanelOption = z.infer<typeof jobPlanPanelOptionSchema>;
+
+export function jobActualQcLabel(actual?: JobPlanRecord): string | null {
+  if (actual?.actualQcLevel === "QC_KD") return "QC_KD · Menunggu QA";
+  if (["QC_QA", "QC_ADVISOR"].includes(actual?.actualQcLevel ?? "")) {
+    return actual?.actualQcResult === "LOLOS" ? "Lolos QC" : "Tidak lolos QC";
+  }
+  return null;
+}
 
 export interface JobPlanRuntimePlannerDraft {
   clientId: string;
@@ -31,6 +39,7 @@ export interface JobPlanRuntimePlannerDraft {
   jobTypeName: string;
   employeeId: string;
   taskDate: string;
+  deadlineDate?: string | null;
   startTime: string;
   durationText: string;
   targetTotalText?: string;
@@ -49,10 +58,9 @@ export interface JobPlanRuntimeManualExecutionDraft {
   expectedVersion: number;
   actualStart: string;
   actualFinish: string;
-  actualMinutesText: string;
-  result: string;
-  note: string;
-  attachmentRef: string;
+  breakMinutesText: string;
+  status: "pending" | "on_progress" | "done";
+  progressText: string;
   error: string | null;
 }
 
@@ -95,11 +103,21 @@ export interface JobPlanRuntimeDisplayRow {
   accumulatedWorkMinutes: number;
   persistedWorkMinutes: number;
   unverifiedWorkMinutes: number;
+  monitoringHistory: Array<{
+    sequence: number;
+    time: string | null;
+    progress: number | null;
+    note: string | null;
+  }>;
+  actualStartAt: string | null;
+  actualFinishAt: string | null;
+  activeSegmentStartedAt: string | null;
   note: string;
   isPriority: boolean;
   error: string | null;
   editPlanId?: string;
   editVersion?: number;
+  isLiveProjected?: boolean;
 }
 
 export function resolveJobPlanDivisionName(
@@ -205,7 +223,7 @@ export function buildJobPlanDraftRecord(
     note: draft.note.trim() || null,
     isOvertime: draft.isOvertime,
     isPriority: draft.isPriority,
-    deadlineDate: draft.taskDate,
+    deadlineDate: draft.deadlineDate?.trim() || calculateJobPlanDeadlineDate(draft.taskDate, targetMinutes),
     isRework: draft.isRework,
     isNonTechnicalJob: false,
     picPlan: draft.employeeId,
@@ -270,6 +288,26 @@ export function toLocalDateValue(value = new Date()) {
   return `${year}-${month}-${day}`;
 }
 
+export function calculateJobPlanDeadlineDate(startDate: string, targetMinutes: number) {
+  const parsedStart = parseSmsDate(startDate, "Tanggal").value;
+  if (!parsedStart || !Number.isFinite(targetMinutes) || targetMinutes <= 0) return startDate;
+
+  const currentDate = new Date(`${parsedStart}T00:00:00.000Z`);
+  let remainingMinutes = Math.ceil(targetMinutes);
+
+  for (let guard = 0; guard < 730; guard += 1) {
+    const day = currentDate.getUTCDay();
+    const dailyCapacity = day === 0 ? 0 : day === 6 ? 5 * 60 : 8 * 60;
+    if (dailyCapacity > 0) {
+      remainingMinutes -= dailyCapacity;
+      if (remainingMinutes <= 0) return currentDate.toISOString().slice(0, 10);
+    }
+    currentDate.setUTCDate(currentDate.getUTCDate() + 1);
+  }
+
+  return parsedStart;
+}
+
 export function parseTimeToMinutes(value: string) {
   const parsed = parseSmsTime(value, "Mulai");
   if (parsed.error || !parsed.value) return { value: null, error: parsed.error ?? "Jam mulai wajib diisi." };
@@ -324,8 +362,27 @@ export function findJobPlanPanelValue(panels: JobPlanPanelOption[], panelName: s
 }
 
 export function parseClockMinutes(value: string) {
-  const match = value.trim().match(/^([01]\d|2[0-3]):([0-5]\d)$/u);
-  return match ? (Number(match[1]) * 60) + Number(match[2]) : null;
+  const parsed = parseSmsTime(value, "Jam");
+  if (parsed.error || !parsed.value) return null;
+  const [hour, minute] = parsed.value.split(":").map(Number);
+  return (hour * 60) + minute;
+}
+
+export function jobPlanElapsedMinutesFrom(startedAt: string | null | undefined, now = new Date()) {
+  if (!startedAt) return 0;
+  const started = new Date(startedAt);
+  if (Number.isNaN(started.getTime())) return 0;
+  return Math.max(0, Math.floor((now.getTime() - started.getTime()) / 60000));
+}
+
+export function liveJobPlanActualMinutes(row: JobPlanRuntimeDisplayRow, now = new Date()) {
+  if (row.isLiveProjected) return row.accumulatedWorkMinutes;
+  if (row.executionState !== "RUNNING") return row.accumulatedWorkMinutes;
+  return row.accumulatedWorkMinutes + jobPlanElapsedMinutesFrom(row.activeSegmentStartedAt, now);
+}
+
+export function liveJobPlanUnverifiedMinutes(row: JobPlanRuntimeDisplayRow, now = new Date()) {
+  return Math.max(0, liveJobPlanActualMinutes(row, now) - row.persistedWorkMinutes);
 }
 
 export function jobPlanWindowMinutes(startTime: string, finishTime: string) {
@@ -354,6 +411,28 @@ export function resolveAdditionalJobTargetMinutes(targetText: string | null | un
   if (target.value < dailyMinutes) return { value: null, error: "Target awal tidak boleh lebih kecil dari total target hari ini." };
 
   return { value: target.value };
+}
+
+export function splitJobPlanRuntimeDraftForSchedule(row: JobPlanRuntimePlannerDraft): JobPlanRuntimePlannerDraft[] {
+  const durationMinutes = parseSmsDurationMinutes(row.durationText, "Durasi").value;
+  if (durationMinutes == null || durationMinutes <= 0) return [row];
+
+  const segments = buildJobPlanScheduleSegments({
+    taskDate: row.taskDate,
+    requestedMode: row.isOvertime ? "overtime" : "normal",
+    targetHours: durationMinutes / 60,
+    startTime: row.startTime,
+  });
+  if (segments.length <= 1) return [row];
+
+  return segments.map((segment, index) => ({
+    ...row,
+    clientId: index === 0 ? row.clientId : `${row.clientId}-${segment.mode}-${index}`,
+    workMode: segment.mode,
+    isOvertime: segment.mode === "overtime",
+    startTime: segment.startTime,
+    durationText: minutesToDuration(Math.round(segment.targetHours * 60)),
+  }));
 }
 
 export function createJobPlanRuntimeDraft(context: JobPlanCountdownOption | null): JobPlanRuntimePlannerDraft {
@@ -396,7 +475,10 @@ export function toJobPlanRuntimeDisplayRows(
   return items.filter((item) => item.approval_state !== "CANCELLED").map((item) => {
     const countdown = countdownByCore.get(item.core_id);
     const employee = item.employee_id ? employeeById.get(item.employee_id) : null;
-    const divisionName = countdown?.divisionName ?? employee?.divisionName ?? "-";
+    const divisionName = countdown?.divisionName ?? item.division_name ?? employee?.divisionName ?? "-";
+    const unitName = countdown?.unitName ?? item.unit_name ?? item.car_id ?? "-";
+    const panelName = countdown?.panelName ?? item.panel_name ?? "-";
+    const employeeName = employee?.label ?? item.employee_name ?? item.employee_id ?? "-";
     return {
       clientId: `plan-${item.plan_id}`,
       isNew: false,
@@ -410,13 +492,13 @@ export function toJobPlanRuntimeDisplayRows(
       kpName: countdown?.kpName ?? null,
       qaIds: countdown?.qaIds ?? [],
       qaNames: countdown?.qaNames ?? [],
-      unitName: countdown?.unitName ?? item.car_id ?? "-",
-      panelName: countdown?.panelName ?? "-",
+      unitName,
+      panelName,
       jobDescription: item.jobdescription ?? countdown?.jobName ?? countdown?.label ?? "-",
       initialFinding: "",
       instructionText: item.note ?? "",
       employeeId: item.employee_id ?? "",
-      employeeName: employee?.label ?? item.employee_id ?? "-",
+      employeeName,
       divisionName,
       taskDate: item.task_date,
       startTime: minutesToTime(item.planned_start_minute),
@@ -436,6 +518,15 @@ export function toJobPlanRuntimeDisplayRows(
       accumulatedWorkMinutes: item.accumulated_work_minutes,
       persistedWorkMinutes: item.persisted_work_minutes,
       unverifiedWorkMinutes: item.unverified_work_minutes,
+      monitoringHistory: (item.monitoring_history ?? []).map((entry) => ({
+        sequence: entry.sequence,
+        time: entry.time ?? null,
+        progress: entry.progress ?? null,
+        note: entry.note ?? null,
+      })),
+      actualStartAt: item.actual_start ?? null,
+      actualFinishAt: item.actual_finish ?? null,
+      activeSegmentStartedAt: item.active_segment_started_at ?? null,
       note: item.note ?? "",
       isPriority: item.is_priority,
       error: null,
@@ -495,6 +586,10 @@ export function toJobPlanDraftDisplayRows(
       accumulatedWorkMinutes: 0,
       persistedWorkMinutes: 0,
       unverifiedWorkMinutes: 0,
+      monitoringHistory: [],
+      actualStartAt: null,
+      actualFinishAt: null,
+      activeSegmentStartedAt: null,
       note: draft.note ?? "",
       isPriority: draft.isPriority,
       error: null,
@@ -601,28 +696,53 @@ export function buildEditDraftJobPlanRuntimePayload(
 }
 
 export function createManualExecutionDraft(plan: JobPlanRuntimeDisplayRow): JobPlanRuntimeManualExecutionDraft {
-  const today = new Date().toISOString().slice(0, 10);
   return {
     clientId: `manual-${plan.planId}`,
     planId: String(plan.planId),
     expectedVersion: Number(plan.version ?? 0),
-    actualStart: `${today}T08:00`,
-    actualFinish: `${today}T${plan.finishTime || "09:00"}`,
-    actualMinutesText: plan.durationText,
-    result: "",
-    note: "",
-    attachmentRef: "",
+    actualStart: `${plan.taskDate}T${plan.startTime || "08:00"}`,
+    actualFinish: `${plan.taskDate}T${plan.finishTime || "09:00"}`,
+    breakMinutesText: "00:00",
+    status: "done",
+    progressText: "100",
     error: null,
   };
+}
+
+function parseManualExecutionDateTime(value: string, label: string) {
+  const raw = value.trim();
+  if (!raw) return { value: null, error: `${label} wajib diisi.` };
+  const parsed = Date.parse(raw);
+  if (Number.isNaN(parsed)) return { value: null, error: `${label} tidak valid.` };
+  return { value: Math.floor(parsed / 60000), error: null };
+}
+
+export function manualExecutionDraftActualMinutes(row: JobPlanRuntimeManualExecutionDraft) {
+  const start = parseManualExecutionDateTime(row.actualStart, "Jam mulai aktual");
+  if (start.error || start.value == null) return { value: null, error: start.error };
+  const finish = parseManualExecutionDateTime(row.actualFinish, "Jam selesai aktual");
+  if (finish.error || finish.value == null) return { value: null, error: finish.error };
+  if (finish.value <= start.value) return { value: null, error: "Jam selesai harus lebih besar dari jam mulai." };
+
+  const breakText = row.breakMinutesText.trim();
+  const breakMinutes = breakText
+    ? parseSmsDurationMinutes(breakText, "Jam istirahat")
+    : { value: 0, error: null };
+  if (breakMinutes.error || breakMinutes.value == null) return { value: null, error: breakMinutes.error ?? "Jam istirahat tidak valid." };
+
+  const elapsed = finish.value - start.value;
+  if (breakMinutes.value >= elapsed) return { value: null, error: "Jam istirahat harus lebih kecil dari durasi kerja." };
+  return { value: elapsed - breakMinutes.value, error: null };
 }
 
 export function validateManualExecutionDraft(row: JobPlanRuntimeManualExecutionDraft) {
   if (!row.planId) return "Plan wajib dipilih.";
   if (!row.expectedVersion) return "Version plan tidak tersedia.";
-  if (!row.actualStart.trim()) return "Waktu mulai aktual wajib diisi.";
-  if (!row.actualFinish.trim()) return "Waktu selesai aktual wajib diisi.";
-  const minutes = parseSmsDurationMinutes(row.actualMinutesText, "Durasi aktual");
+  const minutes = manualExecutionDraftActualMinutes(row);
   if (minutes.error || minutes.value == null) return minutes.error ?? "Durasi aktual wajib diisi.";
+  const progress = Number(row.progressText);
+  if (!Number.isInteger(progress) || progress < 0 || progress > 100) return "Persentase harus 0 sampai 100.";
+  if (row.status === "done" && progress !== 100) return "Status selesai harus 100%.";
   return null;
 }
 
@@ -631,10 +751,16 @@ export function buildManualExecutionJobPlanRuntimePayload(
   userId: string,
   commandId: string,
 ): ManualExecutionJobPlanRuntimeRequest {
-  const minutes = parseSmsDurationMinutes(row.actualMinutesText, "Durasi aktual").value;
+  const minutes = manualExecutionDraftActualMinutes(row).value;
   if (minutes == null) {
     throw new Error(validateManualExecutionDraft(row) ?? "Hasil pekerjaan tidak valid.");
   }
+  const progress = Number(row.progressText);
+  const statusLabels = {
+    pending: "Pending",
+    on_progress: "On Progress",
+    done: "Selesai",
+  } satisfies Record<JobPlanRuntimeManualExecutionDraft["status"], string>;
   return {
     userId,
     commandId,
@@ -642,8 +768,8 @@ export function buildManualExecutionJobPlanRuntimePayload(
     actualStart: row.actualStart,
     actualFinish: row.actualFinish,
     actualMinutes: minutes,
-    result: row.result.trim() || null,
-    note: row.note.trim() || null,
-    attachmentRef: row.attachmentRef.trim() || null,
+    result: statusLabels[row.status],
+    note: `Status: ${statusLabels[row.status]} · Progress: ${progress}% · Istirahat: ${row.breakMinutesText.trim() || "00:00"}`,
+    attachmentRef: null,
   };
 }
