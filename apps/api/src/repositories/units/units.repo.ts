@@ -999,7 +999,7 @@ function unitBoardBaseSql(): string {
     SELECT
       c.id AS unitId,
       c.unit_name AS unitName,
-      c.plate_number AS plateNumber,
+      c.vin_number AS plateNumber,
       c.customer_name AS customerName,
       c.vehicle_notes AS vehicleNotes,
       c.restoration_type AS restorationType,
@@ -1379,9 +1379,9 @@ export class UnitsRepository {
       await connection.execute<ResultSetHeader>(
         `
           INSERT INTO cars (
-            id, unit_name, plate_number, customer_name, vehicle_notes, restoration_type, is_margin,
+            id, unit_name, vin_number, customer_name, vehicle_notes, restoration_type, is_margin,
             contract_delivery_date, incoming_date, revision_contract, target_delivery_date, status
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PLAN')
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PLAN')
         `,
         [
           unitId,
@@ -1452,7 +1452,7 @@ export class UnitsRepository {
         `
           UPDATE cars
           SET
-            unit_name = ?, plate_number = ?, customer_name = ?, vehicle_notes = ?, restoration_type = ?, is_margin = ?,
+            unit_name = ?, vin_number = ?, customer_name = ?, vehicle_notes = ?, restoration_type = ?, is_margin = ?,
             contract_delivery_date = ?, incoming_date = ?, revision_contract = ?, target_delivery_date = ?, status = COALESCE(?, status)
           WHERE id = ?
           LIMIT 1

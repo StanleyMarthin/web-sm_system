@@ -30,4 +30,20 @@ describe("unit panel operational detail relations", () => {
     expect(detailMethod.includes("part_number = ?")).toBe(false);
     expect(detailMethod.includes("item_name = ?")).toBe(false);
   });
+
+  it("stores VIN values in the VIN column", () => {
+    expect(source).toContain("c.vin_number AS plateNumber");
+    expect(source).toContain("id, unit_name, vin_number, customer_name");
+    expect(source).toContain("unit_name = ?, vin_number = ?, customer_name");
+    expect(source.includes("plate_number")).toBe(false);
+  });
+
+  it("supplies one value for every unit intake column", () => {
+    const createUnitMethod = source.slice(
+      source.indexOf("async createUnit"),
+      source.indexOf("async updateUnit"),
+    );
+
+    expect(createUnitMethod).toContain("VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PLAN')");
+  });
 });
