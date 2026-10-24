@@ -26,6 +26,7 @@ import { parseJsonBody } from "@/http/request";
 import { errorResponse, successResponse, withCors } from "@/http/response";
 import { requireSession } from "@/middleware/auth.middleware";
 import { requirePermission } from "@/middleware/permission.middleware";
+import { logger } from "@/observability/logger";
 import type { AuthService } from "@/services/auth/auth.service";
 import type { UnitsService } from "@/services/units/units.service";
 
@@ -139,7 +140,11 @@ async function requireUnitManageSession(
   };
 }
 
-function mapUnitsError(request: Request, error: unknown): Response {
+export function mapUnitsError(request: Request, error: unknown): Response {
+  if (typeof error === "object" && error !== null && "code" in error && error.code === "ER_DATA_TOO_LONG") {
+    return errorResponse(request, "Nilai isian terlalu panjang untuk disimpan.", 422, "UNIT_FIELD_TOO_LONG");
+  }
+
   if (error instanceof Error) {
     if (error.message === "SCOPE_FORBIDDEN") {
       return errorResponse(
@@ -224,6 +229,8 @@ function mapUnitsError(request: Request, error: unknown): Response {
       );
     }
   }
+
+  logger.error("units module request failed", { error });
 
   return errorResponse(
     request,

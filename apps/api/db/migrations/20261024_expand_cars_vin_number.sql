@@ -1,0 +1,2 @@
+ALTER TABLE cars
+  MODIFY COLUMN plate_number VARCHAR(17) NULL;

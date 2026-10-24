@@ -119,7 +119,7 @@ export type UnitClientUnit = z.infer<typeof unitClientUnitSchema>;
 export const createUnitRequestSchema = z.object({
   unitId: nullableTrimmedText.refine((value) => value === null || value.length <= 36, "ID unit maksimal 36 karakter"),
   unitName: z.string().trim().min(1).max(255),
-  plateNumber: nullableTrimmedText,
+  plateNumber: nullableTrimmedText.refine((value) => value === null || value.length <= 17, "VIN Number maksimal 17 karakter"),
   customerName: nullableTrimmedText,
   vehicleNotes: nullableLongText,
   restorationType: unitRestorationTypeSchema.default("FULL_RESTORATION"),
@@ -134,7 +134,7 @@ export const createUnitRequestSchema = z.object({
 
 export const updateUnitRequestSchema = z.object({
   unitName: z.string().trim().min(1).max(255),
-  plateNumber: nullableTrimmedText,
+  plateNumber: nullableTrimmedText.refine((value) => value === null || value.length <= 17, "VIN Number maksimal 17 karakter"),
   customerName: nullableTrimmedText,
   vehicleNotes: nullableLongText,
   restorationType: unitRestorationTypeSchema.default("FULL_RESTORATION"),
