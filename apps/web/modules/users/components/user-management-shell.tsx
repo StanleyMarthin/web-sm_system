@@ -16,6 +16,7 @@ import { isUserVisible } from "../user-visibility";
 interface UserManagementShellProps {
   rows: UserRecord[];
   references: UserGridReference;
+  showRoleColumn: boolean;
 }
 
 type EditorMode = "create" | "edit" | "reset" | null;
@@ -26,7 +27,7 @@ function buildScopeSummary(row: UserRecord): string {
   return row.divisionName || "-";
 }
 
-export function UserManagementShell({ rows, references }: UserManagementShellProps) {
+export function UserManagementShell({ rows, references, showRoleColumn }: UserManagementShellProps) {
   const router = useRouter();
   const sweetAlert = useSweetAlert();
   const [isPending, startTransition] = useTransition();
@@ -49,7 +50,7 @@ export function UserManagementShell({ rows, references }: UserManagementShellPro
 
   useEffect(() => {
     if (!error) return;
-    sweetAlert.notifyError("Aksi belum jalan", error);
+    sweetAlert.notifyError("Tindakan gagal", error);
     setError(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [error]);
@@ -89,7 +90,7 @@ export function UserManagementShell({ rows, references }: UserManagementShellPro
     () => [
       { field: "employeeId", headerName: "ID Pegawai", pinned: "left", width: 145 },
       { field: "fullName", headerName: "Nama", minWidth: 190, flex: 1 },
-      { field: "roleName", headerName: "Role", minWidth: 150 },
+      ...(showRoleColumn ? [{ field: "roleName", headerName: "Role", minWidth: 150 } satisfies ColDef<UserRecord>] : []),
       { field: "divisionName", headerName: "Divisi / Team", minWidth: 165 },
       { field: "grade", headerName: "Jabatan", minWidth: 145, valueFormatter: ({ value }) => value || "-" },
       { headerName: "Pegangan", minWidth: 190, valueGetter: ({ data }) => (data ? buildScopeSummary(data) : "-") },
@@ -127,7 +128,7 @@ export function UserManagementShell({ rows, references }: UserManagementShellPro
         },
       },
     ],
-    [isPending],
+    [isPending, showRoleColumn],
   );
 
   return (

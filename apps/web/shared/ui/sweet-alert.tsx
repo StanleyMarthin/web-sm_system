@@ -76,17 +76,31 @@ export function useSweetAlert() {
     };
   }, [notices]);
 
+  useEffect(() => {
+    if (!confirmState) return;
+    const pendingConfirmation = confirmState;
+
+    function cancelOnEscape(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      pendingConfirmation.resolve(false);
+      setConfirmState(null);
+    }
+
+    window.addEventListener("keydown", cancelOnEscape);
+    return () => window.removeEventListener("keydown", cancelOnEscape);
+  }, [confirmState]);
+
   const alertElement = useMemo(() => (
     <>
       {notices.length > 0 ? (
-        <div className="fixed right-4 top-4 z-[80] flex w-full max-w-sm flex-col gap-2">
+        <div role="status" aria-live="polite" className="fixed right-4 top-4 z-[80] flex w-full max-w-sm flex-col gap-2">
           {notices.map((notice) => {
             const styles = toneStyles(notice.tone);
 
             return (
               <div
                 key={notice.id}
-                className={`rounded-[14px] border px-4 py-3 shadow-xl backdrop-blur-sm dark:shadow-2xl ${styles.ring}`}
+                className={`border bg-card px-4 py-3 shadow-sm dark:bg-card dark:shadow-none ${styles.ring}`}
               >
                 <div className="flex items-start gap-3">
                   <div className="mt-0.5">{styles.icon}</div>
@@ -104,17 +118,17 @@ export function useSweetAlert() {
       ) : null}
 
       {confirmState ? (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-foreground/35 p-4 backdrop-blur-[1px] dark:bg-background/80">
-          <div className="w-full max-w-md rounded-[16px] border border-border bg-white p-5 shadow-2xl dark:border-white/[0.08] dark:bg-popover">
+        <div role="dialog" aria-modal="true" aria-labelledby="sweet-alert-title" className="fixed inset-0 z-[90] flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-md border border-border bg-card p-5 shadow-sm dark:border-white/[0.08] dark:bg-card dark:shadow-none">
             <div className="flex items-start gap-3">
-              <div className={`mt-0.5 rounded-full border p-2 ${toneStyles(confirmState.tone).ring}`}>
+              <div className={`mt-0.5 border p-2 ${toneStyles(confirmState.tone).ring}`}>
                 {toneStyles(confirmState.tone).icon}
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-[10px] uppercase tracking-[0.16em] text-app-accent-ink dark:text-app-accent-ink/70">
                   Konfirmasi
                 </p>
-                <h3 className="mt-1 text-base font-semibold text-foreground dark:font-medium dark:text-foreground">{confirmState.title}</h3>
+                <h3 id="sweet-alert-title" className="mt-1 text-base font-semibold text-foreground dark:font-medium dark:text-foreground">{confirmState.title}</h3>
                 <p className="mt-2 text-sm leading-6 text-muted-foreground dark:text-foreground/65">{confirmState.description}</p>
               </div>
             </div>

@@ -2,6 +2,8 @@ import { headers } from "next/headers";
 import dynamic from "next/dynamic";
 import { redirect } from "next/navigation";
 import { fetchUserGrid } from "@/shared/api/users/users";
+import { fetchCurrentUser } from "@/shared/auth/server";
+import { canViewUserRoles } from "@/modules/users/user-visibility";
 import { ModuleUnavailableState } from "@/shared/ui/module-unavailable-state";
 import { PageDataSkeleton } from "@/shared/ui/page-data-skeleton";
 
@@ -23,13 +25,16 @@ async function UsersPageContent({ searchParams }: UsersPageProps) {
   const resolvedSearchParams = await searchParams;
   const requestHeaders = await headers();
   const cookieHeader = requestHeaders.get("cookie") ?? "";
-  const { payload, status } = await fetchUserGrid(cookieHeader, {
-    ...resolvedSearchParams,
-    limit: "100",
-    page: "1",
-  });
+  const [{ user, status: userStatus }, { payload, status }] = await Promise.all([
+    fetchCurrentUser(cookieHeader),
+    fetchUserGrid(cookieHeader, {
+      ...resolvedSearchParams,
+      limit: "100",
+      page: "1",
+    }),
+  ]);
 
-  if (status === 401) {
+  if (userStatus === 401 || status === 401 || !user) {
     redirect("/login");
   }
 
@@ -69,6 +74,7 @@ async function UsersPageContent({ searchParams }: UsersPageProps) {
       <UserManagementShell
         rows={[...payload.data, ...remainingPages.flatMap((page) => page.payload?.data ?? [])]}
         references={payload.references}
+        showRoleColumn={canViewUserRoles(user.roleName)}
       />
     </div>
   );
