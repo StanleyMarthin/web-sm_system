@@ -25,6 +25,7 @@ import { CountdownBoardShell } from "@/modules/countdown/components/countdown-bo
 import { MasterPanelManager } from "@/modules/units/components/master-panel-manager";
 import { UnitCatalogTab } from "@/modules/units/components/unit-catalog-tab";
 import { UnitDocumentationPanel } from "@/modules/units/components/unit-documentation-panel";
+import { UnitVehicleDetailsPanel } from "@/modules/units/components/unit-vehicle-details-panel";
 import { humanizeCodeLabel } from "@/shared/format/humanize";
 
 interface UnitWorkspaceShellProps {
@@ -34,6 +35,7 @@ interface UnitWorkspaceShellProps {
   masterPanels: UnitPanelCollection | null;
   canManagePhotos: boolean;
   canDownloadPhotos: boolean;
+  canManageUnit: boolean;
   canManagePanels: boolean;
   canCreateWo: boolean;
   canCreatePr: boolean;
@@ -412,6 +414,7 @@ export function UnitWorkspaceShell({
   masterPanels,
   canManagePhotos,
   canDownloadPhotos,
+  canManageUnit,
   canManagePanels,
   canCreateWo,
   canCreatePr,
@@ -432,17 +435,18 @@ export function UnitWorkspaceShell({
   const divisionStats = buildDivisionStats(workspace);
   const incompleteDivisions = divisionStats.filter((division) => clampPercent(division.progressPercent) < 100);
   const overallProgress = clampPercent(unit.progressPercent);
+  const hasJobdesc = workspace.countdownSummary.total > 0;
   const totalCountdown = Math.max(workspace.countdownSummary.total, 1);
   const workflowSegments = [
     {
-      label: "Selesai",
+      label: "Sudah selesai",
       count: workspace.countdownSummary.done,
       width: (workspace.countdownSummary.done / totalCountdown) * 100,
       barClass: "bg-success",
       textClass: "text-success",
     },
     {
-      label: "Dikerjakan",
+      label: "Sedang dikerjakan",
       count: workspace.countdownSummary.proses,
       width: (workspace.countdownSummary.proses / totalCountdown) * 100,
       barClass: "bg-primary",
@@ -456,14 +460,13 @@ export function UnitWorkspaceShell({
       textClass: "text-warning",
     },
     {
-      label: "Terjadwal",
+      label: "Belum dikerjakan",
       count: workspace.countdownSummary.plan,
       width: (workspace.countdownSummary.plan / totalCountdown) * 100,
       barClass: "bg-info",
       textClass: "text-info",
     },
-  ].filter((segment) => segment.count > 0 || workspace.countdownSummary.total === 0);
-  const totalDivisionRemainingHours = divisionStats.reduce((sum, division) => sum + division.remainingHours, 0);
+  ].filter((segment) => segment.count > 0);
   const priorityCards = buildPriorityCards(unit, workspace, divisionStats, deliveryBadge.label);
   const scheduleHealth = buildScheduleHealth(unit, deliveryBadge.label);
   const activeDivisionStats = incompleteDivisions.length > 0 ? incompleteDivisions : divisionStats;
@@ -498,19 +501,21 @@ export function UnitWorkspaceShell({
               </span>
             </div>
           </div>
-          <Link
-            href="/units"
-            className="inline-flex h-10 items-center gap-2 border border-border px-3 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Kembali ke daftar unit
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <UnitVehicleDetailsPanel unit={unit} canManage={canManageUnit} />
+            <Link
+              href="/units"
+              className="inline-flex h-10 items-center gap-2 border border-border px-3 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Kembali ke daftar unit
+            </Link>
+          </div>
         </div>
       </section>
 
       {activeTab === "summary" ? (
         <div className="space-y-4">
-          {unit.vehicleNotes ? <details className="border border-border bg-card px-4 py-3"><summary className="cursor-pointer text-sm font-semibold text-foreground">Info Tambahan Kendaraan</summary><p className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-muted-foreground">{unit.vehicleNotes}</p></details> : null}
           <UnitDocumentationPanel unitId={unit.unitId} canManage={canManagePanels} />
           <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
             <MetricCard
@@ -561,14 +566,18 @@ export function UnitWorkspaceShell({
             <div className="border border-border bg-card px-4 py-4 xl:min-h-0">
               <SectionTitle
                 icon={Activity}
-                title="Peta Kerja"
-                helper="Sekali lihat: posisi progres, tahap kerja, dan divisi penahan utama."
+                title="Pekerjaan Unit"
               />
 
-              <div className="mt-4 space-y-4">
+              {!hasJobdesc ? (
+                <div className="mt-4 border border-border px-4 py-3">
+                  <p className="text-sm font-medium text-foreground">Belum ada pekerjaan</p>
+                  <p className="mt-1 text-sm text-muted-foreground">Tambahkan jobdesc untuk mulai catat pekerjaan unit ini.</p>
+                </div>
+              ) : <div className="mt-4 space-y-4">
                 <div className="space-y-2">
                   <div className="flex items-center justify-between gap-3 text-sm">
-                    <span className="text-muted-foreground">Progres keseluruhan</span>
+                    <span className="text-muted-foreground">Pekerjaan selesai</span>
                     <span className="font-medium text-foreground">{overallProgress}%</span>
                   </div>
                   <div className="h-3 bg-muted">
@@ -578,9 +587,7 @@ export function UnitWorkspaceShell({
 
                 <div className="border border-border px-4 py-3">
                   <div className="flex items-center justify-between gap-3">
-                    <p className="text-[11px] font-mono uppercase tracking-[0.16em] text-muted-foreground">
-                      Sebaran Tahap Kerja
-                    </p>
+                    <p className="text-sm font-medium text-foreground">Posisi pekerjaan</p>
                     <p className="text-sm text-muted-foreground">{formatCount(workspace.countdownSummary.total)} jobdesc</p>
                   </div>
                   <div className="mt-3 flex h-4 overflow-hidden bg-muted">
@@ -608,31 +615,22 @@ export function UnitWorkspaceShell({
 
                 <div className="border border-border">
                   <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
-                    <div>
-                      <p className="text-[11px] font-mono uppercase tracking-[0.16em] text-muted-foreground">
-                        Divisi yang Masih Menahan
-                      </p>
-                      <p className="mt-1 text-sm text-muted-foreground">Hanya divisi aktif yang ditampilkan di ringkasan.</p>
-                    </div>
+                    <p className="text-sm font-medium text-foreground">Kerja per divisi</p>
                     <span className="border border-border px-2.5 py-1 text-xs text-muted-foreground">
                       {formatCount(activeDivisionStats.length)} divisi
                     </span>
                   </div>
 
                   {visibleDivisionStats.length === 0 ? (
-                    <p className="px-4 py-4 text-sm text-muted-foreground">Semua divisi sudah tuntas.</p>
+                    <p className="px-4 py-4 text-sm text-muted-foreground">Semua pekerjaan sudah selesai.</p>
                   ) : (
                     <div className="divide-y divide-border">
                       {visibleDivisionStats.map((division) => {
                         const progress = clampPercent(division.progressPercent);
-                        const remainingShare =
-                          totalDivisionRemainingHours > 0
-                            ? Math.round((division.remainingHours / totalDivisionRemainingHours) * 100)
-                            : 0;
                         return (
                           <div
                             key={`${division.divisionId ?? "none"}:${division.divisionName}`}
-                            className="grid gap-3 px-4 py-3 lg:grid-cols-[minmax(180px,1fr)_minmax(0,1.4fr)_110px_70px] lg:items-center"
+                            className="grid gap-3 px-4 py-3 lg:grid-cols-[minmax(180px,1fr)_minmax(0,1.4fr)_110px] lg:items-center"
                           >
                             <div className="min-w-0">
                               <p className="truncate text-sm font-semibold text-foreground">{division.divisionName}</p>
@@ -650,12 +648,8 @@ export function UnitWorkspaceShell({
                               </div>
                             </div>
                             <div className="text-right">
-                              <p className="text-[11px] text-muted-foreground">Sisa Jam</p>
+                              <p className="text-[11px] text-muted-foreground">Sisa kerja</p>
                               <p className="text-sm font-medium text-primary">{formatHours(division.remainingHours)}</p>
-                            </div>
-                            <div className="text-right">
-                              <p className="text-[11px] text-muted-foreground">Porsi</p>
-                              <p className="text-sm font-medium text-primary">{remainingShare}%</p>
                             </div>
                           </div>
                         );
@@ -663,7 +657,7 @@ export function UnitWorkspaceShell({
                     </div>
                   )}
                 </div>
-              </div>
+              </div>}
             </div>
 
             <div className="grid gap-4 xl:min-h-0 xl:grid-rows-[auto_auto_1fr]">

@@ -9,6 +9,7 @@ import type {
   UnitReferenceOption,
   UnitWorkspace,
   UpdateUnitMediaRequest,
+  UpdateUnitMediaFolderRequest,
   UpdateUnitRequest,
   UnitClient,
   UnitClientUnit,
@@ -48,6 +49,8 @@ export interface UnitsService {
   getUnitReferences(session: WebSession): Promise<{ customers: UnitReferenceOption[]; kps: UnitReferenceOption[]; kds: UnitReferenceOption[]; qa: UnitReferenceOption | null }>;
   getUnitMedia(session: WebSession, unitId: string): Promise<{ folders: UnitMediaFolder[]; media: UnitMedia[] }>;
   createUnitMediaFolder(session: WebSession, unitId: string, input: CreateUnitMediaFolderRequest): Promise<UnitMediaFolder>;
+  updateUnitMediaFolder(session: WebSession, unitId: string, folderId: string, input: UpdateUnitMediaFolderRequest): Promise<UnitMediaFolder>;
+  deleteUnitMediaFolder(session: WebSession, unitId: string, folderId: string): Promise<void>;
   createUnitMedia(session: WebSession, unitId: string, input: CreateUnitMediaRequest): Promise<UnitMedia>;
   updateUnitMedia(session: WebSession, unitId: string, mediaId: string, input: UpdateUnitMediaRequest): Promise<UnitMedia>;
   deleteUnitMedia(session: WebSession, unitId: string, mediaId: string): Promise<void>;
@@ -200,6 +203,19 @@ export class DefaultUnitsService implements UnitsService {
     const folder = await this.repository.createUnitMediaFolder({ carId: unitId, actorId: session.user.employeeId, input });
     await this.auditService.log({ actorId: session.user.employeeId, actorName: session.user.fullName, action: "unit_media_folder.create", module: "unit", recordId: folder.id, newValue: { unitId, folder } });
     return folder;
+  }
+
+  async updateUnitMediaFolder(session: WebSession, unitId: string, folderId: string, input: UpdateUnitMediaFolderRequest) {
+    await this.assertUnitInScope(session, unitId);
+    const folder = await this.repository.updateUnitMediaFolder({ carId: unitId, folderId, input });
+    await this.auditService.log({ actorId: session.user.employeeId, actorName: session.user.fullName, action: "unit_media_folder.update", module: "unit", recordId: folderId, newValue: { unitId, folder } });
+    return folder;
+  }
+
+  async deleteUnitMediaFolder(session: WebSession, unitId: string, folderId: string): Promise<void> {
+    await this.assertUnitInScope(session, unitId);
+    await this.repository.deleteUnitMediaFolder({ carId: unitId, folderId });
+    await this.auditService.log({ actorId: session.user.employeeId, actorName: session.user.fullName, action: "unit_media_folder.delete", module: "unit", recordId: folderId, newValue: { unitId, deleted: true } });
   }
 
   async createUnitMedia(session: WebSession, unitId: string, input: CreateUnitMediaRequest) {

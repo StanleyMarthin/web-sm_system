@@ -48,6 +48,13 @@ export async function handleLoginRoute(
           },
         );
       }
+
+      return errorResponse(
+        request,
+        "Employee ID atau password salah.",
+        401,
+        "INVALID_CREDENTIALS",
+      );
     }
 
     if (

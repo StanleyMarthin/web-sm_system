@@ -3,6 +3,7 @@ import {
   createUnitMediaFolderRequestSchema,
   createUnitMediaRequestSchema,
   createUnitRequestSchema,
+  updateUnitMediaFolderRequestSchema,
   updateUnitMediaRequestSchema,
   updateUnitRequestSchema,
 } from "@smsystem/contracts/unit";
@@ -165,8 +166,10 @@ export function mapUnitsError(request: Request, error: unknown): Response {
 
     if (error.message === "UNIT_MEDIA_FOLDER_DUPLICATE") return errorResponse(request, "Nama kategori dokumentasi sudah ada.", 409, "UNIT_MEDIA_FOLDER_DUPLICATE");
     if (error.message === "UNIT_MEDIA_FOLDER_NOT_FOUND") return errorResponse(request, "Kategori dokumentasi tidak ditemukan.", 404, "UNIT_MEDIA_FOLDER_NOT_FOUND");
+    if (error.message === "UNIT_MEDIA_FOLDER_IN_USE") return errorResponse(request, "Kategori masih memiliki referensi. Hapus atau pindahkan referensinya terlebih dahulu.", 409, "UNIT_MEDIA_FOLDER_IN_USE");
     if (error.message === "UNIT_MEDIA_NOT_FOUND") return errorResponse(request, "Dokumentasi tidak ditemukan.", 404, "UNIT_MEDIA_NOT_FOUND");
     if (error.message === "UNIT_MEDIA_COVER_MUST_BE_PHOTO") return errorResponse(request, "Sampul Unit harus berupa foto.", 422, "UNIT_MEDIA_COVER_MUST_BE_PHOTO");
+    if (error.message === "INVALID_REFERENCE_URL") return errorResponse(request, "Gunakan tautan http atau https yang valid.", 422, "INVALID_REFERENCE_URL");
     if (error.message === "INVALID_GOOGLE_DRIVE_URL") return errorResponse(request, "Gunakan tautan Google Drive yang valid.", 422, "INVALID_GOOGLE_DRIVE_URL");
     if (["INVALID_UPLOAD_CONTENT_TYPE", "UPLOAD_SIZE_REQUIRED", "INVALID_UPLOAD_SIZE", "UPLOAD_TOO_LARGE", "INVALID_UPLOAD_TICKET"].includes(error.message)) return errorResponse(request, "File unggahan tidak valid atau melebihi batas ukuran.", 422, error.message);
     if (error.message === "GALLERY_UPLOAD_NOT_CONFIGURED") return errorResponse(request, "Penyimpanan unggahan belum tersedia.", 503, "GALLERY_UPLOAD_NOT_CONFIGURED");
@@ -240,8 +243,14 @@ export function mapUnitsError(request: Request, error: unknown): Response {
   );
 }
 
+function assertReferenceUrl(value: string): URL {
+  const parsed = new URL(value);
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") throw new Error("INVALID_REFERENCE_URL");
+  return parsed;
+}
+
 function assertGoogleDriveUrl(value: string): void {
-  const hostname = new URL(value).hostname.toLowerCase();
+  const hostname = assertReferenceUrl(value).hostname.toLowerCase();
   if (hostname !== "drive.google.com" && hostname !== "docs.google.com") throw new Error("INVALID_GOOGLE_DRIVE_URL");
 }
 
@@ -260,6 +269,7 @@ export async function handleUnitMediaRoute(request: Request, unitId: string, aut
     if (request.method === "GET") return successResponse(request, "Dokumentasi unit siap.", await unitsService.getUnitMedia(sessionResult.session, unitId));
     const body = await parseJsonBody(request, createUnitMediaRequestSchema);
     if (!body.success) return withCors(request, body.response);
+    assertReferenceUrl(body.data.mediaUrl);
     if (body.data.source === "GOOGLE_DRIVE") assertGoogleDriveUrl(body.data.mediaUrl);
     if (body.data.source === "UPLOAD") await consumeUploadTicketForPublicUrl({ employeeId: sessionResult.session.user.employeeId, publicUrl: body.data.mediaUrl });
     const media = await unitsService.createUnitMedia(sessionResult.session, unitId, body.data);
@@ -278,6 +288,21 @@ export async function handleUnitMediaFolderRoute(request: Request, unitId: strin
   } catch (error) { return mapUnitsError(request, error); }
 }
 
+export async function handleUnitMediaFolderDetailRoute(request: Request, unitId: string, folderId: string, authService: AuthService, unitsService: UnitsService): Promise<Response> {
+  const sessionResult = await requireUnitManageSession(request, authService);
+  if ("response" in sessionResult) return sessionResult.response;
+  try {
+    if (request.method === "DELETE") {
+      await unitsService.deleteUnitMediaFolder(sessionResult.session, unitId, folderId);
+      return successResponse(request, "Kategori referensi dihapus.", { folderId });
+    }
+    const body = await parseJsonBody(request, updateUnitMediaFolderRequestSchema);
+    if (!body.success) return withCors(request, body.response);
+    const folder = await unitsService.updateUnitMediaFolder(sessionResult.session, unitId, folderId, body.data);
+    return successResponse(request, "Kategori referensi diperbarui.", { folder });
+  } catch (error) { return mapUnitsError(request, error); }
+}
+
 export async function handleUnitMediaDetailRoute(request: Request, unitId: string, mediaId: string, authService: AuthService, unitsService: UnitsService): Promise<Response> {
   const sessionResult = await requireUnitManageSession(request, authService);
   if ("response" in sessionResult) return sessionResult.response;
@@ -288,6 +313,7 @@ export async function handleUnitMediaDetailRoute(request: Request, unitId: strin
     }
     const body = await parseJsonBody(request, updateUnitMediaRequestSchema);
     if (!body.success) return withCors(request, body.response);
+    if (body.data.mediaUrl) assertReferenceUrl(body.data.mediaUrl);
     const media = await unitsService.updateUnitMedia(sessionResult.session, unitId, mediaId, body.data);
     return successResponse(request, "Dokumentasi diperbarui.", { media });
   } catch (error) { return mapUnitsError(request, error); }

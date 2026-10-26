@@ -147,6 +147,7 @@ function mapCatalogError(request: Request, error: unknown): Response {
     if (error.message === "UPLOAD_TICKET_FAILED") return errorResponse(request, "Upload ticket object storage gagal dibuat.", 502, "UPLOAD_TICKET_FAILED");
     if (error.message === "R2_UPLOAD_FAILED") return errorResponse(request, "Gagal mengupload gambar ke object storage.", 502, "R2_UPLOAD_FAILED");
   }
+  console.error("[unit-catalog] request failed", error);
   return errorResponse(request, "Terjadi kesalahan internal pada modul catalog.", 500, "UNIT_CATALOG_FAILED");
 }
 

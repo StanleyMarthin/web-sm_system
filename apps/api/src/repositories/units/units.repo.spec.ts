@@ -33,9 +33,20 @@ describe("unit panel operational detail relations", () => {
 
   it("stores VIN values in the VIN column", () => {
     expect(source).toContain("c.vin_number AS plateNumber");
-    expect(source).toContain("id, unit_name, vin_number, customer_name");
-    expect(source).toContain("unit_name = ?, vin_number = ?, customer_name");
+    expect(source).toContain("c.police_number AS policeNumber");
+    expect(source).toContain("c.vehicle_year AS vehicleYear");
+    expect(source).toContain("c.engine_number AS engineNumber");
+    expect(source).toContain("c.has_bpkb AS hasBpkb");
+    expect(source).toContain("id, unit_name, vin_number, police_number, customer_name, vehicle_year, engine_number, vehicle_color, vehicle_notes");
+    expect(source).toContain("unit_name = ?, vin_number = ?, police_number = ?, customer_name = ?, vehicle_year = ?, engine_number = ?, vehicle_color = ?, vehicle_notes = ?");
+    expect(source).toContain("params.input.hasBpkb === null ? null : params.input.hasBpkb ? 1 : 0");
+    expect(source).toContain("params.input.hasStnk === null ? null : params.input.hasStnk ? 1 : 0");
     expect(source.includes("plate_number")).toBe(false);
+  });
+
+  it("searches unit identity by chassis and police number", () => {
+    expect(source).toContain("OR COALESCE(ub.plateNumber, '') LIKE ?");
+    expect(source).toContain("OR COALESCE(ub.policeNumber, '') LIKE ?");
   });
 
   it("supplies one value for every unit intake column", () => {
@@ -44,6 +55,6 @@ describe("unit panel operational detail relations", () => {
       source.indexOf("async updateUnit"),
     );
 
-    expect(createUnitMethod).toContain("VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PLAN')");
+    expect(createUnitMethod).toContain("VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PLAN')");
   });
 });

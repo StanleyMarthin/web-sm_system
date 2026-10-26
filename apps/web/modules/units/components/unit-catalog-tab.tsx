@@ -984,7 +984,7 @@ export function UnitCatalogTab({ unitId, unitName, canManageCatalog }: UnitCatal
                         <div className="min-w-0">
                           <p className="truncate font-medium text-foreground">{panel.panelName}</p>
                           <p className="text-xs text-muted-foreground">
-                            {formatItemCount(panel.itemCount)} item · {formatItemCount(panel.restorationCount)} dipilih restorasi
+                            {formatItemCount(panel.itemCount)} item · {formatItemCount(panel.restorationCount)} sudah didata
                           </p>
                         </div>
                         <div className="text-right text-xs text-muted-foreground">

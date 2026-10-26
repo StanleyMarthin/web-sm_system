@@ -48,6 +48,7 @@ interface WorkspaceItemRow extends RowDataPacket {
   id: number;
   promotedPanelId: number | null;
   aliasName: string | null;
+  surveyData: unknown;
   code: string | null;
   partNumber: string | null;
   itemName: string | null;
@@ -127,23 +128,40 @@ function mapPanel(row: PanelRow): CatalogPanel {
 
 function mapWorkspaceItem(row: WorkspaceItemRow): CatalogWorkspaceItem {
   const promotedPanelId = row.promotedPanelId == null ? null : Number(row.promotedPanelId);
+  const survey = parseSurveyData(row.surveyData);
+  const isSurveyed = Object.keys(survey).length > 0 || row.isRestoration === true || row.isRestoration === 1;
   return {
     id: Number(row.id),
     clientRowId: null,
     promotedPanelId,
-    aliasName: row.aliasName ?? null,
+    aliasName: surveyText(survey.actualName) ?? row.aliasName ?? null,
     code: row.code ?? null,
     partNumber: row.partNumber ?? null,
     itemName: row.itemName ?? null,
     position: row.position ?? null,
     qtyNormal: num(row.qtyNormal),
     isRestoration: row.isRestoration === true || row.isRestoration === 1,
-    availabilityStatus: normalizeAvailabilityStatus(row.availabilityStatus),
-    conditionStatus: normalizeConditionStatus(row.conditionStatus),
-    surveyStatus: promotedPanelId ? "MASTER_PANEL_CREATED" : row.isRestoration === true || row.isRestoration === 1 ? "SUDAH_DIDATA" : "BELUM_DIDATA",
+    availabilityStatus: normalizeAvailabilityStatus(surveyText(survey.availability) ?? row.availabilityStatus),
+    conditionStatus: normalizeConditionStatus(surveyText(survey.condition) ?? row.conditionStatus),
+    surveyStatus: promotedPanelId ? "MASTER_PANEL_CREATED" : isSurveyed ? "SUDAH_DIDATA" : "BELUM_DIDATA",
     createdAt: row.createdAt ?? null,
     updatedAt: row.updatedAt ?? null,
   };
+}
+
+function parseSurveyData(value: unknown): Record<string, unknown> {
+  if (value && typeof value === "object" && !Array.isArray(value)) return value as Record<string, unknown>;
+  if (typeof value !== "string" || !value.trim()) return {};
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {};
+  } catch {
+    return {};
+  }
+}
+
+function surveyText(value: unknown) {
+  return typeof value === "string" && value.trim() ? value : null;
 }
 
 function normalizeAvailabilityStatus(value: string | null): CatalogWorkspaceItem["availabilityStatus"] {
@@ -338,7 +356,7 @@ export class UnitCatalogRepository {
           c.component_name AS componentName,
           p.panel_name AS panelName,
           COUNT(uc.id) AS itemCount,
-          SUM(CASE WHEN COALESCE(uc.is_restoration, 0) = 1 THEN 1 ELSE 0 END) AS restorationCount,
+          SUM(CASE WHEN uc.survey_data IS NOT NULL OR COALESCE(uc.is_restoration, 0) = 1 THEN 1 ELSE 0 END) AS restorationCount,
           DATE_FORMAT(MAX(uc.updated_at), '%Y-%m-%d %H:%i:%s') AS updatedAt
         FROM catalog_panels p
         JOIN catalog_components c ON c.id = p.component_id
@@ -790,6 +808,7 @@ export class UnitCatalogRepository {
           uc.position AS position,
           uc.qty_normal AS qtyNormal,
           uc.is_restoration AS isRestoration,
+          uc.survey_data AS surveyData,
           DATE_FORMAT(uc.created_at, '%Y-%m-%d %H:%i:%s') AS createdAt,
           DATE_FORMAT(uc.updated_at, '%Y-%m-%d %H:%i:%s') AS updatedAt
         FROM unit_catalog uc
@@ -819,17 +838,24 @@ export class UnitCatalogRepository {
     };
   }
 
-  async updateSurvey(unitId: string, itemId: number, _actorId: string, input: UpdateCatalogSurveyRequest) {
+  async updateSurvey(unitId: string, itemId: number, actorId: string, input: UpdateCatalogSurveyRequest) {
     const item = await this.getItem(unitId, itemId);
     if (!item) throw new Error("CATALOG_ITEM_NOT_FOUND");
     if (item.promotedPanelId) throw new Error("CATALOG_ITEM_ALREADY_PROMOTED");
-    await this.poolFactory(this.env).execute(
-      "UPDATE unit_catalog SET is_restoration = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND car_id = ?",
-      [resolveRestorationSelection(input, item.isRestoration) ? 1 : 0, itemId, unitId],
-    );
-    const refreshed = await this.getItem(unitId, itemId);
-    if (!refreshed) throw new Error("CATALOG_ITEM_NOT_FOUND");
-    return refreshed;
+    const connection = await this.poolFactory(this.env).getConnection();
+    try {
+      await connection.beginTransaction();
+      await this.saveSurveyWithConnection(connection, unitId, itemId, actorId, input);
+      const refreshed = await this.getItem(unitId, itemId, connection);
+      if (!refreshed) throw new Error("CATALOG_ITEM_NOT_FOUND");
+      await connection.commit();
+      return refreshed;
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
   }
 
   async confirmSurvey(unitId: string, itemId: number, actorId: string, input: UpdateCatalogSurveyRequest) {
@@ -846,7 +872,7 @@ export class UnitCatalogRepository {
         await connection.commit();
         return { item, panelId: Number(existingRows[0].id), alreadyPromoted: true };
       }
-      const shouldRestore = await this.saveSurveyWithConnection(connection, unitId, itemId, input);
+      const shouldRestore = await this.saveSurveyWithConnection(connection, unitId, itemId, actorId, input);
       if (!shouldRestore) throw new Error("SURVEY_NOT_CONFIRMED");
       const promoted = await this.materializeItemWithConnection(connection, unitId, itemId, actorId, input);
       const item = await this.getItem(unitId, itemId, connection);
@@ -1096,6 +1122,7 @@ export class UnitCatalogRepository {
           position AS position,
           qty_normal AS qtyNormal,
           is_restoration AS isRestoration,
+          survey_data AS surveyData,
           DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') AS createdAt,
           DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s') AS updatedAt
         FROM unit_catalog
@@ -1260,17 +1287,31 @@ export class UnitCatalogRepository {
     } satisfies CatalogPanel;
   }
 
-  private async saveSurveyWithConnection(connection: PoolConnection, unitId: string, itemId: number, input: UpdateCatalogSurveyRequest) {
-    const [rows] = await connection.query<Array<RowDataPacket & { isRestoration: number | boolean | null }>>(
-      "SELECT id, is_restoration AS isRestoration FROM unit_catalog WHERE id = ? AND car_id = ? LIMIT 1 FOR UPDATE",
+  private async saveSurveyWithConnection(connection: PoolConnection, unitId: string, itemId: number, actorId: string, input: UpdateCatalogSurveyRequest) {
+    const [rows] = await connection.query<Array<RowDataPacket & { isRestoration: number | boolean | null; surveyData: unknown }>>(
+      "SELECT id, is_restoration AS isRestoration, survey_data AS surveyData FROM unit_catalog WHERE id = ? AND car_id = ? LIMIT 1 FOR UPDATE",
       [itemId, unitId],
     );
     const row = rows[0];
     if (!row) throw new Error("CATALOG_ITEM_NOT_FOUND");
     const shouldRestore = resolveRestorationSelection(input, row.isRestoration === true || row.isRestoration === 1);
+    const existingSurvey = parseSurveyData(row.surveyData);
+    const surveyData = {
+      version: 1,
+      availability: input.availabilityStatus,
+      condition: input.conditionStatus,
+      needsOrder: existingSurvey.needsOrder === true,
+      qtyOpname: input.qtyOpname ?? existingSurvey.qtyOpname ?? null,
+      actualName: input.actualName ?? null,
+      location: input.location ?? existingSurvey.location ?? null,
+      notes: input.notes ?? null,
+      photos: Array.isArray(existingSurvey.photos) ? existingSurvey.photos : [],
+      surveyedBy: actorId,
+      surveyedAt: new Date().toISOString(),
+    };
     await connection.execute(
-      "UPDATE unit_catalog SET is_restoration = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-      [shouldRestore ? 1 : 0, itemId],
+      "UPDATE unit_catalog SET is_restoration = ?, survey_data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+      [shouldRestore ? 1 : 0, JSON.stringify(surveyData), itemId],
     );
     return shouldRestore;
   }

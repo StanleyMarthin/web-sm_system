@@ -151,6 +151,46 @@ describe("UnitCatalogRepository savePanelWorkspace", () => {
   });
 });
 
+describe("UnitCatalogRepository survey synchronization", () => {
+  it("stores the same survey_data marker read by mobile", async () => {
+    const statements: Array<{ sql: string; params: unknown[] }> = [];
+    const connection = {
+      query: async (sql: string, params: unknown[] = []) => {
+        statements.push({ sql, params });
+        return [[{ id: 9, isRestoration: 0, surveyData: JSON.stringify({ photos: [{ id: 1, url: "https://example.test/photo.jpg" }] }) }]];
+      },
+      execute: async (sql: string, params: unknown[] = []) => {
+        statements.push({ sql, params });
+        return [{ insertId: 0 }];
+      },
+    };
+    const repository = new UnitCatalogRepository(() => ({}) as never, {} as never) as any;
+
+    await repository.saveSurveyWithConnection(connection, "CAR-1", 9, "SM-03.004", {
+      actualName: "Part aktual",
+      availabilityStatus: "AVAILABLE",
+      conditionStatus: "GOOD",
+      isRestoration: false,
+      actionType: "NO_ACTION",
+      location: "UNIT",
+      notes: "Sudah dicek",
+      mapping: null,
+      qtyOpname: null,
+    });
+
+    const update = statements.find(({ sql }) => sql.includes("SET is_restoration = ?, survey_data = ?"));
+    expect(update?.params[0]).toBe(0);
+    expect(JSON.parse(String(update?.params[1]))).toMatchObject({
+      actualName: "Part aktual",
+      availability: "AVAILABLE",
+      condition: "GOOD",
+      notes: "Sudah dicek",
+      surveyedBy: "SM-03.004",
+      photos: [{ id: 1, url: "https://example.test/photo.jpg" }],
+    });
+  });
+});
+
 describe("UnitCatalogRepository createAdditionalItem", () => {
   it("retries with legacy component_id when production schema requires it", async () => {
     const statements: Array<{ sql: string; params: unknown[] }> = [];

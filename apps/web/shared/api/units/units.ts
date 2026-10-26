@@ -389,6 +389,21 @@ export async function createUnitMediaFolder(unitId: string, name: string) {
   return { success: true as const, result: payload.data.folder };
 }
 
+export async function updateUnitMediaFolder(unitId: string, folderId: string, name: string) {
+  const response = await fetch(`${getApiBaseUrl()}/api/units/${encodeURIComponent(unitId)}/media/folders/${encodeURIComponent(folderId)}`, {
+    method: "PUT", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }),
+  });
+  if (!response.ok) return { ...(await parseFailure(response)), success: false as const };
+  const payload = z.object({ data: z.object({ folder: unitMediaFolderSchema }) }).parse(await response.json());
+  return { success: true as const, result: payload.data.folder };
+}
+
+export async function deleteUnitMediaFolder(unitId: string, folderId: string) {
+  const response = await fetch(`${getApiBaseUrl()}/api/units/${encodeURIComponent(unitId)}/media/folders/${encodeURIComponent(folderId)}`, { method: "DELETE", credentials: "include" });
+  if (!response.ok) return { ...(await parseFailure(response)), success: false as const };
+  return { success: true as const };
+}
+
 export async function requestUnitMediaUploadTicket(input: { unitId: string; filename: string; contentType: string; size: number }) {
   const params = new URLSearchParams({ filename: input.filename, contentType: input.contentType, size: String(input.size) });
   const response = await fetch(`${getApiBaseUrl()}/api/units/${encodeURIComponent(input.unitId)}/media/upload-ticket?${params}`, { credentials: "include" });
@@ -397,7 +412,7 @@ export async function requestUnitMediaUploadTicket(input: { unitId: string; file
   return { success: true as const, result: payload.data };
 }
 
-export async function createUnitMedia(input: { unitId: string; folderId: string; mediaType: "PHOTO" | "VIDEO"; source: "UPLOAD" | "GOOGLE_DRIVE"; mediaUrl: string; caption?: string | null }) {
+export async function createUnitMedia(input: { unitId: string; folderId: string; mediaType: "PHOTO" | "VIDEO" | "REFERENCE"; source: "UPLOAD" | "GOOGLE_DRIVE" | "LINK"; mediaUrl: string; caption?: string | null }) {
   const response = await fetch(`${getApiBaseUrl()}/api/units/${encodeURIComponent(input.unitId)}/media`, {
     method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input),
   });
@@ -406,7 +421,7 @@ export async function createUnitMedia(input: { unitId: string; folderId: string;
   return { success: true as const, result: payload.data.media };
 }
 
-export async function updateUnitMedia(unitId: string, mediaId: string, input: { folderId?: string; caption?: string | null; isCover?: boolean }) {
+export async function updateUnitMedia(unitId: string, mediaId: string, input: { folderId?: string; mediaUrl?: string; caption?: string | null; isCover?: boolean }) {
   const response = await fetch(`${getApiBaseUrl()}/api/units/${encodeURIComponent(unitId)}/media/${encodeURIComponent(mediaId)}`, {
     method: "PUT", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input),
   });

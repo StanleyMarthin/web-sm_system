@@ -89,6 +89,14 @@ async function UnitDetailPageContent({ params, searchParams }: UnitDetailPagePro
         masterPanels={masterPanelPayload?.data ?? null}
         canManagePhotos={Boolean(user?.permissions.includes(permissionCodes.galleryPhotoManage))}
         canDownloadPhotos={Boolean(user?.permissions.includes(permissionCodes.galleryDownload))}
+        canManageUnit={Boolean(
+          user && (
+            user.scope.canViewAllUnits
+            || user.permissions.includes(permissionCodes.viewAllUnits)
+            || user.permissions.includes(permissionCodes.manageUsers)
+            || user.permissions.includes(permissionCodes.unitPanelManage)
+          ),
+        )}
         canManagePanels={Boolean(user?.permissions.includes(permissionCodes.unitPanelManage))}
         canCreateWo={Boolean(user?.permissions.includes(permissionCodes.woCreate))}
         canCreatePr={Boolean(user?.permissions.includes(permissionCodes.prCreate))}

@@ -56,12 +56,45 @@ const nullableDateText = z
     return value.length > 0 ? value : null;
   });
 
+const nullableVehicleYear = z
+  .number()
+  .int()
+  .min(1886, "Tahun kendaraan tidak valid")
+  .max(2100, "Tahun kendaraan tidak valid")
+  .nullable()
+  .optional()
+  .transform((value) => value ?? null);
+
+const nullableBoolean = z
+  .boolean()
+  .nullable()
+  .optional()
+  .transform((value) => value ?? null);
+
+const nullableVinNumber = nullableTrimmedText.refine(
+  (value) => value === null || value.length <= 100,
+  "Nomor rangka / VIN maksimal 100 karakter",
+);
+
+const nullablePoliceNumber = nullableTrimmedText.refine(
+  (value) => value === null || value.length <= 50,
+  "Nomor polisi maksimal 50 karakter",
+);
+
 export const unitBoardRowSchema = z.object({
   unitId: z.string(),
   unitName: z.string(),
   plateNumber: z.string().nullable(),
+  policeNumber: z.string().nullable(),
   customerName: z.string().nullable(),
+  vehicleYear: z.number().int().nullable(),
+  engineNumber: z.string().nullable(),
+  vehicleColor: z.string().nullable(),
   vehicleNotes: z.string().nullable().optional(),
+  hasBpkb: z.boolean().nullable(),
+  hasStnk: z.boolean().nullable(),
+  stnkTaxDueDate: z.string().nullable(),
+  bpkbTaxDueDate: z.string().nullable(),
   restorationType: unitRestorationTypeSchema.nullable(),
   isMargin: z.boolean(),
   incomingDate: z.string().nullable(),
@@ -119,9 +152,17 @@ export type UnitClientUnit = z.infer<typeof unitClientUnitSchema>;
 export const createUnitRequestSchema = z.object({
   unitId: nullableTrimmedText.refine((value) => value === null || value.length <= 36, "ID unit maksimal 36 karakter"),
   unitName: z.string().trim().min(1).max(255),
-  plateNumber: nullableTrimmedText.refine((value) => value === null || value.length <= 17, "VIN Number maksimal 17 karakter"),
+  plateNumber: nullableVinNumber,
+  policeNumber: nullablePoliceNumber,
   customerName: nullableTrimmedText,
+  vehicleYear: nullableVehicleYear,
+  engineNumber: nullableTrimmedText,
+  vehicleColor: nullableTrimmedText,
   vehicleNotes: nullableLongText,
+  hasBpkb: nullableBoolean,
+  hasStnk: nullableBoolean,
+  stnkTaxDueDate: nullableDateText,
+  bpkbTaxDueDate: nullableDateText,
   restorationType: unitRestorationTypeSchema.default("FULL_RESTORATION"),
   isMargin: z.boolean().default(true),
   incomingDate: nullableDateText,
@@ -134,9 +175,17 @@ export const createUnitRequestSchema = z.object({
 
 export const updateUnitRequestSchema = z.object({
   unitName: z.string().trim().min(1).max(255),
-  plateNumber: nullableTrimmedText.refine((value) => value === null || value.length <= 17, "VIN Number maksimal 17 karakter"),
+  plateNumber: nullableVinNumber,
+  policeNumber: nullablePoliceNumber,
   customerName: nullableTrimmedText,
+  vehicleYear: nullableVehicleYear,
+  engineNumber: nullableTrimmedText,
+  vehicleColor: nullableTrimmedText,
   vehicleNotes: nullableLongText,
+  hasBpkb: nullableBoolean,
+  hasStnk: nullableBoolean,
+  stnkTaxDueDate: nullableDateText,
+  bpkbTaxDueDate: nullableDateText,
   restorationType: unitRestorationTypeSchema.default("FULL_RESTORATION"),
   isMargin: z.boolean().default(true),
   incomingDate: nullableDateText,
@@ -174,8 +223,8 @@ export const unitMediaSchema = z.object({
   id: z.string(),
   folderId: z.string(),
   folderName: z.string(),
-  mediaType: z.enum(["PHOTO", "VIDEO"]),
-  source: z.enum(["UPLOAD", "GOOGLE_DRIVE"]),
+  mediaType: z.enum(["PHOTO", "VIDEO", "REFERENCE"]),
+  source: z.enum(["UPLOAD", "GOOGLE_DRIVE", "LINK"]),
   mediaUrl: z.string().url(),
   caption: z.string().nullable(),
   isCover: z.boolean(),
@@ -195,16 +244,19 @@ export const createUnitMediaFolderRequestSchema = z.object({
   name: z.string().trim().min(1).max(100),
 });
 
+export const updateUnitMediaFolderRequestSchema = createUnitMediaFolderRequestSchema;
+
 export const createUnitMediaRequestSchema = z.object({
   folderId: z.string().trim().min(1).max(36),
-  mediaType: z.enum(["PHOTO", "VIDEO"]),
-  source: z.enum(["UPLOAD", "GOOGLE_DRIVE"]),
+  mediaType: z.enum(["PHOTO", "VIDEO", "REFERENCE"]),
+  source: z.enum(["UPLOAD", "GOOGLE_DRIVE", "LINK"]),
   mediaUrl: z.string().trim().url().max(2048),
   caption: nullableTrimmedText,
 });
 
 export const updateUnitMediaRequestSchema = z.object({
   folderId: z.string().trim().min(1).max(36).optional(),
+  mediaUrl: z.string().trim().url().max(2048).optional(),
   caption: optionalNullableTrimmedText,
   isCover: z.boolean().optional(),
 });
@@ -309,5 +361,6 @@ export type UnitReferenceOption = z.infer<typeof unitReferenceOptionSchema>;
 export type UnitMediaFolder = z.infer<typeof unitMediaFolderSchema>;
 export type UnitMedia = z.infer<typeof unitMediaSchema>;
 export type CreateUnitMediaFolderRequest = z.infer<typeof createUnitMediaFolderRequestSchema>;
+export type UpdateUnitMediaFolderRequest = z.infer<typeof updateUnitMediaFolderRequestSchema>;
 export type CreateUnitMediaRequest = z.infer<typeof createUnitMediaRequestSchema>;
 export type UpdateUnitMediaRequest = z.infer<typeof updateUnitMediaRequestSchema>;

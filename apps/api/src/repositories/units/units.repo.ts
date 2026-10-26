@@ -10,6 +10,7 @@ import type {
   UnitReferenceOption,
   UnitWorkspace,
   UpdateUnitMediaRequest,
+  UpdateUnitMediaFolderRequest,
   UpdateUnitRequest,
   UnitClient,
   UnitClientUnit,
@@ -47,8 +48,16 @@ interface UnitBoardRowPacket extends RowDataPacket {
   unitId: string;
   unitName: string;
   plateNumber: string | null;
+  policeNumber: string | null;
   customerName: string | null;
+  vehicleYear: number | null;
+  engineNumber: string | null;
+  vehicleColor: string | null;
   vehicleNotes: string | null;
+  hasBpkb: number | boolean | null;
+  hasStnk: number | boolean | null;
+  stnkTaxDueDate: string | null;
+  bpkbTaxDueDate: string | null;
   restorationType: string | null;
   isMargin: number | boolean | null;
   incomingDate: string | null;
@@ -86,8 +95,8 @@ interface UnitMediaPacket extends RowDataPacket {
   id: string;
   folderId: string;
   folderName: string;
-  mediaType: "PHOTO" | "VIDEO";
-  source: "UPLOAD" | "GOOGLE_DRIVE";
+  mediaType: "PHOTO" | "VIDEO" | "REFERENCE";
+  source: "UPLOAD" | "GOOGLE_DRIVE" | "LINK";
   mediaUrl: string;
   caption: string | null;
   isCover: number | boolean;
@@ -371,6 +380,10 @@ function mapTinyIntBoolean(value: unknown): boolean {
   return value === true || value === 1 || value === "1";
 }
 
+function mapNullableTinyIntBoolean(value: unknown): boolean | null {
+  return value === null || value === undefined ? null : mapTinyIntBoolean(value);
+}
+
 function mapUnitPanelReference(row: UnitPanelReferenceOptionRow) {
   return {
     label: String(row.label ?? ""),
@@ -520,11 +533,13 @@ function buildFilterClauses(query: UnitGridQuery, params: unknown[]): string[] {
         ub.unitId LIKE ?
         OR ub.unitName LIKE ?
         OR COALESCE(ub.customerName, '') LIKE ?
+        OR COALESCE(ub.plateNumber, '') LIKE ?
+        OR COALESCE(ub.policeNumber, '') LIKE ?
         OR COALESCE(ub.kpName, '') LIKE ?
         OR COALESCE(ub.advisorName, '') LIKE ?
       )`,
     );
-    params.push(value, value, value, value, value);
+    params.push(value, value, value, value, value, value, value);
   }
 
   for (const filter of query.filters) {
@@ -1000,8 +1015,16 @@ function unitBoardBaseSql(): string {
       c.id AS unitId,
       c.unit_name AS unitName,
       c.vin_number AS plateNumber,
+      c.police_number AS policeNumber,
       c.customer_name AS customerName,
+      c.vehicle_year AS vehicleYear,
+      c.engine_number AS engineNumber,
+      c.vehicle_color AS vehicleColor,
       c.vehicle_notes AS vehicleNotes,
+      c.has_bpkb AS hasBpkb,
+      c.has_stnk AS hasStnk,
+      DATE_FORMAT(c.stnk_tax_due_date, '%Y-%m-%d') AS stnkTaxDueDate,
+      DATE_FORMAT(c.bpkb_tax_due_date, '%Y-%m-%d') AS bpkbTaxDueDate,
       c.restoration_type AS restorationType,
       COALESCE(c.is_margin, 1) AS isMargin,
       DATE_FORMAT(c.incoming_date, '%Y-%m-%d') AS incomingDate,
@@ -1093,8 +1116,16 @@ function mapUnitBoardRow(row: UnitBoardRowPacket): UnitBoardRow {
     unitId: row.unitId,
     unitName: row.unitName,
     plateNumber: row.plateNumber,
+    policeNumber: row.policeNumber,
     customerName: row.customerName,
+    vehicleYear: row.vehicleYear === null ? null : Number(row.vehicleYear),
+    engineNumber: row.engineNumber,
+    vehicleColor: row.vehicleColor,
     vehicleNotes: row.vehicleNotes,
+    hasBpkb: mapNullableTinyIntBoolean(row.hasBpkb),
+    hasStnk: mapNullableTinyIntBoolean(row.hasStnk),
+    stnkTaxDueDate: row.stnkTaxDueDate,
+    bpkbTaxDueDate: row.bpkbTaxDueDate,
     restorationType: row.restorationType === "FULL_RESTORATION" || row.restorationType === "PARTIAL_RESTORATION" ? row.restorationType : null,
     isMargin: mapTinyIntBoolean(row.isMargin),
     incomingDate: row.incomingDate,
@@ -1379,16 +1410,25 @@ export class UnitsRepository {
       await connection.execute<ResultSetHeader>(
         `
           INSERT INTO cars (
-            id, unit_name, vin_number, customer_name, vehicle_notes, restoration_type, is_margin,
+            id, unit_name, vin_number, police_number, customer_name, vehicle_year, engine_number, vehicle_color, vehicle_notes,
+            has_bpkb, has_stnk, stnk_tax_due_date, bpkb_tax_due_date, restoration_type, is_margin,
             contract_delivery_date, incoming_date, revision_contract, target_delivery_date, status
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PLAN')
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PLAN')
         `,
         [
           unitId,
           params.input.unitName,
           params.input.plateNumber,
+          params.input.policeNumber,
           account?.ownerName ?? params.input.customerName,
+          params.input.vehicleYear,
+          params.input.engineNumber,
+          params.input.vehicleColor,
           params.input.vehicleNotes,
+          params.input.hasBpkb === null ? null : params.input.hasBpkb ? 1 : 0,
+          params.input.hasStnk === null ? null : params.input.hasStnk ? 1 : 0,
+          params.input.stnkTaxDueDate,
+          params.input.bpkbTaxDueDate,
           params.input.restorationType,
           params.input.isMargin ? 1 : 0,
           params.input.targetTdAwal,
@@ -1452,7 +1492,8 @@ export class UnitsRepository {
         `
           UPDATE cars
           SET
-            unit_name = ?, vin_number = ?, customer_name = ?, vehicle_notes = ?, restoration_type = ?, is_margin = ?,
+            unit_name = ?, vin_number = ?, police_number = ?, customer_name = ?, vehicle_year = ?, engine_number = ?, vehicle_color = ?, vehicle_notes = ?,
+            has_bpkb = ?, has_stnk = ?, stnk_tax_due_date = ?, bpkb_tax_due_date = ?, restoration_type = ?, is_margin = ?,
             contract_delivery_date = ?, incoming_date = ?, revision_contract = ?, target_delivery_date = ?, status = COALESCE(?, status)
           WHERE id = ?
           LIMIT 1
@@ -1460,8 +1501,16 @@ export class UnitsRepository {
         [
           params.input.unitName,
           params.input.plateNumber,
+          params.input.policeNumber,
           account?.ownerName ?? params.input.customerName,
+          params.input.vehicleYear,
+          params.input.engineNumber,
+          params.input.vehicleColor,
           params.input.vehicleNotes,
+          params.input.hasBpkb === null ? null : params.input.hasBpkb ? 1 : 0,
+          params.input.hasStnk === null ? null : params.input.hasStnk ? 1 : 0,
+          params.input.stnkTaxDueDate,
+          params.input.bpkbTaxDueDate,
           params.input.restorationType,
           params.input.isMargin ? 1 : 0,
           params.input.targetTdAwal,
@@ -1744,6 +1793,40 @@ export class UnitsRepository {
     return folder;
   }
 
+  async updateUnitMediaFolder(params: { carId: string; folderId: string; input: UpdateUnitMediaFolderRequest }): Promise<UnitMediaFolder> {
+    const pool = this.poolFactory();
+    try {
+      const [result] = await pool.execute<ResultSetHeader>(
+        "UPDATE sm_unit_media_folders SET name = ? WHERE id = ? AND car_id = ?",
+        [params.input.name, params.folderId, params.carId],
+      );
+      if (result.affectedRows === 0) throw new Error("UNIT_MEDIA_FOLDER_NOT_FOUND");
+    } catch (error) {
+      if (error && typeof error === "object" && "code" in error && error.code === "ER_DUP_ENTRY") throw new Error("UNIT_MEDIA_FOLDER_DUPLICATE");
+      throw error;
+    }
+    const [rows] = await pool.query<UnitMediaFolderPacket[]>(
+      "SELECT id, name, sort_order AS sortOrder FROM sm_unit_media_folders WHERE id = ? AND car_id = ? LIMIT 1",
+      [params.folderId, params.carId],
+    );
+    if (!rows[0]) throw new Error("UNIT_MEDIA_FOLDER_NOT_FOUND");
+    return mapUnitMediaFolder(rows[0]);
+  }
+
+  async deleteUnitMediaFolder(params: { carId: string; folderId: string }): Promise<void> {
+    const pool = this.poolFactory();
+    const [references] = await pool.query<AggregateCountPacket[]>(
+      "SELECT COUNT(*) AS total FROM sm_unit_media WHERE car_id = ? AND folder_id = ?",
+      [params.carId, params.folderId],
+    );
+    if (Number(references[0]?.total ?? 0) > 0) throw new Error("UNIT_MEDIA_FOLDER_IN_USE");
+    const [result] = await pool.execute<ResultSetHeader>(
+      "DELETE FROM sm_unit_media_folders WHERE id = ? AND car_id = ?",
+      [params.folderId, params.carId],
+    );
+    if (result.affectedRows === 0) throw new Error("UNIT_MEDIA_FOLDER_NOT_FOUND");
+  }
+
   async createUnitMedia(params: {
     carId: string;
     actorId: string;
@@ -1819,7 +1902,8 @@ export class UnitsRepository {
         if (!folderRows[0]) throw new Error("UNIT_MEDIA_FOLDER_NOT_FOUND");
       }
       const caption = params.input.caption === undefined ? current.caption : params.input.caption;
-      await connection.execute("UPDATE sm_unit_media SET folder_id = ?, caption = ? WHERE id = ?", [folderId, caption, params.mediaId]);
+      const mediaUrl = params.input.mediaUrl ?? current.mediaUrl;
+      await connection.execute("UPDATE sm_unit_media SET folder_id = ?, media_url = ?, caption = ? WHERE id = ?", [folderId, mediaUrl, caption, params.mediaId]);
       if (params.input.isCover) {
         if (current.mediaType !== "PHOTO") throw new Error("UNIT_MEDIA_COVER_MUST_BE_PHOTO");
         await connection.execute("UPDATE sm_unit_media SET is_cover = 0 WHERE car_id = ?", [params.carId]);

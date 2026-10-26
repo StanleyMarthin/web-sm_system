@@ -113,6 +113,8 @@ nginx/
 *.sql
 !/apps/api/db/migrations/20260812_prevent_duplicate_work_ledger_actual.sql
 !/apps/api/db/migrations/20260904_catalog_final_erd_cutover.sql
+!/apps/api/db/migrations/20261024_add_unit_reference_media_type.sql
+!/apps/api/db/migrations/20261024_add_vehicle_profile_to_cars.sql
 
 # Misc OS/editor files
 .DS_Store
