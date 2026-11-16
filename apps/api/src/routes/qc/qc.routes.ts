@@ -81,6 +81,15 @@ function mapQcError(request: Request, error: unknown): Response {
     if (error.message === "QC_REWORK_REQUIRED") {
       return errorResponse(request, "PIC perbaikan wajib diisi untuk penolakan QA.", 400, error.message);
     }
+    if (error.message === "QC_REWORK_WORKER_INVALID") {
+      return errorResponse(request, "PIC perbaikan harus aktif dan sesuai divisi Countdown.", 400, error.message);
+    }
+    if (error.message === "QC_REWORK_PANEL_REQUIRED") {
+      return errorResponse(request, "Countdown belum memiliki Master Panel untuk draft rework.", 400, error.message);
+    }
+    if (error.message === "QC_REWORK_HOURS_INVALID") {
+      return errorResponse(request, "Jam perbaikan harus lebih dari nol dan paling lama 12 jam, dengan format HH:MM.", 400, error.message);
+    }
     if (error.message === "QC_WORK_NOT_COMPLETED") {
       return errorResponse(request, "QC hanya dapat dilakukan pada hasil pekerjaan yang sudah selesai 100%.", 409, error.message);
     }

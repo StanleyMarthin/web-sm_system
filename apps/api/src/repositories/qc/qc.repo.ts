@@ -13,6 +13,7 @@ import type { AuthScope } from "@smsystem/contracts/auth";
 import type { Pool, PoolConnection, ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { getMySqlPool } from "@/db/mysql";
 import { isIssueStorageReady } from "@/repositories/issues/issues.repo";
+import { parseQcNotes, qcNotesTextSql, qcReworkValueSql, readQcNotesText } from "./qc-notes";
 
 interface ScopeParams {
   employeeId: string;
@@ -98,6 +99,9 @@ interface MutationResult {
   resultStatus: "LOLOS" | "TIDAK_LOLOS";
   issueId: string | null;
   reworkPlanId: string | null;
+  draftItemId?: string;
+  extensionHours?: number;
+  reused?: boolean;
 }
 
 interface ApproverRow {
@@ -120,6 +124,7 @@ export interface QcRepository {
   listInspectionHistory(params: ScopeParams & { coreId: string }): Promise<QcInspectionRecord[]>;
   findAssignedEmployeeIds?(coreId: string): Promise<string[]>;
   findUnitApprovers?(carId: string): Promise<ApproverRow | null>;
+  findNotificationRecipients?(coreId: string): Promise<{ kdIds: string[]; kpPmIds: string[] }>;
   passInspection(
     context: { actorId: string; qcLevel: string },
     input: { coreId: string; payload: QcPassRequest },
@@ -187,13 +192,6 @@ function toOptions(rows: OptionRow[]): Array<{ label: string; value: string }> {
   }));
 }
 
-function toHours(value: string): number {
-  const [hoursRaw, minutesRaw] = value.split(":");
-  const hours = Number.parseInt(hoursRaw ?? "0", 10);
-  const minutes = Number.parseInt(minutesRaw ?? "0", 10);
-  return Number((hours + minutes / 60).toFixed(2));
-}
-
 const TECHNICAL_COUNTDOWN_WHERE = "COALESCE(jt.is_teknis, 1) = 1";
 
 function isFinalQcLevel(qcLevel: string): boolean {
@@ -209,6 +207,10 @@ const completedActualJoin = `
   )
 `;
 const completedWorkWhere = "LOWER(qc_work.status) IN ('done', 'ready_qc') AND COALESCE(qc_work.progres, 0) >= 100";
+const reworkDraftStateSql = qcReworkValueSql("reject_qc.qc_notes", "$.jobPlanDraftState");
+const reworkLinkedPlanIdSql = qcReworkValueSql("reject_qc.qc_notes", "$.jobPlanDraft.linkedPlanId");
+const activeReworkSql = `(rework_plan.id IS NULL AND ${reworkDraftStateSql} IN ('DRAFT', 'SUBMITTED')
+  OR rework_plan.id IS NOT NULL AND UPPER(COALESCE(rework_plan.status, 'PLAN')) NOT IN ('READY_QC', 'DONE', 'CANCEL', 'REJECTED'))`;
 
 function mapQcRow(row: QcRow): QcQueueRecord {
   return {
@@ -232,7 +234,7 @@ function mapQcRow(row: QcRow): QcQueueRecord {
     targetHours: row.targetHours === null ? null : Number(row.targetHours),
     deadlineDate: row.deadlineDate,
     latestInspectionDate: row.latestInspectionDate,
-    latestInspectionNotes: row.latestInspectionNotes,
+    latestInspectionNotes: readQcNotesText(row.latestInspectionNotes),
     photoBeforeUrl: row.photoBeforeUrl,
     evidencePhotoUrl: row.evidencePhotoUrl,
     reworkPlanId: row.reworkPlanId,
@@ -423,14 +425,17 @@ function baseQcSelectSql(issueStorageReady: boolean): string {
       COALESCE(cd.target_hours, cd.target_hours_initial) AS targetHours,
       DATE_FORMAT(cd.deadline_date, '%Y-%m-%d') AS deadlineDate,
       DATE_FORMAT(latest_qc.inspection_date, '%Y-%m-%d %H:%i:%s') AS latestInspectionDate,
-      latest_qc.qc_notes AS latestInspectionNotes,
+      ${qcNotesTextSql("latest_qc.qc_notes")} AS latestInspectionNotes,
       latest_qc.photo_before_url AS photoBeforeUrl,
       latest_qc.evidence_photo_url AS evidencePhotoUrl,
-      rework_plan.id AS reworkPlanId,
-      DATE_FORMAT(rework_plan.task_date, '%Y-%m-%d') AS reworkTaskDate,
-      rework_plan.assigned_user_id AS reworkAssignedUserId,
+      COALESCE(rework_plan.id, ${reworkLinkedPlanIdSql}) AS reworkPlanId,
+      COALESCE(DATE_FORMAT(rework_plan.task_date, '%Y-%m-%d'),
+        ${qcReworkValueSql("reject_qc.qc_notes", "$.jobPlanDraft.taskDate")}) AS reworkTaskDate,
+      COALESCE(rework_plan.assigned_user_id,
+        ${qcReworkValueSql("reject_qc.qc_notes", "$.jobPlanDraft.assignedUserId")}) AS reworkAssignedUserId,
       rework_emp.full_name AS reworkAssignedUserName,
-      rework_plan.status AS reworkPlanStatus,
+      COALESCE(rework_plan.status, CASE ${reworkDraftStateSql}
+        WHEN 'DRAFT' THEN 'DRAFT' WHEN 'SUBMITTED' THEN 'PENDING_APPROVAL' ELSE NULL END) AS reworkPlanStatus,
       issue_link.issueId AS linkedIssueId,
       COALESCE(issue_link.openIssueCount, 0) AS openIssueCount
     FROM sm_jobdesc_countdown cd
@@ -446,8 +451,10 @@ function baseQcSelectSql(issueStorageReady: boolean): string {
       ORDER BY (q.qc_level IN ('QC_QA', 'QC_ADVISOR')) DESC, q.inspection_date DESC, q.id DESC LIMIT 1
     )
     LEFT JOIN sm_qc_inspections reject_qc ON reject_qc.id = cd.ref_rework_qc_id
-    LEFT JOIN sm_jobdesc_plan rework_plan ON rework_plan.id = reject_qc.rework_plan_id
-    LEFT JOIN sm_employee rework_emp ON rework_emp.employee_id = rework_plan.assigned_user_id
+    LEFT JOIN sm_jobdesc_plan rework_plan ON rework_plan.id = COALESCE(reject_qc.rework_plan_id, ${reworkLinkedPlanIdSql})
+      AND rework_plan.core_id = cd.id
+    LEFT JOIN sm_employee rework_emp ON rework_emp.employee_id = COALESCE(rework_plan.assigned_user_id,
+      ${qcReworkValueSql("reject_qc.qc_notes", "$.jobPlanDraft.assignedUserId")})
     ${buildIssueLinkJoinSql(issueStorageReady)}
   `;
 }
@@ -488,6 +495,35 @@ export class MySqlQcRepository implements QcRepository {
       : null;
   }
 
+  async findNotificationRecipients(coreId: string): Promise<{ kdIds: string[]; kpPmIds: string[] }> {
+    const role = "UPPER(REPLACE(REPLACE(r.role_name, ' ', '_'), '-', '_'))";
+    const divisionScope = `(e.division_id = cd.division_id OR EXISTS (
+      SELECT 1 FROM employee_managed_divisions emd
+      WHERE emd.employee_id = e.employee_id AND emd.division_id = cd.division_id
+    ))`;
+    const [rows] = await this.poolFactory().query<RowDataPacket[]>(`
+      SELECT DISTINCT e.employee_id AS employeeId,
+        CASE WHEN ${role} IN ('KD', 'KETUA_DIVISI', 'KEPALA_DIVISI') THEN 'KD' ELSE 'KP_PM' END AS recipientType
+      FROM sm_jobdesc_countdown cd
+      JOIN sm_employee e ON COALESCE(e.is_active, 1) = 1
+      JOIN sm_role r ON r.id = e.role_id
+      WHERE cd.id = ? AND (
+        (${role} IN ('KD', 'KETUA_DIVISI', 'KEPALA_DIVISI') AND ${divisionScope})
+        OR (${role} IN ('KP', 'KEPALA_PRODUKSI', 'KEPALA_PROJECT') AND (
+          EXISTS (SELECT 1 FROM car_project_assignment cpa
+            WHERE cpa.car_id = cd.car_id AND cpa.kp_id = e.employee_id AND cpa.ended_at IS NULL)
+          OR EXISTS (SELECT 1 FROM employee_managed_divisions emd
+            WHERE emd.employee_id = e.employee_id AND emd.division_id = cd.division_id)
+        ))
+        OR ${role} IN ('MP', 'PM', 'MANAGER_PRODUKSI', 'MANAGER_PROJECT', 'PROJECT_MANAGER')
+      )
+    `, [coreId]);
+    return {
+      kdIds: rows.filter((row) => row.recipientType === "KD").map((row) => String(row.employeeId)),
+      kpPmIds: rows.filter((row) => row.recipientType === "KP_PM").map((row) => String(row.employeeId)),
+    };
+  }
+
   async listQueue(params: QcListParams): Promise<QcListPayload> {
     return this.listByMode(params, {
       extraWhere: [
@@ -505,8 +541,7 @@ export class MySqlQcRepository implements QcRepository {
     return this.listByMode(params, {
       extraWhere: [
         "UPPER(COALESCE(cd.qc_last_status, '')) = 'TIDAK_LOLOS'",
-        "rework_plan.id IS NOT NULL",
-        "UPPER(COALESCE(rework_plan.status, 'PLAN')) NOT IN ('READY_QC', 'DONE', 'CANCEL', 'REJECTED')",
+        activeReworkSql,
       ],
     });
   }
@@ -625,7 +660,7 @@ export class MySqlQcRepository implements QcRepository {
         CASE WHEN UPPER(q.result_status) IN ('PASS', 'LOLOS') THEN 'LOLOS' ELSE 'TIDAK_LOLOS' END AS resultStatus,
         DATE_FORMAT(q.inspection_date, '%Y-%m-%d %H:%i:%s') AS inspectionDate,
         q.inspector_id AS inspectorId, e.full_name AS inspectorName,
-        q.inspection_duration_minutes AS inspectionDurationMinutes, q.qc_notes AS notes,
+        q.inspection_duration_minutes AS inspectionDurationMinutes, ${qcNotesTextSql("q.qc_notes")} AS notes,
         q.photo_before_url AS photoBeforeUrl, q.evidence_photo_url AS evidencePhotoUrl
       FROM sm_qc_inspections q
       JOIN sm_jobdesc_countdown cd ON cd.id = q.core_id
@@ -636,7 +671,7 @@ export class MySqlQcRepository implements QcRepository {
     return rows.map((row) => ({
       qcId: row.qcId, qcLevel: row.qcLevel, resultStatus: row.resultStatus,
       inspectionDate: row.inspectionDate, inspectorId: row.inspectorId,
-      inspectorName: row.inspectorName, notes: row.notes,
+      inspectorName: row.inspectorName, notes: readQcNotesText(row.notes),
       inspectionDurationMinutes: row.inspectionDurationMinutes == null ? null : Number(row.inspectionDurationMinutes),
       photoBeforeUrl: row.photoBeforeUrl, evidencePhotoUrl: row.evidencePhotoUrl,
     }));
@@ -660,6 +695,11 @@ export class MySqlQcRepository implements QcRepository {
         throw new Error("QC_NON_TECHNICAL_FORBIDDEN");
       }
       if (!current.workCompleted) throw new Error("QC_WORK_NOT_COMPLETED");
+      const rework = parseQcNotes(current.reworkQcNotes);
+      if (isFinalQcLevel(context.qcLevel) && current.latestActualId
+          && rework?.workActualId === current.latestActualId) {
+        throw new Error("QC_WORK_NOT_COMPLETED");
+      }
 
       const nextStatus = isFinalQcLevel(context.qcLevel) ? "DONE" : "READY_QC";
       const remainingHoursAfter = isFinalQcLevel(context.qcLevel) ? 0 : current.remainingHours;
@@ -765,15 +805,64 @@ export class MySqlQcRepository implements QcRepository {
       }
 
       if (!input.payload.reworkAssignedUser.trim()) throw new Error("QC_REWORK_REQUIRED");
+      const previous = parseQcNotes(current.reworkQcNotes);
+      if (current.latestActualId && current.reworkQcId
+          && previous?.workActualId === current.latestActualId) {
+        await connection.commit();
+        return { qcId: current.reworkQcId, coreId: input.coreId, resultStatus: "TIDAK_LOLOS",
+          issueId: null, reworkPlanId: current.reworkPlanId,
+          draftItemId: `qc-rework:${current.reworkQcId}`,
+          extensionHours: Number(previous.extensionHours ?? 0), reused: true };
+      }
       const qcId = randomUUID();
-      const reworkPlanId = randomUUID();
-      const reworkHours = toHours(input.payload.reworkDailyHours);
+      const duration = /^(\d{2}):([0-5]\d)$/u.exec(input.payload.reworkDailyHours);
+      const durationMinutes = duration ? Number(duration[1]) * 60 + Number(duration[2]) : 0;
+      if (!duration || durationMinutes <= 0 || durationMinutes > 720) {
+        throw new Error("QC_REWORK_HOURS_INVALID");
+      }
+      if (!current.panelId) throw new Error("QC_REWORK_PANEL_REQUIRED");
+      const [workers] = await connection.query<Array<RowDataPacket & {
+        employeeId: string; fullName: string | null; divisionId: number | null; isActive: number;
+      }>>(
+        `SELECT employee_id AS employeeId, full_name AS fullName,
+          division_id AS divisionId, is_active AS isActive
+         FROM sm_employee WHERE employee_id = ? LIMIT 1`,
+        [input.payload.reworkAssignedUser.trim()],
+      );
+      const worker = workers[0];
+      if (!worker || Number(worker.isActive) !== 1 || worker.divisionId == null
+          || Number(worker.divisionId) !== current.divisionId) {
+        throw new Error("QC_REWORK_WORKER_INVALID");
+      }
+      const reworkHours = durationMinutes / 60;
       const extensionHours = Math.max(0, Number((reworkHours - current.remainingHours).toFixed(2)));
       const nextRemainingHours = Number((current.remainingHours + extensionHours).toFixed(2));
       const nextTargetHours = Number((current.targetHours + extensionHours).toFixed(2));
       const jobDescription =
         input.payload.reworkDescription?.trim() ||
         `QC Rework - ${current.jobName ?? current.panelName ?? "Task"}`;
+      const draftItemId = `qc-rework:${qcId}`;
+      const draft = {
+        draftItemId, sourceType: "COUNTDOWN", coreId: input.coreId,
+        carId: current.carId, unitName: current.unitName,
+        divisionId: current.divisionId, divisionName: current.divisionName,
+        panelId: current.panelId, panelName: current.panelName,
+        jobTypeId: current.jobTypeId, jobName: current.jobName,
+        assignedUserId: input.payload.reworkAssignedUser.trim(), assignedUserName: worker.fullName ?? null,
+        taskDate: input.payload.reworkDate, targetHours: reworkHours,
+        startTime: input.payload.reworkStartTime || (input.payload.reworkIsOvertime ? "17:00" : "08:00"),
+        finishTime: input.payload.reworkFinishTime ?? null,
+        jobDescription: jobDescription.slice(0, 500),
+        note: (input.payload.notes?.trim() || input.payload.reworkDescription?.trim() || "").slice(0, 500) || null,
+        isOvertime: Boolean(input.payload.reworkIsOvertime), isPriority: Boolean(input.payload.reworkIsPriority),
+        deadlineDate: current.deadlineDate, isRework: true, isNonTechnicalJob: false,
+      };
+      const qcNotes = JSON.stringify({
+        notes: input.payload.notes ?? input.payload.reworkDescription ?? null,
+        reworkDescription: input.payload.reworkDescription ?? null,
+        jobPlanDraft: draft, jobPlanDraftState: "DRAFT", workActualId: current.latestActualId,
+        extensionHours,
+      });
 
       if (extensionHours > 0) {
         await connection.execute(
@@ -800,47 +889,13 @@ export class MySqlQcRepository implements QcRepository {
             nextTargetHours,
             extensionHours,
             current.deadlineDate,
-            input.payload.reworkDate,
+            current.deadlineDate,
             qcId,
             input.payload.notes?.trim() || input.payload.reworkDescription?.trim() || "Extend otomatis karena reject QC.",
             context.actorId,
           ],
         );
       }
-
-      await connection.execute(
-        `
-          INSERT INTO sm_jobdesc_plan (
-            id,
-            core_id,
-            task_date,
-            jobdescription,
-            assigned_user_id,
-            target_start_hours,
-            target_finish_hours,
-            dailyTargetHours,
-            is_overtime,
-            is_rework,
-            isPriority,
-            status,
-            acc_tracking,
-            note
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, 'PLAN', 0, ?)
-        `,
-        [
-          reworkPlanId,
-          input.coreId,
-          input.payload.reworkDate,
-          jobDescription,
-          input.payload.reworkAssignedUser,
-          input.payload.reworkStartTime ?? null,
-          input.payload.reworkFinishTime ?? null,
-          input.payload.reworkDailyHours,
-          input.payload.reworkIsOvertime ? 1 : 0,
-          input.payload.reworkIsPriority ? 1 : 0,
-          input.payload.notes?.trim() || input.payload.reworkDescription?.trim() || null,
-        ],
-      );
 
       await connection.execute(
         `
@@ -862,10 +917,10 @@ export class MySqlQcRepository implements QcRepository {
         [
           qcId,
           input.coreId,
-          input.payload.notes ?? input.payload.reworkDescription ?? null,
+          qcNotes,
           input.payload.inspectionDurationMinutes ?? null,
           nextRemainingHours,
-          reworkPlanId,
+          null,
           context.actorId,
           context.qcLevel,
           context.qcLevel.replace("QC_", ""),
@@ -896,7 +951,9 @@ export class MySqlQcRepository implements QcRepository {
         coreId: input.coreId,
         resultStatus: "TIDAK_LOLOS",
         issueId: null,
-        reworkPlanId,
+        reworkPlanId: null,
+        draftItemId,
+        extensionHours,
       };
     } catch (error) {
       await connection.rollback();
@@ -1176,8 +1233,7 @@ export class MySqlQcRepository implements QcRepository {
           SUM(
             CASE
               WHEN UPPER(COALESCE(cd.qc_last_status, '')) = 'TIDAK_LOLOS'
-                AND rework_plan.id IS NOT NULL
-                AND UPPER(COALESCE(rework_plan.status, 'PLAN')) NOT IN ('READY_QC', 'DONE', 'CANCEL', 'REJECTED')
+                AND ${activeReworkSql}
               THEN 1 ELSE 0
             END
           ) AS activeReworkCount
@@ -1185,7 +1241,8 @@ export class MySqlQcRepository implements QcRepository {
         LEFT JOIN master_job_types jt ON jt.id = cd.job_type_id
         ${completedActualJoin}
         LEFT JOIN sm_qc_inspections reject_qc ON reject_qc.id = cd.ref_rework_qc_id
-        LEFT JOIN sm_jobdesc_plan rework_plan ON rework_plan.id = reject_qc.rework_plan_id
+        LEFT JOIN sm_jobdesc_plan rework_plan ON rework_plan.id = COALESCE(reject_qc.rework_plan_id, ${reworkLinkedPlanIdSql})
+          AND rework_plan.core_id = cd.id
         ${whereSql}
       `,
       scopeParams,
@@ -1223,6 +1280,15 @@ export class MySqlQcRepository implements QcRepository {
     connection: PoolConnection,
     coreId: string,
   ): Promise<{
+    carId: string | null;
+    unitName: string | null;
+    divisionId: number | null;
+    divisionName: string | null;
+    panelId: number | null;
+    jobTypeId: string | null;
+    latestActualId: string | null;
+    reworkQcId: string | null;
+    reworkQcNotes: string | null;
     jobName: string | null;
     panelName: string | null;
     reworkPlanId: string | null;
@@ -1238,6 +1304,11 @@ export class MySqlQcRepository implements QcRepository {
       `
         SELECT
           cd.id AS coreId,
+          cd.car_id AS carId, c.unit_name AS unitName,
+          cd.division_id AS divisionId, d.name AS divisionName,
+          cd.panel_id AS panelId, cd.job_type_id AS jobTypeId,
+          qc_work.id AS latestActualId,
+          reject_qc.id AS reworkQcId, reject_qc.qc_notes AS reworkQcNotes,
           COALESCE(wo.job_detail, jt.job_name, cd.section_name, cd.task_category) AS jobName,
           COALESCE(cd.section_name, mp.panel_name, mp.name_part) AS panelName,
           reject_qc.rework_plan_id AS reworkPlanId,
@@ -1255,6 +1326,7 @@ export class MySqlQcRepository implements QcRepository {
         LEFT JOIN master_panels mp ON mp.id = cd.panel_id
         LEFT JOIN master_job_types jt ON jt.id = cd.job_type_id
         LEFT JOIN cars c ON c.id = cd.car_id
+        LEFT JOIN sm_divisi d ON d.id = cd.division_id
         LEFT JOIN sm_jobdesc_wo wo ON wo.id = cd.ref_taks_id
         ${completedActualJoin}
         LEFT JOIN sm_qc_inspections reject_qc ON reject_qc.id = cd.ref_rework_qc_id
@@ -1265,6 +1337,15 @@ export class MySqlQcRepository implements QcRepository {
       [coreId],
     )) as [Array<RowDataPacket & {
       coreId: string;
+      carId: string | null;
+      unitName: string | null;
+      divisionId: number | null;
+      divisionName: string | null;
+      panelId: number | null;
+      jobTypeId: string | null;
+      latestActualId: string | null;
+      reworkQcId: string | null;
+      reworkQcNotes: string | null;
       jobName: string | null;
       panelName: string | null;
       reworkPlanId: string | null;
@@ -1279,6 +1360,15 @@ export class MySqlQcRepository implements QcRepository {
 
     return rows[0]
       ? {
+          carId: rows[0].carId ?? null,
+          unitName: rows[0].unitName ?? null,
+          divisionId: rows[0].divisionId == null ? null : Number(rows[0].divisionId),
+          divisionName: rows[0].divisionName ?? null,
+          panelId: rows[0].panelId == null ? null : Number(rows[0].panelId),
+          jobTypeId: rows[0].jobTypeId == null ? null : String(rows[0].jobTypeId),
+          latestActualId: rows[0].latestActualId ?? null,
+          reworkQcId: rows[0].reworkQcId ?? null,
+          reworkQcNotes: rows[0].reworkQcNotes ?? null,
           jobName: rows[0].jobName,
           panelName: rows[0].panelName,
           reworkPlanId: rows[0].reworkPlanId,

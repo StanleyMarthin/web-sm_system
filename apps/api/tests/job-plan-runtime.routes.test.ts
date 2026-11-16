@@ -6,7 +6,7 @@ import { handleJobPlanRuntimeProxyRoute } from "../src/routes/job-plan/job-plan-
 const session = {
   user: {
     employeeId: "EMP-007",
-    permissions: ["UPDATE_PLAN", "TASK_EXECUTE"],
+    permissions: ["CREATE_TASK", "TASK_EXECUTE", "TASK_CHECKPOINT"],
   },
 } as WebSession;
 
@@ -82,3 +82,32 @@ describe("Job Plan API runtime proxy", () => {
     expect(called).toBe(false);
   });
 });
+
+
+for (const permission of ["CREATE_TASK", "TASK_CHECKPOINT", "TASK_SUBMIT"]) {
+  it(`allows scoped runtime reads for ${permission}`, async () => {
+    const response = await handleJobPlanRuntimeProxyRoute(new Request("http://api.test/api/job-plan-runtime"), "",
+      auth({...session,user:{...session.user,permissions:[permission]}}), async () => Response.json({success:true}), "https://jobplan.test");
+    expect(response.status).toBe(200);
+  });
+}
+
+
+for (const [path, body, permission, expected] of [
+  ["PLAN/monitor", {}, "REVIEW_TASK", 403],
+  ["PLAN/monitor", {}, "TASK_CHECKPOINT", 200],
+  ["PLAN", {action:"approve"}, "CREATE_TASK", 403],
+  ["PLAN", {action:"approve"}, "REVIEW_TASK", 200],
+  ["", {urgent:false}, "UPDATE_PLAN", 403],
+  ["", {urgent:false}, "CREATE_TASK", 200],
+  ["", {urgent:true}, "TASK_SUBMIT", 200],
+] as const) {
+  it(`mutation ${path}/${permission} returns ${expected}`, async () => {
+    let calls = 0;
+    const response = await handleJobPlanRuntimeProxyRoute(new Request("http://api.test/api/job-plan-runtime/"+path, {
+      method:path === "PLAN" ? "PUT" : "POST",headers:{"content-type":"application/json"},body:JSON.stringify(body),
+    }), path, auth({...session,user:{...session.user,permissions:[permission]}}), async () => { calls++;return Response.json({success:true}); }, "https://jobplan.test");
+    expect(response.status).toBe(expected);
+    expect(calls).toBe(expected===200?1:0);
+  });
+}

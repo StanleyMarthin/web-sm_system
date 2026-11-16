@@ -1,8 +1,6 @@
+import { permissionCodes } from "@smsystem/permissions";
 import type {
-  BulkCreateJobPlanRequest,
   CreateJobPlanAdditionalCountdownRequest,
-  CreateJobPlanRequest,
-  CreateJobPlanWorkspaceRequest,
   DeleteJobPlanDraftRequest,
   JobPlanExportFormat,
   JobPlanDraftRecord,
@@ -12,15 +10,9 @@ import type {
   JobPlanRecord,
   JobPlanStatus,
   SaveJobPlanDraftRequest,
-  SubmitJobPlanDraftRequest,
-  UpdateJobPlanRequest,
-  UpdateJobPlanStatusRequest,
 } from "@smsystem/contracts/job-plan";
 import { jobPlanDraftRecordSchema } from "@smsystem/contracts/job-plan";
-import {
-  buildJobPlanScheduleSegments,
-  findExceededJobPlanAllocation,
-} from "@smsystem/contracts/job-plan-schedule";
+import { findExceededJobPlanAllocation } from "@smsystem/contracts/job-plan-schedule";
 import type { RedisClientType } from "redis";
 import ExcelJS from "exceljs";
 import type { AuditService } from "@/services/audit/audit.service";
@@ -32,7 +24,7 @@ import {
 } from "@/repositories/job-plan/job-plan.repo";
 import { getRedisClient } from "@/redis/client";
 import type { WebSession } from "@/services/auth/session.service";
-import { notifyMobileEmployees } from "@/services/notifications/mobile-notification.service";
+
 import { addRowsWorksheet, writeWorkbookBuffer } from "@/services/shared/excel";
 
 interface JobPlanListResult {
@@ -81,39 +73,6 @@ interface JobPlanOptionsQuery {
   unitId?: string | null;
   panelId?: number | null;
   componentName?: string | null;
-}
-
-function expandPlanDraftForSchedule(plan: CreateJobPlanRequest) {
-  const scheduleSegments = buildJobPlanScheduleSegments({
-    taskDate: plan.taskDate,
-    requestedMode: plan.isOvertime ? "overtime" : "normal",
-    targetHours: plan.targetHours,
-    startTime: plan.startTime,
-  });
-
-  if (scheduleSegments.length === 0) {
-    return [plan];
-  }
-
-  if (scheduleSegments.length === 1) {
-    return [
-      {
-        ...plan,
-        targetHours: scheduleSegments[0].targetHours,
-        startTime: plan.startTime ?? scheduleSegments[0].startTime,
-        finishTime: plan.finishTime ?? scheduleSegments[0].finishTime,
-        isOvertime: scheduleSegments[0].mode === "overtime",
-      },
-    ];
-  }
-
-  return scheduleSegments.map((segment) => ({
-    ...plan,
-    targetHours: segment.targetHours,
-    startTime: segment.startTime,
-    finishTime: segment.finishTime,
-    isOvertime: segment.mode === "overtime",
-  }));
 }
 
 const JOB_PLAN_DRAFT_TTL_SECONDS = 60 * 60 * 24 * 30;
@@ -192,12 +151,29 @@ function normalizeMobileDraftItem(item: unknown): JobPlanDraftRecord | null {
       isPriority: Boolean(source.isPriority ?? source.is_priority),
       deadlineDate: source.deadlineDate ?? source.deadline_date ?? null,
       isRework: Boolean(source.isRework ?? source.is_rework),
+      urgent: source.urgent === true || source.isUrgent === true || source.is_urgent === true,
       isNonTechnicalJob: Boolean(source.isNonTechnicalJob ?? source.is_non_technical_job),
       picPlan: source.picPlan ?? source.pic_plan ?? null,
       requiredGrade: source.requiredGrade ?? source.required_grade ?? null,
+      linkedPlanId: source.linkedPlanId ?? source.operationalPlanId ?? null,
+      linkedPlanVersion: source.linkedPlanVersion ?? source.version ?? null,
     });
   } catch {
     return null;
+  }
+}
+
+function isSelfServiceRequest(session: WebSession): boolean {
+  const permissions = session.user.permissions;
+  return Boolean(permissions && !permissions.includes(permissionCodes.createTask));
+}
+
+function assertSupplementalRequest(session: WebSession, item: { draftItemId?: string; urgent?: boolean; assignedUserId?: string; picPlan?: string | null; divisionId?: number | null; note?: string | null }) {
+  if (!isSelfServiceRequest(session)) return;
+  if (!session.user.permissions.some(code => code === permissionCodes.taskExecute || code === permissionCodes.taskSubmit) || !item.urgent || item.draftItemId?.startsWith("qc-rework:")
+    || (item.assignedUserId ?? item.picPlan) !== session.user.employeeId
+    || item.divisionId !== session.user.divisionId || !item.note?.trim()) {
+    throw new Error("SCOPE_FORBIDDEN");
   }
 }
 
@@ -232,7 +208,10 @@ function mapDraftToRecord(draft: JobPlanDraftRecord): JobPlanRecord {
     draftJobTypeId: draft.jobTypeId ?? null,
     draftDeadlineDate: draft.deadlineDate ?? null,
     draftIsRework: draft.isRework,
+    draftUrgent: draft.urgent ?? false,
     draftIsNonTechnicalJob: draft.isNonTechnicalJob,
+    draftLinkedPlanId: draft.linkedPlanId ?? null,
+    draftLinkedPlanVersion: draft.linkedPlanVersion ?? null,
     availablePlanHours: null,
     remainingHours: null,
     progressPercent: null,
@@ -352,22 +331,6 @@ function pushPositiveInt(target: Set<number>, value: unknown) {
   if (parsed !== null) target.add(parsed);
 }
 
-function resolveApprovedStatus(currentStatus: JobPlanStatus): JobPlanStatus {
-  if (currentStatus === "PENDING_ADV") {
-    return "PENDING_KP";
-  }
-
-  if (currentStatus === "PENDING_KP") {
-    return "PENDING_MP";
-  }
-
-  if (currentStatus === "PENDING_MP" || currentStatus === "PENDING") {
-    return "PLAN";
-  }
-
-  throw new Error("INVALID_STATUS_TRANSITION");
-}
-
 export interface JobPlanService {
   list(session: WebSession, query: JobPlanGridQuery): Promise<JobPlanListResult>;
   listOptions(
@@ -380,38 +343,14 @@ export interface JobPlanService {
     session: WebSession,
     input: SaveJobPlanDraftRequest,
   ): Promise<JobPlanMutationResult>;
-  submitDrafts(
-    session: WebSession,
-    input: SubmitJobPlanDraftRequest,
-  ): Promise<JobPlanMutationResult>;
   deleteDrafts(
     session: WebSession,
     input: DeleteJobPlanDraftRequest,
-  ): Promise<JobPlanMutationResult>;
-  create(session: WebSession, input: CreateJobPlanRequest): Promise<JobPlanMutationResult>;
-  createWorkspace(
-    session: WebSession,
-    input: CreateJobPlanWorkspaceRequest,
   ): Promise<JobPlanMutationResult>;
   createAdditionalCountdown(
     session: WebSession,
     input: CreateJobPlanAdditionalCountdownRequest,
   ): Promise<JobPlanAdditionalCountdownResult>;
-  bulkCreate(
-    session: WebSession,
-    input: BulkCreateJobPlanRequest,
-  ): Promise<JobPlanMutationResult>;
-  update(
-    session: WebSession,
-    planId: string,
-    input: UpdateJobPlanRequest,
-  ): Promise<JobPlanMutationResult>;
-  updateStatus(
-    session: WebSession,
-    planId: string,
-    input: UpdateJobPlanStatusRequest,
-  ): Promise<JobPlanMutationResult>;
-  delete(session: WebSession, planId: string): Promise<JobPlanMutationResult>;
   picLoad(
     session: WebSession,
     employeeId: string,
@@ -660,20 +599,6 @@ function buildImage(rows: JobPlanRecord[], query: JobPlanGridQuery): Uint8Array 
   return new TextEncoder().encode(svg);
 }
 
-function canUpdateStatus(currentStatus: JobPlanStatus, nextStatus: JobPlanStatus): boolean {
-  if (nextStatus === "PLAN") {
-    return ["PENDING", "PENDING_ADV", "PENDING_KP", "PENDING_MP"].includes(currentStatus);
-  }
-
-  if (nextStatus === "REJECTED") {
-    return ["PENDING", "PENDING_ADV", "PENDING_KP", "PENDING_MP", "PLAN"].includes(
-      currentStatus,
-    );
-  }
-
-  return false;
-}
-
 export class DefaultJobPlanService implements JobPlanService {
   constructor(
     private readonly repository: JobPlanRepository = new MySqlJobPlanRepository(),
@@ -764,32 +689,49 @@ export class DefaultJobPlanService implements JobPlanService {
   }
 
   private async readDrafts(
-    employeeId: string,
+    session: WebSession,
     divisionIds: number[],
   ): Promise<JobPlanDraftRecord[]> {
-    let rows: JobPlanDraftRecord[][];
+    if (isSelfServiceRequest(session)) {
+      const redis = await this.redisFactory();
+      return this.parseDrafts(await redis.get(buildLegacyMobileDraftKey(session.user.employeeId)))
+        .filter((draft) => draft.urgent && draft.assignedUserId === session.user.employeeId);
+    }
+    const durableDrafts = (await this.repository.listQcReworkDrafts?.({
+      employeeId: session.user.employeeId,
+      scope: session.user.scope,
+      divisionIds,
+    }) ?? [])
+      .map(normalizeMobileDraftItem)
+      .filter((draft): draft is JobPlanDraftRecord => draft !== null);
+    const durableById = new Map(durableDrafts.map((draft) => [draft.draftItemId, draft]));
+    let rows: JobPlanDraftRecord[][] = [];
     try {
       const redis = await this.redisFactory();
       const keys = [
         ...divisionIds.map((divisionId) => buildDivisionDraftKey(divisionId)),
-        buildLegacyMobileDraftKey(employeeId),
-        buildLegacyWebDraftKey(employeeId),
+        buildLegacyMobileDraftKey(session.user.employeeId),
+        buildLegacyWebDraftKey(session.user.employeeId),
       ];
       rows = await Promise.all(keys.map(async (key) => this.parseDrafts(await redis.get(key))));
     } catch (error) {
-      console.warn("[job-plan] draft cache unavailable; continuing without drafts", error);
-      return [];
+      console.warn("[job-plan] draft cache unavailable; using durable QC drafts", error);
     }
 
     const draftsById = new Map<string, JobPlanDraftRecord>();
 
     for (const drafts of rows) {
       for (const draft of drafts) {
-        if (!draftsById.has(draft.draftItemId)) draftsById.set(draft.draftItemId, draft);
+        const durable = durableById.get(draft.draftItemId);
+        if (this.repository.listQcReworkDrafts && draft.draftItemId.startsWith("qc-rework:") && !durable) continue;
+        if (!draftsById.has(draft.draftItemId)) draftsById.set(draft.draftItemId, durable ?? draft);
       }
     }
 
-    return [...draftsById.values()];
+    return [...new Map([
+      ...durableDrafts.map((draft) => [draft.draftItemId, draft] as const),
+      ...draftsById,
+    ]).values()];
   }
 
   private async writeDrafts(
@@ -798,6 +740,17 @@ export class DefaultJobPlanService implements JobPlanService {
     drafts: JobPlanDraftRecord[],
   ) {
     const redis = await this.redisFactory();
+    if (isSelfServiceRequest(session)) {
+      for (const draft of drafts) assertSupplementalRequest(session, draft);
+      const key = buildLegacyMobileDraftKey(session.user.employeeId);
+      const preserved = this.parseDrafts(await redis.get(key))
+        .filter((draft) => !draft.urgent || draft.assignedUserId !== session.user.employeeId);
+      await redis.set(key, JSON.stringify({ action: "save_draft", userId: session.user.employeeId, divisionId: session.user.divisionId,
+        sourceType: "COUNTDOWN", items: [...preserved, ...drafts] }), {
+        EX: JOB_PLAN_DRAFT_TTL_SECONDS,
+      });
+      return;
+    }
     const legacyKeys = [
       buildLegacyWebDraftKey(session.user.employeeId),
       buildLegacyMobileDraftKey(session.user.employeeId),
@@ -932,7 +885,7 @@ export class DefaultJobPlanService implements JobPlanService {
       }),
     ]);
     const allDrafts = await this.readDrafts(
-      session.user.employeeId,
+      session,
       this.getDraftDivisionIds(session, { query, references }),
     );
 
@@ -1031,21 +984,15 @@ export class DefaultJobPlanService implements JobPlanService {
     });
   }
 
-  async create(
-    session: WebSession,
-    input: CreateJobPlanRequest,
-  ): Promise<JobPlanMutationResult> {
-    return this.bulkCreate(session, { plans: [input] });
-  }
-
   async saveDraft(
     session: WebSession,
     input: SaveJobPlanDraftRequest,
   ): Promise<JobPlanMutationResult> {
+    for (const item of input.items) assertSupplementalRequest(session, item);
     const draftDivisionIds = this.getDraftDivisionIds(session, { drafts: input.items });
     const currentDrafts = input.replaceItems
       ? []
-      : await this.readDrafts(session.user.employeeId, draftDivisionIds);
+      : await this.readDrafts(session, draftDivisionIds);
     const draftMap = new Map(currentDrafts.map((draft) => [draft.draftItemId, draft]));
 
     for (const draft of input.items) {
@@ -1083,7 +1030,14 @@ export class DefaultJobPlanService implements JobPlanService {
     if (exceededAllocation) {
       throw new Error("COUNTDOWN_CAPACITY_EXCEEDED");
     }
-    await this.writeDrafts(session, draftDivisionIds, nextDrafts);
+    const persistedQcDrafts = isSelfServiceRequest(session) ? [] : await this.repository.saveQcReworkDrafts?.({
+      employeeId: session.user.employeeId, scope: session.user.scope, items: input.items,
+    }) ?? [];
+    const persistedById = new Map(persistedQcDrafts.map(normalizeMobileDraftItem)
+      .filter((draft): draft is JobPlanDraftRecord => draft !== null)
+      .map((draft) => [draft.draftItemId, draft]));
+    await this.writeDrafts(session, draftDivisionIds,
+      nextDrafts.map((draft) => persistedById.get(draft.draftItemId) ?? draft));
 
     await this.auditService.log({
       actorId: session.user.employeeId,
@@ -1106,230 +1060,6 @@ export class DefaultJobPlanService implements JobPlanService {
     };
   }
 
-  async submitDrafts(
-    session: WebSession,
-    input: SubmitJobPlanDraftRequest,
-  ): Promise<JobPlanMutationResult> {
-    const references = session.user.scope.canViewAllUnits
-      ? await this.repository.listReferences({
-          employeeId: session.user.employeeId,
-          scope: session.user.scope,
-          mode: "all",
-        })
-      : undefined;
-    const draftDivisionIds = this.getDraftDivisionIds(session, { references });
-    const drafts = await this.readDrafts(session.user.employeeId, draftDivisionIds);
-    const selectedDrafts = input.draftItemIds.map((draftItemId) =>
-      drafts.find((draft) => draft.draftItemId === draftItemId) ?? null,
-    );
-
-    if (selectedDrafts.some((draft) => draft === null)) {
-      throw new Error("DRAFT_NOT_FOUND");
-    }
-
-    const draftRows = selectedDrafts.filter(Boolean) as JobPlanDraftRecord[];
-    const groupedHours = new Map<string, number>();
-
-    for (const draft of draftRows) {
-      const scheduleSegments = buildJobPlanScheduleSegments({
-        taskDate: draft.taskDate,
-        requestedMode: draft.isOvertime ? "overtime" : "normal",
-        targetHours: draft.targetHours,
-        startTime: draft.startTime,
-      });
-
-      for (const segment of scheduleSegments) {
-        const key = `${draft.assignedUserId}|${draft.taskDate}|${segment.mode === "overtime" ? "1" : "0"}`;
-        groupedHours.set(key, (groupedHours.get(key) ?? 0) + segment.targetHours);
-      }
-    }
-
-    const loads = await this.repository.getPicLoadBatch([...groupedHours.keys()].map((key) => {
-      const [employeeId, taskDate, overtimeFlag] = key.split("|");
-      return { employeeId: employeeId!, taskDate: taskDate!, overtimeFlag };
-    }));
-
-    for (const [key, requestedHours] of groupedHours) {
-      const [employeeId, taskDate, overtimeFlag] = key.split("|");
-      const capacity = loads.get(`${employeeId}|${taskDate}`) ?? await this.repository.getPicLoad(employeeId!, taskDate!);
-      const remaining =
-        overtimeFlag === "1"
-          ? capacity.overtime.remaining
-          : capacity.normal.remaining;
-
-      if (requestedHours > remaining + 0.0001) {
-        throw new Error("CAPACITY_EXCEEDED");
-      }
-    }
-
-    const result = await this.repository.submitDrafts(
-      {
-        employeeId: session.user.employeeId,
-        scope: session.user.scope,
-        actorId: session.user.employeeId,
-        actorName: session.user.fullName,
-      },
-      draftRows,
-    );
-
-    const remainingDrafts = drafts.filter((draft) => !input.draftItemIds.includes(draft.draftItemId));
-    try {
-      await this.writeDraftsWithRetry(session, draftDivisionIds, remainingDrafts);
-    } catch (error) {
-      console.error("[job-plan] draft cleanup failed after submit", error);
-    }
-
-    await this.auditService.log({
-      actorId: session.user.employeeId,
-      actorName: session.user.fullName,
-      action: "jobplan.draft_submit",
-      module: "jobplan",
-      recordId: result.createdIds[0] ?? null,
-      newValue: {
-        count: result.createdIds.length,
-        draftItemIds: input.draftItemIds,
-        createdIds: result.createdIds,
-      },
-    });
-
-    await this.notifySubmittedPlans(
-      draftRows.map((draft) => draft.carId).filter((id): id is string => Boolean(id)),
-      result.createdIds,
-      session.user.fullName,
-    );
-
-    return {
-      createdIds: result.createdIds,
-      updatedPlanId: null,
-      deletedPlanId: null,
-      status: null,
-    };
-  }
-
-  private async notifySubmittedPlans(
-    carIds: string[],
-    planIds: string[],
-    actorName: string,
-    approverRows?: Array<{ carId: string; kpId: string | null; advisorId: string | null; kdId: string | null }>,
-  ): Promise<void> {
-    try {
-      const approvers = approverRows ?? await this.repository.getApproversForCars([...new Set(carIds)]);
-      const approverByCarId = new Map(approvers.map((approver) => [approver.carId, approver]));
-      const pendingAdvRecipients = new Set<string>();
-      const pendingKpRecipients = new Set<string>();
-      let pendingAdvCount = 0;
-      let pendingKpCount = 0;
-      let pendingAdvPlanId = "";
-      let pendingKpPlanId = "";
-
-      carIds.forEach((carId, index) => {
-        const approver = approverByCarId.get(carId);
-        if (!approver) {
-          return;
-        }
-        if (approver.advisorId) {
-          pendingAdvRecipients.add(approver.advisorId);
-          pendingAdvCount += 1;
-          pendingAdvPlanId ||= planIds[index] ?? "";
-          return;
-        }
-        if (approver.kpId) {
-          pendingKpRecipients.add(approver.kpId);
-          pendingKpCount += 1;
-          pendingKpPlanId ||= planIds[index] ?? "";
-        }
-      });
-
-      if (pendingAdvRecipients.size > 0 && pendingAdvCount > 0) {
-        await notifyMobileEmployees([...pendingAdvRecipients], {
-          title: "Job Plan Menunggu Persetujuan QA",
-          body: `${actorName} mengajukan ${pendingAdvCount} rencana kerja yang perlu disetujui QA.`,
-          data: {
-            planId: pendingAdvPlanId,
-            status: "PENDING_ADV",
-            module: "job_plan",
-          },
-        }, "sm_job_plan");
-      }
-
-      if (pendingKpRecipients.size > 0 && pendingKpCount > 0) {
-        await notifyMobileEmployees([...pendingKpRecipients], {
-          title: "Job Plan Menunggu Persetujuan KP",
-          body: `${actorName} mengajukan ${pendingKpCount} rencana kerja yang perlu disetujui KP.`,
-          data: {
-            planId: pendingKpPlanId,
-            status: "PENDING_KP",
-            module: "job_plan",
-          },
-        }, "sm_job_plan");
-      }
-    } catch (err) {
-      console.error("[job-plan] notification error:", err);
-    }
-  }
-
-  private async notifySubmittedCorePlans(
-    session: WebSession,
-    coreIds: string[],
-    planIds: string[],
-  ): Promise<void> {
-    try {
-      const references = await this.repository.listReferences({
-        employeeId: session.user.employeeId,
-        scope: session.user.scope,
-        mode: "all",
-        countdownIds: [...new Set(coreIds)],
-      });
-      await this.notifySubmittedPlans(
-        references.countdowns.map((countdown) => countdown.carId),
-        planIds,
-        session.user.fullName,
-      );
-    } catch (error) {
-      console.error("[job-plan] notification recipient lookup error:", error);
-    }
-  }
-
-  private async notifyPlanStatus(plan: JobPlanRecord, recipient = plan.assignedUserId): Promise<void> {
-    const waitingFor = plan.status === "PENDING_ADV" ? "QA" : "KP";
-    await notifyMobileEmployees([recipient], {
-      title: plan.status === "PLAN"
-        ? "Job Plan Disetujui"
-        : plan.status === "REJECTED"
-          ? "Job Plan Ditolak"
-          : `Job Plan Menunggu Persetujuan ${waitingFor}`,
-      body: plan.status === "PLAN"
-        ? `Job plan ${plan.unitName} - ${plan.panelName ?? plan.jobName ?? "pekerjaan"} sudah disetujui dan siap dijalankan.`
-        : plan.status === "REJECTED"
-          ? `Job plan ${plan.unitName} - ${plan.panelName ?? plan.jobName ?? "pekerjaan"} ditolak. Silakan cek catatan penolakan.`
-          : `Job plan ${plan.unitName} - ${plan.panelName ?? plan.jobName ?? "pekerjaan"} untuk ${plan.assignedUserName} sedang menunggu persetujuan Anda.`,
-      data: { planId: plan.planId, coreId: plan.coreId, status: plan.status, module: "job_plan" },
-    }, "sm_job_plan");
-  }
-
-  private async notifyUpdatedPlan(session: WebSession, plan: JobPlanRecord): Promise<void> {
-    if (plan.status === "PLAN" || plan.status === "REJECTED") {
-      return this.notifyPlanStatus(plan);
-    }
-    if (plan.status !== "PENDING_ADV" && plan.status !== "PENDING_KP") return;
-
-    try {
-      const references = await this.repository.listReferences({
-        employeeId: session.user.employeeId,
-        scope: session.user.scope,
-        mode: "all",
-        countdownIds: [plan.coreId],
-      });
-      const carId = references.countdowns.find(({ value }) => value === plan.coreId)?.carId;
-      if (!carId) return;
-      const approver = (await this.repository.getApproversForCars([carId]))[0];
-      const recipient = plan.status === "PENDING_ADV" ? approver?.advisorId : approver?.kpId;
-      if (recipient) await this.notifyPlanStatus(plan, recipient);
-    } catch (error) {
-      console.error("[job-plan] status notification error:", error);
-    }
-  }
-
   async deleteDrafts(
     session: WebSession,
     input: DeleteJobPlanDraftRequest,
@@ -1342,12 +1072,17 @@ export class DefaultJobPlanService implements JobPlanService {
         })
       : undefined;
     const draftDivisionIds = this.getDraftDivisionIds(session, { references });
-    const drafts = await this.readDrafts(session.user.employeeId, draftDivisionIds);
+    const drafts = await this.readDrafts(session, draftDivisionIds);
     const remainingDrafts = drafts.filter(
       (draft) => !input.draftItemIds.includes(draft.draftItemId),
     );
 
-    if (remainingDrafts.length === drafts.length) {
+    const consumedQcDraftIds = isSelfServiceRequest(session) ? [] : await this.repository.dismissQcReworkDrafts?.({
+      employeeId: session.user.employeeId,
+      scope: session.user.scope,
+      draftItemIds: input.draftItemIds,
+    }) ?? [];
+    if (remainingDrafts.length === drafts.length && consumedQcDraftIds.length === 0) {
       throw new Error("DRAFT_NOT_FOUND");
     }
 
@@ -1372,148 +1107,11 @@ export class DefaultJobPlanService implements JobPlanService {
     };
   }
 
-  async bulkCreate(
-    session: WebSession,
-    input: BulkCreateJobPlanRequest,
-  ): Promise<JobPlanMutationResult> {
-    const expandedPlans = input.plans.flatMap((plan) => expandPlanDraftForSchedule(plan));
-    const groupedHours = new Map<string, number>();
-
-    for (const plan of expandedPlans) {
-      const key = `${plan.assignedUserId}|${plan.taskDate}|${plan.isOvertime ? "1" : "0"}`;
-      groupedHours.set(key, (groupedHours.get(key) ?? 0) + plan.targetHours);
-    }
-
-    const loads = await this.repository.getPicLoadBatch([...groupedHours.keys()].map((key) => {
-      const [employeeId, taskDate, overtimeFlag] = key.split("|");
-      return { employeeId, taskDate, overtimeFlag };
-    }));
-
-    for (const [key, requestedHours] of groupedHours) {
-      const [employeeId, taskDate, overtimeFlag] = key.split("|");
-      const capacity = loads.get(`${employeeId}|${taskDate}`) ?? await this.repository.getPicLoad(employeeId, taskDate);
-      const remaining =
-        overtimeFlag === "1"
-          ? capacity.overtime.remaining
-          : capacity.normal.remaining;
-
-      if (requestedHours > remaining + 0.0001) {
-        throw new Error("CAPACITY_EXCEEDED");
-      }
-    }
-
-    const result = await this.repository.createMany(
-      {
-        employeeId: session.user.employeeId,
-        scope: session.user.scope,
-        actorId: session.user.employeeId,
-        actorName: session.user.fullName,
-      },
-      expandedPlans,
-    );
-
-    await this.auditService.log({
-      actorId: session.user.employeeId,
-      actorName: session.user.fullName,
-      action: "jobplan.bulk_create",
-      module: "jobplan",
-      recordId: result.createdIds[0] ?? null,
-      newValue: {
-        createdIds: result.createdIds,
-        count: result.createdIds.length,
-      },
-    });
-
-    await this.notifySubmittedCorePlans(
-      session,
-      expandedPlans.map((plan) => plan.coreId),
-      result.createdIds,
-    );
-
-    return {
-      createdIds: result.createdIds,
-      updatedPlanId: null,
-      deletedPlanId: null,
-      status: null,
-    };
-  }
-
-  async createWorkspace(
-    session: WebSession,
-    input: CreateJobPlanWorkspaceRequest,
-  ): Promise<JobPlanMutationResult> {
-    const groupedHours = new Map<string, number>();
-
-    for (const row of input.rows) {
-      const scheduleSegments = buildJobPlanScheduleSegments({
-        taskDate: input.taskDate,
-        requestedMode: input.mode,
-        targetHours: row.targetHours,
-        startTime: row.startTime,
-      });
-
-      for (const segment of scheduleSegments) {
-        const key = `${row.assignedUserId}|${input.taskDate}|${segment.mode === "overtime" ? "1" : "0"}`;
-        groupedHours.set(key, (groupedHours.get(key) ?? 0) + segment.targetHours);
-      }
-    }
-
-    for (const [key, requestedHours] of groupedHours) {
-      const [employeeId, taskDate, overtimeFlag] = key.split("|");
-      const capacity = await this.repository.getPicLoad(employeeId, taskDate);
-      const remaining =
-        overtimeFlag === "1"
-          ? capacity.overtime.remaining
-          : capacity.normal.remaining;
-
-      if (requestedHours > remaining + 0.0001) {
-        throw new Error("CAPACITY_EXCEEDED");
-      }
-    }
-
-    const result = await this.repository.createWorkspace(
-      {
-        employeeId: session.user.employeeId,
-        scope: session.user.scope,
-        actorId: session.user.employeeId,
-        actorName: session.user.fullName,
-      },
-      input,
-    );
-
-    await this.auditService.log({
-      actorId: session.user.employeeId,
-      actorName: session.user.fullName,
-      action: "jobplan.workspace_create",
-      module: "jobplan",
-      recordId: result.createdIds[0] ?? null,
-      newValue: {
-        createdIds: result.createdIds,
-        count: result.createdIds.length,
-        taskDate: input.taskDate,
-        mode: input.mode,
-        isRework: input.isRework,
-      },
-    });
-
-    await this.notifySubmittedPlans(
-      input.rows.map((row) => row.carId).filter((id): id is string => Boolean(id)),
-      result.createdIds,
-      session.user.fullName,
-    );
-
-    return {
-      createdIds: result.createdIds,
-      updatedPlanId: null,
-      deletedPlanId: null,
-      status: null,
-    };
-  }
-
   async createAdditionalCountdown(
     session: WebSession,
     input: CreateJobPlanAdditionalCountdownRequest,
   ): Promise<JobPlanAdditionalCountdownResult> {
+    assertSupplementalRequest(session, input);
     const result = await this.repository.createAdditionalCountdown(
       {
         employeeId: session.user.employeeId,
@@ -1547,96 +1145,6 @@ export class DefaultJobPlanService implements JobPlanService {
       isNewJobType: result.isNewJobType,
       isNewCore: result.isNewCore,
     };
-  }
-
-  async update(
-    session: WebSession,
-    planId: string,
-    _input: UpdateJobPlanRequest,
-  ): Promise<JobPlanMutationResult> {
-    const existing = await this.repository.findById({
-      employeeId: session.user.employeeId,
-      scope: session.user.scope,
-      planId,
-    });
-    if (!existing) {
-      throw new Error("PLAN_NOT_FOUND");
-    }
-
-    throw new Error("PLAN_EDIT_FORBIDDEN");
-  }
-
-  async updateStatus(
-    session: WebSession,
-    planId: string,
-    input: UpdateJobPlanStatusRequest,
-  ): Promise<JobPlanMutationResult> {
-    const existing = await this.repository.findById({
-      employeeId: session.user.employeeId,
-      scope: session.user.scope,
-      planId,
-    });
-    if (!existing) {
-      throw new Error("PLAN_NOT_FOUND");
-    }
-
-    if (!canUpdateStatus(existing.status, input.status)) {
-      throw new Error("INVALID_STATUS_TRANSITION");
-    }
-
-    const nextStatus =
-      input.status === "PLAN" && existing.status !== "PLAN"
-        ? resolveApprovedStatus(existing.status)
-        : input.status;
-
-    const result = await this.repository.updateStatus(
-      {
-        employeeId: session.user.employeeId,
-        scope: session.user.scope,
-        planId,
-      },
-      {
-        ...input,
-        status: nextStatus,
-      },
-    );
-
-    await this.auditService.log({
-      actorId: session.user.employeeId,
-      actorName: session.user.fullName,
-      action: "jobplan.status_update",
-      module: "jobplan",
-      recordId: planId,
-      oldValue: {
-        status: existing.status,
-      },
-      newValue: {
-        status: result.status,
-        note: input.note,
-      },
-    });
-
-    await this.notifyUpdatedPlan(session, { ...existing, status: result.status });
-
-    return {
-      createdIds: [],
-      updatedPlanId: planId,
-      deletedPlanId: null,
-      status: result.status,
-    };
-  }
-
-  async delete(session: WebSession, planId: string): Promise<JobPlanMutationResult> {
-    const existing = await this.repository.findById({
-      employeeId: session.user.employeeId,
-      scope: session.user.scope,
-      planId,
-    });
-    if (!existing) {
-      throw new Error("PLAN_NOT_FOUND");
-    }
-
-    throw new Error("PLAN_DELETE_FORBIDDEN");
   }
 
   async picLoad(

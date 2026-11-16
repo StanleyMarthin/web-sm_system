@@ -3,11 +3,14 @@ import { jobPlanRuntimeReadItemSchema } from "@smsystem/contracts/job-plan-runti
 import {
   buildCountdownPanelOptions,
   jobActualQcLabel,
+  jobActualQcStatus,
+  jobActualWorkStatus,
   buildCreateJobPlanRuntimePayload,
   buildEditDraftJobPlanRuntimePayload,
   buildJobPlanDraftRecord,
   buildManualExecutionJobPlanRuntimePayload,
   calculateJobPlanDeadlineDate,
+  createJobPlanRuntimeDraft,
   createEditDraftFromRow,
   createManualExecutionDraft,
   findJobPlanPanelValue,
@@ -23,6 +26,7 @@ import {
   isJobPlanCountdownPlannable,
   minutesToDuration,
   minutesToTime,
+  mergeJobPlanDraftDisplayRows,
   resolveAdditionalJobTargetMinutes,
   splitJobPlanRuntimeDraftForSchedule,
   toJobPlanDraftDisplayRows,
@@ -30,7 +34,25 @@ import {
   toJobPlanRuntimeDisplayRows,
   resolveJobPlanDivisionName,
   validateJobPlanRuntimeDraft,
+  canPerformJobPlanAction,
 } from "./job-plan-planner";
+
+test("runtime display retains per-actor capabilities and missing actions deny mutations", () => {
+  const item = jobPlanRuntimeReadItemSchema.parse({
+    plan_id: "PLAN", core_id: "CORE", car_id: "CAR", panel_id: 1, division_id: 4, employee_id: "EMP",
+    task_date: "2026-11-16", planned_start_minute: 480, planned_finish_minute: 540, planned_work_minutes: 60,
+    approval_state: "DIVISION_REVIEW", execution_state: "NOT_STARTED", ledger_state: "UNMATERIALIZED",
+    legacy_status: "PLAN", urgent: true, is_rework: false, is_overtime: false, is_priority: false,
+    note: null, source: "V2_REDIS", available_actions: ["approve", "reject"],
+  });
+  const [row] = toJobPlanRuntimeDisplayRows([item], [], []);
+  expect(canPerformJobPlanAction(row!, "approve")).toBe(true);
+  expect(canPerformJobPlanAction(row!, "monitor")).toBe(false);
+  const [denied] = toJobPlanRuntimeDisplayRows([{...item, available_actions: []}], [], []);
+  expect(canPerformJobPlanAction(denied!, "approve")).toBe(false);
+  const [missing] = toJobPlanRuntimeDisplayRows([{...item, available_actions: undefined}], [], []);
+  expect(canPerformJobPlanAction(missing!, "approve")).toBe(false);
+});
 
 test("QC result distinguishes a KD pass awaiting QA from final QC", () => {
   expect(jobActualQcLabel({ actualQcResult: "LOLOS", actualQcLevel: "QC_KD" } as never)).toBe("QC_KD · Menunggu QA");
@@ -64,6 +86,31 @@ const employee = {
 };
 
 describe("Job Plan planner helpers", () => {
+  test("preserves canonical Cancel ahead of completion and keeps partial work out of QC", () => {
+    const item = jobPlanRuntimeReadItemSchema.parse({
+      plan_id: "PLAN-1", core_id: "CORE-1", car_id: "220S", panel_id: 10, division_id: 7, employee_id: "EMP-1",
+      task_date: "2026-11-12", planned_start_minute: 480, planned_finish_minute: 600, planned_work_minutes: 120,
+      approval_state: "APPROVED", execution_state: "FINISHED_PENDING_VALIDATION", ledger_state: "UNMATERIALIZED",
+      legacy_status: "CANCEL", urgent: false, is_rework: false, is_overtime: false, is_priority: false,
+      note: null, source: "V2_REDIS", execution_status: "cancel", progress_percent: 100,
+    });
+    const [cancelled] = toJobPlanRuntimeDisplayRows([item], [{ ...countdown, remainingHours: 0 }], [employee]);
+    expect(cancelled).toMatchObject({ executionStatus: "cancel", execution: "Dibatalkan", progressPercent: 100 });
+    expect(jobActualWorkStatus(cancelled)).toBe("CANCEL");
+    expect(jobActualQcStatus(cancelled, { actualQcResult: "LOLOS", actualQcLevel: "QC_QA" } as never)).toBe("Belum QC");
+    const [partial] = toJobPlanRuntimeDisplayRows([{ ...item, execution_status: "onprogress", progress_percent: 40 }], [countdown], [employee]);
+    expect(partial.execution).toBe("On Progress");
+    expect(jobActualWorkStatus(partial)).toBe("ONPROGRESS");
+    expect(jobActualQcStatus(partial)).toBe("Belum QC");
+    const [done] = toJobPlanRuntimeDisplayRows([{ ...item, execution_status: "done", progress_percent: 100 }], [countdown], [employee]);
+    expect(jobActualWorkStatus(done)).toBe("READY_QC");
+    expect(jobActualQcStatus(done)).toBe("Menunggu QC");
+    expect(formatJobPlanRuntimeExecution("HOLD")).toBe("Jeda");
+    expect(jobActualWorkStatus({ ...partial, executionState: "HOLD", actualStartAt: "2026-11-12T08:00:00+07:00" })).toBe("JEDA");
+    expect(jobActualWorkStatus({ ...partial, executionState: "HOLD", actualStartAt: null, accumulatedWorkMinutes: 0 })).toBe("PENDING");
+    expect(jobActualWorkStatus({ ...partial, executionStatus: undefined })).toBe("READY_QC");
+  });
+
   test("calculates deadline from target hours and workshop capacity", () => {
     expect(calculateJobPlanDeadlineDate("2026-10-01", 16 * 60)).toBe("2026-10-02");
     expect(calculateJobPlanDeadlineDate("2026-10-02", 16 * 60)).toBe("2026-10-05");
@@ -390,7 +437,7 @@ describe("Job Plan planner helpers", () => {
     });
   });
 
-  test("uses target total for shared mobile draft while keeping daily finish time", () => {
+  test("keeps daily target separate from total Countdown target in the shared draft", () => {
     const draft = {
       clientId: "draft-web-total-target",
       isNew: true as const,
@@ -423,7 +470,7 @@ describe("Job Plan planner helpers", () => {
       panels: [],
       jobTypes: [{ value: "JOB-1", label: "Making", jobName: "Making", divisionId: 7 }],
     })).toMatchObject({
-      targetHours: 4,
+      targetHours: 1.65,
       finishTime: "09:39",
     });
   });
@@ -474,7 +521,7 @@ describe("Job Plan planner helpers", () => {
         draftPanelId: 10,
         draftJobTypeId: null,
         draftDeadlineDate: null,
-        draftIsRework: false,
+        draftIsRework: true,
         draftIsNonTechnicalJob: false,
         availablePlanHours: null,
         remainingHours: null,
@@ -484,6 +531,17 @@ describe("Job Plan planner helpers", () => {
 
     expect(rows[0]?.panelName).toBe("Panel Body");
     expect(rows[0]?.remainingText).toBe("01:39");
+    expect(rows[0]?.sharedDraftId).toBe("draft-1");
+    const edit = createEditDraftFromRow(rows[0]!);
+    expect(edit.sharedDraftId).toBe("draft-1");
+    expect(edit.isRework).toBe(true);
+    const linkedDraft = { ...rows[0]!, sharedLinkedPlanId: "PLAN-1", sharedLinkedPlanVersion: 1 };
+    const canonical = { ...rows[0]!, planId: "PLAN-1", sharedDraftId: undefined, version: 3 };
+    const distinctDraft = { ...canonical, planId: "PLAN-2" };
+    const merged = mergeJobPlanDraftDisplayRows([canonical, distinctDraft], [linkedDraft]);
+    expect(merged.map((row) => row.planId)).toEqual(["draft-1", "PLAN-2"]);
+    expect(merged[0]?.sharedLinkedPlanVersion).toBe(3);
+    expect(mergeJobPlanDraftDisplayRows([{ ...canonical, approvalState: "DIVISION_REVIEW" }], [linkedDraft])).toHaveLength(2);
   });
 
   test("hides cancelled rows from the operational grid", () => {
@@ -584,6 +642,55 @@ describe("Job Plan planner helpers", () => {
     };
 
     expect(validateJobPlanRuntimeDraft(draft)).toBeNull();
+  });
+
+  test("keeps unit and part requirements for nontechnical additional work", () => {
+    const draft = {
+      ...createJobPlanRuntimeDraft(null),
+      sourceType: "additional" as const,
+      isNonTechnicalJob: true,
+      divisionId: 7,
+      employeeId: "EMP-1",
+      jobTypeName: "Briefing pagi",
+      jobDescription: "Briefing pembagian pekerjaan",
+      taskDate: "2026-11-03",
+      durationText: "01:00",
+      carId: "220S",
+      panelId: 10,
+    };
+    expect(validateJobPlanRuntimeDraft(draft)).toBeNull();
+    expect(validateJobPlanRuntimeDraft({ ...draft, divisionId: null })).toBe("Team wajib dipilih.");
+    expect(validateJobPlanRuntimeDraft({ ...draft, employeeId: "" })).toBe("PIC wajib dipilih.");
+    expect(validateJobPlanRuntimeDraft({ ...draft, jobTypeName: "", jobDescription: "" })).not.toBeNull();
+    expect(validateJobPlanRuntimeDraft({ ...draft, taskDate: "wrong" })).not.toBeNull();
+    expect(validateJobPlanRuntimeDraft({ ...draft, durationText: "wrong" })).not.toBeNull();
+    expect(validateJobPlanRuntimeDraft({ ...draft, carId: "" })).toBe("Unit wajib dipilih.");
+    expect(validateJobPlanRuntimeDraft({ ...draft, panelId: null })).toBe("Panel wajib dipilih.");
+  });
+
+  test("retains nontechnical classification and the exact additional Countdown context", () => {
+    const draft = {
+      ...createJobPlanRuntimeDraft(countdown),
+      sourceType: "additional" as const,
+      isNonTechnicalJob: true,
+      divisionId: 7,
+      employeeId: "EMP-1",
+      jobTypeId: "NONTECHNICAL-JOB",
+      jobTypeName: "Briefing pagi",
+      jobDescription: "Briefing pembagian pekerjaan",
+      taskDate: "2026-11-03",
+      durationText: "01:00",
+      targetTotalText: "32:00",
+    };
+    const record = buildJobPlanDraftRecord(draft, {
+      countdowns: [countdown], employees: [employee], divisions: [], panels: [], jobTypes: [],
+    });
+    expect(record).toMatchObject({
+      sourceType: "COUNTDOWN", isNonTechnicalJob: true,
+      coreId: "CORE-1", carId: "220S", panelId: 10, panelName: "Front Bumper", jobTypeId: "NONTECHNICAL-JOB",
+      unitName: "MB 220S", targetHours: 1,
+      jobDescription: "Briefing pembagian pekerjaan", assignedUserId: "EMP-1",
+    });
   });
 
   test("derives component, panel, and part options from one unit panel list", () => {
@@ -774,4 +881,15 @@ describe("Job Plan planner helpers", () => {
       note: "Status: Selesai · Progress: 100% · Istirahat: 00:30",
     });
   });
+});
+
+
+test("supplemental workflow survives draft storage and canonical create without changing daily target", () => {
+  const row = { ...createJobPlanRuntimeDraft(countdown), employeeId: employee.value, taskDate: "2026-11-14",
+    durationText: "02:00", targetTotalText: "08:00", urgent: true, note: "[Penggantian] Unit sebelumnya ditahan" };
+  const record = buildJobPlanDraftRecord(row, { countdowns: [countdown], employees: [employee], divisions: [], panels: [], jobTypes: [] });
+  expect(record.urgent).toBe(true);
+  expect(record.targetHours).toBe(2);
+  const payload = buildCreateJobPlanRuntimePayload(row, "KD-1", "additional-1");
+  expect(payload).toMatchObject({ urgent: true, plannedWorkMinutes: 120, note: row.note });
 });

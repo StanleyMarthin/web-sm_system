@@ -36,16 +36,24 @@ export class HttpJobPlanRuntimeReadModel implements JobPlanRuntimeReadModel {
       userId,
       view: "browse",
       coreId,
+      limit: "200",
     });
-    const response = await this.fetcher(
-      `${baseUrl(this.upstreamBaseUrl)}/sm/job-plans/v2?${params.toString()}`,
-      { signal: AbortSignal.timeout(2_500) },
-    );
-    if (!response.ok) {
-      throw new Error("JOB_PLAN_RUNTIME_READ_MODEL_UNAVAILABLE");
+    const items: JobPlanRuntimeReadItem[] = [];
+    const seen = new Set<string>();
+    for (let page = 1; ; page++) {
+      params.set("page", String(page));
+      const response = await this.fetcher(
+        `${baseUrl(this.upstreamBaseUrl)}/sm/job-plans/v2?${params.toString()}`,
+        { signal: AbortSignal.timeout(2_500) },
+      );
+      if (!response.ok) throw new Error("JOB_PLAN_RUNTIME_READ_MODEL_UNAVAILABLE");
+      const payload = jobPlanRuntimeListEnvelopeSchema.parse(await response.json());
+      for (const item of payload.data.items) {
+        if (seen.has(item.plan_id)) throw new Error("JOB_PLAN_RUNTIME_PAGE_REPEATED");
+        seen.add(item.plan_id);
+        items.push(item);
+      }
+      if (payload.data.items.length < 200) return items;
     }
-
-    const payload = jobPlanRuntimeListEnvelopeSchema.parse(await response.json());
-    return payload.data.items;
   }
 }

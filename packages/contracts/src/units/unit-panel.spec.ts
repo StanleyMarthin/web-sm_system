@@ -44,6 +44,8 @@ describe("unit panel contracts", () => {
         sourcePart: "CATALOG",
         initialCondition: "RESTORE",
         currentStatus: "WAITING",
+        operationalStatus: "MENUNGGU",
+        progressPercent: 0,
         location: "UNIT",
         notes: null,
         totalJobdesc: 0,

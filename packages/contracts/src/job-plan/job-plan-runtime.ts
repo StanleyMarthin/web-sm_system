@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const jobPlanRuntimeApprovalStateSchema = z.enum([
+export const jobPlanRuntimeApprovalStateSchema = z.string().trim().toUpperCase().pipe(z.enum([
   "DRAFT",
   "DIVISION_REVIEW",
   "UNIT_REVIEW",
@@ -8,21 +8,27 @@ export const jobPlanRuntimeApprovalStateSchema = z.enum([
   "APPROVED",
   "REJECTED",
   "CANCELLED",
-]);
+]));
 
-export const jobPlanRuntimeExecutionStateSchema = z.enum([
+export const jobPlanRuntimeExecutionStateSchema = z.string().trim().toUpperCase().pipe(z.enum([
   "NOT_STARTED",
   "RUNNING",
   "HOLD",
   "FINISHED_PENDING_VALIDATION",
   "VALIDATED",
-]);
+]));
 
-export const jobPlanRuntimeLedgerStateSchema = z.enum([
+const jobPlanRuntimeExecutionStatusSchema = z.string().trim().toLowerCase().pipe(z.enum([
+  "cancel",
+  "onprogress",
+  "done",
+]));
+
+export const jobPlanRuntimeLedgerStateSchema = z.string().trim().toUpperCase().pipe(z.enum([
   "UNMATERIALIZED",
   "MATERIALIZED",
   "FINALIZED",
-]);
+]));
 
 export const jobPlanRuntimeSourceSchema = z.enum([
   "V2_REDIS",
@@ -41,8 +47,28 @@ export const jobPlanRuntimeViewSchema = z.enum([
 const jobPlanRuntimeMonitoringHistorySchema = z.object({
   sequence: z.number().int().positive(),
   time: z.string().nullable().optional(),
-  progress: z.number().int().min(0).max(100).nullable().optional(),
+  progress: z.number().min(0).max(100).nullable().optional(),
   note: z.string().nullable().optional(),
+});
+
+export const jobPlanRuntimeExecutionSegmentSchema = z.object({
+  segment_id: z.string(),
+  started_at: z.string(),
+  finished_at: z.string(),
+  break_minutes: z.number().int().nonnegative(),
+  worked_minutes: z.number().int().nonnegative(),
+  close_reason: z.string(),
+});
+
+const jobPlanPhotoUrlSchema = z.string().trim().url().max(2048).refine(
+  (url) => url.startsWith("https://") || url.startsWith("http://"),
+  "Dokumentasi harus menggunakan URL HTTP atau HTTPS.",
+);
+
+const jobPlanPhotosSchema = z.object({
+  before: z.array(jobPlanPhotoUrlSchema).default([]),
+  process: z.array(jobPlanPhotoUrlSchema).default([]),
+  after: z.array(jobPlanPhotoUrlSchema).default([]),
 });
 
 const jobPlanRuntimeReadItemBaseSchema = z.object({
@@ -57,7 +83,10 @@ const jobPlanRuntimeReadItemBaseSchema = z.object({
   planned_finish_minute: z.number().int(),
   planned_work_minutes: z.number().int(),
   approval_state: jobPlanRuntimeApprovalStateSchema,
+  available_actions: z.array(z.string()).optional(),
+  availableActions: z.array(z.string()).optional(),
   execution_state: jobPlanRuntimeExecutionStateSchema,
+  execution_status: jobPlanRuntimeExecutionStatusSchema.nullable().optional(),
   ledger_state: jobPlanRuntimeLedgerStateSchema,
   legacy_status: z.string().nullable(),
   urgent: z.boolean(),
@@ -82,13 +111,22 @@ const jobPlanRuntimeReadItemBaseSchema = z.object({
   actual_start: z.string().nullable().optional(),
   actual_finish: z.string().nullable().optional(),
   active_segment_started_at: z.string().nullable().optional(),
+  execution_budget_minutes: z.number().int().positive().nullable().optional(),
+  execution_deadline: z.string().datetime({ offset: true }).nullable().optional(),
+  continuation_of: z.string().nullable().optional(),
+  progress_percent: z.number().min(0).max(100).nullable().optional(),
+  execution_note: z.string().nullable().optional(),
+  execution_segments: z.array(jobPlanRuntimeExecutionSegmentSchema).optional(),
+  is_technical: z.boolean().optional(),
+  photos: jobPlanPhotosSchema.optional(),
   monitoring_history: z.array(jobPlanRuntimeMonitoringHistorySchema).default([]),
   live_state_available: z.boolean().default(true),
   read_only: z.boolean().default(false),
 });
 
-export const jobPlanRuntimeReadItemSchema = jobPlanRuntimeReadItemBaseSchema.transform(({ job_description, ...row }) => ({
+export const jobPlanRuntimeReadItemSchema = jobPlanRuntimeReadItemBaseSchema.transform(({ job_description, availableActions, ...row }) => ({
   ...row,
+  ...(row.available_actions === undefined && availableActions !== undefined ? { available_actions: availableActions } : {}),
   jobdescription: row.jobdescription ?? job_description ?? null,
 }));
 
@@ -110,6 +148,7 @@ const workMinuteSchema = z.number().int().positive().max(24 * 60);
 
 export const createJobPlanRuntimeRequestSchema = z.object({
   userId: userIdSchema,
+  draftItemId: z.string().trim().min(1).max(120).optional(),
   coreId: z.string().trim().min(1).max(100),
   employeeId: z.string().trim().min(1).max(100),
   taskDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u),
@@ -121,6 +160,7 @@ export const createJobPlanRuntimeRequestSchema = z.object({
   isOvertime: z.boolean().default(false),
   isRework: z.boolean().default(false),
   isPriority: z.boolean().default(false),
+  urgent: z.boolean().optional(),
 });
 
 export const mutateJobPlanRuntimeApprovalRequestSchema = z.object({
@@ -148,6 +188,14 @@ export const mutateJobPlanRuntimeExecutionRequestSchema = z.object({
   taskDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u).optional(),
   plannedStartMinute: minuteSchema.optional(),
   plannedWorkMinutes: workMinuteSchema.optional(),
+  progressPercent: z.number().min(0).max(100).nullable().optional(),
+  status: z.string().trim().toLowerCase().pipe(z.enum(["pending", "cancel", "on_progress", "done"])).optional(),
+  photos: z.object({
+    before: z.array(jobPlanPhotoUrlSchema).max(3).default([]),
+    process: z.array(jobPlanPhotoUrlSchema).max(3).default([]),
+    after: z.array(jobPlanPhotoUrlSchema).max(3).default([]),
+  }).optional(),
+  note: z.string().max(2000).nullable().optional(),
 });
 
 export const monitorJobPlanRuntimeRequestSchema = z.object({
@@ -155,8 +203,8 @@ export const monitorJobPlanRuntimeRequestSchema = z.object({
   commandId: commandIdSchema,
   expectedVersion: z.number().int().positive(),
   verifiedTotalMinutes: z.number().int().min(0).optional(),
-  progressSeen: z.number().int().min(0).max(100).optional(),
-  note: z.string().trim().max(1000).nullable().optional(),
+  progressSeen: z.number().min(0).max(100).optional(),
+  note: z.string().trim().max(2000).nullable().optional(),
 });
 
 export const validateJobPlanRuntimeRequestSchema = monitorJobPlanRuntimeRequestSchema;
@@ -183,6 +231,7 @@ export const jobPlanRuntimeMutationEnvelopeSchema = z.object({
     reused: z.boolean().optional(),
     approvalState: jobPlanRuntimeApprovalStateSchema.optional(),
     executionState: jobPlanRuntimeExecutionStateSchema.optional(),
+    executionStatus: jobPlanRuntimeExecutionStatusSchema.nullable().optional(),
     ledgerState: jobPlanRuntimeLedgerStateSchema.optional(),
     schedulingGap: z.record(z.string(), z.unknown()).nullable().optional(),
     verifiedTotalMinutes: z.number().int().optional(),

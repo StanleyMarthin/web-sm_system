@@ -145,6 +145,15 @@ describe("countdown detail entry schema", () => {
       photos: [],
     })).toMatchObject({ actualId: null, photos: [] });
   });
+
+  it("keeps an unknown billed duration distinct from zero", () => {
+    expect(countdownDetailEntrySchema.parse({
+      ...entry,
+      billedHours: null,
+      actualId: "actual-historical-1",
+      photos: [],
+    }).billedHours).toBe(null);
+  });
 });
 
 describe("countdown revision schemas", () => {

@@ -34,6 +34,13 @@ async function bodyWithSessionUser(request: Request, userId: string) {
 
 function hasJobPlanRuntimeAccess(permissions: readonly string[]) {
   return (
+    permissions.includes(permissionCodes.createTask) ||
+    permissions.includes(permissionCodes.taskCheckpoint) ||
+    permissions.includes(permissionCodes.taskSubmit) ||
+    permissions.includes(permissionCodes.taskBreak) ||
+    permissions.includes(permissionCodes.taskPending) ||
+    permissions.includes(permissionCodes.listCarProgress) ||
+    permissions.includes(permissionCodes.unitDetailView) ||
     permissions.includes(permissionCodes.updatePlan) ||
     permissions.includes(permissionCodes.taskExecute) ||
     permissions.includes(permissionCodes.taskView) ||
@@ -76,6 +83,30 @@ export async function handleJobPlanRuntimeProxyRoute(
       400,
       code,
     );
+  }
+
+  if (body) {
+    const payload = JSON.parse(String(body)) as Record<string, unknown>;
+    const has = (...codes: string[]) => codes.some(code => user.permissions.includes(code));
+    const create = has(permissionCodes.createTask);
+    const selfRequest = has(permissionCodes.taskExecute, permissionCodes.taskSubmit);
+    const action = String(payload.action ?? "").trim().toLowerCase();
+    let permitted = false;
+    if (!path) permitted = create || (payload.urgent === true && selfRequest);
+    else if (/\/(monitor|validate|manual-execution)$/u.test(path)) permitted = has(permissionCodes.taskCheckpoint);
+    else if (path.endsWith("/execution")) {
+      const code = {start: permissionCodes.taskExecute, resume: permissionCodes.taskExecute,
+        hold: permissionCodes.taskBreak, finish: permissionCodes.taskSubmit}[action];
+      permitted = Boolean(code && has(code));
+      if (action === "finish" && ["pending", "cancel"].includes(String(payload.status ?? "").trim().toLowerCase())) {
+        permitted = permitted && has(permissionCodes.taskPending);
+      }
+    } else if (/^drafts\/[^/]+\/cancel$/u.test(path)) permitted = create || selfRequest;
+    else if (request.method === "PUT" && !path.includes("/")) {
+      permitted = ["approve", "correct", "reject"].includes(action)
+        ? has(permissionCodes.reviewTask) : create || selfRequest;
+    }
+    if (!permitted) return errorResponse(request, "Permission tidak tersedia untuk tindakan Job Plan ini.", 403, "JOB_PLAN_FORBIDDEN");
   }
 
   const upstream = await fetcher(upstreamUrl, {

@@ -128,6 +128,7 @@ function mapCatalogError(request: Request, error: unknown): Response {
     );
   }
   if (error instanceof Error) {
+    if (error.message === "UNIT_ON_HOLD") return errorResponse(request, "Unit sedang HOLD. Jobdesc baru tidak dapat dibuat.", 409, "UNIT_ON_HOLD");
     if (error.message === "UNIT_NOT_FOUND") return errorResponse(request, "Unit tidak ditemukan.", 404, "UNIT_NOT_FOUND");
     if (error.message === "CATALOG_PANEL_NOT_FOUND") return errorResponse(request, "Panel catalog tidak ditemukan.", 404, "CATALOG_PANEL_NOT_FOUND");
     if (error.message === "CATALOG_PANEL_DUPLICATE") return errorResponse(request, "Nama panel sudah ada pada komponen ini.", 409, "CATALOG_PANEL_DUPLICATE");

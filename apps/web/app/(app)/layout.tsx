@@ -22,7 +22,7 @@ export default async function ProtectedLayout({
   }
 
   return (
-    <AppShell user={user} navigation={buildNavigation(user.permissions, { employeeId: user.employeeId })}>
+    <AppShell user={user} navigation={buildNavigation(user.permissions, { employeeId: user.employeeId, roleName: user.roleName })}>
       {children}
     </AppShell>
   );

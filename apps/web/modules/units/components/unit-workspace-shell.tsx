@@ -9,13 +9,10 @@ import {
   Activity,
   AlertTriangle,
   ArrowLeft,
-  CalendarClock,
   CheckCircle2,
   CircleAlert,
-  ClipboardList,
   Clock3,
   Gauge,
-  ShieldAlert,
   Wrench,
 } from "lucide-react";
 import Link from "next/link";
@@ -81,8 +78,13 @@ type DivisionStat = {
   divisionName: string;
   totalItems: number;
   doneItems: number;
-  remainingHours: number;
+  withActual: number;
+  rawActualHours: number;
+  targetHours: number;
+  targetKnownCount: number;
+  remainingHours: number | null;
   progressPercent: number;
+  completionRate: number;
 };
 
 type UnitWorkspaceTab = "summary" | "catalog" | "parts-panels" | "master-panel" | "countdown";
@@ -137,11 +139,17 @@ function clampPercent(value: number): number {
   return Math.min(100, Math.max(0, Math.round(value)));
 }
 
+function hoursProgress(actualHours: number, targetHours: number): number | null {
+  if (targetHours <= 0) return null;
+  return clampPercent((actualHours / targetHours) * 100);
+}
+
 function formatCount(value: number): string {
   return new Intl.NumberFormat("id-ID").format(value);
 }
 
-function formatHours(value: number): string {
+function formatHours(value: number | null): string {
+  if (value == null) return "Belum ditetapkan";
   return `${value.toFixed(1)} jam`;
 }
 
@@ -172,15 +180,20 @@ function buildDivisionStats(workspace: UnitWorkspace): DivisionStat[] {
         divisionName: division.divisionName,
         totalItems: division.total,
         doneItems: division.done,
+        withActual: division.withActual,
+        rawActualHours: division.rawActualHours,
+        targetHours: division.targetHours,
+        targetKnownCount: division.targetKnownCount,
         remainingHours: division.remainingHours,
         progressPercent: division.progressPercent,
+        completionRate: division.completionRate,
       }))
       .sort((a, b) => {
-        const aIncomplete = a.progressPercent < 100 ? 1 : 0;
-        const bIncomplete = b.progressPercent < 100 ? 1 : 0;
+        const aIncomplete = a.completionRate < 100 ? 1 : 0;
+        const bIncomplete = b.completionRate < 100 ? 1 : 0;
         if (aIncomplete !== bIncomplete) return bIncomplete - aIncomplete;
-        if (a.remainingHours !== b.remainingHours) return b.remainingHours - a.remainingHours;
-        return a.progressPercent - b.progressPercent;
+        if ((a.remainingHours ?? -1) !== (b.remainingHours ?? -1)) return (b.remainingHours ?? -1) - (a.remainingHours ?? -1);
+        return a.completionRate - b.completionRate;
       });
   }
 
@@ -194,27 +207,42 @@ function buildDivisionStats(workspace: UnitWorkspace): DivisionStat[] {
           divisionName: item.divisionName,
           totalItems: 0,
           doneItems: 0,
-          remainingHours: 0,
+          withActual: 0,
+          rawActualHours: 0,
+          targetHours: 0,
+          targetKnownCount: 0,
+          remainingHours: null,
           progressPercent: 0,
+          completionRate: 0,
         };
       }
       acc[key].totalItems += 1;
       acc[key].doneItems += item.status.toUpperCase() === "DONE" ? 1 : 0;
-      acc[key].remainingHours += item.remainingHours;
+      acc[key].withActual += item.totalActualHours > 0 ? 1 : 0;
+      acc[key].rawActualHours += item.totalActualHours;
+      acc[key].targetHours += item.targetHoursRevised;
+      acc[key].targetKnownCount += item.targetHoursRevised > 0 ? 1 : 0;
+      if (item.targetHoursRevised <= 0 || item.remainingHours == null) {
+        acc[key].remainingHours = null;
+      } else if (acc[key].remainingHours != null) {
+        acc[key].remainingHours += item.remainingHours;
+      }
       acc[key].progressPercent += item.actualProgressPercent;
+      acc[key].completionRate += item.status.toUpperCase() === "DONE" ? 100 : 0;
       return acc;
     }, {}),
   )
     .map((division) => ({
       ...division,
       progressPercent: division.totalItems > 0 ? division.progressPercent / division.totalItems : 0,
+      completionRate: division.totalItems > 0 ? division.completionRate / division.totalItems : 0,
     }))
     .sort((a, b) => {
-      const aIncomplete = a.progressPercent < 100 ? 1 : 0;
-      const bIncomplete = b.progressPercent < 100 ? 1 : 0;
+        const aIncomplete = a.completionRate < 100 ? 1 : 0;
+        const bIncomplete = b.completionRate < 100 ? 1 : 0;
       if (aIncomplete !== bIncomplete) return bIncomplete - aIncomplete;
-      if (a.remainingHours !== b.remainingHours) return b.remainingHours - a.remainingHours;
-      return a.progressPercent - b.progressPercent;
+        if ((a.remainingHours ?? -1) !== (b.remainingHours ?? -1)) return (b.remainingHours ?? -1) - (a.remainingHours ?? -1);
+        return a.completionRate - b.completionRate;
     });
 }
 
@@ -222,7 +250,7 @@ function buildDeliveryBadge(unit: UnitBoardRow, workspace: UnitWorkspace, unitSt
   const target = unit.targetDeliveryDate;
   const eta = unit.etaDate;
 
-  if (clampPercent(unit.progressPercent) === 100 && unit.remainingHours <= 0) {
+  if (clampPercent(workspace.countdownSummary.completionRate) === 100 && workspace.countdownSummary.remainingHours === 0) {
     return {
       label: "Selesai",
       cls: "border-success/30 bg-success/10 text-success",
@@ -311,7 +339,7 @@ function buildPriorityCards(
   divisions: DivisionStat[],
   deliveryBadgeLabel: string,
 ) {
-  const topDivision = divisions.find((division) => clampPercent(division.progressPercent) < 100);
+  const topDivision = divisions.find((division) => clampPercent(division.completionRate) < 100);
 
   return [
     buildScheduleHealth(unit, deliveryBadgeLabel),
@@ -335,8 +363,10 @@ function buildPriorityCards(
     topDivision
       ? {
           label: `${topDivision.divisionName} paling berat`,
-          helper: `${formatHours(topDivision.remainingHours)} tersisa dengan progres ${clampPercent(topDivision.progressPercent)}%.`,
-          tone: topDivision.remainingHours > 0 ? ("warning" as const) : ("default" as const),
+          helper: topDivision.remainingHours == null
+            ? `Target belum lengkap. ${formatCount(topDivision.doneItems)}/${formatCount(topDivision.totalItems)} jobdesc selesai.`
+            : `${formatHours(topDivision.remainingHours)} tersisa, ${formatCount(topDivision.doneItems)}/${formatCount(topDivision.totalItems)} jobdesc selesai.`,
+          tone: topDivision.remainingHours != null && topDivision.remainingHours > 0 ? ("warning" as const) : ("default" as const),
         }
       : {
           label: "Semua divisi tuntas",
@@ -433,8 +463,11 @@ export function UnitWorkspaceShell({
   const statusConfig = UNIT_STATUS_CONFIG[unitStatus as UnitStatusKey];
   const deliveryBadge = buildDeliveryBadge(unit, workspace, unitStatus);
   const divisionStats = buildDivisionStats(workspace);
-  const incompleteDivisions = divisionStats.filter((division) => clampPercent(division.progressPercent) < 100);
-  const overallProgress = clampPercent(unit.progressPercent);
+  const overallCompletionRate = clampPercent(workspace.countdownSummary.completionRate);
+  const workHoursProgress = hoursProgress(
+    workspace.countdownSummary.rawActualHours,
+    workspace.countdownSummary.targetHours,
+  );
   const hasJobdesc = workspace.countdownSummary.total > 0;
   const totalCountdown = Math.max(workspace.countdownSummary.total, 1);
   const workflowSegments = [
@@ -461,18 +494,21 @@ export function UnitWorkspaceShell({
     },
     {
       label: "Belum dikerjakan",
-      count: workspace.countdownSummary.plan,
-      width: (workspace.countdownSummary.plan / totalCountdown) * 100,
+      count: workspace.countdownSummary.planWithoutActual,
+      width: (workspace.countdownSummary.planWithoutActual / totalCountdown) * 100,
       barClass: "bg-info",
       textClass: "text-info",
     },
+    {
+      label: "Riwayat kerja ada",
+      count: workspace.countdownSummary.planWithActual,
+      width: (workspace.countdownSummary.planWithActual / totalCountdown) * 100,
+      barClass: "bg-primary/60",
+      textClass: "text-primary",
+    },
   ].filter((segment) => segment.count > 0);
   const priorityCards = buildPriorityCards(unit, workspace, divisionStats, deliveryBadge.label);
-  const scheduleHealth = buildScheduleHealth(unit, deliveryBadge.label);
-  const activeDivisionStats = incompleteDivisions.length > 0 ? incompleteDivisions : divisionStats;
-  const completedDivisionCount = Math.max(divisionStats.length - incompleteDivisions.length, 0);
-  const visibleDivisionStats = activeDivisionStats.slice(0, 4);
-  const hiddenActiveDivisionCount = Math.max(activeDivisionStats.length - visibleDivisionStats.length, 0);
+  const visibleDivisionStats = divisionStats;
   const scheduleDeltaDays = diffDays(unit.targetDeliveryDate, unit.etaDate);
 
   return (
@@ -494,7 +530,10 @@ export function UnitWorkspaceShell({
                 Kepala project: {unit.kpName || "-"}
               </span>
               <span className="border border-border px-2.5 py-1 text-muted-foreground">
-                Advisor: {unit.advisorName || "-"}
+                QA: {unit.advisorName || "-"}
+              </span>
+              <span className="border border-border px-2.5 py-1 text-muted-foreground">
+                Kepala divisi: {unit.kdName || "-"}
               </span>
               <span className={`border px-2.5 py-1 font-medium ${deliveryBadge.cls}`}>
                 {deliveryBadge.label}
@@ -520,46 +559,74 @@ export function UnitWorkspaceShell({
           <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
             <MetricCard
               icon={Gauge}
-              label="Progres"
-              value={`${overallProgress}%`}
-              helper={`${formatCount(workspace.countdownSummary.done)} selesai`}
-              tone={overallProgress >= 100 ? "success" : "default"}
-            />
-            <MetricCard
-              icon={CalendarClock}
-              label="ETA"
-              value={formatDate(unit.etaDate)}
-              helper={scheduleHealth.label}
-              tone={scheduleHealth.tone}
-            />
-            <MetricCard
-              icon={CalendarClock}
-              label="Target"
-              value={formatDate(unit.targetDeliveryDate)}
-              helper={unit.targetDeliveryDate ? "Jadwal kontrak" : "Belum ditetapkan"}
-              tone={unit.targetDeliveryDate ? "default" : "warning"}
+              label="Status selesai"
+              value={`${overallCompletionRate}%`}
+              helper={`${formatCount(workspace.countdownSummary.done)} dari ${formatCount(workspace.countdownSummary.total)} status DONE`}
+              tone={overallCompletionRate >= 100 ? "success" : "default"}
             />
             <MetricCard
               icon={Clock3}
-              label="Sisa Jam"
-              value={formatHours(unit.remainingHours)}
-              helper={`${formatCount(incompleteDivisions.length)} divisi aktif`}
-              tone={unit.remainingHours > 0 ? "warning" : "success"}
+              label="Total Jam Aktual"
+              value={formatHours(workspace.countdownSummary.rawActualHours)}
+              helper={workHoursProgress == null
+                ? `${formatCount(workspace.countdownSummary.withActual)} jobdesc memiliki riwayat kerja`
+                : `${workHoursProgress}% dari total target jam`}
+              tone="default"
             />
             <MetricCard
-              icon={ClipboardList}
-              label="Siap QC"
-              value={formatCount(workspace.countdownSummary.qcReady)}
-              helper="Jobdesc menunggu QA"
-              tone={workspace.countdownSummary.qcReady > 0 ? "warning" : "success"}
+              icon={Clock3}
+              label="Total Target Jam"
+              value={workspace.countdownSummary.targetKnownCount > 0
+                ? formatHours(workspace.countdownSummary.targetHours)
+                : "Belum ditetapkan"}
+              helper={`Target tersedia pada ${formatCount(workspace.countdownSummary.targetKnownCount)} dari ${formatCount(workspace.countdownSummary.total)} jobdesc`}
+              tone={workspace.countdownSummary.targetKnownCount > 0 ? "default" : "warning"}
             />
             <MetricCard
-              icon={ShieldAlert}
-              label="Kendala"
-              value={formatCount(unit.qcIssueOpenCount + unit.woOpenCount + workspace.issueSummary.open)}
-              helper="QC, WO, pembahasan"
-              tone={unit.qcIssueOpenCount + unit.woOpenCount + workspace.issueSummary.open > 0 ? "danger" : "success"}
+              icon={Clock3}
+              label="Sisa Jam Terukur"
+              value={formatHours(workspace.countdownSummary.remainingHours)}
+              helper={workspace.countdownSummary.remainingHours == null
+                ? `Target tersedia pada ${formatCount(workspace.countdownSummary.targetKnownCount)} dari ${formatCount(workspace.countdownSummary.total)} jobdesc`
+                : workspace.countdownSummary.overrunHours > 0
+                  ? `Dihitung per jobdesc · overrun ${formatHours(workspace.countdownSummary.overrunHours)}`
+                  : `Dihitung dari ${formatCount(workspace.countdownSummary.targetKnownCount)} pekerjaan bertarget`}
+              tone={workspace.countdownSummary.remainingHours != null && workspace.countdownSummary.remainingHours > 0 ? "warning" : "default"}
             />
+            <section className="border border-border bg-card px-4 py-4 md:col-span-2 xl:col-span-2">
+              <SectionTitle
+                icon={CircleAlert}
+                title="Status Target"
+                helper="Bahasa singkat untuk keputusan cepat."
+              />
+              <div className="mt-4 space-y-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className={`border px-2.5 py-1 text-sm font-medium ${deliveryBadge.cls}`}>
+                    {deliveryBadge.label}
+                  </span>
+                  <span className="border border-border px-2.5 py-1 text-sm text-muted-foreground">
+                    {scheduleDeltaDays == null
+                      ? "Selisih belum ada"
+                      : scheduleDeltaDays > 0
+                        ? `Mundur ${scheduleDeltaDays} hari`
+                        : scheduleDeltaDays < 0
+                          ? `Lebih cepat ${Math.abs(scheduleDeltaDays)} hari`
+                          : "Pas target"}
+                  </span>
+                </div>
+                <p className="text-sm leading-6 text-foreground">{workspace.deliveryRisk.reason}</p>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <div className="border border-border px-3 py-2">
+                    <p className="text-[11px] text-muted-foreground">Target</p>
+                    <p className="mt-1 text-sm font-medium text-foreground">{formatDate(unit.targetDeliveryDate)}</p>
+                  </div>
+                  <div className="border border-border px-3 py-2">
+                    <p className="text-[11px] text-muted-foreground">ETA</p>
+                    <p className="mt-1 text-sm font-medium text-foreground">{formatDate(unit.etaDate)}</p>
+                  </div>
+                </div>
+              </div>
+            </section>
           </section>
 
           <section className="grid gap-4 xl:min-h-0 xl:grid-cols-[minmax(0,1.45fr)_360px]">
@@ -577,18 +644,35 @@ export function UnitWorkspaceShell({
               ) : <div className="mt-4 space-y-4">
                 <div className="space-y-2">
                   <div className="flex items-center justify-between gap-3 text-sm">
-                    <span className="text-muted-foreground">Pekerjaan selesai</span>
-                    <span className="font-medium text-foreground">{overallProgress}%</span>
+                    <span className="text-muted-foreground">Status selesai</span>
+                    <span className="font-medium text-foreground">{overallCompletionRate}%</span>
                   </div>
                   <div className="h-3 bg-muted">
-                    <div className="h-3 bg-primary" style={{ width: `${overallProgress}%` }} />
+                    <div className="h-3 bg-primary" style={{ width: `${overallCompletionRate}%` }} />
                   </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-3 text-sm">
+                    <span className="text-muted-foreground">Realisasi jam kerja</span>
+                    <span className="font-medium text-foreground">
+                      {workHoursProgress == null ? "-" : `${workHoursProgress}%`}
+                    </span>
+                  </div>
+                  <div className="h-3 bg-muted">
+                    <div className="h-3 bg-primary/70" style={{ width: `${workHoursProgress ?? 0}%` }} />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {formatHours(workspace.countdownSummary.rawActualHours)} aktual dari {formatHours(workspace.countdownSummary.targetHours)} target.
+                  </p>
                 </div>
 
                 <div className="border border-border px-4 py-3">
                   <div className="flex items-center justify-between gap-3">
                     <p className="text-sm font-medium text-foreground">Posisi pekerjaan</p>
-                    <p className="text-sm text-muted-foreground">{formatCount(workspace.countdownSummary.total)} jobdesc</p>
+                    <p className="text-sm text-muted-foreground">
+                      {formatCount(workspace.countdownSummary.total)} jobdesc · {formatHours(workspace.countdownSummary.rawActualHours)} aktual
+                    </p>
                   </div>
                   <div className="mt-3 flex h-4 overflow-hidden bg-muted">
                     {workflowSegments.map((segment) => (
@@ -617,7 +701,7 @@ export function UnitWorkspaceShell({
                   <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
                     <p className="text-sm font-medium text-foreground">Kerja per divisi</p>
                     <span className="border border-border px-2.5 py-1 text-xs text-muted-foreground">
-                      {formatCount(activeDivisionStats.length)} divisi
+                      {formatCount(divisionStats.length)} divisi
                     </span>
                   </div>
 
@@ -626,7 +710,7 @@ export function UnitWorkspaceShell({
                   ) : (
                     <div className="divide-y divide-border">
                       {visibleDivisionStats.map((division) => {
-                        const progress = clampPercent(division.progressPercent);
+                        const progress = hoursProgress(division.rawActualHours, division.targetHours);
                         return (
                           <div
                             key={`${division.divisionId ?? "none"}:${division.divisionName}`}
@@ -635,20 +719,22 @@ export function UnitWorkspaceShell({
                             <div className="min-w-0">
                               <p className="truncate text-sm font-semibold text-foreground">{division.divisionName}</p>
                               <p className="text-xs text-muted-foreground">
-                                {formatCount(division.doneItems)}/{formatCount(division.totalItems)} selesai
+                                {formatCount(division.doneItems)}/{formatCount(division.totalItems)} selesai · {formatCount(division.withActual)} ada riwayat
                               </p>
                             </div>
                             <div>
                               <div className="mb-1 flex items-center justify-between gap-2 text-xs">
-                                <span className="text-muted-foreground">Progres</span>
-                                <span className="font-medium text-primary">{progress}%</span>
+                                <span className="text-muted-foreground">Realisasi jam</span>
+                                <span className="font-medium text-primary">{progress == null ? "-" : `${progress}%`}</span>
                               </div>
                               <div className="h-2 bg-muted">
-                                <div className="h-2 bg-primary" style={{ width: `${progress}%` }} />
+                                <div className="h-2 bg-primary" style={{ width: `${progress ?? 0}%` }} />
                               </div>
                             </div>
                             <div className="text-right">
-                              <p className="text-[11px] text-muted-foreground">Sisa kerja</p>
+                              <p className="text-[11px] text-muted-foreground">Aktual</p>
+                              <p className="text-sm font-medium text-primary">{formatHours(division.rawActualHours)}</p>
+                              <p className="mt-1 text-[11px] text-muted-foreground">Sisa kerja</p>
                               <p className="text-sm font-medium text-primary">{formatHours(division.remainingHours)}</p>
                             </div>
                           </div>
@@ -661,41 +747,6 @@ export function UnitWorkspaceShell({
             </div>
 
             <div className="grid gap-4 xl:min-h-0 xl:grid-rows-[auto_auto_1fr]">
-              <div className="border border-border bg-card px-4 py-4">
-                <SectionTitle
-                  icon={CircleAlert}
-                  title="Status Target"
-                  helper="Bahasa singkat untuk keputusan cepat."
-                />
-                <div className="mt-4 space-y-3">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className={`border px-2.5 py-1 text-sm font-medium ${deliveryBadge.cls}`}>
-                      {deliveryBadge.label}
-                    </span>
-                    <span className="border border-border px-2.5 py-1 text-sm text-muted-foreground">
-                      {scheduleDeltaDays == null
-                        ? "Selisih belum ada"
-                        : scheduleDeltaDays > 0
-                          ? `Mundur ${scheduleDeltaDays} hari`
-                          : scheduleDeltaDays < 0
-                            ? `Lebih cepat ${Math.abs(scheduleDeltaDays)} hari`
-                            : "Pas target"}
-                    </span>
-                  </div>
-                  <p className="text-sm leading-6 text-foreground">{workspace.deliveryRisk.reason}</p>
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    <div className="border border-border px-3 py-2">
-                      <p className="text-[11px] text-muted-foreground">Target</p>
-                      <p className="mt-1 text-sm font-medium text-foreground">{formatDate(unit.targetDeliveryDate)}</p>
-                    </div>
-                    <div className="border border-border px-3 py-2">
-                      <p className="text-[11px] text-muted-foreground">ETA</p>
-                      <p className="mt-1 text-sm font-medium text-foreground">{formatDate(unit.etaDate)}</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
               <div className="border border-border bg-card px-4 py-4">
                 <SectionTitle
                   icon={AlertTriangle}
@@ -752,16 +803,6 @@ export function UnitWorkspaceShell({
                     <span>Temuan QC aktif</span>
                     <span>{formatCount(workspaceDetails.qcIssueSummary?.pembahasan ?? unit.qcIssueOpenCount)}</span>
                   </Link>
-                  {(hiddenActiveDivisionCount > 0 || completedDivisionCount > 0) ? (
-                    <p className="pt-2 text-xs text-muted-foreground">
-                      {hiddenActiveDivisionCount > 0
-                        ? `${formatCount(hiddenActiveDivisionCount)} divisi aktif lain tidak ditampilkan. `
-                        : ""}
-                      {completedDivisionCount > 0
-                        ? `${formatCount(completedDivisionCount)} divisi selesai disembunyikan dari ringkasan.`
-                        : ""}
-                    </p>
-                  ) : null}
                   <span
                     className={`inline-flex border px-2.5 py-1 text-[11px] font-mono uppercase tracking-[0.16em] ${
                       statusConfig?.cls ?? "border-border bg-muted/40 text-muted-foreground"

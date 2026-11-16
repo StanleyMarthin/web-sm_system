@@ -20,7 +20,7 @@ describe("SPF navigation permissions", () => {
 
   it("shows administration only for the identity-bound superadmin", () => {
     expect(
-      buildNavigation([], { employeeId: "SM-03.004" })
+      buildNavigation([permissionCodes.manageUsers], { employeeId: "SM-03.004", roleName: "mis" })
         .find((item) => item.id === "users")
         ?.subItems?.map((item) => item.id),
     ).toEqual(["users-list", "roles-matrix", "divisions-management"]);
@@ -35,5 +35,18 @@ describe("Unit catalog navigation permissions", () => {
         .find((item) => item.id === "units")
         ?.label,
     ).toBe("Units");
+  });
+});
+
+
+describe("MIS role matrix and operational grants", () => {
+  it("shows the matrix to MIS with a DB grant without granting superadmin identity", () => {
+    const user = buildNavigation([permissionCodes.manageUsers], {employeeId: "MIS-OTHER", roleName: "mis"});
+    expect(user.find(item => item.id === "users")?.subItems?.map(item => item.id)).toContain("roles-matrix");
+    expect(buildNavigation([permissionCodes.manageUsers], {employeeId: "MIS-OTHER", roleName: "qa"})
+      .find(item => item.id === "users")?.subItems?.some(item => item.id === "roles-matrix")).not.toBe(true);
+  });
+  it("CREATE_TASK opens Job Plan navigation without UPDATE_PLAN", () => {
+    expect(buildNavigation([permissionCodes.createTask]).find(item => item.id === "monitoring")?.subItems?.some(item => item.id === "job-plan")).toBe(true);
   });
 });

@@ -25,7 +25,7 @@ describe("CountdownRepository detail documentation", () => {
             detailId: "DETAIL-1", actualId: "ACTUAL-1", entryType: "ACTUAL",
             employeeId: "EMP-1", employeeName: "Teknisi", employeeRole: "PIC",
             workDate: "2026-08-10", startTime: "08:00", finishTime: "10:00",
-            billedHours: 2, progressPercent: 25, taskStatus: "PROSES",
+            billedHours: null, progressPercent: 25, taskStatus: "PROSES",
             dailyNotes: "Membersihkan dudukan kondensor.",
           }]];
         }
@@ -45,6 +45,7 @@ describe("CountdownRepository detail documentation", () => {
 
     expect(result?.details[0]?.actualId).toBe("ACTUAL-1");
     expect(result?.details[0]?.dailyNotes).toBe("Membersihkan dudukan kondensor.");
+    expect(result?.details[0]?.billedHours).toBe(null);
     expect(result?.details[0]?.photos).toEqual([{
       photoId: "PHOTO-1", type: "AFTER", url: "/work/after.jpg",
       caption: "Hasil", uploader: "Teknisi", time: "2026-08-10 10:00:00",

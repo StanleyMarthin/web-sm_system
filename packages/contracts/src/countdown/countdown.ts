@@ -155,7 +155,7 @@ export const countdownDetailEntrySchema = z.object({
   workDate: z.string(),
   startTime: z.string(),
   finishTime: z.string(),
-  billedHours: z.number(),
+  billedHours: z.number().nullable(),
   progressPercent: z.number(),
   taskStatus: z.string(),
   dailyNotes: z.string().nullable(),

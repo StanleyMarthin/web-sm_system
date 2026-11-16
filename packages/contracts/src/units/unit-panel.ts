@@ -13,6 +13,7 @@ export const unitPanelNodeTypeSchema = z.enum(["PANEL", "PART"]);
 export const unitPanelLocationTypeSchema = z.enum(["GUDANG", "WORKSHOP", "UNIT"]);
 export const unitPanelStockStatusSchema = z.enum(["IN_STORAGE", "RETRIEVED", "INSTALLED", "LOST"]);
 export const unitPanelConditionTypeSchema = z.enum(["BARU", "RESTORE", "BEKAS"]);
+export const unitPanelOperationalStatusSchema = z.enum(["MENUNGGU", "PROSES", "SELESAI"]);
 
 export interface UnitPanelRecordShape {
   id: number;
@@ -25,6 +26,8 @@ export interface UnitPanelRecordShape {
   sourcePart?: "CATALOG" | "ADDITIONAL" | null;
   initialCondition?: string | null;
   currentStatus?: string | null;
+  operationalStatus: "MENUNGGU" | "PROSES" | "SELESAI";
+  progressPercent: number;
   location?: string | null;
   notes?: string | null;
   totalJobdesc?: number;
@@ -62,6 +65,8 @@ export const unitPanelRecordSchema: z.ZodType<UnitPanelRecordShape> = z.lazy(() 
     sourcePart: z.enum(["CATALOG", "ADDITIONAL"]).nullable().optional(),
     initialCondition: z.string().nullable().optional(),
     currentStatus: z.string().nullable().optional(),
+    operationalStatus: unitPanelOperationalStatusSchema,
+    progressPercent: z.number().min(0).max(100),
     location: z.string().nullable().optional(),
     notes: z.string().nullable().optional(),
     totalJobdesc: z.number().nonnegative().optional(),

@@ -1,3 +1,4 @@
+import { qcNotesTextSql } from "@/repositories/qc/qc-notes";
 import type {
   QaDashboardSummary,
   QaGridQuery,
@@ -338,7 +339,7 @@ function baseSelectSql(columns: Set<string>) {
       ${qcColumn(columns, "qc_level")} AS qcLevel,
       CASE WHEN UPPER(qc.result_status) IN ('PASS', 'LOLOS') THEN 'LOLOS' ELSE 'TIDAK_LOLOS' END AS resultStatus,
       ${qcColumn(columns, "inspection_duration_minutes")} AS inspectionDurationMinutes,
-      qc.qc_notes AS qcNotes,
+      ${qcNotesTextSql("qc.qc_notes")} AS qcNotes,
       ${qcColumn(columns, "photo_before_url")} AS photoBeforeUrl,
       ${qcColumn(columns, "evidence_photo_url")} AS evidencePhotoUrl,
       ${qcColumn(columns, "issue_type")} AS issueType,

@@ -7,7 +7,7 @@ import type {
   UpdateRoleRequest,
 } from "@smsystem/contracts/rbac";
 import type { WebSession } from "@/services/auth/session.service";
-import { isSystemSuperadminEmployee } from "@smsystem/contracts/auth";
+import { canManageRoleMatrix } from "@smsystem/permissions";
 import {
   MySqlRolesRepository,
   type RolesRepository,
@@ -61,8 +61,8 @@ function invalidateRoleCaches(roleId?: number): void {
   }
 }
 
-function assertSystemSuperadmin(session: WebSession): void {
-  if (!isSystemSuperadminEmployee(session.user.employeeId)) {
+function assertRoleMatrixAccess(session: WebSession): void {
+  if (!canManageRoleMatrix(session.user.roleName, session.user.permissions)) {
     throw new Error("SUPERADMIN_REQUIRED");
   }
 }
@@ -119,7 +119,7 @@ export class DefaultRolesService implements RolesService {
   ) {}
 
   async listRoles(session: WebSession): Promise<RoleRecord[]> {
-    assertSystemSuperadmin(session);
+    assertRoleMatrixAccess(session);
     return rolesListCache.getOrCreate("global", () => this.repository.listRoles());
   }
 
@@ -127,7 +127,7 @@ export class DefaultRolesService implements RolesService {
     session: WebSession,
     input: CreateRoleRequest,
   ): Promise<RoleRecord> {
-    assertSystemSuperadmin(session);
+    assertRoleMatrixAccess(session);
     assertRoleNameAvailable(input.roleName);
     const role = await this.repository.createRole(input);
     invalidateRoleCaches(role.id);
@@ -146,7 +146,7 @@ export class DefaultRolesService implements RolesService {
     divisions: RoleReferenceOption[];
     units: RoleReferenceOption[];
   }> {
-    assertSystemSuperadmin(session);
+    assertRoleMatrixAccess(session);
     return roleReferencesCache.getOrCreate("global", () =>
       this.repository.listRoleReferences(),
     );
@@ -157,7 +157,7 @@ export class DefaultRolesService implements RolesService {
     roleId: number,
     input: UpdateRoleRequest,
   ): Promise<RoleRecord> {
-    assertSystemSuperadmin(session);
+    assertRoleMatrixAccess(session);
 
     const existingRole = await this.repository.findRoleById(roleId);
     if (!existingRole) {
@@ -186,7 +186,7 @@ export class DefaultRolesService implements RolesService {
   }
 
   async listPermissions(session: WebSession): Promise<PermissionRecord[]> {
-    assertSystemSuperadmin(session);
+    assertRoleMatrixAccess(session);
     return permissionCatalogCache.getOrCreate("global", () =>
       this.repository.listPermissions(),
     );
@@ -196,7 +196,7 @@ export class DefaultRolesService implements RolesService {
     session: WebSession,
     roleId: number,
   ): Promise<number[]> {
-    assertSystemSuperadmin(session);
+    assertRoleMatrixAccess(session);
 
     const existingRole = await this.repository.findRoleById(roleId);
     if (!existingRole) {
@@ -209,7 +209,7 @@ export class DefaultRolesService implements RolesService {
   }
 
   async getRoleHistory(session: WebSession, roleId: number): Promise<RoleHistoryEntry[]> {
-    assertSystemSuperadmin(session);
+    assertRoleMatrixAccess(session);
     if (!await this.repository.findRoleById(roleId)) throw new Error("ROLE_NOT_FOUND");
     return this.historyRepository.listRoleHistory(roleId);
   }
@@ -219,7 +219,7 @@ export class DefaultRolesService implements RolesService {
     roleId: number,
     input: UpdateRolePermissionsRequest,
   ): Promise<number[]> {
-    assertSystemSuperadmin(session);
+    assertRoleMatrixAccess(session);
 
     const existingRole = await this.repository.findRoleById(roleId);
     if (!existingRole) {

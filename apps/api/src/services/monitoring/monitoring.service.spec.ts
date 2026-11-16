@@ -1,18 +1,11 @@
 import * as bunTest from "bun:test";
 
-const { beforeEach, describe, expect, it } = bunTest;
+const { describe, expect, it } = bunTest;
 const mock = (bunTest as unknown as {
   mock: ((implementation: (...args: unknown[]) => unknown) => (...args: unknown[]) => unknown) & {
     module: (name: string, factory: () => unknown) => void;
   };
 }).mock;
-
-const notifications: unknown[][] = [];
-const notifyMobileEmployees = mock(async (...args: unknown[]) => { notifications.push(args); });
-
-mock.module("@/services/notifications/mobile-notification.service", () => ({
-  notifyMobileEmployees,
-}));
 
 const { DefaultMonitoringService } = await import("./monitoring.service");
 
@@ -94,53 +87,7 @@ function monitoringSession() {
   };
 }
 
-describe("DefaultMonitoringService mobile notification", () => {
-  beforeEach(() => {
-    notifications.length = 0;
-  });
-
-  it("notifies the assigned employee after actual task submit", async () => {
-    const repository = {
-      createActual: mock(async () => ({ planId: "PLAN-1", actualId: "ACT-1" })),
-    };
-    const service = new DefaultMonitoringService(repository as never);
-
-    await service.createActual({
-      user: { employeeId: "LEAD-1", fullName: "Lead", scope: {} },
-    } as never, {
-      date: "2026-08-10",
-      employeeId: "PIC-1",
-      divisionId: 3,
-      planId: "PLAN-1",
-      carId: "CAR-1",
-      jobDescription: "Wiring",
-      resultNote: null,
-      startTime: "08:00",
-      finishTime: "10:00",
-      breakMinutes: 0,
-      progressPercent: 100,
-      taskStatus: "DONE",
-      location: null,
-      isOvertime: false,
-    });
-
-    expect(notifications).toEqual([[
-      ["PIC-1"],
-      {
-        title: "Update Task",
-        body: "Lead memperbarui task Wiring menjadi DONE.",
-        data: {
-          module: "task",
-          taskId: "PLAN-1",
-          plandailyId: "PLAN-1",
-          actualId: "ACT-1",
-          status: "DONE",
-        },
-      },
-      "sm_tasks",
-    ]]);
-  });
-
+describe("DefaultMonitoringService ledger", () => {
   it("submits one actual to the immutable ledger", async () => {
     const ledgerCalls: unknown[][] = [];
     const submitActualToLedger = mock(async (...args: unknown[]) => {
@@ -191,6 +138,14 @@ describe("DefaultMonitoringService runtime monitoring enrichment", () => {
           accumulated_work_minutes: 75,
           persisted_work_minutes: 30,
           unverified_work_minutes: 45,
+          progress_percent: 80.5,
+          execution_note: "Menunggu sparepart",
+          actual_start: "2026-09-16T08:00:00+07:00",
+          active_segment_started_at: "2026-09-16T13:00:00+07:00",
+          execution_segments: [
+            { segment_id: "SEG-1", started_at: "2026-09-16T08:00:00+07:00", finished_at: "2026-09-16T09:00:00+07:00", worked_minutes: 60, break_minutes: 0, close_reason: "HOLD" },
+            { segment_id: "SEG-2", started_at: "2026-09-16T10:30:00+07:00", finished_at: "2026-09-16T11:00:00+07:00", worked_minutes: 30, break_minutes: 0, close_reason: "HOLD" },
+          ],
           live_state_available: true,
           read_only: false,
         },
@@ -218,7 +173,14 @@ describe("DefaultMonitoringService runtime monitoring enrichment", () => {
       syncStatus: "SYNCED",
       dataSource: "V2_REDIS",
       actualMinutes: 75,
+      progressPercent: 80.5,
+      executionNote: "Menunggu sparepart",
+      monitoringResult: "Menunggu sparepart",
+      actualStartTime: "2026-09-16T08:00:00+07:00",
+      actualFinishTime: null,
+      activeSegmentStartedAt: "2026-09-16T13:00:00+07:00",
     });
+    expect(result.data[0]?.executionSegments?.length).toBe(2);
   });
 
   it("falls back to legacy rows when Job Plan Runtime is unavailable", async () => {

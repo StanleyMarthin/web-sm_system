@@ -8,6 +8,7 @@ import {
   jobPlanRuntimeExecutionStateSchema,
   jobPlanRuntimeLedgerStateSchema,
   jobPlanRuntimeSourceSchema,
+  jobPlanRuntimeExecutionSegmentSchema,
 } from "../job-plan/job-plan-runtime";
 
 const optionSchema = z.object({
@@ -130,6 +131,9 @@ const monitoringTaskRecordBaseSchema = z.object({
     note: z.string().nullable().optional().default(null),
     attachmentRef: z.string().nullable().optional().default(null),
   }).nullable().optional().default(null),
+  executionNote: z.string().nullable().optional(),
+  executionSegments: z.array(jobPlanRuntimeExecutionSegmentSchema).optional(),
+  activeSegmentStartedAt: z.string().nullable().optional(),
   actualId: z.string().nullable().catch(null),
   submittedToLedger: z.boolean().default(false),
   planStartTime: z.string().nullable().optional(),
@@ -225,35 +229,6 @@ export const monitoringReferencesSchema = z.object({
   divisions: z.array(optionSchema),
   units: z.array(optionSchema),
   employees: z.array(optionSchema),
-});
-
-const isoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/u);
-const timeSchema = z.string().trim().regex(/^\d{2}:\d{2}$/u);
-
-export const createMonitoringActualRequestSchema = z.object({
-  date: isoDateSchema,
-  employeeId: z.string().trim().min(1).max(50),
-  divisionId: z.number().int().positive(),
-  planId: z.string().trim().max(120).nullable().optional().default(null),
-  carId: z.string().trim().max(100).nullable().optional().default(null),
-  jobDescription: z.string().trim().min(1).max(500),
-  resultNote: z.string().trim().max(500).nullable().optional().default(null),
-  startTime: timeSchema,
-  finishTime: timeSchema,
-  breakMinutes: z.number().int().min(0).max(720).default(0),
-  progressPercent: z.number().min(0).max(100).default(0),
-  taskStatus: z.enum(["ONPROGRESS", "READY_QC", "DONE", "PENDING", "CANCEL"]),
-  location: z.string().trim().max(50).nullable().optional().default(null),
-  isOvertime: z.boolean().default(false),
-});
-
-export const monitoringActualMutationEnvelopeSchema = z.object({
-  success: z.boolean(),
-  message: z.string(),
-  data: z.object({
-    planId: z.string(),
-    actualId: z.string(),
-  }),
 });
 
 export const monitoringLedgerMutationEnvelopeSchema = z.object({
@@ -352,4 +327,3 @@ export type MonitoringUnitTimesheetRecord = z.infer<
 export type MonitoringSummary = z.infer<typeof monitoringSummarySchema>;
 export type MonitoringQuery = z.infer<typeof monitoringQuerySchema>;
 export type MonitoringReferences = z.infer<typeof monitoringReferencesSchema>;
-export type CreateMonitoringActualRequest = z.infer<typeof createMonitoringActualRequestSchema>;

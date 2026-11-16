@@ -383,6 +383,7 @@ export class MySqlBubutInvoiceRepository implements BubutInvoiceRepository {
         FROM ${tables.countdown} core
         INNER JOIN ${tables.countdownDetail} detail ON detail.countdown_id = core.id
         WHERE core.ref_taks_id IS NOT NULL
+          AND COALESCE(detail.is_historical_unbilled, 0) = 0
         GROUP BY core.ref_taks_id
       ) work_summary ON work_summary.source_wo_id = wo.id
       LEFT JOIN ${tables.employees} operator ON operator.employee_id = work_summary.operator_id
@@ -578,6 +579,7 @@ export class MySqlBubutInvoiceRepository implements BubutInvoiceRepository {
         FROM ${this.tables.countdown} core
         INNER JOIN ${this.tables.countdownDetail} detail ON detail.countdown_id = core.id
         WHERE core.ref_taks_id = ?
+          AND COALESCE(detail.is_historical_unbilled, 0) = 0
         ORDER BY detail.work_date ASC, detail.start_time ASC
       `,
       [sourceWoId],
@@ -730,6 +732,7 @@ export class MySqlBubutInvoiceRepository implements BubutInvoiceRepository {
           ON ledger_photos.countdown_id = core.id
          AND (ledger_photos.actual_id = detail.ref_actual_id OR detail.ref_actual_id IS NULL)
         WHERE core.ref_taks_id = ?
+          AND COALESCE(detail.is_historical_unbilled, 0) = 0
         ORDER BY detail.work_date ASC, detail.start_time ASC, detail.id ASC
       `,
       [sourceWoId],

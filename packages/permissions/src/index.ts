@@ -274,3 +274,7 @@ export function getPermissionMeta(permissionCode: string): PermissionMeta {
     }
   );
 }
+
+export function canManageRoleMatrix(roleName: string, permissions: readonly string[]): boolean {
+  return roleName.trim().toLowerCase() === "mis" && hasPermission(permissions, permissionCodes.manageUsers);
+}

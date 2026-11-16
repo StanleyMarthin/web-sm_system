@@ -68,6 +68,7 @@ interface UnitBoardRowPacket extends RowDataPacket {
   kpId: string | null;
   kdId: string | null;
   kpName: string;
+  kdName: string | null;
   advisorName: string;
   etaDate: string | null;
   riskLevel: "GREEN" | "YELLOW" | "ORANGE" | "RED" | "UNKNOWN" | "DELIVERED";
@@ -117,11 +118,19 @@ interface UnitDependencyCountPacket extends RowDataPacket {
 interface WorkspaceCountdownPacket extends RowDataPacket {
   total: number;
   plan: number;
+  planWithActual: number;
+  planWithoutActual: number;
   proses: number;
   qcReady: number;
   done: number;
-  remainingHours: number;
+  withActual: number;
+  rawActualHours: number;
+  targetHours: number;
+  targetKnownCount: number;
+  remainingHours: number | null;
+  overrunHours: number;
   progressPercent: number;
+  completionRate: number;
 }
 
 interface WorkspaceWoPacket extends RowDataPacket {
@@ -142,8 +151,14 @@ interface WorkspaceDivisionProgressPacket extends RowDataPacket {
   divisionName: string | null;
   total: number;
   done: number;
-  remainingHours: number;
+  withActual: number;
+  rawActualHours: number;
+  targetHours: number;
+  targetKnownCount: number;
+  remainingHours: number | null;
+  overrunHours: number;
   progressPercent: number;
+  completionRate: number;
 }
 
 interface WorkspaceCountdownItemPacket extends RowDataPacket {
@@ -258,6 +273,8 @@ interface UnitPanelRow extends RowDataPacket {
   sourcePart: "CATALOG" | "ADDITIONAL" | null;
   initialCondition: string | null;
   currentStatus: string | null;
+  operationalStatus: "MENUNGGU" | "PROSES" | "SELESAI" | null;
+  progressPercent: number | string | null;
   location: string | null;
   notes: string | null;
   totalJobdesc: number | string | null;
@@ -374,6 +391,7 @@ interface MasterPanelInventorySchemaRow extends RowDataPacket {
 
 interface MasterPanelInventorySchema {
   hasQty: boolean;
+  hasParent: boolean;
 }
 
 function mapTinyIntBoolean(value: unknown): boolean {
@@ -625,14 +643,18 @@ function mapUnitPanelRecord(row: UnitPanelRow): UnitPanelRecord {
     sourcePart: row.sourcePart === "CATALOG" || row.sourcePart === "ADDITIONAL" ? row.sourcePart : null,
     initialCondition: toNullableText(row.initialCondition),
     currentStatus: toNullableText(row.currentStatus),
+    operationalStatus: row.operationalStatus === "PROSES" || row.operationalStatus === "SELESAI" || row.operationalStatus === "MENUNGGU"
+      ? row.operationalStatus
+      : "MENUNGGU",
+    progressPercent: Math.max(0, Math.min(100, Number(row.progressPercent ?? 0))),
     location: toNullableText(row.location),
     notes: toNullableText(row.notes),
     totalJobdesc: Number(row.totalJobdesc ?? 0),
     totalHours: Number(row.totalHours ?? 0),
     remainingHours: Number(row.remainingHours ?? 0),
     sourceGeneralId: null,
-    parentId: null,
-    nodeType: "PART",
+    parentId: row.parentId === null || row.parentId === undefined ? null : Number(row.parentId),
+    nodeType: row.parentId === null || row.parentId === undefined ? "PANEL" : "PART",
     section: row.section,
     name: row.name,
     category: toNullableText(row.category),
@@ -1035,6 +1057,7 @@ function unitBoardBaseSql(): string {
       cpa.kp_id AS kpId,
       cpa.kd_id AS kdId,
       COALESCE(kp.full_name, '-') AS kpName,
+      kd.full_name AS kdName,
       COALESCE(advisor.full_name, '-') AS advisorName,
       CASE
         WHEN UPPER(COALESCE(c.status, '')) = 'DONE'
@@ -1075,6 +1098,7 @@ function unitBoardBaseSql(): string {
       GROUP BY car_id
     ) cpa ON cpa.car_id = c.id
     LEFT JOIN sm_employee kp ON kp.employee_id = cpa.kp_id
+    LEFT JOIN sm_employee kd ON kd.employee_id = cpa.kd_id
     LEFT JOIN sm_employee advisor ON advisor.employee_id = cpa.advisor_id
     LEFT JOIN (
       SELECT
@@ -1136,6 +1160,7 @@ function mapUnitBoardRow(row: UnitBoardRowPacket): UnitBoardRow {
     kpId: row.kpId,
     kdId: row.kdId,
     kpName: row.kpName,
+    kdName: row.kdName,
     advisorName: row.advisorName,
     targetDeliveryDate: row.targetDelivery,
     etaDate: row.etaDate,
@@ -1234,8 +1259,9 @@ export class UnitsRepository {
 
   constructor(
     private readonly poolFactory: () => Pool = getMySqlPool,
+    env: ApiEnv = getApiEnv(),
   ) {
-    this.env = getApiEnv();
+    this.env = env;
     this.purchaseDb = this.env.PURCHASE_DB_NAME;
     this.warehouseDb = this.env.WAREHOUSE_DB_NAME;
     this.clientDb = this.env.CLIENT_DB_NAME;
@@ -1366,7 +1392,7 @@ export class UnitsRepository {
             WHERE table_schema = DATABASE()
               AND table_name = 'master_panels'
               AND column_name IN (
-                'qty'
+                'qty', 'parent_id'
               )
           `,
         )
@@ -1374,6 +1400,7 @@ export class UnitsRepository {
           const columns = new Set(rows.map((row) => row.columnName));
           return {
             hasQty: columns.has("qty"),
+            hasParent: columns.has("parent_id"),
           };
         });
     }
@@ -1999,14 +2026,33 @@ export class UnitsRepository {
         `
           SELECT
             COUNT(*) AS total,
-            SUM(CASE WHEN status = 'PLAN' THEN 1 ELSE 0 END) AS plan,
-            SUM(CASE WHEN status = 'PROSES' THEN 1 ELSE 0 END) AS proses,
-            SUM(CASE WHEN status = 'QC_READY' THEN 1 ELSE 0 END) AS qcReady,
-            SUM(CASE WHEN status = 'DONE' THEN 1 ELSE 0 END) AS done,
-            ROUND(SUM(COALESCE(remaining_hours, 0)), 2) AS remainingHours,
-            ROUND(AVG(actual_progress_percent), 2) AS progressPercent
-          FROM sm_jobdesc_countdown
-          WHERE car_id = ?
+            SUM(CASE WHEN cd.status = 'PLAN' THEN 1 ELSE 0 END) AS plan,
+            SUM(CASE WHEN cd.status = 'PLAN' AND actual_history.core_id IS NOT NULL THEN 1 ELSE 0 END) AS planWithActual,
+            SUM(CASE WHEN cd.status = 'PLAN' AND actual_history.core_id IS NULL THEN 1 ELSE 0 END) AS planWithoutActual,
+            SUM(CASE WHEN cd.status = 'PROSES' THEN 1 ELSE 0 END) AS proses,
+            SUM(CASE WHEN cd.status = 'QC_READY' THEN 1 ELSE 0 END) AS qcReady,
+            SUM(CASE WHEN cd.status = 'DONE' THEN 1 ELSE 0 END) AS done,
+            SUM(CASE WHEN actual_history.core_id IS NOT NULL THEN 1 ELSE 0 END) AS withActual,
+            ROUND(SUM(COALESCE(cd.total_actual_hours, 0)), 2) AS rawActualHours,
+            ROUND(SUM(COALESCE(cd.target_hours, cd.target_hours_initial, 0)), 2) AS targetHours,
+            SUM(CASE WHEN COALESCE(cd.target_hours, cd.target_hours_initial) IS NOT NULL THEN 1 ELSE 0 END) AS targetKnownCount,
+            CASE
+              WHEN SUM(CASE WHEN COALESCE(cd.target_hours, cd.target_hours_initial) IS NULL THEN 1 ELSE 0 END) > 0 THEN NULL
+              ELSE ROUND(SUM(ROUND(CASE
+                WHEN cd.status = 'DONE' THEN 0
+                ELSE GREATEST(COALESCE(cd.target_hours, cd.target_hours_initial, 0) - COALESCE(cd.total_actual_hours, 0), 0)
+              END, 2)), 2)
+            END AS remainingHours,
+            ROUND(SUM(ROUND(GREATEST(COALESCE(cd.total_actual_hours, 0) - COALESCE(cd.target_hours, cd.target_hours_initial, 0), 0), 2)), 2) AS overrunHours,
+            ROUND(AVG(COALESCE(cd.actual_progress_percent, 0)), 2) AS progressPercent,
+            ROUND(100 * SUM(CASE WHEN cd.status = 'DONE' THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0), 2) AS completionRate
+          FROM sm_jobdesc_countdown cd
+          LEFT JOIN (
+            SELECT DISTINCT p.core_id
+            FROM sm_jobdesc_plan p
+            JOIN sm_jobdesc_actual a ON a.plandaily_id = p.id
+          ) actual_history ON actual_history.core_id = cd.id
+          WHERE cd.car_id = ?
         `,
         [params.unitId],
       ),
@@ -2046,10 +2092,27 @@ export class UnitsRepository {
             COALESCE(d.name, 'Tanpa Divisi') AS divisionName,
             COUNT(*) AS total,
             SUM(CASE WHEN COALESCE(cd.status, 'PLAN') = 'DONE' THEN 1 ELSE 0 END) AS done,
-            ROUND(SUM(COALESCE(cd.remaining_hours, 0)), 2) AS remainingHours,
-            ROUND(AVG(COALESCE(cd.actual_progress_percent, 0)), 2) AS progressPercent
+            SUM(CASE WHEN actual_history.core_id IS NOT NULL THEN 1 ELSE 0 END) AS withActual,
+            ROUND(SUM(COALESCE(cd.total_actual_hours, 0)), 2) AS rawActualHours,
+            ROUND(SUM(COALESCE(cd.target_hours, cd.target_hours_initial, 0)), 2) AS targetHours,
+            SUM(CASE WHEN COALESCE(cd.target_hours, cd.target_hours_initial) IS NOT NULL THEN 1 ELSE 0 END) AS targetKnownCount,
+            CASE
+              WHEN SUM(CASE WHEN COALESCE(cd.target_hours, cd.target_hours_initial) IS NULL THEN 1 ELSE 0 END) > 0 THEN NULL
+              ELSE ROUND(SUM(ROUND(CASE
+                WHEN cd.status = 'DONE' THEN 0
+                ELSE GREATEST(COALESCE(cd.target_hours, cd.target_hours_initial, 0) - COALESCE(cd.total_actual_hours, 0), 0)
+              END, 2)), 2)
+            END AS remainingHours,
+            ROUND(SUM(ROUND(GREATEST(COALESCE(cd.total_actual_hours, 0) - COALESCE(cd.target_hours, cd.target_hours_initial, 0), 0), 2)), 2) AS overrunHours,
+            ROUND(AVG(COALESCE(cd.actual_progress_percent, 0)), 2) AS progressPercent,
+            ROUND(100 * SUM(CASE WHEN COALESCE(cd.status, 'PLAN') = 'DONE' THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0), 2) AS completionRate
           FROM sm_jobdesc_countdown cd
           LEFT JOIN sm_divisi d ON d.id = cd.division_id
+          LEFT JOIN (
+            SELECT DISTINCT p.core_id
+            FROM sm_jobdesc_plan p
+            JOIN sm_jobdesc_actual a ON a.plandaily_id = p.id
+          ) actual_history ON actual_history.core_id = cd.id
           WHERE cd.car_id = ?
           GROUP BY cd.division_id, COALESCE(d.name, 'Tanpa Divisi')
           ORDER BY progressPercent ASC, remainingHours DESC, divisionName ASC
@@ -2072,7 +2135,10 @@ export class UnitsRepository {
             jt.job_name AS jobTypeName,
             ROUND(COALESCE(cd.target_hours, cd.target_hours_initial, 0), 2) AS targetHoursRevised,
             ROUND(COALESCE(cd.total_actual_hours, 0), 2) AS totalActualHours,
-            ROUND(COALESCE(cd.remaining_hours, 0), 2) AS remainingHours,
+            ROUND(CASE
+              WHEN cd.status = 'DONE' THEN 0
+              ELSE GREATEST(COALESCE(cd.target_hours, cd.target_hours_initial, 0) - COALESCE(cd.total_actual_hours, 0), 0)
+            END, 2) AS remainingHours,
             ROUND(COALESCE(cd.actual_progress_percent, 0), 2) AS actualProgressPercent,
             COALESCE(cd.status, 'PLAN') AS status,
             DATE_FORMAT(cd.deadline_date, '%Y-%m-%d') AS deadlineDate,
@@ -2109,19 +2175,33 @@ export class UnitsRepository {
       countdownSummary: {
         total: Number(countdown?.total ?? 0),
         plan: Number(countdown?.plan ?? 0),
+        planWithActual: Number(countdown?.planWithActual ?? 0),
+        planWithoutActual: Number(countdown?.planWithoutActual ?? 0),
         proses: Number(countdown?.proses ?? 0),
         qcReady: Number(countdown?.qcReady ?? 0),
         done: Number(countdown?.done ?? 0),
-        remainingHours: Number(countdown?.remainingHours ?? 0),
+        withActual: Number(countdown?.withActual ?? 0),
+        rawActualHours: Number(countdown?.rawActualHours ?? 0),
+        targetHours: Number(countdown?.targetHours ?? 0),
+        targetKnownCount: Number(countdown?.targetKnownCount ?? 0),
+        remainingHours: countdown?.remainingHours == null ? null : Number(countdown.remainingHours),
+        overrunHours: Number(countdown?.overrunHours ?? 0),
         progressPercent: Number(countdown?.progressPercent ?? 0),
+        completionRate: Number(countdown?.completionRate ?? 0),
       },
       divisionProgress: divisionRows[0].map((row) => ({
         divisionId: row.divisionId,
         divisionName: row.divisionName ?? "Tanpa Divisi",
         total: Number(row.total ?? 0),
         done: Number(row.done ?? 0),
-        remainingHours: Number(row.remainingHours ?? 0),
+        withActual: Number(row.withActual ?? 0),
+        rawActualHours: Number(row.rawActualHours ?? 0),
+        targetHours: Number(row.targetHours ?? 0),
+        targetKnownCount: Number(row.targetKnownCount ?? 0),
+        remainingHours: row.remainingHours == null ? null : Number(row.remainingHours),
+        overrunHours: Number(row.overrunHours ?? 0),
         progressPercent: Number(row.progressPercent ?? 0),
+        completionRate: Number(row.completionRate ?? 0),
       })),
       countdownItems: countdownItemRows[0].map((row) => {
         const remainingHours = Number(row.remainingHours ?? 0);
@@ -2656,6 +2736,57 @@ export class UnitsRepository {
     };
   }
 
+  private panelOperationalStatusSql(alias = "mp"): string {
+    const purchasePrHeader = qualifyTable(this.purchaseDb, "pur_pr_header");
+    const vendorTable = qualifyTable(this.purchaseDb, "vnd_wo_vendor");
+
+    return `
+      CASE WHEN
+        EXISTS (
+          SELECT 1
+          FROM sm_jobdesc_countdown active_countdown
+          WHERE active_countdown.car_id = ${alias}.car_id
+            AND active_countdown.panel_id = ${alias}.id
+            AND UPPER(COALESCE(active_countdown.status, 'PLAN')) NOT IN ('DONE', 'CANCEL', 'CANCELLED')
+        )
+        OR EXISTS (
+          SELECT 1
+          FROM sm_jobdesc_wo active_wo
+          WHERE active_wo.car_id = ${alias}.car_id
+            AND active_wo.master_panel_id = ${alias}.id
+            AND UPPER(COALESCE(active_wo.status, 'SUBMITTED')) NOT IN ('DONE', 'REJECTED', 'CLOSED', 'CANCEL', 'CANCELLED')
+        )
+        OR EXISTS (
+          SELECT 1
+          FROM ${purchasePrHeader} active_pr
+          WHERE active_pr.car_id = ${alias}.car_id
+            AND active_pr.master_panel_id = ${alias}.id
+            AND UPPER(COALESCE(active_pr.status, 'OPEN')) NOT IN ('ARRIVED', 'REJECTED', 'CANCELLED')
+        )
+        OR EXISTS (
+          SELECT 1
+          FROM ${vendorTable} active_wov
+          LEFT JOIN sm_jobdesc_countdown wov_countdown
+            ON wov_countdown.id = active_wov.core_id
+           AND wov_countdown.car_id = active_wov.car_id
+          LEFT JOIN ${purchasePrHeader} wov_pr
+            ON wov_pr.id = active_wov.pr_id
+           AND wov_pr.car_id = active_wov.car_id
+          WHERE active_wov.car_id = ${alias}.car_id
+            AND COALESCE(wov_countdown.panel_id, wov_pr.master_panel_id) = ${alias}.id
+            AND UPPER(COALESCE(active_wov.status, 'OPEN')) NOT IN ('RECEIVED', 'REJECTED', 'CANCELLED')
+        )
+      THEN 'PROSES'
+      WHEN EXISTS (
+        SELECT 1
+        FROM sm_jobdesc_countdown completed_countdown
+        WHERE completed_countdown.car_id = ${alias}.car_id
+          AND completed_countdown.panel_id = ${alias}.id
+          AND UPPER(COALESCE(completed_countdown.status, 'PLAN')) = 'DONE'
+      ) OR UPPER(COALESCE(${alias}.current_status, '')) IN ('DONE', 'SELESAI', 'FINISH', 'FINISHED', 'COMPLETED', 'COMPLETE') THEN 'SELESAI'
+      ELSE 'MENUNGGU' END AS operationalStatus`;
+  }
+
   private async findUnitPanelRow(pool: Pick<Pool, "query">, unitId: string, panelId: number) {
     const schema = await this.getMasterPanelInventorySchema(pool);
     const qtySelect = schema.hasQty ? "COALESCE(mp.qty, 1)" : "1";
@@ -2673,12 +2804,14 @@ export class UnitsRepository {
           mp.source_part AS sourcePart,
           mp.initial_condition AS initialCondition,
           mp.current_status AS currentStatus,
+          ${this.panelOperationalStatusSql("mp")},
           mp.location AS location,
           mp.notes AS notes,
           COALESCE(countdown_summary.totalJobdesc, 0) AS totalJobdesc,
           COALESCE(countdown_summary.totalHours, 0) AS totalHours,
           COALESCE(countdown_summary.remainingHours, 0) AS remainingHours,
-          NULL AS parentId,
+          COALESCE(countdown_summary.progressPercent, 0) AS progressPercent,
+          ${schema.hasParent ? "mp.parent_id" : "NULL"} AS parentId,
           NULL AS sourceGeneralId,
           COALESCE(NULLIF(TRIM(mp.panel_name), ''), NULLIF(TRIM(mp.component_name), ''), 'Tanpa Panel') AS section,
           COALESCE(NULLIF(TRIM(mp.name_part), ''), NULLIF(TRIM(mp.panel_name), ''), '-') AS name,
@@ -2691,7 +2824,7 @@ export class UnitsRepository {
           ${masterPanelConditionSql("mp")} AS defaultConditionType,
           COALESCE(countdown_summary.totalJobdesc, 0) AS countdownUsageCount,
           COUNT(DISTINCT cps.id) AS statusUsageCount,
-          0 AS childCount,
+          ${schema.hasParent ? "(SELECT COUNT(*) FROM master_panels child WHERE child.car_id = mp.car_id AND child.parent_id = mp.id)" : "0"} AS childCount,
           DATE_FORMAT(mp.created_at, '%Y-%m-%d %H:%i:%s') AS createdAt,
           DATE_FORMAT(mp.updated_at, '%Y-%m-%d %H:%i:%s') AS updatedAt
         FROM master_panels mp
@@ -2699,8 +2832,21 @@ export class UnitsRepository {
           SELECT
             panel_id,
             COUNT(*) AS totalJobdesc,
+            SUM(CASE WHEN UPPER(COALESCE(status, 'PLAN')) NOT IN ('DONE', 'CANCEL', 'CANCELLED') THEN 1 ELSE 0 END) AS activeJobdesc,
             ROUND(SUM(COALESCE(target_hours, target_hours_initial, 0)), 2) AS totalHours,
-            ROUND(SUM(COALESCE(remaining_hours, 0)), 2) AS remainingHours
+            ROUND(SUM(COALESCE(remaining_hours, 0)), 2) AS remainingHours,
+            ROUND(CASE
+              WHEN COUNT(*) = 0 THEN 0
+              WHEN SUM(CASE WHEN UPPER(COALESCE(status, 'PLAN')) = 'DONE' THEN 1 ELSE 0 END) = COUNT(*) THEN 100
+              WHEN SUM(COALESCE(target_hours, target_hours_initial, 0)) > 0 THEN 100 * SUM(CASE
+                WHEN UPPER(COALESCE(status, 'PLAN')) = 'DONE' THEN COALESCE(target_hours, target_hours_initial, 0)
+                ELSE GREATEST(COALESCE(target_hours, target_hours_initial, 0) - COALESCE(remaining_hours, 0), 0)
+              END) / SUM(COALESCE(target_hours, target_hours_initial, 0))
+              ELSE AVG(CASE
+                WHEN UPPER(COALESCE(status, 'PLAN')) = 'DONE' THEN 100
+                ELSE COALESCE(actual_progress_percent, 0)
+              END)
+            END, 2) AS progressPercent
           FROM sm_jobdesc_countdown
           GROUP BY panel_id
         ) countdown_summary ON countdown_summary.panel_id = mp.id
@@ -2722,12 +2868,15 @@ export class UnitsRepository {
           mp.location,
           mp.notes,
           countdown_summary.totalJobdesc,
+          countdown_summary.activeJobdesc,
           countdown_summary.totalHours,
           countdown_summary.remainingHours,
+          countdown_summary.progressPercent,
           mp.panel_name,
           mp.component_name,
           mp.name_part,
           ${schema.hasQty ? "mp.qty," : ""}
+          ${schema.hasParent ? "mp.parent_id," : ""}
           mp.created_at,
           mp.updated_at
         LIMIT 1
@@ -2761,12 +2910,14 @@ export class UnitsRepository {
           mp.source_part AS sourcePart,
           mp.initial_condition AS initialCondition,
           mp.current_status AS currentStatus,
+          ${this.panelOperationalStatusSql("mp")},
           mp.location AS location,
           mp.notes AS notes,
           COALESCE(countdown_summary.totalJobdesc, 0) AS totalJobdesc,
           COALESCE(countdown_summary.totalHours, 0) AS totalHours,
           COALESCE(countdown_summary.remainingHours, 0) AS remainingHours,
-          NULL AS parentId,
+          COALESCE(countdown_summary.progressPercent, 0) AS progressPercent,
+          ${schema.hasParent ? "mp.parent_id" : "NULL"} AS parentId,
           NULL AS sourceGeneralId,
           COALESCE(NULLIF(TRIM(mp.panel_name), ''), NULLIF(TRIM(mp.component_name), ''), 'Tanpa Panel') AS section,
           COALESCE(NULLIF(TRIM(mp.name_part), ''), NULLIF(TRIM(mp.panel_name), ''), '-') AS name,
@@ -2779,7 +2930,7 @@ export class UnitsRepository {
           ${masterPanelConditionSql("mp")} AS defaultConditionType,
           COALESCE(countdown_summary.totalJobdesc, 0) AS countdownUsageCount,
           COUNT(DISTINCT cps.id) AS statusUsageCount,
-          0 AS childCount,
+          ${schema.hasParent ? "(SELECT COUNT(*) FROM master_panels child WHERE child.car_id = mp.car_id AND child.parent_id = mp.id)" : "0"} AS childCount,
           DATE_FORMAT(mp.created_at, '%Y-%m-%d %H:%i:%s') AS createdAt,
           DATE_FORMAT(mp.updated_at, '%Y-%m-%d %H:%i:%s') AS updatedAt
         FROM master_panels mp
@@ -2787,8 +2938,21 @@ export class UnitsRepository {
           SELECT
             panel_id,
             COUNT(*) AS totalJobdesc,
+            SUM(CASE WHEN UPPER(COALESCE(status, 'PLAN')) NOT IN ('DONE', 'CANCEL', 'CANCELLED') THEN 1 ELSE 0 END) AS activeJobdesc,
             ROUND(SUM(COALESCE(target_hours, target_hours_initial, 0)), 2) AS totalHours,
-            ROUND(SUM(COALESCE(remaining_hours, 0)), 2) AS remainingHours
+            ROUND(SUM(COALESCE(remaining_hours, 0)), 2) AS remainingHours,
+            ROUND(CASE
+              WHEN COUNT(*) = 0 THEN 0
+              WHEN SUM(CASE WHEN UPPER(COALESCE(status, 'PLAN')) = 'DONE' THEN 1 ELSE 0 END) = COUNT(*) THEN 100
+              WHEN SUM(COALESCE(target_hours, target_hours_initial, 0)) > 0 THEN 100 * SUM(CASE
+                WHEN UPPER(COALESCE(status, 'PLAN')) = 'DONE' THEN COALESCE(target_hours, target_hours_initial, 0)
+                ELSE GREATEST(COALESCE(target_hours, target_hours_initial, 0) - COALESCE(remaining_hours, 0), 0)
+              END) / SUM(COALESCE(target_hours, target_hours_initial, 0))
+              ELSE AVG(CASE
+                WHEN UPPER(COALESCE(status, 'PLAN')) = 'DONE' THEN 100
+                ELSE COALESCE(actual_progress_percent, 0)
+              END)
+            END, 2) AS progressPercent
           FROM sm_jobdesc_countdown
           GROUP BY panel_id
         ) countdown_summary ON countdown_summary.panel_id = mp.id
@@ -2809,12 +2973,15 @@ export class UnitsRepository {
           mp.location,
           mp.notes,
           countdown_summary.totalJobdesc,
+          countdown_summary.activeJobdesc,
           countdown_summary.totalHours,
           countdown_summary.remainingHours,
+          countdown_summary.progressPercent,
           mp.panel_name,
           mp.component_name,
           mp.name_part,
           ${schema.hasQty ? "mp.qty," : ""}
+          ${schema.hasParent ? "mp.parent_id," : ""}
           mp.created_at,
           mp.updated_at
         ORDER BY
@@ -3284,12 +3451,14 @@ export class UnitsRepository {
       excludePanelId?: number;
     },
   ) {
+    const schema = await this.getMasterPanelInventorySchema(pool);
     const params: unknown[] = [
       input.unitId,
       input.section.trim(),
       input.name.trim(),
       toNullableText(input.category) ?? "Lainnya",
     ];
+    if (schema.hasParent) params.push(input.parentId);
     const excludeClause = input.excludePanelId ? "AND id <> ?" : "";
     if (input.excludePanelId) {
       params.push(input.excludePanelId);
@@ -3303,6 +3472,7 @@ export class UnitsRepository {
           AND TRIM(COALESCE(panel_name, '')) = ?
           AND TRIM(COALESCE(name_part, '')) = ?
           AND COALESCE(NULLIF(TRIM(component_name), ''), 'Lainnya') = ?
+          ${schema.hasParent ? "AND parent_id <=> ?" : ""}
           ${excludeClause}
       `,
       params,
@@ -3310,6 +3480,52 @@ export class UnitsRepository {
 
     if (Number(rows[0]?.total ?? 0) > 0) {
       throw new Error("UNIT_PANEL_DUPLICATE");
+    }
+  }
+
+  private async withUnitPanelTransaction<T>(unitId: string, action: (connection: PoolConnection) => Promise<T>): Promise<T> {
+    const connection = await this.poolFactory().getConnection();
+    try {
+      await connection.beginTransaction();
+      const [units] = await connection.query<Array<RowDataPacket & { id: string }>>(
+        "SELECT id FROM cars WHERE id = ? FOR UPDATE", [unitId],
+      );
+      if (!units.length) throw new Error("UNIT_NOT_FOUND");
+      const result = await action(connection);
+      await connection.commit();
+      return result;
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
+
+  private async assertUnitPanelParent(
+    connection: PoolConnection,
+    unitId: string,
+    parentId: number | null,
+    panelId?: number,
+  ): Promise<void> {
+    const schema = await this.getMasterPanelInventorySchema(connection);
+    if (!schema.hasParent) {
+      if (parentId !== null) throw new Error("UNIT_PANEL_PARENT_SCHEMA_REQUIRED");
+      return;
+    }
+    if (parentId === null) return;
+    const [rows] = await connection.query<Array<RowDataPacket & { id: number; parentId: number | null }>>(
+      "SELECT id, parent_id AS parentId FROM master_panels WHERE car_id = ? FOR UPDATE", [unitId],
+    );
+    const parents = new Map(rows.map((row) => [Number(row.id), row.parentId === null ? null : Number(row.parentId)]));
+    const visited = new Set<number>();
+    let current: number | null = parentId;
+    while (current !== null) {
+      if (current === panelId || visited.has(current)) throw new Error("UNIT_PANEL_PARENT_CYCLE");
+      visited.add(current);
+      const next = parents.get(current);
+      if (next === undefined) throw new Error("UNIT_PANEL_PARENT_NOT_FOUND");
+      current = next;
     }
   }
 
@@ -3325,44 +3541,35 @@ export class UnitsRepository {
       throw new Error("UNIT_NOT_FOUND");
     }
 
-    const pool = this.poolFactory();
-    const schema = await this.getMasterPanelInventorySchema(pool);
-    const input = normalizeUnitPanelInventoryInput(params.input);
+    return this.withUnitPanelTransaction(params.unitId, async (pool) => {
+      const schema = await this.getMasterPanelInventorySchema(pool);
+      const input = normalizeUnitPanelInventoryInput(params.input);
+      const parentId = input.parentId ?? null;
+      await this.assertUnitPanelParent(pool, params.unitId, parentId);
 
-    await this.assertUnitPanelNotDuplicate(pool, {
-      unitId: params.unitId,
-      parentId: null,
-      section: input.section,
-      name: input.name,
-      category: input.category,
-    });
+      await this.assertUnitPanelNotDuplicate(pool, {
+        unitId: params.unitId,
+        parentId,
+        section: input.section,
+        name: input.name,
+        category: input.category,
+      });
 
-    const inventoryColumns = [
-      schema.hasQty ? "qty" : null,
-    ].filter(Boolean);
-    const inventoryValues = [
-      schema.hasQty ? input.qty : undefined,
-    ].filter((value) => value !== undefined);
+      const inventoryColumns = [
+        schema.hasQty ? "qty" : null,
+        schema.hasParent ? "parent_id" : null,
+      ].filter(Boolean);
+      const inventoryValues = [
+        schema.hasQty ? input.qty : undefined,
+        schema.hasParent ? parentId : undefined,
+      ].filter((value) => value !== undefined);
 
-    const [result] = await pool.execute<ResultSetHeader>(
-      `
-        INSERT INTO master_panels (
-          car_id,
-          component_name,
-          panel_name,
-          name_part,
-          alias_name,
-          part_number,
-          location,
-          initial_condition,
-          current_status,
-          ${inventoryColumns.length ? `${inventoryColumns.join(",\n          ")},` : ""}
-          notes,
-          created_by,
-          updated_by
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ${inventoryColumns.map(() => "?").join(", ")}${inventoryColumns.length ? ", " : ""}?, ?, ?)
-      `,
-      [
+      const columns = [
+        "car_id", "component_name", "panel_name", "name_part", "alias_name", "part_number",
+        "location", "initial_condition", "current_status", ...inventoryColumns,
+        "notes", "created_by", "updated_by",
+      ];
+      const values = [
         params.unitId,
         toNullableText(input.category),
         input.section.trim(),
@@ -3376,15 +3583,35 @@ export class UnitsRepository {
         toNullableText(input.notes),
         params.actorId,
         params.actorId,
-      ],
-    );
+      ];
+      let panelId: number;
+      try {
+        const [result] = await pool.execute<ResultSetHeader>(
+          `INSERT INTO master_panels (${columns.join(", ")}) VALUES (${values.map(() => "?").join(", ")})`,
+          values,
+        );
+        panelId = Number(result.insertId);
+      } catch (error) {
+        const mysqlError = error as { code?: string; sqlMessage?: string };
+        if (mysqlError.code !== "ER_NO_DEFAULT_FOR_FIELD" || !mysqlError.sqlMessage?.includes("'id'")) throw error;
+        const [ids] = await pool.query<Array<RowDataPacket & { nextId: number }>>(
+          "SELECT COALESCE(MAX(id), 0) + 1 AS nextId FROM master_panels FOR UPDATE",
+        );
+        panelId = Number(ids[0]?.nextId);
+        if (!Number.isSafeInteger(panelId) || panelId <= 0) throw new Error("MASTER_PANEL_ID_UNAVAILABLE");
+        await pool.execute(
+          `INSERT INTO master_panels (id, ${columns.join(", ")}) VALUES (?, ${values.map(() => "?").join(", ")})`,
+          [panelId, ...values],
+        );
+      }
 
-    const row = await this.findUnitPanelRow(pool, params.unitId, Number(result.insertId));
-    if (!row) {
-      throw new Error("UNIT_PANEL_NOT_FOUND");
-    }
+      const row = await this.findUnitPanelRow(pool, params.unitId, panelId);
+      if (!row) {
+        throw new Error("UNIT_PANEL_NOT_FOUND");
+      }
 
-    return mapUnitPanelRecord(row);
+      return mapUnitPanelRecord(row);
+    });
   }
 
   async updateUnitPanel(
@@ -3400,76 +3627,81 @@ export class UnitsRepository {
       throw new Error("UNIT_NOT_FOUND");
     }
 
-    const pool = this.poolFactory();
-    const schema = await this.getMasterPanelInventorySchema(pool);
-    const input = normalizeUnitPanelInventoryInput(params.input);
-    const currentRow = await this.findUnitPanelRow(pool, params.unitId, params.panelId);
-    if (!currentRow) {
-      throw new Error("UNIT_PANEL_NOT_FOUND");
-    }
+    return this.withUnitPanelTransaction(params.unitId, async (pool) => {
+      const schema = await this.getMasterPanelInventorySchema(pool);
+      const input = normalizeUnitPanelInventoryInput(params.input);
+      const currentRow = await this.findUnitPanelRow(pool, params.unitId, params.panelId);
+      if (!currentRow) {
+        throw new Error("UNIT_PANEL_NOT_FOUND");
+      }
 
-    const before = mapUnitPanelRecord(currentRow);
+      const before = mapUnitPanelRecord(currentRow);
+      const parentId = input.parentId === undefined ? before.parentId : input.parentId;
+      await this.assertUnitPanelParent(pool, params.unitId, parentId, params.panelId);
 
-    await this.assertUnitPanelNotDuplicate(pool, {
-      unitId: params.unitId,
-      parentId: null,
-      section: input.section,
-      name: input.name,
-      category: input.category,
-      excludePanelId: params.panelId,
+      await this.assertUnitPanelNotDuplicate(pool, {
+        unitId: params.unitId,
+        parentId,
+        section: input.section,
+        name: input.name,
+        category: input.category,
+        excludePanelId: params.panelId,
+      });
+      const inventoryAssignments = [
+        schema.hasQty ? "qty = ?" : null,
+        schema.hasParent ? "parent_id = ?" : null,
+      ].filter(Boolean);
+      const inventoryValues = [
+        schema.hasQty ? input.qty : undefined,
+        schema.hasParent ? parentId : undefined,
+      ].filter((value) => value !== undefined);
+
+      await pool.execute(
+        `
+          UPDATE master_panels
+          SET
+            component_name = ?,
+            panel_name = ?,
+            name_part = ?,
+            alias_name = ?,
+            part_number = ?,
+            location = ?,
+            initial_condition = ?,
+            current_status = ?,
+            ${inventoryAssignments.length ? `${inventoryAssignments.join(",\n          ")},` : ""}
+            notes = ?,
+            updated_by = ?
+          WHERE id = ?
+            AND car_id = ?
+          LIMIT 1
+        `,
+        [
+          toNullableText(input.category),
+          input.section.trim(),
+          input.name.trim(),
+          toNullableText(input.aliasName),
+          toNullableText(input.partNumber),
+          toNullableText(input.location) ?? input.defaultLocationType,
+          toNullableText(input.initialCondition) ?? input.defaultConditionType,
+          toNullableText(input.currentStatus) ?? input.defaultStockStatus,
+          ...inventoryValues,
+          toNullableText(input.notes),
+          params.actorId,
+          params.panelId,
+          params.unitId,
+        ],
+      );
+
+      const updatedRow = await this.findUnitPanelRow(pool, params.unitId, params.panelId);
+      if (!updatedRow) {
+        throw new Error("UNIT_PANEL_NOT_FOUND");
+      }
+
+      return {
+        before,
+        after: mapUnitPanelRecord(updatedRow),
+      };
     });
-    const inventoryAssignments = [
-      schema.hasQty ? "qty = ?" : null,
-    ].filter(Boolean);
-    const inventoryValues = [
-      schema.hasQty ? input.qty : undefined,
-    ].filter((value) => value !== undefined);
-
-    await pool.execute(
-      `
-        UPDATE master_panels
-        SET
-          component_name = ?,
-          panel_name = ?,
-          name_part = ?,
-          alias_name = ?,
-          part_number = ?,
-          location = ?,
-          initial_condition = ?,
-          current_status = ?,
-          ${inventoryAssignments.length ? `${inventoryAssignments.join(",\n          ")},` : ""}
-          notes = ?,
-          updated_by = ?
-        WHERE id = ?
-          AND car_id = ?
-        LIMIT 1
-      `,
-      [
-        toNullableText(input.category),
-        input.section.trim(),
-        input.name.trim(),
-        toNullableText(input.aliasName),
-        toNullableText(input.partNumber),
-        toNullableText(input.location) ?? input.defaultLocationType,
-        toNullableText(input.initialCondition) ?? input.defaultConditionType,
-        toNullableText(input.currentStatus) ?? input.defaultStockStatus,
-        ...inventoryValues,
-        toNullableText(input.notes),
-        params.actorId,
-        params.panelId,
-        params.unitId,
-      ],
-    );
-
-    const updatedRow = await this.findUnitPanelRow(pool, params.unitId, params.panelId);
-    if (!updatedRow) {
-      throw new Error("UNIT_PANEL_NOT_FOUND");
-    }
-
-    return {
-      before,
-      after: mapUnitPanelRecord(updatedRow),
-    };
   }
 
   async renameUnitPanelCategory(
@@ -3517,33 +3749,34 @@ export class UnitsRepository {
       throw new Error("UNIT_NOT_FOUND");
     }
 
-    const pool = this.poolFactory();
-    const currentRow = await this.findUnitPanelRow(pool, params.unitId, params.panelId);
-    if (!currentRow) {
-      throw new Error("UNIT_PANEL_NOT_FOUND");
-    }
+    return this.withUnitPanelTransaction(params.unitId, async (pool) => {
+      const currentRow = await this.findUnitPanelRow(pool, params.unitId, params.panelId);
+      if (!currentRow) {
+        throw new Error("UNIT_PANEL_NOT_FOUND");
+      }
 
-    const current = mapUnitPanelRecord(currentRow);
+      const current = mapUnitPanelRecord(currentRow);
 
-    if (current.childCount > 0) {
-      throw new Error("UNIT_PANEL_HAS_CHILDREN");
-    }
+      if (current.childCount > 0) {
+        throw new Error("UNIT_PANEL_HAS_CHILDREN");
+      }
 
-    if (current.countdownUsageCount > 0 || current.statusUsageCount > 0) {
-      throw new Error("UNIT_PANEL_IN_USE");
-    }
+      if (current.countdownUsageCount > 0 || current.statusUsageCount > 0) {
+        throw new Error("UNIT_PANEL_IN_USE");
+      }
 
-    await pool.execute(
-      `
-        DELETE FROM master_panels
-        WHERE id = ?
-          AND car_id = ?
-        LIMIT 1
-      `,
-      [params.panelId, params.unitId],
-    );
+      await pool.execute(
+        `
+          DELETE FROM master_panels
+          WHERE id = ?
+            AND car_id = ?
+          LIMIT 1
+        `,
+        [params.panelId, params.unitId],
+      );
 
-    return current;
+      return current;
+    });
   }
 
   async upsertWarehouseStockCardFromPanel(

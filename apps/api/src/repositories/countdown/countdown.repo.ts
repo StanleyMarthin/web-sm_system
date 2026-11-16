@@ -1,4 +1,5 @@
 import type { AuthScope } from "@smsystem/contracts/auth";
+import { assertUnitAcceptsNewWork } from "@/db/unit-work-guard";
 import type { GridFilter } from "@smsystem/contracts/grid";
 import type {
   CountdownBoardRow,
@@ -109,7 +110,7 @@ interface CountdownEntryRowPacket extends RowDataPacket {
   workDate: string;
   startTime: string;
   finishTime: string;
-  billedHours: number;
+  billedHours: number | null;
   progressPercent: number;
   taskStatus: string;
   dailyNotes: string | null;
@@ -692,7 +693,7 @@ function mapCountdownDetailRow(
       workDate: detail.workDate,
       startTime: detail.startTime,
       finishTime: detail.finishTime,
-      billedHours: Number(detail.billedHours ?? 0),
+      billedHours: detail.billedHours === null || detail.billedHours === undefined ? null : Number(detail.billedHours),
       progressPercent: Number(detail.progressPercent ?? 0),
       taskStatus: detail.taskStatus,
       dailyNotes: detail.dailyNotes,
@@ -1237,7 +1238,7 @@ export class CountdownRepository {
           DATE_FORMAT(detail.work_date, '%Y-%m-%d') AS workDate,
           TIME_FORMAT(detail.start_time, '%H:%i') AS startTime,
           TIME_FORMAT(detail.finish_time, '%H:%i') AS finishTime,
-          ROUND(COALESCE(detail.billed_hours, 0), 2) AS billedHours,
+          ROUND(detail.billed_hours, 2) AS billedHours,
           ROUND(COALESCE(detail.progress_percent, 0), 2) AS progressPercent,
           detail.task_status AS taskStatus,
           NULLIF(TRIM(actual.daily_notes), '') AS dailyNotes
@@ -1647,6 +1648,7 @@ export class CountdownRepository {
 
     try {
       await connection.beginTransaction();
+      await assertUnitAcceptsNewWork(connection, input.carId);
       const normalized = await normalizeAndValidateCountdownMutation(connection, params, input);
       const countdownId = randomUUID();
       const now = new Date();
@@ -2014,6 +2016,15 @@ export class CountdownRepository {
         );
         if (!validUnit) {
           issues.push(mapImportIssue(row.rowNumber, "carId", "carId tidak ditemukan di master unit.", row.carId));
+          rejected += 1;
+          continue;
+        }
+
+        try {
+          await assertUnitAcceptsNewWork(connection, carId);
+        } catch (error) {
+          if (!(error instanceof Error) || error.message !== "UNIT_ON_HOLD") throw error;
+          issues.push(mapImportIssue(row.rowNumber, "carId", "Unit sedang HOLD. Jobdesc baru tidak dapat dibuat.", row.carId));
           rejected += 1;
           continue;
         }

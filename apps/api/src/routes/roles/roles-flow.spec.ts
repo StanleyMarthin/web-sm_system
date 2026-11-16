@@ -5,7 +5,7 @@ import type { RolesRepository } from "@/repositories/roles/roles.repo";
 import { DefaultRolesService } from "@/services/roles/roles.service";
 import { handleRolesCreateRoute, handleRolesUpdateRoute } from "./roles.routes";
 
-const session = { user: { employeeId: "SM-03.004", fullName: "Admin", permissions: [] } } as unknown as WebSession;
+const session = { user: { employeeId: "EMP-MIS", fullName: "MIS", roleName: "mis", permissions: ["user.manage"] } } as unknown as WebSession;
 const auth = { async getCurrentSession() { return session; } } as unknown as AuthService;
 
 describe("role save flow", () => {

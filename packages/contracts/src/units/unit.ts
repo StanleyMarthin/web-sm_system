@@ -105,6 +105,7 @@ export const unitBoardRowSchema = z.object({
   kpId: z.string().nullable(),
   kdId: z.string().nullable(),
   kpName: z.string(),
+  kdName: z.string().nullable(),
   advisorName: z.string(),
   targetDeliveryDate: z.string().nullable(),
   etaDate: z.string().nullable(),
@@ -280,11 +281,19 @@ export const unitDeleteEnvelopeSchema = z.object({
 export const countdownSummarySchema = z.object({
   total: z.number().int().nonnegative(),
   plan: z.number().int().nonnegative(),
+  planWithActual: z.number().int().nonnegative(),
+  planWithoutActual: z.number().int().nonnegative(),
   proses: z.number().int().nonnegative(),
   qcReady: z.number().int().nonnegative(),
   done: z.number().int().nonnegative(),
-  remainingHours: z.number(),
+  withActual: z.number().int().nonnegative(),
+  rawActualHours: z.number(),
+  targetHours: z.number(),
+  targetKnownCount: z.number().int().nonnegative(),
+  remainingHours: z.number().nullable(),
+  overrunHours: z.number().nonnegative(),
   progressPercent: z.number(),
+  completionRate: z.number(),
 });
 
 export const woSummarySchema = z.object({
@@ -310,8 +319,14 @@ export const unitWorkspaceDivisionProgressSchema = z.object({
   divisionName: z.string(),
   total: z.number().int().nonnegative(),
   done: z.number().int().nonnegative(),
-  remainingHours: z.number(),
+  withActual: z.number().int().nonnegative(),
+  rawActualHours: z.number(),
+  targetHours: z.number(),
+  targetKnownCount: z.number().int().nonnegative(),
+  remainingHours: z.number().nullable(),
+  overrunHours: z.number().nonnegative(),
   progressPercent: z.number(),
+  completionRate: z.number(),
 });
 
 export const unitWorkspaceCountdownItemSchema = z.object({

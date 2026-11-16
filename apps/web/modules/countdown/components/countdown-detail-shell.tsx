@@ -23,6 +23,7 @@ import { useSweetAlert } from "@/shared/ui/sweet-alert";
 import { SmartSelectCellEditor, type SmartSelectOption } from "@/modules/units/components/master-panel-smart-select-editor";
 import { resolveCountdownPhotoUrl, resolveCountdownRevisionActions } from "../countdown-dialog";
 import { formatCountdownRevisionStatus } from "../countdown-revision";
+import { formatActualHours, formatBilledHours } from "../countdown-hours";
 
 interface CountdownDetailShellProps {
   countdown: CountdownDetail;
@@ -117,14 +118,14 @@ const actualColumnDefs: ColDef<CountdownActualRow>[] = [
   { headerName: "PIC", field: "employeeName", minWidth: 150, flex: 0.8 },
   { headerName: "Mulai", field: "startTime", minWidth: 85, valueFormatter: ({ value }) => fmtTime(String(value ?? "")) },
   { headerName: "Selesai", field: "finishTime", minWidth: 85, valueFormatter: ({ value }) => fmtTime(String(value ?? "")) },
-  { headerName: "Durasi", field: "billedHours", minWidth: 90, valueFormatter: ({ value }) => `${Number(value ?? 0).toFixed(2)} jam` },
+  { headerName: "Durasi", field: "billedHours", minWidth: 90, valueFormatter: ({ value }) => formatBilledHours(value) },
   { headerName: "Progress", field: "progressPercent", minWidth: 90, valueFormatter: ({ value }) => `${Number(value ?? 0).toFixed(0)}%` },
   { headerName: "Status", field: "taskStatus", minWidth: 130, cellRenderer: ({ value }: ICellRendererParams<CountdownActualRow>) => <DataGridStatusBadge value={humanizeCodeLabel(value)} /> },
   { headerName: "Catatan", field: "dailyNotes", minWidth: 220, flex: 1 },
 ];
 
 function formatHours(value: number | null | undefined) {
-  return `${Number(value ?? 0).toFixed(2)} jam`;
+  return formatActualHours(value);
 }
 
 function formatRevisionHours(value: number | null | undefined) {

@@ -4,7 +4,7 @@ import {
   gridQueryStateSchema,
 } from "../grid/grid";
 
-export const jobPlanStatusSchema = z.enum([
+export const jobPlanStatusSchema = z.string().trim().toUpperCase().pipe(z.enum([
   "DRAFT",
   "PENDING",
   "PENDING_ADV",
@@ -16,7 +16,7 @@ export const jobPlanStatusSchema = z.enum([
   "DONE",
   "REJECTED",
   "CANCEL",
-]);
+]));
 
 export const jobPlanWindowSchema = z.enum(["daily", "weekly"]);
 
@@ -120,6 +120,9 @@ const jobPlanRecordBaseSchema = z.object({
   draftJobTypeId: z.string().trim().max(100).nullable().optional(),
   draftDeadlineDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u).nullable().optional(),
   draftIsRework: z.boolean().nullable().optional(),
+  draftUrgent: z.boolean().nullable().optional(),
+  draftLinkedPlanId: z.string().nullable().optional(),
+  draftLinkedPlanVersion: z.number().int().positive().nullable().optional(),
   draftIsNonTechnicalJob: z.boolean().nullable().optional(),
   availablePlanHours: z.number().nullable().optional(),
   remainingHours: z.number().nullable(),
@@ -303,6 +306,8 @@ export const createJobPlanAdditionalCountdownRequestSchema = z.object({
   carId: z.string().trim().min(1).max(100),
   divisionId: z.number().int().positive(),
   panelId: z.number().int().positive(),
+  isNonTechnicalJob: z.boolean().default(false),
+  urgent: z.boolean().optional(),
   jobTypeId: z.string().trim().max(100).nullable().optional().default(null),
   jobTypeName: z.string().trim().max(150).nullable().optional().default(null),
   taskDate: isoDateSchema,
@@ -344,6 +349,8 @@ export const updateJobPlanStatusRequestSchema = z.object({
 
 export const jobPlanDraftRecordSchema = z.object({
   draftItemId: z.string().trim().min(1).max(120),
+  linkedPlanId: z.string().trim().min(1).max(100).nullable().optional(),
+  linkedPlanVersion: z.number().int().positive().nullable().optional(),
   sourceType: z.string().trim().min(1).max(32).default("COUNTDOWN"),
   coreId: z.string().trim().max(64).nullable().optional().default(null),
   carId: z.string().trim().max(100).nullable().optional().default(null),
@@ -367,6 +374,7 @@ export const jobPlanDraftRecordSchema = z.object({
   deadlineDate: isoDateSchema.nullable().optional().default(null),
   isRework: z.boolean().default(false),
   isNonTechnicalJob: z.boolean().default(false),
+  urgent: z.boolean().optional(),
   picPlan: z.string().trim().max(50).nullable().optional(),
   requiredGrade: optionalNullableTextSchema,
 });

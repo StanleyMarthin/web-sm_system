@@ -13,7 +13,11 @@ import { DefaultAuditService } from "@/services/audit/audit.service";
 import { MySqlAuditRepository } from "@/repositories/audit/audit.repo";
 import { createsDivisionCycle } from "./division-management.helpers";
 
-const divisionAuditService = new DefaultAuditService(new MySqlAuditRepository());
+let divisionAuditService: DefaultAuditService | undefined;
+
+function getDivisionAuditService(): DefaultAuditService {
+  return (divisionAuditService ??= new DefaultAuditService(new MySqlAuditRepository()));
+}
 
 const createMasterJobdescRequestSchema = z.object({
   jobName: z.string().trim().min(1).max(255),
@@ -279,7 +283,7 @@ export async function handleDivisionCreateRoute(
     );
 
     const division = await readDivisionById(result.insertId);
-    await divisionAuditService.log({
+    await getDivisionAuditService().log({
       actorId: sessionResult.session.user.employeeId,
       actorName: sessionResult.session.user.fullName,
       action: "division.create",
@@ -429,7 +433,7 @@ export async function handleDivisionUpdateRoute(
     }
 
     const division = await readDivisionById(divisionId);
-    await divisionAuditService.log({
+    await getDivisionAuditService().log({
       actorId: sessionResult.session.user.employeeId,
       actorName: sessionResult.session.user.fullName,
       action: "division.update",
@@ -474,7 +478,7 @@ export async function handleDivisionDeleteRoute(
       throw new Error("DIVISION_NOT_FOUND");
     }
 
-    await divisionAuditService.log({
+    await getDivisionAuditService().log({
       actorId: sessionResult.session.user.employeeId,
       actorName: sessionResult.session.user.fullName,
       action: "division.delete",
@@ -557,7 +561,7 @@ export async function handleJobTypeUpdateRoute(
       throw new Error("JOB_TYPE_NOT_FOUND");
     }
     const jobType = toJobTypePayload(row);
-    await divisionAuditService.log({
+    await getDivisionAuditService().log({
       actorId: sessionResult.session.user.employeeId,
       actorName: sessionResult.session.user.fullName,
       action: "division.jobdesc.update",
@@ -619,7 +623,7 @@ export async function handleJobTypeDeleteRoute(
       throw new Error("JOB_TYPE_NOT_FOUND");
     }
 
-    await divisionAuditService.log({
+    await getDivisionAuditService().log({
       actorId: sessionResult.session.user.employeeId,
       actorName: sessionResult.session.user.fullName,
       action: "division.jobdesc.delete",
@@ -684,7 +688,7 @@ async function createMasterJobdesc(
       jobName: parsedBody.data.jobName,
       isTeknis: parsedBody.data.isTeknis,
     };
-    await divisionAuditService.log({
+    await getDivisionAuditService().log({
       actorId: sessionResult.session.user.employeeId,
       actorName: sessionResult.session.user.fullName,
       action: "division.jobdesc.create",

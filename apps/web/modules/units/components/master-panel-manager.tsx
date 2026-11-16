@@ -1,19 +1,19 @@
 "use client";
 
-import type { UnitPanelDetail, UnitPanelRecord, UpdateUnitPanelRequest } from "@smsystem/contracts/unit-panel";
+import type { CreateUnitPanelRequest, UnitPanelDetail, UnitPanelRecord, UpdateUnitPanelRequest } from "@smsystem/contracts/unit-panel";
 import type { CellKeyDownEvent, CellValueChangedEvent, ColDef, ICellRendererParams, SelectionChangedEvent } from "ag-grid-community";
 import { AllCommunityModule, ModuleRegistry } from "ag-grid-community";
 import { AgGridReact } from "ag-grid-react";
 import { ArrowLeft, ChevronRight, Image as ImageIcon, ListPlus, Plus, RefreshCw, Search, X } from "lucide-react";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { createUnitAdditionalMasterPanel } from "@/shared/api/units/unit-catalog";
-import { deleteUnitPanel, fetchUnitPanelDetail, fetchUnitPanels, updateUnitPanel } from "@/shared/api/units/units";
+import { createUnitPanel, deleteUnitPanel, fetchUnitPanelDetail, fetchUnitPanels, updateUnitPanel } from "@/shared/api/units/units";
 import { MasterPanelActivityMenu } from "./master-panel-activity-menu";
 import { MasterPanelCountdownGrid } from "./master-panel-countdown-grid";
 import { MasterPanelPhotoGallery } from "./master-panel-photo-gallery";
 import { MasterPanelPrGrid } from "./master-panel-pr-grid";
 import { MasterPanelWoGrid } from "./master-panel-wo-grid";
 import { MasterPanelWovGrid } from "./master-panel-wov-grid";
+import { MasterPanelCreateForm } from "./master-panel-create-form";
 
 const ICON_STROKE_WIDTH = 2.5;
 
@@ -32,14 +32,6 @@ interface MasterPanelManagerProps {
   initialRows?: UnitPanelRecord[];
 }
 
-interface AdditionalFormState {
-  componentName: string;
-  panelName: string;
-  itemName: string;
-  partNumber: string;
-  deskription: string;
-}
-
 type MasterPartGridRow = UnitPanelRecord & {
   clientId: string;
   isDraft?: boolean;
@@ -54,14 +46,6 @@ function withPartValue<T extends MasterPartGridRow>(row: T, field: PartEditableF
   return { ...row, [field]: nextValue };
 }
 
-const EMPTY_ADDITIONAL_FORM: AdditionalFormState = {
-  componentName: "",
-  panelName: "",
-  itemName: "",
-  partNumber: "",
-  deskription: "",
-};
-
 const CONDITION_LABEL: Record<UnitPanelRecord["defaultConditionType"], string> = {
   BARU: "Baru",
   BEKAS: "Bekas",
@@ -73,7 +57,7 @@ function displayCondition(record: UnitPanelRecord): string {
 }
 
 function displayCurrentStatus(record: UnitPanelRecord): string {
-  return record.currentStatus ?? displayPanelStatus(record);
+  return record.currentStatus ?? "Belum diperbarui";
 }
 
 function toNullable(value: string | null | undefined): string | null {
@@ -88,6 +72,7 @@ function toPositiveQty(value: unknown): number {
 
 function recordToUpdateInput(record: UnitPanelRecord): UpdateUnitPanelRequest {
   return {
+    parentId: record.parentId,
     section: record.section,
     name: record.name,
     category: record.category,
@@ -120,44 +105,24 @@ function updateRecordTree(
   });
 }
 
-function displayPanelStatus(record: UnitPanelRecord): string {
-  if (!record.isActive) return "Nonaktif";
-  if (record.statusUsageCount > 0 || record.countdownUsageCount > 0) return "Operational";
-  return "Siap";
-}
-
 function formatNumber(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
 
-const DONE_STATUS_VALUES = new Set(["DONE", "SELESAI", "FINISH", "FINISHED", "COMPLETED", "COMPLETE"]);
-
-function normalizeStatus(value: string | null | undefined): string {
-  return (value ?? "").trim().toUpperCase();
-}
-
-function isPartComplete(record: UnitPanelRecord): boolean {
-  return DONE_STATUS_VALUES.has(normalizeStatus(record.currentStatus));
-}
-
-function isRestorationPart(record: UnitPanelRecord): boolean {
-  return displayCondition(record).toUpperCase().includes("RESTOR");
-}
-
 function partProgressLabel(record: UnitPanelRecord): { label: string; className: string; dotClassName: string } {
-  if (isPartComplete(record)) {
+  if (record.operationalStatus === "PROSES") {
+    return {
+      label: "PROSES",
+      className: "border-primary/35 bg-primary/[0.08] text-app-accent-ink",
+      dotClassName: "bg-primary",
+    };
+  }
+
+  if (record.operationalStatus === "SELESAI") {
     return {
       label: "SELESAI",
       className: "border-success/30 bg-success/[0.08] text-success",
       dotClassName: "bg-success",
-    };
-  }
-
-  if (isRestorationPart(record)) {
-    return {
-      label: "RESTORASI",
-      className: "border-primary/35 bg-primary/[0.08] text-app-accent-ink",
-      dotClassName: "bg-primary",
     };
   }
 
@@ -166,11 +131,6 @@ function partProgressLabel(record: UnitPanelRecord): { label: string; className:
     className: "border-border bg-muted text-muted-foreground",
     dotClassName: "bg-muted-foreground",
   };
-}
-
-function progressFromParts(totalPart: number, completedPart: number): number {
-  if (totalPart <= 0) return 0;
-  return Math.max(0, Math.min(100, Math.round((completedPart / totalPart) * 100)));
 }
 
 function sumBy<T>(items: T[], read: (item: T) => number | null | undefined): number {
@@ -203,7 +163,6 @@ interface MasterPanelPanelGroup {
   completedPart: number;
   remainingPart: number;
   conditionSummary: string;
-  status: string;
   totalJobdesc: number;
   totalHours: number;
   remainingHours: number;
@@ -244,7 +203,7 @@ function buildMasterPanelHierarchy(records: UnitPanelRecord[]): MasterPanelCompo
         .map(([panelName, parts]) => {
           const totalHours = sumBy(parts, part => part.totalHours);
           const remainingHours = sumBy(parts, part => part.remainingHours);
-          const completedPart = parts.filter(isPartComplete).length;
+          const completedPart = parts.filter((part) => part.operationalStatus === "SELESAI").length;
           return {
             key: `${componentName}\u0000${panelName}`,
             componentName,
@@ -254,11 +213,10 @@ function buildMasterPanelHierarchy(records: UnitPanelRecord[]): MasterPanelCompo
             completedPart,
             remainingPart: parts.length - completedPart,
             conditionSummary: conditionSummary(parts),
-            status: parts.some((part) => displayPanelStatus(part) === "Operational") ? "Operational" : "Siap",
             totalJobdesc: sumBy(parts, part => part.totalJobdesc),
             totalHours,
             remainingHours,
-            progress: progressFromParts(parts.length, completedPart),
+            progress: parts.length === 0 ? 0 : Math.round(sumBy(parts, (part) => part.progressPercent) / parts.length),
           };
         });
       const totalHours = sumBy(panels, panel => panel.totalHours);
@@ -275,7 +233,7 @@ function buildMasterPanelHierarchy(records: UnitPanelRecord[]): MasterPanelCompo
         remainingPart: totalPart - completedPart,
         totalHours,
         remainingHours,
-        progress: progressFromParts(totalPart, completedPart),
+        progress: panels.length === 0 ? 0 : Math.round(sumBy(panels, (panel) => panel.progress) / panels.length),
       };
     });
 }
@@ -379,10 +337,9 @@ export function MasterPanelManager({ unitId, canManage, canCreateWo, canCreatePr
   const [selectedPartRow, setSelectedPartRow] = useState<MasterPartGridRow | null>(null);
   const [deletedPartIds, setDeletedPartIds] = useState<number[]>([]);
   const [isAddingAdditional, setIsAddingAdditional] = useState(false);
-  const [additionalForm, setAdditionalForm] = useState<AdditionalFormState>(EMPTY_ADDITIONAL_FORM);
+  const [createParentId, setCreateParentId] = useState<number | null>(null);
   const flatRows = useMemo(() => flattenPanelRecords(rows), [rows]);
   const hierarchy = useMemo(() => buildMasterPanelHierarchy(flatRows), [flatRows]);
-  const componentOptions = useMemo(() => hierarchy.map((component) => component.componentName), [hierarchy]);
   const searchTerm = search.trim().toLowerCase();
 
   const rootCount = hierarchy.reduce((total, component) => total + component.totalPanel, 0);
@@ -495,6 +452,8 @@ export function MasterPanelManager({ unitId, canManage, canCreateWo, canCreatePr
     sourcePart: "ADDITIONAL",
     initialCondition: "BEKAS",
     currentStatus: "UNKNOWN",
+    operationalStatus: "MENUNGGU",
+    progressPercent: 0,
     location: "UNIT",
     notes: null,
     totalJobdesc: 0,
@@ -521,8 +480,11 @@ export function MasterPanelManager({ unitId, canManage, canCreateWo, canCreatePr
   }), [unitId]);
   const handleAddPartRow = useCallback(() => {
     if (!expandedPanel) return;
-    setDraftParts((current) => [...current, createDraftPart(expandedPanel)]);
-  }, [createDraftPart, expandedPanel]);
+    setDraftParts((current) => [...current, {
+      ...createDraftPart(expandedPanel),
+      parentId: selectedPartRow && !selectedPartRow.isDraft ? selectedPartRow.id : null,
+    }]);
+  }, [createDraftPart, expandedPanel, selectedPartRow]);
   const loadPanels = useCallback(async () => {
     setIsLoading(true);
     setError(null);
@@ -639,26 +601,20 @@ export function MasterPanelManager({ unitId, canManage, canCreateWo, canCreatePr
       for (const id of deletedPartIds) {
         const result = await deleteUnitPanel(unitId, id);
         if (!result.success) throw new Error(result.message);
+        setDeletedPartIds((current) => current.filter((deletedId) => deletedId !== id));
       }
       for (const part of dirtyRows) {
         const result = await updateUnitPanel(unitId, part.id, recordToUpdateInput(part));
         if (!result.success) throw new Error(result.message);
+        setDirtyPartIds((current) => new Set([...current].filter((id) => id !== part.id)));
       }
       for (const part of newRows) {
-        const createResult = await createUnitAdditionalMasterPanel(unitId, {
-          componentName: part.category ?? expandedPanel.componentName,
-          panelName: part.section || expandedPanel.panelName,
-          itemName: part.name.trim(),
-          partNumber: toNullable(part.partNumber),
-          deskription: toNullable(part.notes),
+        const createResult = await createUnitPanel(unitId, {
+          ...recordToUpdateInput(part),
+          parentId: part.parentId,
         });
         if (!createResult.success) throw new Error(createResult.message);
-        const updateResult = await updateUnitPanel(unitId, createResult.result.panelId, recordToUpdateInput({
-          ...part,
-          id: createResult.result.panelId,
-          carId: unitId,
-        }));
-        if (!updateResult.success) throw new Error(updateResult.message);
+        setDraftParts((current) => current.filter((draft) => draft.clientId !== part.clientId));
       }
       setDirtyPartIds(new Set());
       setDeletedPartIds([]);
@@ -774,6 +730,14 @@ export function MasterPanelManager({ unitId, canManage, canCreateWo, canCreatePr
   ], []);
   const partColumnDefs = useMemo<ColDef<MasterPartGridRow>[]>(() => [
     {
+      headerName: "Induk Panel / Part",
+      field: "parentId",
+      minWidth: 190,
+      flex: 1,
+      editable: false,
+      valueFormatter: ({ value }) => value === null || value === undefined ? "Tanpa induk" : flatRows.find((part) => part.id === Number(value))?.name ?? `#${value}`,
+    },
+    {
       headerName: "Nama Part",
       field: "name",
       minWidth: 260,
@@ -812,7 +776,7 @@ export function MasterPanelManager({ unitId, canManage, canCreateWo, canCreatePr
       field: "currentStatus",
       editable: canManage,
       cellEditor: "agSelectCellEditor",
-      cellEditorParams: { values: ["WAITING", "UNKNOWN", "INSTALLED", "IN_PROGRESS", "DONE", "SELESAI"] },
+      cellEditorParams: { values: ["WAITING", "UNKNOWN", "INSTALLED", "PROSES", "IN_PROGRESS", "DONE", "SELESAI"] },
       minWidth: 150,
       flex: 0.9,
       cellRenderer: PartStatusRenderer,
@@ -845,7 +809,7 @@ export function MasterPanelManager({ unitId, canManage, canCreateWo, canCreatePr
         </div>
       ) : null,
     },
-  ], [canManage, showAliasColumn]);
+  ], [canManage, flatRows, showAliasColumn]);
 
   useEffect(() => {
     if (initialRows !== undefined) {
@@ -856,53 +820,35 @@ export function MasterPanelManager({ unitId, canManage, canCreateWo, canCreatePr
     void loadPanels();
   }, [initialRows, loadPanels]);
 
-  function openAdditionalForm() {
-    setAdditionalForm({
-      componentName: expandedPanel?.componentName ?? expandedComponent?.componentName ?? "",
-      panelName: expandedPanel?.panelName ?? "",
-      itemName: "",
-      partNumber: "",
-      deskription: "",
-    });
+  function openAdditionalForm(parent: UnitPanelRecord | null = null) {
+    setCreateParentId(parent?.id ?? null);
     setMessage(null);
     setError(null);
     setIsAddingAdditional(true);
   }
 
-  async function handleAdditionalSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function handleAdditionalSubmit(input: CreateUnitPanelRequest) {
     if (!canManage) {
-      return;
-    }
-
-    const payload = {
-      componentName: additionalForm.componentName.trim(),
-      panelName: additionalForm.panelName.trim(),
-      itemName: additionalForm.itemName.trim(),
-      partNumber: additionalForm.partNumber.trim() || null,
-      deskription: additionalForm.deskription.trim() || null,
-    };
-
-    if (!payload.componentName || !payload.panelName || !payload.itemName) {
-      setError("Bagian, panel, dan item wajib diisi.");
       return;
     }
 
     setIsSubmitting(true);
     setError(null);
     setMessage(null);
-    const result = await createUnitAdditionalMasterPanel(unitId, payload);
-    if (!result.success) {
-      setError(result.message);
+    try {
+      const result = await createUnitPanel(unitId, input);
+      if (!result.success) {
+        setError(result.message);
+        return;
+      }
+      setMessage(input.parentId ? "Part pecahan berhasil ditambahkan." : "Panel berhasil ditambahkan.");
+      setIsAddingAdditional(false);
+      await loadPanels();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Panel/part belum berhasil disimpan.");
+    } finally {
       setIsSubmitting(false);
-      return;
     }
-
-    setMessage("Item tambahan berhasil masuk Struktur Panel Unit.");
-    setIsAddingAdditional(false);
-    setAdditionalForm(EMPTY_ADDITIONAL_FORM);
-    await loadPanels();
-    setIsSubmitting(false);
   }
 
   return (
@@ -922,9 +868,9 @@ export function MasterPanelManager({ unitId, canManage, canCreateWo, canCreatePr
             <RefreshCw className="h-3 w-3" strokeWidth={ICON_STROKE_WIDTH} /> Refresh
           </button>
           {canManage && !expandedPanel && (
-            <button type="button" onClick={openAdditionalForm}
+            <button type="button" onClick={() => openAdditionalForm()}
               className="inline-flex items-center gap-1.5 border border-primary/30 bg-primary/[0.04] px-2 py-1 text-[14px] font-mono uppercase text-app-accent-ink hover:bg-primary/10 transition-colors">
-              <Plus className="h-3 w-3" strokeWidth={ICON_STROKE_WIDTH} /> Tambah Panel Baru
+              <Plus className="h-3 w-3" strokeWidth={ICON_STROKE_WIDTH} /> Tambah Panel / Part
             </button>
           )}
         </div>
@@ -1063,6 +1009,11 @@ export function MasterPanelManager({ unitId, canManage, canCreateWo, canCreatePr
                         </div>
                         {canManage ? (
                           <div className="flex flex-wrap justify-end gap-2">
+                            <button type="button" disabled={!selectedPartRow || selectedPartRow.isDraft || isSubmitting}
+                              onClick={() => selectedPartRow && openAdditionalForm(selectedPartRow)}
+                              className="min-h-11 border border-border px-2 text-sm text-foreground focus-visible:ring-2 focus-visible:ring-primary/60 disabled:opacity-40">
+                              Tambah Pecahan
+                            </button>
                             <button
                               type="button"
                               onClick={handleAddPartRow}
@@ -1228,78 +1179,9 @@ export function MasterPanelManager({ unitId, canManage, canCreateWo, canCreatePr
         </div>
       ) : null}
       {isAddingAdditional ? (
-        <div className="fixed inset-y-0 right-0 z-40 flex w-full max-w-md flex-col border-l border-border bg-card shadow-2xl">
-          <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
-            <div>
-              <p className="text-[13px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Item Tambahan</p>
-              <h4 className="mt-1 text-[18px] font-semibold text-foreground">Tambah Panel Baru</h4>
-            </div>
-            <button type="button" onClick={() => setIsAddingAdditional(false)} className="catalog-icon-button" title="Tutup">
-              <X className="h-3.5 w-3.5" strokeWidth={ICON_STROKE_WIDTH} />
-            </button>
-          </div>
-          <form className="flex flex-1 flex-col" onSubmit={(event) => void handleAdditionalSubmit(event)}>
-            <div className="flex-1 space-y-3 overflow-auto px-5 py-4">
-              <label className="block space-y-1">
-                <span className="text-[13px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Bagian</span>
-                <input
-                  value={additionalForm.componentName}
-                  onChange={(event) => setAdditionalForm((current) => ({ ...current, componentName: event.target.value }))}
-                  list="unit-master-panel-components"
-                  className="h-9 w-full border border-border bg-background px-3 text-[14px] text-foreground outline-none focus:border-primary/45"
-                  placeholder="Pilih atau cari bagian"
-                />
-                <datalist id="unit-master-panel-components">
-                  {componentOptions.map((component) => <option key={component} value={component} />)}
-                </datalist>
-              </label>
-              <label className="block space-y-1">
-                <span className="text-[13px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Nama Panel</span>
-                <input
-                  value={additionalForm.panelName}
-                  onChange={(event) => setAdditionalForm((current) => ({ ...current, panelName: event.target.value }))}
-                  className="h-9 w-full border border-border bg-background px-3 text-[14px] text-foreground outline-none focus:border-primary/45"
-                  placeholder="Contoh: FRONT BUMPER"
-                />
-              </label>
-              <label className="block space-y-1">
-                <span className="text-[13px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Nama Part</span>
-                <input
-                  value={additionalForm.itemName}
-                  onChange={(event) => setAdditionalForm((current) => ({ ...current, itemName: event.target.value }))}
-                  className="h-9 w-full border border-border bg-background px-3 text-[14px] text-foreground outline-none focus:border-primary/45"
-                  placeholder="Contoh: Bracket Foglamp Custom"
-                />
-              </label>
-              <label className="block space-y-1">
-                <span className="text-[13px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Part Number</span>
-                <input
-                  value={additionalForm.partNumber}
-                  onChange={(event) => setAdditionalForm((current) => ({ ...current, partNumber: event.target.value }))}
-                  className="h-9 w-full border border-border bg-background px-3 text-[14px] text-foreground outline-none focus:border-primary/45"
-                  placeholder="Opsional"
-                />
-              </label>
-              <label className="block space-y-1">
-                <span className="text-[13px] font-mono uppercase tracking-[0.12em] text-muted-foreground">Catatan</span>
-                <textarea
-                  value={additionalForm.deskription}
-                  onChange={(event) => setAdditionalForm((current) => ({ ...current, deskription: event.target.value }))}
-                  className="min-h-24 w-full resize-y border border-border bg-background px-3 py-2 text-[14px] text-foreground outline-none focus:border-primary/45"
-                  placeholder="Opsional"
-                />
-              </label>
-            </div>
-            <div className="flex justify-end gap-2 border-t border-border px-5 py-3">
-              <button type="button" onClick={() => setIsAddingAdditional(false)} className="border border-border px-3 py-1.5 text-[13px] font-mono uppercase tracking-[0.08em] text-muted-foreground hover:text-foreground">
-                Batal
-              </button>
-              <button type="submit" disabled={isSubmitting} className="border border-primary/40 bg-primary/[0.06] px-3 py-1.5 text-[13px] font-mono uppercase tracking-[0.08em] text-app-accent-ink transition-colors hover:bg-primary/10 disabled:opacity-30">
-                {isSubmitting ? "Menyimpan..." : "Simpan Data"}
-              </button>
-            </div>
-          </form>
-        </div>
+        <MasterPanelCreateForm records={flatRows} initialCategory={expandedPanel?.componentName ?? expandedComponent?.componentName ?? ""}
+          initialParentId={createParentId} isSaving={isSubmitting} error={error}
+          onClose={() => setIsAddingAdditional(false)} onSubmit={handleAdditionalSubmit} />
       ) : null}
     </section>
   );

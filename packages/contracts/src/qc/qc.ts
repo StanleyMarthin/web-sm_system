@@ -130,6 +130,9 @@ export const qcMutationResultSchema = z.object({
   resultStatus: qcResultStatusSchema,
   issueId: z.string().nullable().default(null),
   reworkPlanId: z.string().nullable().default(null),
+  draftItemId: z.string().optional(),
+  extensionHours: z.number().nonnegative().optional(),
+  reused: z.boolean().optional(),
 });
 
 export const qcMutationEnvelopeSchema = z.object({

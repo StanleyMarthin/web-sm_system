@@ -285,7 +285,7 @@ export function QcShell({
         return;
       }
 
-      setMessage("QC reject berhasil disimpan dan rework dibuat.");
+      setMessage(canValidate ? "QC tidak lolos disimpan. Draft rework tersedia di Job Plan." : "QC KD tidak lolos disimpan dan menunggu QA.");
       router.refresh();
     } finally {
       setIsSubmitting(false);
@@ -602,7 +602,7 @@ export function QcShell({
                     </button>
 
                     <div className="space-y-3 rounded-2xl border border-white/[0.06] bg-white/[0.03] p-4">
-                      <p className="text-sm text-foreground">{canValidate ? "Tolak dan buat rework" : "QC KD: Tidak lolos, menunggu QA"}</p>
+                      <p className="text-sm text-foreground">{canValidate ? "Tolak dan buat draft rework di Job Plan" : "QC KD: Tidak lolos, menunggu QA"}</p>
                       {canValidate ? <>
                       <input
                         value={rejectForm.reworkDate}

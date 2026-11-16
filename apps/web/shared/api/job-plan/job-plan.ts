@@ -1,5 +1,6 @@
 import type {
   CreateJobPlanAdditionalCountdownRequest,
+  DeleteJobPlanDraftRequest,
   JobPlanMode,
   JobPlanOptionKind,
   JobPlanRecord,
@@ -230,4 +231,16 @@ export async function saveJobPlanDraft(input: SaveJobPlanDraftRequest) {
     success: true as const,
     result: payload.data,
   };
+}
+
+export async function deleteJobPlanDrafts(input: DeleteJobPlanDraftRequest) {
+  const response = await fetch(`${getApiBaseUrl()}/api/job-plan/draft/delete`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) return { ...await parseFailure(response), success: false as const };
+  const payload = jobPlanMutationEnvelopeSchema.parse(await response.json());
+  return { success: true as const, result: payload.data };
 }

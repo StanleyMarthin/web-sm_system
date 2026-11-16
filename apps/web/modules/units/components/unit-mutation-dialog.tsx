@@ -277,8 +277,8 @@ export function UnitMutationDialog({
             </div>
             {mode === "edit" ? <label className={labelClass}>
               <span className={captionClass}>Status unit</span>
-              <select value={form.status} disabled={form.status === "ON_PROGRESS" || form.status === "DONE"} onChange={(event) => onChange({ ...form, status: event.target.value === "HOLD" ? "HOLD" : "PLAN" })} className={fieldClass}>
-                <option value="PLAN">Rencana</option><option value="HOLD">Ditahan</option><option value="ON_PROGRESS">Sedang dikerjakan</option><option value="DONE">Sudah diserahkan</option>
+              <select value={form.status} disabled={form.status === "DONE"} onChange={(event) => onChange({ ...form, status: event.target.value === "HOLD" ? "HOLD" : event.target.value === "ON_PROGRESS" ? "ON_PROGRESS" : "PLAN" })} className={fieldClass}>
+                <option value="PLAN">Rencana</option><option value="HOLD">Ditahan</option><option value="ON_PROGRESS">Sedang dikerjakan</option><option value="DONE" disabled>Sudah diserahkan</option>
               </select>
             </label> : null}
             <label className={labelClass}><span className={captionClass}>Tanggal kedatangan</span><input type="date" value={form.incomingDate} onChange={(event) => onChange({ ...form, incomingDate: event.target.value })} className={fieldClass} /></label>

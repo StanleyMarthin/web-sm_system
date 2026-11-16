@@ -3,7 +3,7 @@ import {
   updateRolePermissionsRequestSchema,
   updateRoleRequestSchema,
 } from "@smsystem/contracts/rbac";
-import { isSystemSuperadminEmployee } from "@smsystem/contracts/auth";
+import { canManageRoleMatrix } from "@smsystem/permissions";
 import { parseJsonBody } from "@/http/request";
 import {
   errorResponse,
@@ -23,11 +23,11 @@ async function requireRoleMatrixSession(
     return sessionResult;
   }
 
-  if (!isSystemSuperadminEmployee(sessionResult.session.user.employeeId)) {
+  if (!canManageRoleMatrix(sessionResult.session.user.roleName, sessionResult.session.user.permissions)) {
     return {
       response: errorResponse(
         request,
-        "Role Matrix hanya tersedia untuk superadmin.",
+        "Role Matrix hanya tersedia untuk MIS dengan izin pengelolaan RBAC.",
         403,
         "SUPERADMIN_REQUIRED",
       ),
@@ -65,7 +65,7 @@ function mapRolesError(request: Request, error: unknown): Response {
     }
 
     if (error.message === "SUPERADMIN_REQUIRED") {
-      return errorResponse(request, "Role Matrix hanya tersedia untuk superadmin.", 403, "SUPERADMIN_REQUIRED");
+      return errorResponse(request, "Role Matrix hanya tersedia untuk MIS dengan izin pengelolaan RBAC.", 403, "SUPERADMIN_REQUIRED");
     }
 
     if (error.message === "RESERVED_ROLE_NAME") {

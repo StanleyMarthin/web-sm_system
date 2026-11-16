@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import assert from "node:assert/strict";
 import { MySqlJobPlanRepository } from "./job-plan.repo";
 
 const scope = {
@@ -10,63 +11,37 @@ const scope = {
 };
 
 describe("MySqlJobPlanRepository countdown alignment", () => {
-  async function createPlanWithCapacity(input: {
-    remainingHours: number;
-    reservedPlanHours: number;
-    targetHours: number;
-    currentStatus?: string;
-  }) {
-    const executed: string[] = [];
+  it("rejects an out-of-scope existing Additional Countdown before provisioning", async () => {
+    const mutations: string[] = [];
+    let committed = false;
+    let rolledBack = false;
     const connection = {
       beginTransaction: async () => undefined,
-      commit: async () => undefined,
-      rollback: async () => undefined,
+      commit: async () => { committed = true; },
+      rollback: async () => { rolledBack = true; },
       release: () => undefined,
       query: async (sql: string) => {
-        if (sql.includes("FROM sm_jobdesc_countdown jc")) {
-          return [[{
-            coreId: "CD-1",
-            carId: "CAR-1",
-            unitName: "Unit A",
-            divisionId: 1,
-            divisionName: "Divisi A",
-            panelId: 11,
-            remainingHours: input.remainingHours,
-            progressPercent: 0,
-            currentStatus: input.currentStatus ?? "PLAN",
-          }]];
-        }
-        if (sql.includes("FROM master_panels")) return [[{ id: 11 }]];
-        if (sql.includes("FROM sm_car_panel_status")) return [[]];
-        if (sql.includes("FROM sm_jobdesc_plan p")) return [[{ total: input.reservedPlanHours }]];
-        if (sql.includes("FROM car_project_assignment")) return [[]];
-        return [[]];
+        if (/INSERT|UPDATE|DELETE/u.test(sql)) mutations.push(sql);
+        if (sql.includes("FROM cars c")) return [[{ carId: "CAR-1", panelId: 11,
+          divisionId: 10, jobTypeId: "JOB-1", panelName: "Panel A", jobName: "Repair" }]];
+        if (sql.includes("FROM master_job_types")) return [[{ id: "JOB-1", isTechnical: 1 }]];
+        if (sql.includes("job_type_id = ?")) return [[{ coreId: "CD-OPEN" }]];
+        if (sql.includes("WHERE jc.id = ?")) return [[{ coreId: "CD-OPEN", divisionId: 10 }]];
+        return [[{ status: "In_Progress" }]];
       },
-      execute: async (sql: string) => {
-        executed.push(sql);
-        return [{}];
-      },
+      execute: async (sql: string) => { mutations.push(sql); return [{}]; },
     };
     const repository = new MySqlJobPlanRepository(() => ({ getConnection: async () => connection }) as never);
-
-    await repository.createMany(
-      { employeeId: "EMP-1", actorId: "EMP-1", actorName: "Tester", scope },
-      [{
-        coreId: "CD-1",
-        assignedUserId: "EXECUTOR-1",
-        taskDate: "2026-09-01",
-        targetHours: input.targetHours,
-        startTime: "08:00",
-        finishTime: "09:00",
-        jobDescription: "Repair",
-        note: null,
-        isOvertime: false,
-        isPriority: false,
-      }],
-    );
-
-    return executed;
-  }
+    await assert.rejects(repository.createAdditionalCountdown({ employeeId: "OUTSIDE", scope: {
+      ...scope, canViewAllUnits: false, canViewAssignedUnits: false,
+    } }, { taskDate: "2026-11-13", deadlineDate: "2026-11-13", carId: "CAR-1", divisionId: 10,
+      panelId: 11, jobTypeId: "JOB-1", jobTypeName: "Repair", targetHours: 1,
+      jobDescription: "Repair", note: null, initialFinding: null, isNonTechnicalJob: false,
+      picPlan: "EMP-1", requiredGrade: null }), /SCOPE_FORBIDDEN/u);
+    expect(mutations).toEqual([]);
+    expect(committed).toBe(false);
+    expect(rolledBack).toBe(true);
+  });
 
   it("filters countdown choices by available plan hours", async () => {
     const statements: string[] = [];
@@ -173,110 +148,7 @@ describe("MySqlJobPlanRepository countdown alignment", () => {
     expect(sql).toContain("jc_panel.division_id = ?");
   });
 
-  it("rejects a job plan that only provides a panel name", async () => {
-    const connection = {
-      beginTransaction: async () => undefined,
-      commit: async () => undefined,
-      rollback: async () => undefined,
-      release: () => undefined,
-      query: async () => [[]],
-      execute: async () => [{}],
-    };
-    const repository = new MySqlJobPlanRepository(() => ({ getConnection: async () => connection }) as never);
-
-    let message = "";
-    try {
-      await repository.createWorkspace(
-        { employeeId: "EMP-1", actorId: "EMP-1", actorName: "Tester", scope },
-        {
-          mode: "normal",
-          taskDate: "2026-09-01",
-          deadlineDate: "2026-09-01",
-          projectTargetHours: "02:00",
-          isRework: false,
-          rows: [{
-            source: "additional",
-            referenceId: null,
-            carId: "UNIT-1",
-            divisionId: 1,
-            panelId: null,
-            jobTypeId: "JOB-1",
-            jobTypeName: null,
-            assignedUserId: "EXECUTOR-1",
-            targetHours: 2,
-            startTime: "08:00",
-            finishTime: "10:00",
-            jobDescription: "Panel name only",
-            note: null,
-            isPriority: false,
-            isNonTechnicalJob: false,
-            picPlan: "PIC-1",
-            requiredGrade: "SENIOR",
-          }],
-        },
-      );
-    } catch (error) {
-      message = (error as Error).message;
-    }
-
-    expect(message).toBe("ADDITIONAL_REFERENCE_INCOMPLETE");
-  });
-
-  it("rejects a WO row when no linked countdown exists", async () => {
-    const statements: string[] = [];
-    const connection = {
-      beginTransaction: async () => undefined,
-      commit: async () => undefined,
-      rollback: async () => undefined,
-      release: () => undefined,
-      query: async (sql: string) => {
-        statements.push(sql);
-        return [[]];
-      },
-      execute: async () => [{}],
-    };
-    const repository = new MySqlJobPlanRepository(() => ({ getConnection: async () => connection }) as never);
-
-    let message = "";
-    try {
-      await repository.createWorkspace(
-        { employeeId: "EMP-1", actorId: "EMP-1", actorName: "Tester", scope },
-        {
-          mode: "normal",
-          taskDate: "2026-09-01",
-          deadlineDate: "2026-09-01",
-          projectTargetHours: "02:00",
-          isRework: false,
-          rows: [{
-            source: "wo",
-            referenceId: "WO-1",
-            carId: null,
-            divisionId: null,
-            panelId: null,
-            jobTypeId: null,
-            jobTypeName: null,
-            assignedUserId: "EXECUTOR-1",
-            targetHours: 2,
-            startTime: "08:00",
-            finishTime: "10:00",
-            jobDescription: "WO without countdown",
-            note: null,
-            isPriority: false,
-            isNonTechnicalJob: false,
-            picPlan: null,
-            requiredGrade: null,
-          }],
-        },
-      );
-    } catch (error) {
-      message = (error as Error).message;
-    }
-
-    expect(message).toBe("WORK_ORDER_COUNTDOWN_NOT_FOUND");
-    expect(statements.some((sql) => sql.includes("INSERT INTO sm_jobdesc_plan"))).toBe(false);
-  });
-
-  it("resolves an additional job name and reuses an open countdown in one workspace transaction", async () => {
+  it("resolves an additional job name and reuses an open countdown without writing a plan", async () => {
     const queries: Array<{ sql: string; params?: unknown[] }> = [];
     const executed: Array<{ sql: string; params?: unknown[] }> = [];
     const connection = {
@@ -329,33 +201,14 @@ describe("MySqlJobPlanRepository countdown alignment", () => {
     };
     const repository = new MySqlJobPlanRepository(() => ({ getConnection: async () => connection }) as never);
 
-    await repository.createWorkspace(
-      { employeeId: "EMP-1", actorId: "EMP-1", actorName: "Tester", scope },
+    const result = await repository.createAdditionalCountdown(
+      { employeeId: "EMP-1", scope },
       {
-        mode: "normal",
-        taskDate: "2026-09-01",
-        deadlineDate: "2026-09-01",
-        projectTargetHours: "02:00",
-        isRework: false,
-        rows: [{
-          source: "additional",
-          referenceId: null,
-          carId: "CAR-1",
-          divisionId: 10,
-          panelId: 11,
-          jobTypeId: null,
-          jobTypeName: "Repair baru",
-          assignedUserId: "EXECUTOR-1",
-          targetHours: 2,
-          startTime: "08:00",
-          finishTime: "10:00",
-          jobDescription: "Repair baru",
-          note: null,
-          isPriority: false,
-          isNonTechnicalJob: false,
-          picPlan: "EXECUTOR-1",
-          requiredGrade: null,
-        }],
+        taskDate: "2026-09-01", deadlineDate: "2026-09-01",
+        carId: "CAR-1", divisionId: 10, panelId: 11,
+        jobTypeId: null, jobTypeName: "Repair baru", targetHours: 2,
+        jobDescription: "Repair baru", note: null, initialFinding: null,
+        isNonTechnicalJob: false, picPlan: "EXECUTOR-1", requiredGrade: null,
       },
     );
 
@@ -365,73 +218,112 @@ describe("MySqlJobPlanRepository countdown alignment", () => {
     expect(additionalLookupSql).toContain("'QC_READY'");
     expect(additionalLookupSql).toContain("'REJECTED'");
     expect(executed.some(({ sql }) => sql.includes("INSERT INTO sm_jobdesc_countdown"))).toBe(false);
-    expect(executed.some(({ sql, params }) => sql.includes("INSERT INTO sm_jobdesc_plan") && params?.[1] === "CD-OPEN")).toBe(true);
+    expect(result.coreId).toBe("CD-OPEN");
+    expect(result.isNewCore).toBe(false);
+    expect(executed.some(({ sql }) => sql.includes("INSERT INTO sm_jobdesc_plan"))).toBe(false);
+  });
+});
+
+
+describe("MySqlJobPlanRepository durable QC rework drafts", () => {
+  it("loads only the current scoped QC draft with authoritative Countdown and inspection IDs", async () => {
+    let statement = "";
+    let values: unknown[] = [];
+    const repository = new MySqlJobPlanRepository(() => ({ query: async (sql: string, params: unknown[]) => {
+      statement = sql; values = params;
+      return [[{ qcId: "QC-1", coreId: "CORE-1", qcNotes: JSON.stringify({
+        notes: "Rapikan", jobPlanDraftState: "DRAFT", jobPlanDraft: {
+          draftItemId: "untrusted-id", coreId: "untrusted-core", targetHours: 70 / 60,
+        },
+      }) }]];
+    } }) as never);
+    const drafts = await repository.listQcReworkDrafts({ employeeId: "KD-1", scope: {
+      ...scope, canViewAllUnits: false, divisionIds: [7],
+    }, divisionIds: [7] });
+    expect(drafts).toEqual([{ draftItemId: "qc-rework:QC-1", coreId: "CORE-1", targetHours: 70 / 60 }]);
+    expect(statement).toContain("jc.ref_rework_qc_id = q.id");
+    expect(statement).toContain("JSON_VALID(q.qc_notes)");
+    expect(statement).toContain("$.jobPlanDraftState");
+    expect(statement).toContain("jc.division_id IN (?)");
+    expect(statement).toContain("p_scope.assigned_user_id = ?");
+    expect(values).toContain("KD-1");
+    expect(values.filter((value) => value === 7).length >= 2).toBe(true);
   });
 
-  it("allows 1 requested hour when 1 countdown hour remains and none is reserved", async () => {
-    const executed = await createPlanWithCapacity({
-      remainingHours: 1,
-      reservedPlanHours: 0,
-      targetHours: 1,
-    });
-
-    expect(executed.some((sql) => sql.includes("INSERT INTO sm_jobdesc_plan"))).toBe(true);
+  it("allows scoped cleanup only after native cancellation consumed the QC draft", async () => {
+    const statements: Array<{ sql: string; values: unknown[] }> = [];
+    const repository = new MySqlJobPlanRepository(() => ({ query: async (sql: string, values: unknown[]) => {
+      statements.push({ sql, values });
+      return [[{ qcId: "QC-1", draftState: "DISMISSED" }]];
+    } }) as never);
+    const consumedIds = await repository.dismissQcReworkDrafts({ employeeId: "KD-1", scope: {
+      ...scope, canViewAllUnits: false, divisionIds: [7],
+    }, draftItemIds: ["ordinary-draft", "qc-rework:QC-1"] });
+    expect(consumedIds).toEqual(["qc-rework:QC-1"]);
+    expect(statements.length).toBe(1);
+    expect(statements[0]?.sql.trim().startsWith("SELECT")).toBe(true);
+    expect(statements[0]?.sql).toContain("p_scope.assigned_user_id = ?");
+    expect(statements[0]?.values).toContain("QC-1");
+    expect(statements[0]?.values.includes("ordinary-draft")).toBe(false);
+    expect(statements[0]?.values).toContain("KD-1");
+  });
+  it("refuses direct dismissal of every active QC draft, including an unlinked intent", async () => {
+    const statements: string[] = [];
+    const repository = new MySqlJobPlanRepository(() => ({ query: async (sql: string) => {
+      statements.push(sql);
+      return [[{ qcId: "QC-1", draftState: "DRAFT" }]];
+    } }) as never);
+    await assert.rejects(repository.dismissQcReworkDrafts({ employeeId: "QA-1", scope,
+      draftItemIds: ["qc-rework:QC-1"] }), /QC_REWORK_DRAFT_LINKED/u);
+    expect(statements.length).toBe(1);
+    expect(statements[0]?.trim().startsWith("SELECT")).toBe(true);
   });
 
-  it("rejects requested hours when reserved plan hours exhaust countdown capacity", async () => {
-    let message = "";
-    try {
-      await createPlanWithCapacity({
-        remainingHours: 1,
-        reservedPlanHours: 1,
-        targetHours: 0.5,
-      });
-    } catch (error) {
-      message = (error as Error).message;
+  it("saves mutable fields under the scoped lock and preserves source and canonical linkage", async () => {
+    const statements: Array<{ sql: string; values: unknown[] }> = [];
+    const events: string[] = [];
+    const original = { draftItemId: "qc-rework:QC-1", coreId: "CORE-1", carId: "CAR-1", divisionId: 7,
+      isRework: true, linkedPlanId: "PLAN-REAL", linkedPlanVersion: 2, targetHours: 1 };
+    const envelope = { notes: "Human QC note", workActualId: "ACTUAL-1", extensionHours: .5,
+      jobPlanDraftState: "DRAFT", jobPlanDraft: original };
+    const connection = {
+      beginTransaction: async () => { events.push("begin"); },
+      query: async (sql: string, values: unknown[]) => {
+        statements.push({ sql, values });
+        return [[{ qcId: "QC-1", coreId: "CORE-1", qcNotes: JSON.stringify(envelope) }]];
+      },
+      execute: async (sql: string, values: unknown[]) => { statements.push({ sql, values }); return [{}]; },
+      commit: async () => { events.push("commit"); }, rollback: async () => { events.push("rollback"); },
+      release: () => { events.push("release"); },
+    };
+    const repository = new MySqlJobPlanRepository(() => ({ getConnection: async () => connection }) as never);
+    const saved = await repository.saveQcReworkDrafts({ employeeId: "KD-1", scope: { ...scope,
+      canViewAllUnits: false, divisionIds: [7] }, items: [{ ...original, linkedPlanId: "FORGED",
+        linkedPlanVersion: 99, carId: "FORGED-CAR", divisionId: 99, targetHours: .5, note: "KD edit" }] as never });
+    expect(saved).toEqual([{ ...original, targetHours: .5, note: "KD edit", sourceType: "COUNTDOWN" }]);
+    expect(statements[0]?.sql).toContain("FOR UPDATE");
+    expect(statements[0]?.sql).toContain("jc.ref_rework_qc_id = q.id");
+    expect(statements[0]?.values).toContain("KD-1");
+    const persisted = JSON.parse(String(statements[1]?.values[0]));
+    expect(persisted.notes).toBe("Human QC note");
+    expect(persisted.workActualId).toBe("ACTUAL-1");
+    expect(persisted.extensionHours).toBe(.5);
+    expect(events).toEqual(["begin", "commit", "release"]);
+  });
+
+  it("rolls back without saving forged or missing QC draft identities", async () => {
+    for (const rows of [[], [{ qcId: "QC-1", coreId: "OTHER", qcNotes: JSON.stringify({ notes: "QC",
+      jobPlanDraftState: "DRAFT", jobPlanDraft: {} }) }]]) {
+      const events: string[] = [];
+      const repository = new MySqlJobPlanRepository(() => ({ getConnection: async () => ({
+        beginTransaction: async () => undefined, query: async () => [rows],
+        execute: async () => { events.push("write"); }, commit: async () => { events.push("commit"); },
+        rollback: async () => { events.push("rollback"); }, release: () => { events.push("release"); },
+      }) }) as never);
+      await assert.rejects(repository.saveQcReworkDrafts({ employeeId: "KD-1", scope,
+        items: [{ draftItemId: "qc-rework:QC-1", coreId: "CORE-1" }] as never }), /DRAFT_NOT_FOUND|SCOPE_FORBIDDEN/u);
+      expect(events).toEqual(["rollback", "release"]);
     }
-
-    expect(message).toBe("COUNTDOWN_CAPACITY_EXCEEDED");
   });
 
-  it("rejects create when the countdown is waiting for QC", async () => {
-    let message = "";
-    try {
-      await createPlanWithCapacity({
-        remainingHours: 4,
-        reservedPlanHours: 0,
-        targetHours: 1,
-        currentStatus: "READY_QC",
-      });
-    } catch (error) {
-      message = (error as Error).message;
-    }
-
-    expect(message).toBe("COUNTDOWN_NOT_PLANABLE");
-  });
-
-  it("rejects create when the countdown is rejected", async () => {
-    let message = "";
-    try {
-      await createPlanWithCapacity({
-        remainingHours: 4,
-        reservedPlanHours: 0,
-        targetHours: 1,
-        currentStatus: "REJECTED",
-      });
-    } catch (error) {
-      message = (error as Error).message;
-    }
-
-    expect(message).toBe("COUNTDOWN_NOT_PLANABLE");
-  });
-
-  it("allows requested hours equal to remaining minus reserved plan hours", async () => {
-    const executed = await createPlanWithCapacity({
-      remainingHours: 5,
-      reservedPlanHours: 2,
-      targetHours: 3,
-    });
-
-    expect(executed.some((sql) => sql.includes("INSERT INTO sm_jobdesc_plan"))).toBe(true);
-  });
 });

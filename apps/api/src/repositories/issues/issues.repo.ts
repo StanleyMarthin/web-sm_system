@@ -1,3 +1,4 @@
+import { qcNotesTextSql } from "@/repositories/qc/qc-notes";
 import type { AuthScope } from "@smsystem/contracts/auth";
 import type {
   IssueCreateRequest,
@@ -821,7 +822,7 @@ export class MySqlIssuesRepository implements IssuesRepository {
           'QC_REJECT' AS issueType,
           'HIGH' AS severity,
           CONCAT('QC Reject - ', COALESCE(cd.section_name, 'Task')) AS title,
-          COALESCE(NULLIF(TRIM(qc.qc_notes), ''), 'QC tidak lolos dan perlu tindak lanjut.') AS description
+          COALESCE(NULLIF(TRIM(${qcNotesTextSql("qc.qc_notes")}), ''), 'QC tidak lolos dan perlu tindak lanjut.') AS description
         FROM sm_qc_inspections qc
         JOIN sm_jobdesc_countdown cd ON cd.id = qc.core_id
         JOIN cars c ON c.id = cd.car_id

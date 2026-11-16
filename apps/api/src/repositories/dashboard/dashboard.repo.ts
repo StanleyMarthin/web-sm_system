@@ -203,6 +203,35 @@ export interface DashboardRepository {
   listUnitWorkHours(params: DashboardQueryParams): Promise<Array<{ carId: string; unitName: string; actualHours: number }>>;
 }
 
+export function buildDivisionAggregateSourceSql(countdown: string, divisionSummary: string): string {
+  return `
+    SELECT
+      sdm.car_id AS carId,
+      sdm.division_id AS divisionId,
+      sdm.avg_progress_percentage AS avgProgressPercent,
+      sdm.count_panel_done AS completedPanels,
+      sdm.count_panel_plan AS plannedPanels,
+      sdm.total_man_hours_spent AS actualHours
+    FROM ${divisionSummary} sdm
+    UNION ALL
+    SELECT
+      cd.car_id AS carId,
+      cd.division_id AS divisionId,
+      ROUND(AVG(COALESCE(cd.actual_progress_percent, 0)), 2) AS avgProgressPercent,
+      COUNT(DISTINCT CASE WHEN cd.status = 'DONE' OR COALESCE(cd.actual_progress_percent, 0) >= 100 THEN cd.panel_id END) AS completedPanels,
+      COUNT(DISTINCT cd.panel_id) AS plannedPanels,
+      ROUND(SUM(COALESCE(cd.total_actual_hours, 0)), 2) AS actualHours
+    FROM ${countdown} cd
+    WHERE NOT EXISTS (
+      SELECT 1
+      FROM ${divisionSummary} existing
+      WHERE existing.car_id = cd.car_id
+        AND existing.division_id = cd.division_id
+    )
+    GROUP BY cd.car_id, cd.division_id
+  `;
+}
+
 export class MySqlDashboardRepository implements DashboardRepository {
   private readonly pool: Pool;
   private readonly env = getApiEnv();
@@ -790,37 +819,37 @@ export class MySqlDashboardRepository implements DashboardRepository {
   ): Promise<DivisionAggregateRow[]> {
     const queryParams: unknown[] = [];
     const scopeClause = buildScopeWhereClause(params.scope, params.employeeId, queryParams, {
-      car: "sdm.car_id",
-      division: "sdm.division_id",
+      car: "source.carId",
+      division: "source.divisionId",
     });
 
-    const whereClauses = ["COALESCE(sdm.count_panel_plan, 0) > 0"];
+    const whereClauses = ["COALESCE(source.plannedPanels, 0) > 0"];
     if (scopeClause) {
       whereClauses.push(scopeClause);
     }
     if (params.divisionId) {
-      whereClauses.push("sdm.division_id = ?");
+      whereClauses.push("source.divisionId = ?");
       queryParams.push(Number(params.divisionId));
     }
     if (params.unitId) {
-      whereClauses.push("sdm.car_id = ?");
+      whereClauses.push("source.carId = ?");
       queryParams.push(params.unitId);
     }
 
     const [rows] = await this.pool.query<DivisionAggregateRow[]>(
       `
         SELECT
-          sdm.division_id AS divisionId,
+          source.divisionId AS divisionId,
           COALESCE(d.name, '-') AS divisionName,
-          COUNT(DISTINCT sdm.car_id) AS activeUnits,
-          ROUND(AVG(COALESCE(sdm.avg_progress_percentage, 0)), 2) AS avgProgressPercent,
-          SUM(COALESCE(sdm.count_panel_done, 0)) AS completedPanels,
-          SUM(COALESCE(sdm.count_panel_plan, 0)) AS plannedPanels,
-          ROUND(SUM(COALESCE(sdm.total_man_hours_spent, 0)), 2) AS actualHours
-        FROM ${this.tables.divisionSummary} sdm
-        LEFT JOIN ${this.tables.divisions} d ON d.id = sdm.division_id
+          COUNT(DISTINCT source.carId) AS activeUnits,
+          ROUND(AVG(COALESCE(source.avgProgressPercent, 0)), 2) AS avgProgressPercent,
+          SUM(COALESCE(source.completedPanels, 0)) AS completedPanels,
+          SUM(COALESCE(source.plannedPanels, 0)) AS plannedPanels,
+          ROUND(SUM(COALESCE(source.actualHours, 0)), 2) AS actualHours
+        FROM (${buildDivisionAggregateSourceSql(this.tables.countdown, this.tables.divisionSummary)}) source
+        LEFT JOIN ${this.tables.divisions} d ON d.id = source.divisionId
         WHERE ${whereClauses.join(" AND ")}
-        GROUP BY sdm.division_id, d.name
+        GROUP BY source.divisionId, d.name
         ORDER BY avgProgressPercent ASC, actualHours DESC, activeUnits DESC
         LIMIT 8
       `,

@@ -208,10 +208,18 @@ export function mapUnitsError(request: Request, error: unknown): Response {
     if (error.message === "UNIT_PANEL_PARENT_INVALID") {
       return errorResponse(
         request,
-        "Part hanya boleh ditempatkan di bawah panel utama.",
+        "Induk panel/part tidak valid untuk unit ini.",
         409,
         "UNIT_PANEL_PARENT_INVALID",
       );
+    }
+
+    if (error.message === "UNIT_PANEL_PARENT_CYCLE") {
+      return errorResponse(request, "Induk tidak boleh merujuk ke item sendiri atau turunannya.", 409, "UNIT_PANEL_PARENT_CYCLE");
+    }
+
+    if (error.message === "UNIT_PANEL_PARENT_SCHEMA_REQUIRED") {
+      return errorResponse(request, "Relasi induk panel/part belum diaktifkan pada database.", 409, "UNIT_PANEL_PARENT_SCHEMA_REQUIRED");
     }
 
     if (error.message === "UNIT_PANEL_HAS_CHILDREN") {

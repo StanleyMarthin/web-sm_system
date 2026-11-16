@@ -3,11 +3,14 @@
 import type { JobPlanRuntimeReadItem } from "@smsystem/contracts/job-plan-runtime";
 import type { JobPlanMode, JobPlanRecord } from "@smsystem/contracts/job-plan";
 import type { CellKeyDownEvent, CellValueChangedEvent, ColDef, GridApi, GridReadyEvent, ICellRendererParams, SelectionChangedEvent, TabToNextCellParams } from "ag-grid-community";
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   createJobPlanCommandId,
   fetchJobPlanRuntimeList,
   mutateJobPlanApproval,
+  submitSharedJobPlanDraft,
+  cancelSharedJobPlanDraft,
 } from "@/shared/api/job-plan/job-plan-runtime";
 import { createJobPlanAdditionalCountdown, fetchJobPlanOptions, saveJobPlanDraft } from "@/shared/api/job-plan/job-plan";
 import { SmsAgGrid } from "@/shared/datagrid/sms-ag-grid";
@@ -17,6 +20,7 @@ import { useSweetAlert } from "@/shared/ui/sweet-alert";
 import { SmartSelectCellEditor, type SmartSelectOption } from "@/modules/units/components/master-panel-smart-select-editor";
 import {
   buildCountdownPanelOptions,
+  buildCreateJobPlanRuntimePayload,
   buildJobPlanDraftRecord,
   calculateJobPlanDeadlineDate,
   buildEditDraftJobPlanRuntimePayload,
@@ -31,11 +35,13 @@ import {
   jobPlanWindowMinutes,
   minutesToDuration,
   minutesToTime,
+  mergeJobPlanDraftDisplayRows,
   resolveAdditionalJobTargetMinutes,
   resolveJobPlanDivisionName,
   splitJobPlanRuntimeDraftForSchedule,
   toLocalDateValue,
   toJobPlanRuntimeDisplayRows,
+  canPerformJobPlanAction,
   toJobPlanDraftDisplayRows,
   validateJobPlanRuntimeDraft,
   type JobPlanRuntimeDisplayRow,
@@ -53,6 +59,7 @@ type WorkMode = "normal" | "overtime";
 type PlannerRow = JobPlanRuntimeDisplayRow | (JobPlanRuntimeDisplayRow & JobPlanRuntimePlannerDraft & { editPlanId?: string; editVersion?: number });
 
 interface AdditionalJobFormState {
+  isNonTechnicalJob: boolean;
   divisionId: string;
   carId: string;
   componentName: string;
@@ -83,6 +90,8 @@ interface JobPlanPlannerShellProps {
   userId: string;
   canCreate: boolean;
   canApprove: boolean;
+  supplemental?: boolean;
+  ownRequestsOnly?: boolean;
   initialCoreId: string | null;
   initialDate: string | null;
   initialMode: string | null;
@@ -269,8 +278,10 @@ function numberValue(value: unknown) {
 
 function statusLabel(row: PlannerRow) {
   if (row.isNew || row.editPlanId) return "Belum Disimpan";
+  if (row.executionStatus === "cancel") return "Dibatalkan";
+  if (row.executionStatus && ["FINISHED_PENDING_VALIDATION", "VALIDATED"].includes(row.executionState)) return row.execution;
   if (row.executionState === "RUNNING") return "Berjalan";
-  if (row.executionState === "HOLD") return "Hold";
+  if (row.executionState === "HOLD") return "Jeda";
   if (row.executionState === "FINISHED_PENDING_VALIDATION") return "Selesai";
   if (row.executionState === "VALIDATED") return "Tervalidasi";
   return row.approval;
@@ -659,6 +670,15 @@ function AdditionalJobDialog({
             />
           </label>
           <div className="sm:col-span-2">
+            <label className="mb-2 flex min-h-11 cursor-pointer items-center gap-2 text-[13px] text-foreground">
+              <input
+                type="checkbox"
+                checked={value.isNonTechnicalJob}
+                onChange={(event) => update({ isNonTechnicalJob: event.target.checked })}
+                className="h-4 w-4 accent-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+              />
+              Pekerjaan nonteknis
+            </label>
             <SearchSelectField
               label="Jobdesc"
               value={value.jobTypeText}
@@ -767,6 +787,8 @@ export function JobPlanPlannerShell({
   userId,
   canCreate,
   canApprove,
+  supplemental = false,
+  ownRequestsOnly = false,
   initialCoreId,
   initialDate,
   initialMode,
@@ -779,6 +801,8 @@ export function JobPlanPlannerShell({
   panels,
   jobTypes,
 }: JobPlanPlannerShellProps) {
+  const [requestKind, setRequestKind] = useState("Tambahan");
+  const [requestReason, setRequestReason] = useState("");
   const [items, setItems] = useState<JobPlanRuntimeReadItem[]>([]);
   const [drafts, setDrafts] = useState<JobPlanRuntimePlannerDraft[]>([]);
   const [editDrafts, setEditDrafts] = useState<Array<JobPlanRuntimePlannerDraft & { editPlanId: string; editVersion: number }>>([]);
@@ -788,6 +812,7 @@ export function JobPlanPlannerShell({
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedRows, setSelectedRows] = useState<PlannerRow[]>([]);
+  const [removedSharedDraftIds, setRemovedSharedDraftIds] = useState<string[]>([]);
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
   const [dateFilter, setDateFilter] = useState(initialDate ?? toLocalDateValue());
   const [kpFilter, setKpFilter] = useState("");
@@ -797,6 +822,7 @@ export function JobPlanPlannerShell({
   const [workModeFilter, setWorkModeFilter] = useState<JobPlanMode>(() => initialWorkModeFilter(initialWorkMode));
   const [additionalJobOpen, setAdditionalJobOpen] = useState(false);
   const [additionalJobForm, setAdditionalJobForm] = useState<AdditionalJobFormState>({
+    isNonTechnicalJob: false,
     divisionId: "",
     carId: "",
     componentName: "",
@@ -892,8 +918,8 @@ export function JobPlanPlannerShell({
   function personOptions(row: Partial<PlannerRow> | Partial<JobPlanRuntimePlannerDraft> | null | undefined) {
     const divisionId = rowDivisionId(row);
     const cached = lazyEmployees[String(divisionId ?? "all")];
-    if (cached) return toOptions(cached);
-    const source = divisionId === null ? employees : employees.filter((item) => item.divisionId === divisionId);
+    if (cached) return toOptions(ownRequestsOnly ? cached.filter((item) => item.value === userId) : cached);
+    const source = employees.filter((item) => (!ownRequestsOnly || item.value === userId) && (divisionId === null || item.divisionId === divisionId));
     return toOptions(source);
   }
 
@@ -1129,7 +1155,11 @@ export function JobPlanPlannerShell({
   }, [additionalJobForm, additionalJobOpen, drafts, editDrafts, lazyEmployees, lazyJobs, lazyPanels, lazyUnitOptions]);
 
   function normalizeDraftSelection(row: JobPlanRuntimePlannerDraft): JobPlanRuntimePlannerDraft {
-    let next = { ...row };
+    let next = {
+      ...row,
+      urgent: supplemental || row.urgent,
+      note: supplemental && !row.note.trim() && requestReason.trim() ? `[${requestKind}] ${requestReason.trim()}` : row.note,
+    };
     const divisionOptionsForRow = teamOptions();
     if (next.divisionId !== null && !divisionOptionsForRow.some((option) => option.value === String(next.divisionId))) {
       next = { ...next, divisionId: null, carId: "", panelId: null, coreId: "", employeeId: "", jobDescription: "", initialFinding: "" };
@@ -1195,7 +1225,7 @@ export function JobPlanPlannerShell({
     };
   }
 
-  async function load() {
+  async function load(preserveError = false) {
     setIsLoading(true);
     const result = await fetchJobPlanRuntimeList({
       userId,
@@ -1210,7 +1240,7 @@ export function JobPlanPlannerShell({
       return;
     }
     setItems(result.result.items);
-    setError(null);
+    if (!preserveError) setError(null);
     setIsLoading(false);
   }
 
@@ -1235,24 +1265,30 @@ export function JobPlanPlannerShell({
     });
     const runtimePlanIds = new Set(runtimeRows.map((row) => row.planId).filter(Boolean));
     const legacyDraftRows = toJobPlanDraftDisplayRows(initialDraftRows, activeCountdowns, employees)
-      .filter((row) => !runtimePlanIds.has(row.planId));
+      .filter((row) => !runtimePlanIds.has(row.planId) && !removedSharedDraftIds.includes(row.sharedDraftId ?? ""))
+      .map((row) => {
+        const draft = editDrafts.find((item) => item.sharedDraftId === row.sharedDraftId);
+        return draft ? draftToDisplay(draft, activeCountdowns, employees, divisions, panels, jobTypes) : row;
+      });
 
     return [
-      ...legacyDraftRows,
-      ...runtimeRows,
+      ...mergeJobPlanDraftDisplayRows(runtimeRows, legacyDraftRows),
       ...drafts.map((draft) => draftToDisplay(draft, activeCountdowns, employees, divisions, panels, jobTypes)),
     ];
-  }, [activeCountdowns, drafts, editDrafts, employees, divisions, initialDraftRows, items, jobTypes, panels]);
+  }, [activeCountdowns, drafts, editDrafts, employees, divisions, initialDraftRows, items, jobTypes, panels, removedSharedDraftIds]);
 
   const filteredRows = useMemo(() => rows.filter((row) => {
+    if (supplemental && !row.urgent) return false;
     if (dateFilter && row.taskDate !== dateFilter) return false;
     if (kpFilter && row.kpId !== kpFilter) return false;
     if (qaFilter && !row.qaIds.includes(qaFilter)) return false;
     if (divisionFilter && row.divisionName !== divisionFilter) return false;
-    if (statusFilter && row.approvalState !== statusFilter && row.executionState !== statusFilter) return false;
+    if (statusFilter === "CANCEL") {
+      if (row.executionStatus !== "cancel") return false;
+    } else if (statusFilter && (row.executionStatus === "cancel" || (row.approvalState !== statusFilter && row.executionState !== statusFilter))) return false;
     if (workModeFilter !== "all" && row.workMode !== workModeFilter) return false;
     return true;
-  }), [dateFilter, divisionFilter, kpFilter, qaFilter, rows, statusFilter, workModeFilter]);
+  }), [dateFilter, divisionFilter, kpFilter, qaFilter, rows, statusFilter, workModeFilter, supplemental]);
 
   const kpOptions = useMemo(() => uniqueByValue(activeCountdowns.map((item) => ({
     value: item.kpId ?? "",
@@ -1271,13 +1307,14 @@ export function JobPlanPlannerShell({
 
   const statusOptions = [
     ["DRAFT", "Draft"],
-    ["DIVISION_REVIEW", "Review QA"],
-    ["UNIT_REVIEW", "Review KP"],
+    ["DIVISION_REVIEW", supplemental ? "Review KD" : "Review QA"],
+    ["UNIT_REVIEW", supplemental ? "Review KP / QA / PM" : "Review KP"],
     ["MANAGEMENT_REVIEW", "Review PM"],
     ["APPROVED", "Disetujui"],
     ["REJECTED", "Ditolak"],
     ["RUNNING", "Berjalan"],
-    ["HOLD", "Ditahan"],
+    ["HOLD", "Jeda / Pending"],
+    ["CANCEL", "Dibatalkan"],
     ["FINISHED_PENDING_VALIDATION", "Selesai"],
     ["VALIDATED", "Tervalidasi"],
   ] as const;
@@ -1289,19 +1326,21 @@ export function JobPlanPlannerShell({
     && row.approvalState === "REJECTED"
     && row.planId
     && row.version
-    && (row.createdBy === userId || canApprove);
+    && canPerformJobPlanAction(row, "edit_draft");
   const isEditablePersistedRow = (row: PlannerRow) =>
     !row.isNew
     && !row.editPlanId
     && row.planId
     && row.version
+    && (row.sharedDraftId || canPerformJobPlanAction(row, "edit_draft"))
     && (row.approvalState === "DRAFT" || isRejectedOwnerRow(row));
   const isCancellablePlannerRow = (row: PlannerRow) =>
+    (Boolean(row.sharedDraftId) || canPerformJobPlanAction(row, "cancel")) && (
     (row.approvalState === "DRAFT" && (row.planId || row.editPlanId) && (row.version || row.editVersion))
-    || isRejectedOwnerRow(row);
+    || isRejectedOwnerRow(row));
 
-  const approvableSelectedRows = selectedRows.filter((row) => !row.isNew && !row.editPlanId && isReviewState(row.approvalState));
-  const submittableSelectedRows = selectedRows.filter((row) => !row.isNew && !row.editPlanId && row.approvalState === "DRAFT" && row.planId && row.version);
+  const approvableSelectedRows = selectedRows.filter((row) => !row.isNew && !row.editPlanId && isReviewState(row.approvalState) && canPerformJobPlanAction(row, "approve"));
+  const submittableSelectedRows = selectedRows.filter((row) => !row.isNew && !row.editPlanId && row.approvalState === "DRAFT" && row.planId && row.version && (row.sharedDraftId || canPerformJobPlanAction(row, "submit")));
   const editableSelectedRows = selectedRows.filter(isEditablePersistedRow);
   const cancellableSelectedRows = selectedRows.filter(isCancellablePlannerRow);
   const rejectedOwnerSelectedRows = selectedRows.filter((row) =>
@@ -1441,6 +1480,10 @@ export function JobPlanPlannerShell({
   ], [activeCountdowns, employees, jobTypes, lazyEmployees, lazyJobs, lazyPanels, lazyUnitOptions, panels, technicalDivisionOptions]);
 
   function addDraft() {
+    if (supplemental && !requestReason.trim()) {
+      setError("Alasan tambahan, penggantian, atau peralihan wajib diisi.");
+      return;
+    }
     if (planableCountdowns.length === 0) {
       setError("Belum ada countdown yang bisa dibuat plan. Countdown DONE, CANCEL, REJECTED, atau butuh QC tidak ditampilkan.");
       return;
@@ -1448,6 +1491,9 @@ export function JobPlanPlannerShell({
     const draft = createJobPlanRuntimeDraft(selectedContext && isJobPlanCountdownPlannable(selectedContext) ? selectedContext : null);
     const nextDraft = {
       ...draft,
+      urgent: supplemental,
+      note: supplemental ? `[${requestKind}] ${requestReason.trim()}` : draft.note,
+      employeeId: ownRequestsOnly ? userId : draft.employeeId,
       taskDate: initialDate ?? draft.taskDate,
       workMode: defaultDraftWorkMode,
       isOvertime: isOvertimeMode(defaultDraftWorkMode),
@@ -1468,6 +1514,10 @@ export function JobPlanPlannerShell({
   }
 
   function addAdditionalJobDraft() {
+    if (supplemental && !requestReason.trim()) {
+      setError("Alasan tambahan, penggantian, atau peralihan wajib diisi.");
+      return;
+    }
     const divisionId = numberValue(additionalJobForm.divisionId);
     const panelId = numberValue(additionalJobForm.panelId);
     const jobText = additionalJobForm.jobTypeText.trim();
@@ -1518,12 +1568,15 @@ export function JobPlanPlannerShell({
       deadlineDate: additionalJobForm.deadlineDate.trim() || null,
       jobDescription: description,
       initialFinding: additionalJobForm.initialFinding.trim(),
-      note: additionalJobForm.note.trim(),
+      urgent: supplemental,
+      note: supplemental ? `[${requestKind}] ${requestReason.trim()}${additionalJobForm.note.trim() ? ` — ${additionalJobForm.note.trim()}` : ""}` : additionalJobForm.note.trim(),
       isOvertime: isOvertimeMode(defaultDraftWorkMode),
+      isNonTechnicalJob: additionalJobForm.isNonTechnicalJob,
     });
     setDrafts((current) => [...current, draft]);
     setAdditionalJobOpen(false);
     setAdditionalJobForm({
+      isNonTechnicalJob: false,
       divisionId: "",
       carId: "",
       componentName: "",
@@ -1592,8 +1645,9 @@ export function JobPlanPlannerShell({
       initialFinding: String(row.initialFinding ?? ""),
       note: String(row.note ?? ""),
       isOvertime: isOvertimeMode(String(row.workMode ?? "normal") as WorkMode),
-      isRework: false,
+      isRework: Boolean(row.isRework),
       isPriority: Boolean(row.isPriority),
+      isNonTechnicalJob: Boolean(row.isNonTechnicalJob),
       error: null,
     };
     if (field === "workMode") {
@@ -1825,6 +1879,8 @@ export function JobPlanPlannerShell({
             note: row.note.trim() || null,
             picPlan: row.employeeId,
             requiredGrade: null,
+            isNonTechnicalJob: row.isNonTechnicalJob ?? false,
+            urgent: row.urgent ?? false,
           });
 
         if (!countdownResult.success) {
@@ -1858,9 +1914,15 @@ export function JobPlanPlannerShell({
       }
     }
     for (const row of validatedEdits) {
-      const result = await mutateJobPlanApproval(row.editPlanId, buildEditDraftJobPlanRuntimePayload(row, userId, createJobPlanCommandId("web-edit-draft"), row.editVersion));
+      const result = row.sharedDraftId
+        ? await saveJobPlanDraft({ replaceItems: false, items: [buildJobPlanDraftRecord({
+            ...row, clientId: row.sharedDraftId, targetTotalText: row.durationText,
+          }, { countdowns: activeCountdowns, employees, divisions, panels, jobTypes })] })
+        : await mutateJobPlanApproval(row.editPlanId, buildEditDraftJobPlanRuntimePayload(row, userId, createJobPlanCommandId("web-edit-draft"), row.editVersion));
       if (!result.success) {
         failedEdits.push({ ...row, error: result.message });
+      } else if (row.sharedDraftId) {
+        savedSharedDraft = true;
       }
     }
 
@@ -1876,8 +1938,8 @@ export function JobPlanPlannerShell({
   }
 
   async function reviewRows(rowsToReview: PlannerRow[], action: "approve" | "reject", rejectReason?: string) {
-    if (rowsToReview.length === 0 || isSaving) return;
-    const validRows = rowsToReview.filter((row) => row.planId && row.version && isReviewState(row.approvalState));
+    if (!canApprove || rowsToReview.length === 0 || isSaving) return;
+    const validRows = rowsToReview.filter((row) => row.planId && row.version && isReviewState(row.approvalState) && canPerformJobPlanAction(row, action));
     if (validRows.length !== rowsToReview.length || !sameApprovalStage(validRows)) {
       setError("Pilih rencana pada tahap persetujuan yang sama.");
       sweetAlert.notifyWarning("Persetujuan belum diproses", "Tahap persetujuan pada baris terpilih harus sama.");
@@ -1917,35 +1979,57 @@ export function JobPlanPlannerShell({
 
   async function submitRows(rowsToSubmit: PlannerRow[]) {
     if (rowsToSubmit.length === 0 || isSaving) return;
-    const validRows = rowsToSubmit.filter((row) => row.planId && row.version && row.approvalState === "DRAFT");
+    const validRows = rowsToSubmit.filter((row) => row.planId && row.version && row.approvalState === "DRAFT" && (row.sharedDraftId || canPerformJobPlanAction(row, "submit")));
     if (validRows.length !== rowsToSubmit.length) {
       setError("Pilih rencana draft yang sudah tersimpan.");
       return;
     }
     const confirmed = await sweetAlert.confirm({
       title: `Ajukan ${validRows.length} rencana?`,
-      description: "Rencana akan masuk ke Review QA.",
+      description: validRows.some((row) => row.urgent) ? "Tugas mengikuti persetujuan sesuai pembuatnya. Tugas terbit setelah persetujuan terpenuhi." : "Rencana akan masuk ke Review QA.",
       confirmLabel: "Ajukan",
     });
     if (!confirmed) return;
     setIsSaving(true);
+    setError(null);
     let failed = 0;
-    for (const row of validRows) {
-      const result = await mutateJobPlanApproval((row.planId ?? row.editPlanId) as string, {
-        action: "submit",
-        userId,
-        commandId: createJobPlanCommandId("web-submit"),
-        expectedVersion: row.version as number,
-      });
-      if (!result.success) {
-        failed += 1;
-        setError(result.message);
+    try {
+      for (const row of validRows) {
+        const validation = row.sharedDraftId ? validateJobPlanRuntimeDraft(createEditDraftFromRow(row)) : null;
+        if (validation) {
+          failed += 1;
+          setError(validation);
+          continue;
+        }
+        const result = row.sharedDraftId ? await submitSharedJobPlanDraft({
+          ...buildCreateJobPlanRuntimePayload(createEditDraftFromRow(row), userId, "web-shared-draft"),
+          draftItemId: row.sharedDraftId,
+          linkedPlanId: row.sharedLinkedPlanId,
+          draftRecord: buildJobPlanDraftRecord({
+            ...createEditDraftFromRow(row), clientId: row.sharedDraftId, targetTotalText: row.durationText,
+          }, { countdowns: activeCountdowns, employees, divisions, panels, jobTypes }),
+        }) : await mutateJobPlanApproval((row.planId ?? row.editPlanId) as string, {
+          action: "submit",
+          userId,
+          commandId: createJobPlanCommandId("web-submit"),
+          expectedVersion: row.version as number,
+        });
+        if (!result.success) {
+          failed += 1;
+          setError(result.message);
+        } else if (row.sharedDraftId) {
+          setRemovedSharedDraftIds((current) => [...current, row.sharedDraftId as string]);
+        }
       }
+      await load(true);
+    } catch {
+      failed += 1;
+      setError("Pengajuan belum terkonfirmasi. Muat ulang dan coba lagi; draft tetap tersimpan.");
+    } finally {
+      setIsSaving(false);
     }
-    await load();
-    setIsSaving(false);
     if (failed === 0) {
-      sweetAlert.notifySuccess("Rencana diajukan", `${validRows.length} draft masuk Review QA.`);
+      sweetAlert.notifySuccess("Rencana diajukan", validRows.some((row) => row.urgent) ? `${validRows.length} tugas diajukan. Lihat status persetujuan terbaru pada daftar.` : `${validRows.length} draft masuk Review QA.`);
       setSelectedRows([]);
     }
   }
@@ -1972,7 +2056,7 @@ export function JobPlanPlannerShell({
       row.planId
       && row.version
       && row.approvalState === "REJECTED"
-      && (row.createdBy === userId || canApprove)
+      && canPerformJobPlanAction(row, "edit_draft")
     );
     if (validRows.length !== rowsToEdit.length) {
       setError("Hanya plan rejected milik pengaju atau reviewer yang bisa diedit.");
@@ -2007,7 +2091,7 @@ export function JobPlanPlannerShell({
     setIsSaving(true);
     let failed = 0;
     for (const row of validRows) {
-      const result = await mutateJobPlanApproval(row.planId as string, {
+      const result = row.sharedDraftId ? await cancelSharedJobPlanDraft(row.sharedDraftId, userId, row.sharedLinkedPlanId, row.sharedLinkedPlanVersion) : await mutateJobPlanApproval(row.planId as string, {
         action: "cancel",
         userId,
         commandId: createJobPlanCommandId("web-cancel-draft"),
@@ -2017,6 +2101,8 @@ export function JobPlanPlannerShell({
       if (!result.success) {
         failed += 1;
         setError(result.message);
+      } else if (row.sharedDraftId) {
+        setRemovedSharedDraftIds((current) => [...current, row.sharedDraftId as string]);
       }
     }
     await load();
@@ -2033,7 +2119,7 @@ export function JobPlanPlannerShell({
       row.planId
       && row.version
       && row.approvalState === "REJECTED"
-      && (row.createdBy === userId || canApprove)
+      && canPerformJobPlanAction(row, "cancel")
     );
     if (validRows.length !== rowsToCancel.length) {
       setError("Hanya plan rejected milik pengaju atau reviewer yang bisa dihapus.");
@@ -2110,7 +2196,7 @@ export function JobPlanPlannerShell({
       <div className="border border-border bg-card px-3 py-2 shadow-sm">
         <PageHeader
           eyebrow="PERENCANAAN KERJA"
-          title="Rencana Pekerjaan"
+          title={supplemental ? "Tambah / Ganti Jobdesc" : "Rencana Pekerjaan"}
           actions={(
             <div className="flex flex-wrap items-center gap-2">
               {mode === "planner" ? (
@@ -2214,6 +2300,22 @@ export function JobPlanPlannerShell({
         }}>Reset</ActionButton>
         <ActionButton onClick={openReportPrint}>Print</ActionButton>
       </div>
+      {supplemental ? <Link href={`/monitoring/employee?date=${encodeURIComponent(dateFilter)}`} className="inline-flex min-h-11 items-center text-[12px] text-app-accent-ink hover:underline">Kembali ke Tugas</Link> : null}
+      {supplemental && canCreate && mode === "planner" ? (
+        <div className="flex flex-wrap items-start gap-3 border border-border bg-card p-3">
+          <label className="space-y-1 text-[12px]">
+            <span className="block text-muted-foreground">Jenis pengajuan</span>
+            <select value={requestKind} onChange={(event) => setRequestKind(event.target.value)} className="h-11 border border-border bg-background px-3 text-foreground">
+              {["Tambahan", "Penggantian", "Peralihan"].map((kind) => <option key={kind}>{kind}</option>)}
+            </select>
+          </label>
+          <label className="min-w-0 flex-1 basis-64 space-y-1 text-[12px]">
+            <span className="block text-muted-foreground">Alasan pengajuan</span>
+            <textarea value={requestReason} onChange={(event) => setRequestReason(event.target.value)} maxLength={350} rows={2} className="w-full border border-border bg-background px-3 py-2 text-foreground" />
+          </label>
+          <p className="w-full text-[12px] text-muted-foreground">Pilih jobdesc dari Countdown atau buat baru. Pekerjaan sebelumnya tetap mengikuti tombol Jeda / Selesaikan pekerja. Pengajuan yang menunggu persetujuan belum dapat dikerjakan.</p>
+        </div>
+      ) : null}
       <div className="flex flex-wrap items-center justify-between gap-2">
         {mode === "planner" && canCreate ? (
           <div className="flex flex-wrap items-center gap-2">
@@ -2224,8 +2326,12 @@ export function JobPlanPlannerShell({
               <button
                 type="button"
                 onClick={() => {
+                  if (supplemental && !requestReason.trim()) {
+                    setError("Alasan tambahan, penggantian, atau peralihan wajib diisi.");
+                    return;
+                  }
                   const startTime = startTimeForWorkMode(defaultDraftWorkMode);
-                  setAdditionalJobForm((current) => ({ ...current, startTime, finishTime: minutesToTime((Number(startTime.slice(0, 2)) * 60) + 60) }));
+                  setAdditionalJobForm((current) => ({ ...current, employeeId: ownRequestsOnly ? userId : current.employeeId, startTime, finishTime: minutesToTime((Number(startTime.slice(0, 2)) * 60) + 60) }));
                   setAdditionalJobOpen(true);
                 }}
                 className="px-3 py-2 font-mono text-[12px] uppercase text-app-accent-ink hover:bg-primary/10"

@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { assertUnitAcceptsNewWork } from "@/db/unit-work-guard";
 import type {
   CatalogComponent,
   CatalogItem,
@@ -1020,6 +1021,7 @@ export class UnitCatalogRepository {
     const connection = await this.poolFactory(this.env).getConnection();
     try {
       await connection.beginTransaction();
+      await assertUnitAcceptsNewWork(connection, unitId);
       const panel = await this.getPanel(unitId, panelId);
       if (!panel) throw new Error("UNIT_PANEL_NOT_FOUND");
       const created = [];

@@ -19,6 +19,7 @@ import { SmsAgGrid } from "@/shared/datagrid/sms-ag-grid";
 import { DataGridStatusBadge } from "@/shared/datagrid/status-badge";
 import { ActionButton, CompactDateInput, CompactDateRangeInput, EmptyRow, MetricBar, PageHeader, SectionCard } from "@/shared/ui/compact";
 import { useSweetAlert } from "@/shared/ui/sweet-alert";
+import { ExecutionHistory, executionTime } from "./execution-history";
 
 interface MonitoringShellProps {
   activeMode: "all" | "normal" | "overtime";
@@ -200,8 +201,7 @@ function minutesValue(value: number | null | undefined) {
 }
 
 function timeValue(value: string | null | undefined) {
-  if (!value) return "-";
-  return value.length >= 5 ? value.slice(0, 5) : value;
+  return executionTime(value);
 }
 
 function lastUpdateValue(row: MonitoringTaskRecord) {
@@ -263,7 +263,7 @@ function MonitoringDetailDrawer({ row, onClose }: { row: MonitoringTaskRecord; o
   const visibleStatus = humanMonitoringStatus(row);
 
   return (
-    <div className="fixed inset-0 z-[80] flex justify-end bg-black/65 backdrop-blur-[1px]" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <div className="fixed inset-0 z-[80] flex justify-end bg-black/65 backdrop-blur-[1px]" onKeyDown={(event) => { if (event.key === "Escape") onClose(); if (event.key === "Tab") event.preventDefault(); }} onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <aside role="dialog" aria-modal="true" aria-labelledby="monitoring-detail-title" className="flex h-full w-full max-w-2xl flex-col border-l border-border bg-background shadow-2xl dark:border-white/[0.08]">
         <div className="flex items-start justify-between gap-3 border-b border-border px-4 py-3 dark:border-white/[0.08]">
           <div className="min-w-0">
@@ -275,7 +275,7 @@ function MonitoringDetailDrawer({ row, onClose }: { row: MonitoringTaskRecord; o
               <DataGridStatusBadge value={riskLabel(row)} />
             </div>
           </div>
-          <button type="button" onClick={onClose} className="inline-flex h-9 w-9 items-center justify-center border border-border text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="Tutup detail monitoring">
+          <button autoFocus type="button" onClick={onClose} className="inline-flex h-11 w-11 items-center justify-center border border-border text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground" aria-label="Tutup detail monitoring">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -339,6 +339,8 @@ function MonitoringDetailDrawer({ row, onClose }: { row: MonitoringTaskRecord; o
             <DetailField label="Input Source" value={textValue(row.inputSource)} />
             <DetailField label="Manual Summary" value={textValue(row.manualExecution?.result ?? row.manualExecution?.note)} />
           </DetailSection>
+
+          <ExecutionHistory row={row} />
 
           <DetailSection title="QC Summary">
             <DetailField label="QC Status" value={<DataGridStatusBadge value={optionValue(qcStatusOptions, row.qcStatus)} />} />

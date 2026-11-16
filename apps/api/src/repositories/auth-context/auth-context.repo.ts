@@ -1,4 +1,5 @@
 import type { RowDataPacket } from "mysql2";
+import type { Pool } from "mysql2/promise";
 import type { AuthUser } from "@smsystem/contracts/auth";
 import type { RoleProfile } from "@smsystem/contracts/rbac";
 import { permissionCodes } from "@smsystem/permissions";
@@ -61,12 +62,12 @@ function mapRoleProfile(row: RoleProfileRow | undefined): RoleProfile | null {
     mobileEnabled: row.mobile_enabled === 1,
     approvalRank: row.approval_rank,
     notes: row.notes,
-    scopePreset: {
+    ...(row.division_mode != null && row.unit_mode != null ? { scopePreset: {
       divisionMode: row.division_mode ?? "NONE",
       divisionIds: parseJsonNumberArray(row.division_ids_json),
       unitMode: row.unit_mode ?? "NONE",
       unitIds: parseJsonStringArray(row.unit_ids_json),
-    },
+    } } : {}),
   };
 }
 
@@ -96,10 +97,10 @@ function parseJsonStringArray(value: string | null | undefined): string[] {
 
 async function findRoleProfile(
   roleId: number | null,
+  pool: Pick<Pool, "query">,
 ): Promise<RoleProfileRow[]> {
   if (roleId === null) return [];
 
-  const pool = getMySqlPool();
   const profileSql = (includeScopePreset: boolean) => `
     SELECT
       rp.role_level,
@@ -139,8 +140,10 @@ export interface AuthContextRepository {
 }
 
 export class MySqlAuthContextRepository implements AuthContextRepository {
+  constructor(private readonly poolFactory: () => Pick<Pool, "query"> = getMySqlPool) {}
+
   async findByEmployeeId(employeeId: string): Promise<AuthUser | null> {
-    const pool = getMySqlPool();
+    const pool = this.poolFactory();
     const [employeeRows] = await pool.query<EmployeeRow[]>(
       `
         SELECT
@@ -200,7 +203,7 @@ export class MySqlAuthContextRepository implements AuthContextRepository {
           FROM sm_divisi
         `,
       ),
-      findRoleProfile(employee.role_id),
+      findRoleProfile(employee.role_id, pool),
       pool.query<UnitAssignmentRow[]>(
         `
           SELECT DISTINCT car_id
@@ -230,7 +233,7 @@ export class MySqlAuthContextRepository implements AuthContextRepository {
       id: row.id,
       parentId: row.parent_id,
     }));
-    const roleProfile = mapRoleProfile(roleProfileRows[0][0]);
+    const roleProfile = mapRoleProfile(roleProfileRows[0]);
 
     return normalizeReservedAuthUser({
       employeeId: employee.employee_id,

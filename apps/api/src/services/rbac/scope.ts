@@ -64,7 +64,7 @@ function capDivisionScope(
     case "OWN_DIVISION":
       return collectDescendants(divisions, ownDivisionIds);
     case "ASSIGNED_DIVISIONS": {
-      const permittedIds = new Set(collectDescendants(divisions, preset.divisionIds));
+      const permittedIds = new Set(collectDescendants(divisions, preset.divisionIds.length > 0 ? preset.divisionIds : divisionIds));
       return divisionIds.filter((divisionId) => permittedIds.has(divisionId));
     }
     default:
@@ -81,7 +81,7 @@ function capUnitScope(
     case "NONE":
       return [];
     case "ASSIGNED_UNITS": {
-      const permittedIds = new Set(preset.unitIds);
+      const permittedIds = new Set(preset.unitIds.length > 0 ? preset.unitIds : unitIds);
       return unitIds.filter((unitId) => permittedIds.has(unitId));
     }
     default:

@@ -24,11 +24,6 @@ tmp/
 *.tsbuildinfo
 next-env.d.ts
 
-# Tests are local-only in the runtime-source handoff.
-**/*.test.ts
-**/*.test.tsx
-/apps/api/tests/
-
 # Runtime logs and local process state
 *.log
 *.pid
@@ -53,12 +48,14 @@ src/config/secrets/
 *.pfx
 
 # Local editor and AI-agent state
+.aws/
+.tours/
+/skills-lock.json
+/prompts/
+/ai-templates/
+/assistant-templates/
 .vscode/
 .codex/
-!.codex/
-!.codex/config.toml
-!.codex/agents/
-!.codex/agents/*.toml
 .agents/
 .agent/
 .claude/
@@ -96,11 +93,9 @@ nginx/
 
 # Local docs, notes, and generated analysis reports
 *.md
-!/README.md
-!/AI_HANDOFF.md
-!/AGENTS.md
-!/docs/
-!/docs/CODEX-NAVIGATION-GUIDE.md
+*.mdx
+*.markdown
+docs
 /SYSTEM_MAP_WEB.md
 /MOBILE_*.md
 /PLAN_*.md
@@ -130,3 +125,7 @@ generate-url.ts
 patch-auth.sh
 patch-login.sh
 patch-vehicles-log.sh
+
+# Historical import tooling and its private data stay local.
+/tools/migrations/
+/apps/api/src/services/migrations/

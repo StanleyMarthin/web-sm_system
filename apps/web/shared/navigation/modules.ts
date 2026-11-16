@@ -1,5 +1,5 @@
 import type { PermissionCode } from "@smsystem/permissions";
-import { permissionCodes } from "@smsystem/permissions";
+import { permissionCodes, canManageRoleMatrix } from "@smsystem/permissions";
 import { isSystemSuperadminEmployee } from "@smsystem/contracts/auth";
 import {
   getWarehouseSectionDefinition,
@@ -279,6 +279,7 @@ function hasUnitCatalogAccess(permissions: readonly string[]) {
 }
 
 interface NavigationContext {
+  roleName?: string;
   employeeId?: string;
 }
 
@@ -287,7 +288,13 @@ function hasNodePermission(
   permissions: readonly string[],
   context: NavigationContext,
 ) {
-  if (["users", "users-list", "roles-matrix", "divisions-management"].includes(item.id)) {
+  if (item.id === "roles-matrix") {
+    return canManageRoleMatrix(context.roleName ?? "", permissions);
+  }
+  if (item.id === "job-plan") {
+    return [permissionCodes.createTask, permissionCodes.reviewTask, permissionCodes.taskView].some(code => permissions.includes(code));
+  }
+  if (["users", "users-list", "divisions-management"].includes(item.id)) {
     return isSystemSuperadminEmployee(context.employeeId);
   }
   if (item.id === "units") {
@@ -349,7 +356,7 @@ function filterSubItems(
 
     filteredItems.push({
       ...item,
-      href: item.href ?? firstNavigableHref(filteredSubItems),
+      href: selfAllowed ? item.href ?? firstNavigableHref(filteredSubItems) : firstNavigableHref(filteredSubItems),
       subItems: filteredSubItems.length > 0 ? filteredSubItems : undefined,
     });
   }
@@ -373,7 +380,7 @@ export function buildNavigation(
 
     filteredItems.push({
       ...item,
-      href: item.href ?? firstNavigableHref(filteredSubItems),
+      href: selfAllowed ? item.href ?? firstNavigableHref(filteredSubItems) : firstNavigableHref(filteredSubItems),
       subItems: filteredSubItems.length > 0 ? filteredSubItems : undefined,
     });
   }

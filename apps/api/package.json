@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "bun --env-file=../../src/config/secrets/.env.local --watch src/index.ts",
     "start": "bun src/index.ts",
-    "test": "bun test",
+    "test": "bun --no-env-file test --isolate src tests",
     "typecheck": "tsc --project tsconfig.json --noEmit"
   }
 }

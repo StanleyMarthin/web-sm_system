@@ -25,6 +25,25 @@ export function jobActualQcLabel(actual?: JobPlanRecord): string | null {
   return null;
 }
 
+export function jobActualWorkStatus(row: JobPlanRuntimeDisplayRow) {
+  if (row.executionStatus === "cancel") return "CANCEL";
+  if (row.approvalState === "APPROVED" && row.executionState === "NOT_STARTED") return "PLAN";
+  if (row.executionState === "RUNNING") return "ONPROGRESS";
+  if (row.executionState === "HOLD") return row.actualStartAt || row.accumulatedWorkMinutes > 0 ? "JEDA" : "PENDING";
+  if (row.executionStatus === "onprogress") return "ONPROGRESS";
+  if (row.executionState === "FINISHED_PENDING_VALIDATION") return "READY_QC";
+  if (row.executionState === "VALIDATED") return "DONE";
+  return row.executionState;
+}
+
+export function jobActualQcStatus(row: JobPlanRuntimeDisplayRow, actual?: JobPlanRecord) {
+  if (row.executionStatus === "cancel" || row.executionStatus === "onprogress") return "Belum QC";
+  const inspection = jobActualQcLabel(actual);
+  if (inspection) return inspection;
+  if (["READY_QC", "DONE"].includes(jobActualWorkStatus(row))) return "Menunggu QC";
+  return "Belum QC";
+}
+
 export interface JobPlanRuntimePlannerDraft {
   clientId: string;
   isNew: true;
@@ -49,6 +68,11 @@ export interface JobPlanRuntimePlannerDraft {
   isOvertime: boolean;
   isRework: boolean;
   isPriority: boolean;
+  urgent?: boolean;
+  sharedDraftId?: string;
+  sharedLinkedPlanId?: string;
+  sharedLinkedPlanVersion?: number;
+  isNonTechnicalJob?: boolean;
   error: string | null;
 }
 
@@ -95,11 +119,14 @@ export interface JobPlanRuntimeDisplayRow {
   approvalState: JobPlanRuntimeApprovalState;
   execution: string;
   executionState: JobPlanRuntimeExecutionState;
+  executionStatus?: JobPlanRuntimeReadItem["execution_status"];
+  progressPercent?: number | null;
   ledger: string;
   ledgerState: JobPlanRuntimeLedgerState;
   sync: string;
   createdBy: string | null;
   version: number | null;
+  availableActions?: string[];
   accumulatedWorkMinutes: number;
   persistedWorkMinutes: number;
   unverifiedWorkMinutes: number;
@@ -114,10 +141,20 @@ export interface JobPlanRuntimeDisplayRow {
   activeSegmentStartedAt: string | null;
   note: string;
   isPriority: boolean;
+  isRework?: boolean;
+  urgent?: boolean;
+  sharedDraftId?: string;
+  sharedLinkedPlanId?: string;
+  sharedLinkedPlanVersion?: number;
+  isNonTechnicalJob?: boolean;
   error: string | null;
   editPlanId?: string;
   editVersion?: number;
   isLiveProjected?: boolean;
+}
+
+export function canPerformJobPlanAction(row: Pick<JobPlanRuntimeDisplayRow, "availableActions">, action: string): boolean {
+  return row.availableActions?.includes(action) === true;
 }
 
 export function resolveJobPlanDivisionName(
@@ -216,16 +253,17 @@ export function buildJobPlanDraftRecord(
     assignedUserId: draft.employeeId,
     assignedUserName: employee?.label ?? draft.employeeId,
     taskDate: draft.taskDate,
-    targetHours: targetMinutes / 60,
+    targetHours: durationMinutes / 60,
     startTime: draft.startTime,
     finishTime: minutesToTime(startMinutes + durationMinutes),
     jobDescription: draft.jobDescription.trim(),
     note: draft.note.trim() || null,
     isOvertime: draft.isOvertime,
     isPriority: draft.isPriority,
+    urgent: draft.urgent ?? false,
     deadlineDate: draft.deadlineDate?.trim() || calculateJobPlanDeadlineDate(draft.taskDate, targetMinutes),
     isRework: draft.isRework,
-    isNonTechnicalJob: false,
+    isNonTechnicalJob: draft.isNonTechnicalJob ?? false,
     picPlan: draft.employeeId,
     requiredGrade: null,
   };
@@ -244,7 +282,7 @@ const approvalLabels: Record<JobPlanRuntimeApprovalState, string> = {
 const executionLabels: Record<JobPlanRuntimeExecutionState, string> = {
   NOT_STARTED: "Belum Mulai",
   RUNNING: "Berjalan",
-  HOLD: "Hold",
+  HOLD: "Jeda",
   FINISHED_PENDING_VALIDATION: "Menunggu Validasi",
   VALIDATED: "Validated",
 };
@@ -259,7 +297,12 @@ export function formatJobPlanRuntimeApproval(value: JobPlanRuntimeApprovalState)
   return approvalLabels[value] ?? value;
 }
 
-export function formatJobPlanRuntimeExecution(value: JobPlanRuntimeExecutionState) {
+export function formatJobPlanRuntimeExecution(value: JobPlanRuntimeExecutionState, status?: JobPlanRuntimeReadItem["execution_status"]) {
+  if (status === "cancel") return "Dibatalkan";
+  if (["FINISHED_PENDING_VALIDATION", "VALIDATED"].includes(value)) {
+    if (status === "onprogress") return "On Progress";
+    if (status === "done") return "Selesai";
+  }
   return executionLabels[value] ?? value;
 }
 
@@ -460,6 +503,7 @@ export function createJobPlanRuntimeDraft(context: JobPlanCountdownOption | null
     isOvertime: false,
     isRework: false,
     isPriority: false,
+    isNonTechnicalJob: false,
     error: null,
   };
 }
@@ -506,15 +550,20 @@ export function toJobPlanRuntimeDisplayRows(
       durationText: minutesToDuration(item.planned_work_minutes),
       targetTotalText: minutesToDuration(Math.round((countdown?.targetTotalHours ?? item.planned_work_minutes / 60) * 60)),
       remainingText: minutesToDuration(Math.round((countdown?.remainingHours ?? 0) * 60)),
-      approval: formatJobPlanRuntimeApproval(item.approval_state),
+      approval: item.urgent && item.approval_state === "DIVISION_REVIEW" ? "Review KD"
+        : item.urgent && item.approval_state === "UNIT_REVIEW" ? "Review KP / QA / PM"
+        : formatJobPlanRuntimeApproval(item.approval_state),
       approvalState: item.approval_state,
-      execution: formatJobPlanRuntimeExecution(item.execution_state),
+      execution: formatJobPlanRuntimeExecution(item.execution_state, item.execution_status),
       executionState: item.execution_state,
+      executionStatus: item.execution_status,
+      progressPercent: item.progress_percent,
       ledger: formatJobPlanRuntimeLedger(item.ledger_state),
       ledgerState: item.ledger_state,
       sync: resolveJobPlanRuntimeSync(item),
       createdBy: item.created_by ?? null,
       version: item.version ?? null,
+      availableActions: item.available_actions ?? [],
       accumulatedWorkMinutes: item.accumulated_work_minutes,
       persistedWorkMinutes: item.persisted_work_minutes,
       unverifiedWorkMinutes: item.unverified_work_minutes,
@@ -529,6 +578,8 @@ export function toJobPlanRuntimeDisplayRows(
       activeSegmentStartedAt: item.active_segment_started_at ?? null,
       note: item.note ?? "",
       isPriority: item.is_priority,
+      isRework: item.is_rework,
+      urgent: item.urgent,
       error: null,
     };
   });
@@ -551,6 +602,9 @@ export function toJobPlanDraftDisplayRows(
       clientId: `legacy-draft-${draft.planId}`,
       isNew: false,
       planId: draft.planId,
+      sharedDraftId: draft.planId,
+      sharedLinkedPlanId: draft.draftLinkedPlanId ?? undefined,
+      sharedLinkedPlanVersion: draft.draftLinkedPlanVersion ?? undefined,
       workMode: draft.isOvertime ? "overtime" : "normal",
       coreId: draft.coreId,
       divisionId: countdown?.divisionId ?? draft.divisionId ?? null,
@@ -580,7 +634,7 @@ export function toJobPlanDraftDisplayRows(
       executionState: "NOT_STARTED",
       ledger: formatJobPlanRuntimeLedger("UNMATERIALIZED"),
       ledgerState: "UNMATERIALIZED",
-      sync: "Draft Redis",
+      sync: "Draft",
       createdBy: null,
       version: 1,
       accumulatedWorkMinutes: 0,
@@ -592,6 +646,9 @@ export function toJobPlanDraftDisplayRows(
       activeSegmentStartedAt: null,
       note: draft.note ?? "",
       isPriority: draft.isPriority,
+      isRework: draft.draftIsRework ?? false,
+      urgent: draft.draftUrgent ?? false,
+      isNonTechnicalJob: draft.draftIsNonTechnicalJob ?? false,
       error: null,
     };
   });
@@ -616,16 +673,34 @@ export function createEditDraftFromRow(row: JobPlanRuntimeDisplayRow): JobPlanRu
     initialFinding: "",
     note: row.note,
     isOvertime: row.workMode !== "normal",
-    isRework: false,
+    isRework: row.isRework ?? false,
+    urgent: row.urgent ?? false,
     isPriority: row.isPriority,
+    isNonTechnicalJob: row.isNonTechnicalJob ?? false,
     error: null,
     editPlanId: row.planId ?? "",
     editVersion: row.version ?? 0,
+    sharedDraftId: row.sharedDraftId,
+    sharedLinkedPlanId: row.sharedLinkedPlanId,
+    sharedLinkedPlanVersion: row.sharedLinkedPlanVersion,
     workMode: row.workMode,
   };
 }
 
+export function mergeJobPlanDraftDisplayRows(runtimeRows: JobPlanRuntimeDisplayRow[], sharedRows: JobPlanRuntimeDisplayRow[]) {
+  const runtimeById = new Map(runtimeRows.map((row) => [row.planId, row]));
+  const linkedIds = new Set(sharedRows.map((row) => row.sharedLinkedPlanId).filter(Boolean));
+  return [
+    ...sharedRows.map((row) => ({
+      ...row,
+      sharedLinkedPlanVersion: runtimeById.get(row.sharedLinkedPlanId ?? "")?.version ?? row.sharedLinkedPlanVersion,
+    })),
+    ...runtimeRows.filter((row) => row.approvalState !== "DRAFT" || !linkedIds.has(row.planId ?? "")),
+  ];
+}
+
 export function validateJobPlanRuntimeDraft(row: JobPlanRuntimePlannerDraft) {
+  if (row.urgent && !row.note.trim()) return "Alasan pengajuan wajib diisi.";
   if (row.sourceType === "additional") {
     if (!row.divisionId) return "Team wajib dipilih.";
     if (!row.carId) return "Unit wajib dipilih.";
@@ -671,6 +746,7 @@ export function buildCreateJobPlanRuntimePayload(
     isOvertime: row.isOvertime,
     isRework: row.isRework,
     isPriority: row.isPriority,
+    urgent: row.urgent ?? false,
   };
 }
 

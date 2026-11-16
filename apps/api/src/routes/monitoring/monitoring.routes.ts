@@ -1,7 +1,5 @@
 import { parseGridQueryParams } from "@smsystem/contracts/grid";
-import { createMonitoringActualRequestSchema } from "@smsystem/contracts/monitoring";
 import { permissionCodes } from "@smsystem/permissions";
-import { parseJsonBody } from "@/http/request";
 import { errorResponse, withCors } from "@/http/response";
 import { requireSession } from "@/middleware/auth.middleware";
 import { requirePermission } from "@/middleware/permission.middleware";
@@ -472,66 +470,6 @@ export async function handleMonitoringEmployeeRoute(
   }
 }
 
-export async function handleMonitoringActualCreateRoute(
-  request: Request,
-  authService: AuthService,
-  monitoringService: MonitoringService,
-): Promise<Response> {
-  const sessionResult = await requireMonitoringSession(request, authService);
-  if ("response" in sessionResult) {
-    return sessionResult.response;
-  }
-
-  const bodyResult = await parseJsonBody(request, createMonitoringActualRequestSchema);
-  if (!bodyResult.success) {
-    return bodyResult.response;
-  }
-
-  try {
-    const result = await monitoringService.createActual(
-      sessionResult.session,
-      bodyResult.data,
-    );
-
-    return withCors(
-      request,
-      Response.json({
-        success: true,
-        message: "Actual berhasil disimpan.",
-        data: result,
-      }),
-    );
-  } catch (error) {
-    if (error instanceof Error && error.message === "UNIT_ON_HOLD") {
-      return errorResponse(
-        request,
-        "Unit sedang ditahan. Ubah status Unit ke Sedang dikerjakan sebelum memperbarui progress.",
-        409,
-        "UNIT_ON_HOLD",
-      );
-    }
-    if (
-      error instanceof Error &&
-      error.message === "MANUAL_TECHNICAL_ACTUAL_REQUIRES_PLAN"
-    ) {
-      return errorResponse(
-        request,
-        "Actual teknis harus dibuat dari plan atau countdown.",
-        400,
-        "MANUAL_TECHNICAL_ACTUAL_REQUIRES_PLAN",
-      );
-    }
-
-    console.error("[monitoring] actual create failed", error);
-    return errorResponse(
-      request,
-      "Terjadi kesalahan internal saat menyimpan actual.",
-      500,
-      "MONITORING_ACTUAL_FAILED",
-    );
-  }
-}
-
 export async function handleMonitoringLedgerSubmitRoute(
   request: Request,
   actualId: string,
@@ -550,6 +488,7 @@ export async function handleMonitoringLedgerSubmitRoute(
   } catch (error) {
     if (error instanceof Error && error.message === "ACTUAL_NOT_FOUND") return errorResponse(request, "Actual tidak ditemukan.", 404, "ACTUAL_NOT_FOUND");
     if (error instanceof Error && error.message === "ACTUAL_NOT_READY") return errorResponse(request, "Actual belum selesai dan belum dapat dimasukkan ke report.", 409, "ACTUAL_NOT_READY");
+    if (error instanceof Error && error.message === "HISTORICAL_UNBILLED_LEDGER_FORBIDDEN") return errorResponse(request, "Actual historis tanpa tagihan tidak dapat dimasukkan ke report.", 409, "HISTORICAL_UNBILLED_LEDGER_FORBIDDEN");
     console.error("[monitoring] ledger submit failed", error);
     return errorResponse(request, "Actual gagal dimasukkan ke report.", 500, "LEDGER_SUBMIT_FAILED");
   }

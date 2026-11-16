@@ -6,6 +6,7 @@ import type { QcInspectionRecord } from "@smsystem/contracts/qc";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import {
   createJobPlanCommandId,
   fetchJobPlanRuntimeList,
@@ -25,9 +26,11 @@ import {
   manualExecutionDraftActualMinutes,
   liveJobPlanActualMinutes,
   liveJobPlanUnverifiedMinutes,
-  jobActualQcLabel,
+  jobActualQcStatus as qcStatus,
+  jobActualWorkStatus as actualWorkStatus,
   minutesToDuration,
   toJobPlanRuntimeDisplayRows,
+  canPerformJobPlanAction,
   toLocalDateValue,
   validateManualExecutionDraft,
   type JobPlanCountdownOption,
@@ -41,6 +44,7 @@ interface JobActualShellProps {
   canInput: boolean;
   canMonitor: boolean;
   canValidate: boolean;
+  canRequestJobdesc?: boolean;
   initialDate: string | null;
   countdowns: JobPlanCountdownOption[];
   employees: JobPlanEmployeeOption[];
@@ -95,31 +99,15 @@ function monitoringStatus(row: JobPlanRuntimeDisplayRow) {
   return "Belum ada aktual";
 }
 
-function qcStatus(row: JobPlanRuntimeDisplayRow, actual?: JobPlanRecord) {
-  const inspection = jobActualQcLabel(actual);
-  if (inspection) return inspection;
-  if (["VALIDATED", "FINISHED_PENDING_VALIDATION"].includes(row.executionState)) return "Menunggu QC";
-  return "Belum QC";
-}
-
-function actualWorkStatus(row: JobPlanRuntimeDisplayRow) {
-  if (row.approvalState === "APPROVED" && row.executionState === "NOT_STARTED") return "PLAN";
-  if (row.executionState === "RUNNING") return "ONPROGRESS";
-  if (row.executionState === "HOLD") return "PENDING";
-  if (row.executionState === "FINISHED_PENDING_VALIDATION") return "READY_QC";
-  if (row.executionState === "VALIDATED") return "DONE";
-  return row.executionState;
-}
-
 function actualProgressText(row: JobPlanRuntimeDisplayRow, actual?: JobPlanRecord) {
-  const progress = actual?.actualProgressPercent ?? actual?.actualValidationProgress;
+  const progress = row.progressPercent ?? actual?.actualProgressPercent ?? actual?.actualValidationProgress;
   if (progress != null) return `${progress}%`;
   if (row.persistedWorkMinutes > 0) return "100%";
   return "-";
 }
 
 function actualProgressValue(row: JobPlanRuntimeDisplayRow, actual?: JobPlanRecord) {
-  const progress = actual?.actualProgressPercent ?? actual?.actualValidationProgress;
+  const progress = row.progressPercent ?? actual?.actualProgressPercent ?? actual?.actualValidationProgress;
   if (progress != null) return Number(progress);
   if (row.monitoringHistory.length > 0) return row.monitoringHistory.at(-1)?.progress ?? 0;
   return row.persistedWorkMinutes > 0 ? 100 : 0;
@@ -161,7 +149,7 @@ function monitoringDetailText(row: JobPlanRuntimeDisplayRow, actual: JobPlanReco
   const finish = actualTimeText(row, actual, "finish", now);
   const liveMinutes = liveJobPlanActualMinutes(row, now);
   const durationMinutes = row.persistedWorkMinutes > 0 ? row.persistedWorkMinutes : liveMinutes;
-  const progress = actual?.actualProgressPercent ?? (row.persistedWorkMinutes > 0 ? 100 : 0);
+  const progress = row.progressPercent ?? actual?.actualProgressPercent ?? (row.persistedWorkMinutes > 0 ? 100 : 0);
   const duration = minutesToDuration(durationMinutes);
   if (start !== "-" && finish !== "-") return `${start} - ${finish} | ${duration} (${progress}%)`;
   return `${duration} (${progress}%)`;
@@ -215,7 +203,7 @@ function createActualDraft(row: JobPlanRuntimeDisplayRow): JobPlanRuntimeManualE
 }
 
 function createReviewDraft(action: ReviewAction, row: JobPlanRuntimeDisplayRow, actual?: JobPlanRecord): JobActualReviewDraft {
-  const progress = actual?.actualProgressPercent ?? actual?.actualValidationProgress ?? (row.persistedWorkMinutes > 0 ? 100 : 0);
+  const progress = row.progressPercent ?? actual?.actualProgressPercent ?? actual?.actualValidationProgress ?? (row.persistedWorkMinutes > 0 ? 100 : 0);
   return {
     action,
     planId: String(row.planId),
@@ -326,6 +314,7 @@ export function JobActualShell({
   canInput,
   canMonitor,
   canValidate,
+  canRequestJobdesc = false,
   initialDate,
   countdowns,
   employees,
@@ -428,7 +417,9 @@ export function JobActualShell({
     if (kpFilter && row.kpId !== kpFilter) return false;
     if (qaFilter && !row.qaIds.includes(qaFilter)) return false;
     if (divisionFilter && row.divisionName !== divisionFilter) return false;
-    if (statusFilter && row.executionState !== statusFilter && row.approvalState !== statusFilter) return false;
+    if (statusFilter === "CANCEL") {
+      if (row.executionStatus !== "cancel") return false;
+    } else if (statusFilter && (row.executionStatus === "cancel" || (row.executionState !== statusFilter && row.approvalState !== statusFilter))) return false;
     return true;
   }), [dateFilter, divisionFilter, kpFilter, qaFilter, rows, statusFilter]);
 
@@ -451,7 +442,8 @@ export function JobActualShell({
     ["MANAGEMENT_REVIEW", "Review PM"],
     ["NOT_STARTED", "Plan"],
     ["RUNNING", "Berjalan"],
-    ["HOLD", "Ditahan"],
+    ["HOLD", "Jeda / Pending"],
+    ["CANCEL", "Dibatalkan"],
     ["FINISHED_PENDING_VALIDATION", "Selesai"],
     ["VALIDATED", "Tervalidasi"],
   ] as const;
@@ -540,17 +532,17 @@ export function JobActualShell({
       filter: false,
       cellRenderer: ({ data }: ICellRendererParams<JobPlanRuntimeDisplayRow>) => data ? (
         <div className="flex h-full items-center gap-1">
-          <button type="button" className="border border-border px-2 py-1 text-[11px] text-muted-foreground hover:bg-muted" disabled={!canInput || !data.planId || !data.version} onClick={() => {
+          <button type="button" className="border border-border px-2 py-1 text-[11px] text-muted-foreground hover:bg-muted" disabled={!canInput || !canPerformJobPlanAction(data, "manual_execution") || !data.planId || !data.version || data.executionStatus === "cancel"} onClick={() => {
             setReviewDraft(null);
             setMonitoringDetail(null);
             setDraft(createActualDraft(data));
           }}>Input</button>
-          <button type="button" className="border border-border px-2 py-1 text-[11px] text-muted-foreground hover:bg-muted" disabled={!canMonitor || !data.planId || !data.version || data.accumulatedWorkMinutes <= 0 || !canAddMonitoring(data, data.planId ? actualByPlanId.get(data.planId) : undefined)} onClick={() => {
+          <button type="button" className="border border-border px-2 py-1 text-[11px] text-muted-foreground hover:bg-muted" disabled={!canMonitor || !canPerformJobPlanAction(data, "monitor") || !data.planId || !data.version || data.accumulatedWorkMinutes <= 0 || !canAddMonitoring(data, data.planId ? actualByPlanId.get(data.planId) : undefined)} onClick={() => {
             setDraft(null);
             setMonitoringDetail(null);
             setReviewDraft(createReviewDraft("monitor", data, data.planId ? actualByPlanId.get(data.planId) : undefined));
           }}>Monitor</button>
-          <button type="button" className="border border-border px-2 py-1 text-[11px] text-muted-foreground hover:bg-muted" disabled={!canValidate || !data.planId || !data.version || data.accumulatedWorkMinutes <= 0} onClick={() => {
+          <button type="button" className="border border-border px-2 py-1 text-[11px] text-muted-foreground hover:bg-muted" disabled={!canValidate || !data.planId || !data.version || data.accumulatedWorkMinutes <= 0 || !["READY_QC", "DONE"].includes(actualWorkStatus(data))} onClick={() => {
             setDraft(null);
             setMonitoringDetail(null);
             setReviewDraft(createReviewDraft("qc", data, data.planId ? actualByPlanId.get(data.planId) : undefined));
@@ -561,7 +553,9 @@ export function JobActualShell({
   ], [actualByPlanId, canInput, canMonitor, canValidate, nowTick]);
 
   async function saveActual() {
-    if (!draft || isSaving) return;
+    if (!draft || isSaving || !canInput) return;
+    const row = rows.find(item => item.planId === draft.planId);
+    if (!row || !canPerformJobPlanAction(row, "manual_execution")) return;
     const normalizedDraft = normalizeActualDraftTimes(draft);
     const message = validateManualExecutionDraft(normalizedDraft);
     if (message) {
@@ -584,13 +578,15 @@ export function JobActualShell({
   async function saveReview() {
     if (!reviewDraft || isSaving) return;
     if (reviewDraft.action === "monitor") {
+      if (!canMonitor) return;
       const row = rows.find((item) => item.planId === reviewDraft.planId);
       const actual = row?.planId ? actualByPlanId.get(row.planId) : undefined;
-      if (row && !canAddMonitoring(row, actual)) {
+      if (!row || !canPerformJobPlanAction(row, "monitor") || !canAddMonitoring(row, actual)) {
         setReviewDraft({ ...reviewDraft, error: "Monitoring sudah lengkap. Ubah data existing jika perlu koreksi." });
         return;
       }
     }
+    if (reviewDraft.action === "qc" && !canValidate) return;
     const message = reviewDraft.action === "monitor" ? validateProgress(reviewDraft.progressText) : validateQcDraft(reviewDraft);
     if (message) {
       setReviewDraft({ ...reviewDraft, error: message });
@@ -660,7 +656,10 @@ export function JobActualShell({
         <PageHeader
           eyebrow="JOB ACTUAL"
           title="Hasil Pekerjaan"
-          actions={<p className="text-[11px] text-muted-foreground">{filteredRows.length} dari {rows.length} baris</p>}
+          actions={<div className="flex flex-wrap items-center gap-3">
+            <p className="text-[11px] text-muted-foreground">{filteredRows.length} dari {rows.length} baris</p>
+            {canRequestJobdesc ? <Link href={`/monitoring/employee?supplemental=1&date=${encodeURIComponent(dateFilter)}`} className="inline-flex min-h-11 items-center border border-primary/40 px-3 text-[12px] font-medium text-app-accent-ink hover:bg-primary/10">Tambah / ganti jobdesc</Link> : null}
+          </div>}
         />
         <div className="mt-2 flex flex-wrap gap-1.5">
           {summaryItems.map((item) => {
@@ -734,7 +733,7 @@ export function JobActualShell({
               <ActionButton onClick={() => setMonitoringDetail(null)}>Tutup</ActionButton>
               <ActionButton
                 variant="primary"
-                disabled={!canMonitor || !monitoringDetail.row.planId || !monitoringDetail.row.version || monitoringDetail.row.accumulatedWorkMinutes <= 0 || !monitoringDetailCanInput}
+                disabled={!canMonitor || !canPerformJobPlanAction(monitoringDetail.row, "monitor") || !monitoringDetail.row.planId || !monitoringDetail.row.version || monitoringDetail.row.accumulatedWorkMinutes <= 0 || !monitoringDetailCanInput}
                 onClick={() => {
                   setDraft(null);
                   setReviewDraft(createReviewDraft(
@@ -949,7 +948,7 @@ export function JobActualShell({
                 </>
               ) : (
                 <p className="mt-1 max-w-2xl text-[12px] text-muted-foreground">
-                  Isi hasil pengecekan seperti form QC mobile. Jika tidak lolos, sistem akan membuat rencana rework.
+                  Isi hasil pengecekan. Jika tidak lolos, sistem menyiapkan draft rework di Job Plan.
                 </p>
               )}
             </div>

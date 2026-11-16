@@ -45,7 +45,7 @@ async function JobPlanPageContent({ searchParams }: JobPlanPageProps) {
   return (
     <JobPlanPlannerShell
       userId={user.employeeId}
-      canCreate={user.permissions.includes(permissionCodes.updatePlan)}
+      canCreate={user.permissions.includes(permissionCodes.createTask)}
       canApprove={user.permissions.includes(permissionCodes.reviewTask)}
       initialCoreId={coreId}
       initialDate={requestedDate}

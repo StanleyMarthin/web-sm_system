@@ -106,12 +106,14 @@ export function UnitBoardShell({ rows, meta, state, user }: UnitBoardShellProps)
 
   async function handleSubmit() {
     if (!form.unitName.trim() || !form.kpId) return;
+    const resumeHeldUnit = form.status === "ON_PROGRESS" && rows.find((row) => row.unitId === form.unitId)?.status === "HOLD";
     setPending(true);
     const result = dialogMode === "create"
       ? await createUnit(buildCreateUnitInput(form))
       : await updateUnit(form.unitId, {
         ...buildUnitMutationInput(form),
-        status: form.status === "ON_PROGRESS" || form.status === "DONE" ? undefined : form.status,
+        // ON_PROGRESS is derived from work; restoring PLAN clears the stored HOLD.
+        status: resumeHeldUnit ? "PLAN" : form.status === "ON_PROGRESS" || form.status === "DONE" ? undefined : form.status,
       });
     setPending(false);
 
@@ -167,7 +169,7 @@ export function UnitBoardShell({ rows, meta, state, user }: UnitBoardShellProps)
     { field: "customerName", headerName: "Pemilik", minWidth: 170 },
     { field: "restorationType", headerName: "Restorasi", minWidth: 136, valueFormatter: (params) => params.value === "PARTIAL_RESTORATION" ? "Partial" : "Full" },
     { field: "kpName", headerName: "KP", minWidth: 150 },
-    { field: "advisorName", headerName: "KD", minWidth: 150 },
+    { field: "kdName", headerName: "KD", minWidth: 150, valueFormatter: (params) => params.value || "-" },
     { field: "incomingDate", headerName: "Tanggal Kedatangan", minWidth: 160, valueFormatter: (params) => params.value || "-" },
     {
       field: "targetDelivery",
@@ -210,7 +212,10 @@ export function UnitBoardShell({ rows, meta, state, user }: UnitBoardShellProps)
           {canManageUnits ? <button type="button" onClick={() => void prepareDialog("create")} className="inline-flex h-8 items-center gap-1.5 border border-primary/40 bg-primary/10 px-3 text-[12px] font-medium text-app-accent-ink hover:bg-primary/20"><Plus className="h-3.5 w-3.5" />Tambah Unit</button> : null}
         </div>
       </div>
-      <SmsAgGrid<UnitBoardRow> heightClassName="h-[calc(100svh-246px)] min-h-[28rem]" rowData={rows} columnDefs={columns} quickFilterText={searchInput} getRowId={(params) => params.data.unitId} defaultColDef={{ floatingFilter: true, filter: "agTextColumnFilter", filterParams: { trimInput: true, debounceMs: 150 } }} onRowClicked={(event) => { if (event.data) router.push(`/units/${encodeURIComponent(event.data.unitId)}`); }} emptyMessage="Belum ada unit." />
+      <SmsAgGrid<UnitBoardRow> heightClassName="h-[calc(100svh-246px)] min-h-[28rem]" rowData={rows} columnDefs={columns} quickFilterText={searchInput} getRowId={(params) => params.data.unitId} defaultColDef={{ floatingFilter: true, filter: "agTextColumnFilter", filterParams: { trimInput: true, debounceMs: 150 } }} onRowClicked={(event) => {
+        if (!event.data || (event.event?.target instanceof Element && event.event.target.closest("a, button"))) return;
+        router.push(`/units/${encodeURIComponent(event.data.unitId)}`);
+      }} emptyMessage="Belum ada unit." />
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-3 py-2 text-[12px] text-muted-foreground"><span>{meta.total} unit</span><div className="flex items-center gap-2"><button type="button" disabled={!meta.hasPrev || gridState.isPending} onClick={() => gridState.setPage(meta.page - 1)} className="h-7 border border-border px-2 text-foreground disabled:cursor-not-allowed disabled:opacity-40">Sebelumnya</button><span>Halaman {meta.page}/{meta.totalPages}</span><button type="button" disabled={!meta.hasNext || gridState.isPending} onClick={() => gridState.setPage(meta.page + 1)} className="h-7 border border-border px-2 text-foreground disabled:cursor-not-allowed disabled:opacity-40">Berikutnya</button></div></div>
     </section>
     {dialogMode ? <UnitMutationDialog mode={dialogMode} form={form} references={references} referencesLoading={referencesLoading} pending={pending} onChange={setForm} onClose={() => setDialogMode(null)} onSubmit={handleSubmit} /> : null}

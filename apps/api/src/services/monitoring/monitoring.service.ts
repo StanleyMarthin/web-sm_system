@@ -1,6 +1,5 @@
 import type { GridQueryState } from "@smsystem/contracts/grid";
 import type {
-  CreateMonitoringActualRequest,
   MonitoringDivisionDetailSummary,
   MonitoringDivisionLoadRecord,
   MonitoringDivisionMemberRecord,
@@ -14,6 +13,7 @@ import { buildGridMeta } from "@/services/grid/paginate";
 import {
   MySqlMonitoringRepository,
   type MonitoringRepository,
+  type MonitoringScope,
 } from "@/repositories/monitoring/monitoring.repo";
 import {
   HttpJobPlanRuntimeReadModel,
@@ -22,7 +22,6 @@ import {
 import type { WebSession } from "@/services/auth/session.service";
 import { applyDefaultDivisionIdFilter } from "@/services/grid/division-default";
 import { TtlCache } from "@/lib/ttl-cache";
-import { notifyMobileEmployees } from "@/services/notifications/mobile-notification.service";
 
 interface MonitoringGridResult {
   data: MonitoringTaskRecord[];
@@ -100,10 +99,6 @@ export interface MonitoringService {
     totalActualHours: number;
   }>>;
   listReferences(session: WebSession): Promise<MonitoringReferences>;
-  createActual(session: WebSession, input: CreateMonitoringActualRequest): Promise<{
-    planId: string;
-    actualId: string;
-  }>;
   submitActualToLedger(session: WebSession, actualId: string): Promise<{ ledgerId: string; alreadySubmitted: boolean }>;
 }
 
@@ -115,8 +110,14 @@ const monitoringReferenceCache = new TtlCache<MonitoringReferences>(
 function monitoringScopeCacheKey(session: WebSession): string {
   return JSON.stringify({
     employeeId: session.user.employeeId,
-    scope: session.user.scope,
+    scope: monitoringScope(session),
   });
+}
+
+function monitoringScope(session: WebSession): MonitoringScope {
+  const role = session.user.roleName?.trim().toUpperCase().replace(/[\s-]+/gu, "_");
+  if (!["KD", "KEPALA_DIVISI", "KETUA_DIVISI"].includes(role ?? "")) return session.user.scope;
+  return { ...session.user.scope, canViewAllUnits: false, canViewAssignedUnits: false, divisionOnly: true };
 }
 
 export class DefaultMonitoringService implements MonitoringService {
@@ -164,7 +165,7 @@ export class DefaultMonitoringService implements MonitoringService {
 
     const payload = await this.repository.listTasks({
       employeeId: session.user.employeeId,
-      scope: session.user.scope,
+      scope: monitoringScope(session),
       query: normalized,
       mode: "no-start",
     });
@@ -192,7 +193,7 @@ export class DefaultMonitoringService implements MonitoringService {
 
     const payload = await this.repository.listTasks({
       employeeId: session.user.employeeId,
-      scope: session.user.scope,
+      scope: monitoringScope(session),
       query: normalized,
       mode: "no-submit",
     });
@@ -209,7 +210,7 @@ export class DefaultMonitoringService implements MonitoringService {
   ): Promise<MonitoringDivisionLoadRecord[]> {
     return this.repository.listDivisionLoad({
       employeeId: session.user.employeeId,
-      scope: session.user.scope,
+      scope: monitoringScope(session),
       date: date?.trim() || todayIsoDate(),
       mode,
       span,
@@ -227,7 +228,7 @@ export class DefaultMonitoringService implements MonitoringService {
   ): Promise<MonitoringDivisionDetailResult> {
     const result = await this.repository.getDivisionDetail({
       employeeId: session.user.employeeId,
-      scope: session.user.scope,
+      scope: monitoringScope(session),
       divisionId,
       date: date?.trim() || todayIsoDate(),
       mode,
@@ -253,7 +254,7 @@ export class DefaultMonitoringService implements MonitoringService {
   ): Promise<import("@smsystem/contracts/monitoring").MonitoringUnitTimesheetRecord[]> {
     return this.repository.listUnitLoad({
       employeeId: session.user.employeeId,
-      scope: session.user.scope,
+      scope: monitoringScope(session),
       date: date?.trim() || todayIsoDate(),
       mode,
       span,
@@ -264,7 +265,7 @@ export class DefaultMonitoringService implements MonitoringService {
   async listEmployeeTimesheet(session: WebSession, date: string, dateTo: string) {
     return this.repository.listEmployeeTimesheet({
       employeeId: session.user.employeeId,
-      scope: session.user.scope,
+      scope: monitoringScope(session),
       date,
       dateTo,
     });
@@ -274,39 +275,15 @@ export class DefaultMonitoringService implements MonitoringService {
     return monitoringReferenceCache.getOrCreate(monitoringScopeCacheKey(session), () =>
       this.repository.listReferences({
         employeeId: session.user.employeeId,
-        scope: session.user.scope,
+        scope: monitoringScope(session),
       }),
     );
-  }
-
-  async createActual(session: WebSession, input: CreateMonitoringActualRequest) {
-    const result = await this.repository.createActual(
-      {
-        employeeId: session.user.employeeId,
-        scope: session.user.scope,
-        actorId: session.user.employeeId,
-      },
-      input,
-    );
-    monitoringReferenceCache.delete(monitoringScopeCacheKey(session));
-    await notifyMobileEmployees([input.employeeId], {
-      title: "Update Task",
-      body: `${session.user.fullName} memperbarui task ${input.jobDescription} menjadi ${input.taskStatus}.`,
-      data: {
-        module: "task",
-        taskId: result.planId,
-        plandailyId: result.planId,
-        actualId: result.actualId,
-        status: input.taskStatus,
-      },
-    }, "sm_tasks");
-    return result;
   }
 
   async submitActualToLedger(session: WebSession, actualId: string) {
     return this.repository.submitActualToLedger({
       employeeId: session.user.employeeId,
-      scope: session.user.scope,
+      scope: monitoringScope(session),
       actorId: session.user.employeeId,
       actorName: session.user.fullName,
     }, actualId);
@@ -326,19 +303,19 @@ export class DefaultMonitoringService implements MonitoringService {
     const [payload, references, summary] = await Promise.all([
       this.repository.listTasks({
         employeeId: session.user.employeeId,
-        scope: session.user.scope,
+        scope: monitoringScope(session),
         query: normalized,
         mode,
       }),
       monitoringReferenceCache.getOrCreate(monitoringScopeCacheKey(session), () =>
         this.repository.listReferences({
           employeeId: session.user.employeeId,
-          scope: session.user.scope,
+          scope: monitoringScope(session),
         }),
       ),
       this.repository.getSummary({
         employeeId: session.user.employeeId,
-        scope: session.user.scope,
+        scope: monitoringScope(session),
         date: normalized.date,
         dateTo: normalized.dateTo,
       }),
@@ -399,6 +376,13 @@ export class DefaultMonitoringService implements MonitoringService {
           syncStatus,
           dataSource: item.source,
           actualMinutes: item.accumulated_work_minutes,
+          progressPercent: item.progress_percent ?? row.progressPercent,
+          actualStartTime: item.actual_start ?? item.active_segment_started_at ?? row.actualStartTime,
+          actualFinishTime: item.execution_state === "RUNNING" ? null : item.actual_finish ?? row.actualFinishTime,
+          executionNote: item.execution_note ?? null,
+          monitoringResult: item.execution_note ?? row.monitoringResult,
+          executionSegments: item.execution_segments ?? [],
+          activeSegmentStartedAt: item.active_segment_started_at ?? null,
           inputSource: row.actualId ? "LEGACY_ACTUAL" : row.inputSource ?? null,
           manualExecution: row.manualExecution ?? null,
         };

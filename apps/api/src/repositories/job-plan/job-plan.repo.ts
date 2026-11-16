@@ -1,28 +1,20 @@
 import { randomUUID } from "node:crypto";
+import { assertUnitAcceptsNewWork } from "@/db/unit-work-guard";
 import type { AuthScope } from "@smsystem/contracts/auth";
+import { jobPlanStatusSchema } from "@smsystem/contracts/job-plan";
 import type {
   CreateJobPlanAdditionalCountdownRequest,
-  CreateJobPlanWorkspaceRequest,
-  JobPlanDraftRecord,
   JobPlanGridQuery,
   JobPlanGridReference,
+  JobPlanDraftRecord,
   JobPlanOptionKind,
   JobPlanPicLoad,
   JobPlanRecord,
-  JobPlanStatus,
   JobPlanSummary,
-  JobPlanDraftItem,
-  JobPlanWorkspaceDraftRow,
-  UpdateJobPlanRequest,
-  UpdateJobPlanStatusRequest,
 } from "@smsystem/contracts/job-plan";
-import {
-  isNonTechnicalDivisionReference,
-  type DivisionTechnicalReference,
-} from "@smsystem/contracts/division";
-import { buildJobPlanScheduleSegments } from "@smsystem/contracts/job-plan-schedule";
-import type { Pool, PoolConnection, ResultSetHeader, RowDataPacket } from "mysql2/promise";
+import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
 import { getMySqlPool } from "@/db/mysql";
+import { parseQcNotes, qcNotesTextSql } from "@/repositories/qc/qc-notes";
 
 interface ScopeParams {
   employeeId: string;
@@ -31,10 +23,6 @@ interface ScopeParams {
 
 interface JobPlanListParams extends ScopeParams {
   query: JobPlanGridQuery;
-}
-
-interface JobPlanMutationParams extends ScopeParams {
-  planId: string;
 }
 
 interface JobPlanOptionsParams extends ScopeParams {
@@ -197,10 +185,6 @@ interface PicLoadBatchRow extends PicLoadRow {
   taskDate: string;
 }
 
-interface LockStateRow extends RowDataPacket {
-  isLocked: number | boolean;
-}
-
 interface AdditionalContextRow extends RowDataPacket {
   carId: string;
   unitName: string;
@@ -232,36 +216,8 @@ export interface JobPlanDraftReferenceMaps {
   }>;
 }
 
-interface DivisionTechnicalRow extends RowDataPacket {
-  value: string;
-  label: string | null;
-  code: string | null;
-  isTeknis: number | boolean | null;
-}
-
 function toBoolean(value: unknown): boolean {
   return value === true || value === 1 || value === "1";
-}
-
-function toNumber(value: unknown, fallback = 0): number {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : fallback;
-}
-
-function isCountdownPlanableStatus(value: string | null | undefined): boolean {
-  const normalized = String(value ?? "PLAN").trim().toUpperCase();
-  return !["DONE", "CANCEL", "READY_QC", "QC_READY", "REJECTED"].includes(normalized);
-}
-
-function parseDurationHours(value: string): number {
-  const match = value.trim().match(/^(\d{1,3}):([0-5]\d)$/u);
-  if (!match) {
-    throw new Error("PROJECT_TARGET_INVALID");
-  }
-
-  const hours = Number.parseInt(match[1] ?? "0", 10);
-  const minutes = Number.parseInt(match[2] ?? "0", 10);
-  return Number((hours + minutes / 60).toFixed(2));
 }
 
 function getOvertimeLimit(taskDate: string): number {
@@ -293,7 +249,7 @@ function mapJobPlanRow(row: JobPlanRow): JobPlanRecord {
     finishTime: row.finishTime,
     isOvertime: toBoolean(row.isOvertime),
     isPriority: toBoolean(row.isPriority),
-    status: row.status as JobPlanStatus,
+    status: jobPlanStatusSchema.parse(row.status),
     jobDescription: row.jobDescription,
     instructionText: row.note ?? "",
     note: row.note,
@@ -457,82 +413,6 @@ async function hasScopeAccess(
   return params.carId ? hasAssignmentScopeAccess(connection, employeeId, params.carId) : false;
 }
 
-async function hasActiveAdvisor(
-  connection: Pick<PoolConnection, "query">,
-  carId: string | null,
-): Promise<boolean> {
-  if (!carId) {
-    return false;
-  }
-
-  const [rows] = (await connection.query(
-    `
-      SELECT 1 AS ok
-      FROM car_project_assignment
-      WHERE car_id = ?
-        AND ended_at IS NULL
-        AND advisor_id IS NOT NULL
-      LIMIT 1
-    `,
-    [carId],
-  )) as [Array<RowDataPacket & { ok: number }>, unknown];
-
-  return rows.length > 0;
-}
-
-async function resolveInitialSubmittedStatus(
-  connection: Pick<PoolConnection, "query">,
-  carId: string | null,
-): Promise<JobPlanStatus> {
-  return (await hasActiveAdvisor(connection, carId)) ? "PENDING_ADV" : "PENDING_KP";
-}
-
-async function getDivisionTechnicalReference(
-  connection: Pick<PoolConnection, "query">,
-  divisionId: number,
-): Promise<DivisionTechnicalReference | null> {
-  const [rows] = (await connection.query(
-    `
-      SELECT
-        CAST(id AS CHAR) AS value,
-        name AS label,
-        code,
-        isteknis AS isTeknis
-      FROM sm_divisi
-      WHERE id = ?
-      LIMIT 1
-    `,
-    [divisionId],
-  )) as [DivisionTechnicalRow[], unknown];
-
-  const row = rows[0];
-  if (!row) return null;
-
-  return {
-    value: row.value,
-    label: row.label,
-    code: row.code,
-    isTeknis: row.isTeknis === null || row.isTeknis === undefined ? null : toBoolean(row.isTeknis),
-  };
-}
-
-async function isPlanLocked(
-  connection: Pick<PoolConnection, "query">,
-  planId: string,
-): Promise<boolean> {
-  const [rows] = (await connection.query(
-    `
-      SELECT COALESCE(acc_tracking, 0) AS isLocked
-      FROM sm_jobdesc_plan
-      WHERE id = ?
-      LIMIT 1
-    `,
-    [planId],
-  )) as [LockStateRow[], unknown];
-
-  return toBoolean(rows[0]?.isLocked ?? 0);
-}
-
 function buildFilterClauses(query: JobPlanGridQuery, params: unknown[]): string[] {
   const clauses: string[] = [
     "p.task_date BETWEEN ? AND ?",
@@ -561,8 +441,8 @@ function buildFilterClauses(query: JobPlanGridQuery, params: unknown[]): string[
 
   for (const filter of query.filters) {
     if (filter.field === "status") {
-      clauses.push("p.status = ?");
-      params.push(filter.value);
+      clauses.push("UPPER(TRIM(p.status)) = ?");
+      params.push(filter.value.trim().toUpperCase());
       continue;
     }
 
@@ -661,7 +541,7 @@ function buildListSelectSql(): string {
       latest_validation.progress_final AS actualValidationProgress,
       latest_validation.note AS actualValidationNote,
       latest_monitoring_validation.note AS actualMonitoringNote,
-      qc_inspection.qc_notes AS actualQcNote,
+      ${qcNotesTextSql("qc_inspection.qc_notes")} AS actualQcNote,
       CASE WHEN UPPER(qc_inspection.result_status) = 'PASS' THEN 'LOLOS'
         ELSE qc_inspection.result_status END AS actualQcResult,
       qc_inspection.qc_level AS actualQcLevel,
@@ -770,201 +650,6 @@ async function getCountdownContext(
   return rows[0] ?? null;
 }
 
-async function assertCountdownHasMasterPanel(
-  connection: Pick<PoolConnection, "query">,
-  countdown: CountdownContextRow,
-): Promise<void> {
-  if (!countdown.panelId) {
-    throw new Error("COUNTDOWN_PANEL_REQUIRED");
-  }
-  const [rows] = (await connection.query(
-    `
-      SELECT id
-      FROM master_panels
-      WHERE id = ?
-        AND is_active = 1
-        AND car_id = ?
-      LIMIT 1
-    `,
-    [countdown.panelId, countdown.carId],
-  )) as [Array<RowDataPacket & { id: number }>, unknown];
-  if (!rows[0]) {
-    throw new Error("PANEL_NOT_FOUND");
-  }
-}
-
-async function assertCountdownAccessible(
-  connection: PoolConnection,
-  params: ScopeParams,
-  coreId: string,
-): Promise<CountdownContextRow> {
-  const countdown = await getCountdownContext(connection, coreId, true);
-  if (!countdown) {
-    throw new Error("COUNTDOWN_NOT_FOUND");
-  }
-
-  const scoped = await hasScopeAccess(connection, params.scope, params.employeeId, {
-    carId: countdown.carId,
-    divisionId: countdown.divisionId,
-  });
-  if (!scoped) {
-    throw new Error("SCOPE_FORBIDDEN");
-  }
-
-  if (!isCountdownPlanableStatus(countdown.currentStatus)) {
-    throw new Error("COUNTDOWN_NOT_PLANABLE");
-  }
-
-  await assertCountdownHasMasterPanel(connection, countdown);
-
-  return countdown;
-}
-
-async function checkPanelLock(
-  connection: PoolConnection,
-  countdown: CountdownContextRow,
-): Promise<void> {
-  if (!countdown.panelId || countdown.divisionId === null) {
-    return;
-  }
-
-  const [rows] = (await connection.query(
-    `
-      SELECT is_locked AS isLocked, current_division_id AS currentDivisionId
-      FROM sm_car_panel_status
-      WHERE car_id = ? AND panel_id = ?
-      LIMIT 1
-    `,
-    [countdown.carId, countdown.panelId],
-  )) as [Array<RowDataPacket & { isLocked: number; currentDivisionId: number | null }>, unknown];
-
-  const panel = rows[0];
-  if (
-    panel &&
-    toBoolean(panel.isLocked) &&
-    panel.currentDivisionId !== null &&
-    panel.currentDivisionId !== countdown.divisionId
-  ) {
-    throw new Error("PANEL_LOCKED");
-  }
-}
-
-async function lockPanel(
-  connection: PoolConnection,
-  countdown: CountdownContextRow,
-): Promise<void> {
-  if (!countdown.panelId || countdown.divisionId === null) {
-    return;
-  }
-
-  await connection.execute(
-    `
-      INSERT INTO sm_car_panel_status (
-        id,
-        car_id,
-        panel_id,
-        current_division_id,
-        is_locked
-      ) VALUES (?, ?, ?, ?, 1)
-      ON DUPLICATE KEY UPDATE
-        current_division_id = VALUES(current_division_id),
-        is_locked = 1,
-        last_updated_at = CURRENT_TIMESTAMP
-    `,
-    [randomUUID(), countdown.carId, countdown.panelId, countdown.divisionId],
-  );
-}
-
-async function syncPanelLock(
-  connection: PoolConnection,
-  countdown: CountdownContextRow,
-): Promise<void> {
-  if (!countdown.panelId) {
-    return;
-  }
-
-  const [rows] = (await connection.query(
-    `
-      SELECT COUNT(*) AS total
-      FROM sm_jobdesc_plan p
-      JOIN sm_jobdesc_countdown jc ON jc.id = p.core_id
-      WHERE jc.car_id = ?
-        AND jc.panel_id = ?
-        AND p.status NOT IN ('REJECTED', 'DONE', 'CANCEL')
-    `,
-    [countdown.carId, countdown.panelId],
-  )) as [CountRow[], unknown];
-
-  if ((rows[0]?.total ?? 0) > 0) {
-    return;
-  }
-
-  await connection.execute(
-    `
-      UPDATE sm_car_panel_status
-      SET is_locked = 0,
-          current_division_id = NULL,
-          last_updated_at = CURRENT_TIMESTAMP
-      WHERE car_id = ? AND panel_id = ?
-    `,
-    [countdown.carId, countdown.panelId],
-  );
-}
-
-async function getReservedPlanHours(
-  connection: Pick<PoolConnection, "query">,
-  coreId: string,
-  excludePlanId?: string,
-): Promise<number> {
-  const params: unknown[] = [coreId];
-  let sql = `
-    SELECT COALESCE(
-      SUM(
-        CASE
-          WHEN p.status NOT IN ('REJECTED', 'READY_QC', 'CANCEL')
-            AND (a.id IS NULL OR a.finish_time IS NULL)
-          THEN TIME_TO_SEC(p.dailyTargetHours) / 3600
-          ELSE 0
-        END
-      ),
-      0
-    ) AS total
-    FROM sm_jobdesc_plan p
-    LEFT JOIN (
-      SELECT
-        plandaily_id,
-        MAX(id) AS latestActualId
-      FROM sm_jobdesc_actual
-      GROUP BY plandaily_id
-    ) latest ON latest.plandaily_id = p.id
-    LEFT JOIN sm_jobdesc_actual a ON a.id = latest.latestActualId
-    WHERE p.core_id = ?
-  `;
-
-  if (excludePlanId) {
-    sql += " AND p.id <> ?";
-    params.push(excludePlanId);
-  }
-
-  const [rows] = (await connection.query(sql, params)) as [CountRow[], unknown];
-  return Number(rows[0]?.total ?? 0);
-}
-
-async function assertCountdownCapacity(
-  connection: PoolConnection,
-  countdown: CountdownContextRow,
-  requestedHours: number,
-  excludePlanId?: string,
-): Promise<void> {
-  const remainingHours = toNumber(countdown.remainingHours, 0);
-  const reservedHours = await getReservedPlanHours(connection, countdown.coreId, excludePlanId);
-  const availableHours = Math.max(0, remainingHours - reservedHours);
-
-  if (requestedHours > availableHours + 0.0001) {
-    throw new Error("COUNTDOWN_CAPACITY_EXCEEDED");
-  }
-}
-
 async function getAdditionalContext(
   connection: Pick<PoolConnection, "query">,
   carId: string,
@@ -1036,8 +721,22 @@ async function resolveOrCreateJobType(
   divisionId: number,
   jobTypeId: string | null | undefined,
   jobTypeName: string | null | undefined,
+  isNonTechnicalJob = false,
 ): Promise<ResolvedJobType> {
-  if (jobTypeId) return { jobTypeId, isNewJobType: false };
+  async function resolved(id: string, isNewJobType: boolean): Promise<ResolvedJobType> {
+    if (isNonTechnicalJob && !isNewJobType) {
+      const [rows] = await connection.query<Array<RowDataPacket & { isTeknis: unknown }>>(
+        "SELECT is_teknis AS isTeknis FROM master_job_types WHERE id = ? LIMIT 1 FOR UPDATE",
+        [id],
+      );
+      const isTeknis = rows[0]?.isTeknis;
+      if (isTeknis !== 0 && isTeknis !== "0" && isTeknis !== false) {
+        throw new Error("JOB_TYPE_CLASSIFICATION_MISMATCH");
+      }
+    }
+    return { jobTypeId: id, isNewJobType };
+  }
+  if (jobTypeId) return resolved(jobTypeId, false);
 
   const trimmedName = jobTypeName?.trim();
   if (!trimmedName) {
@@ -1056,18 +755,18 @@ async function resolveOrCreateJobType(
   )) as [Array<RowDataPacket & { id: string }>, unknown];
 
   const existing = existingRows[0]?.id;
-  if (existing) return { jobTypeId: existing, isNewJobType: false };
+  if (existing) return resolved(existing, false);
 
   const id = randomUUID();
   try {
     await connection.query(
       `
         INSERT INTO master_job_types (id, division_id, job_name, is_teknis)
-        VALUES (?, ?, ?, 1)
+        VALUES (?, ?, ?, ?)
       `,
-      [id, divisionId, trimmedName],
+      [id, divisionId, trimmedName, isNonTechnicalJob ? 0 : 1],
     );
-    return { jobTypeId: id, isNewJobType: true };
+    return resolved(id, true);
   } catch (error) {
     const mysqlError = error as { code?: string };
     if (mysqlError.code !== "ER_DUP_ENTRY") throw error;
@@ -1078,36 +777,14 @@ async function resolveOrCreateJobType(
         WHERE division_id = ?
           AND UPPER(job_name) = UPPER(?)
         LIMIT 1
+        FOR UPDATE
       `,
       [divisionId, trimmedName],
     )) as [Array<RowDataPacket & { id: string }>, unknown];
     const retry = retryRows[0]?.id;
     if (!retry) throw error;
-    return { jobTypeId: retry, isNewJobType: false };
+    return resolved(retry, false);
   }
-}
-
-async function findExistingWorkOrderCountdown(
-  connection: Pick<PoolConnection, "query">,
-  workOrderId: string,
-): Promise<CountdownContextRow | null> {
-  const [rows] = (await connection.query(
-    `
-      SELECT id AS coreId
-      FROM sm_jobdesc_countdown
-      WHERE task_category = 'WO'
-        AND ref_taks_id = ?
-      ORDER BY updated_at DESC, created_at DESC
-      LIMIT 1
-    `,
-    [workOrderId],
-  )) as [Array<RowDataPacket & { coreId: string }>, unknown];
-
-  if (!rows[0]?.coreId) {
-    return null;
-  }
-
-  return getCountdownContext(connection, rows[0].coreId);
 }
 
 async function createCountdownInTransaction(
@@ -1234,85 +911,6 @@ async function findOpenAdditionalCountdown(
   return coreId ? getCountdownContext(connection, coreId, true) : null;
 }
 
-async function resolveWorkspaceCountdown(
-  connection: PoolConnection,
-  params: ScopeParams,
-  row: JobPlanWorkspaceDraftRow,
-  workspaceMeta: {
-    projectTargetHours: number;
-    taskDate: string;
-    deadlineDate: string;
-  },
-): Promise<CountdownContextRow> {
-  if (row.source === "countdown") {
-    if (!row.referenceId) {
-      throw new Error("COUNTDOWN_NOT_FOUND");
-    }
-
-    return assertCountdownAccessible(connection, params, row.referenceId);
-  }
-
-  if (row.source === "wo") {
-    if (!row.referenceId) {
-      throw new Error("WORK_ORDER_COUNTDOWN_NOT_FOUND");
-    }
-
-    const existingCountdown = await findExistingWorkOrderCountdown(connection, row.referenceId);
-    if (!existingCountdown) {
-      throw new Error("WORK_ORDER_COUNTDOWN_NOT_FOUND");
-    }
-
-    return assertCountdownAccessible(connection, params, existingCountdown.coreId);
-  }
-
-  if (!row.carId || !row.divisionId || !row.panelId || (!row.jobTypeId && !row.jobTypeName)) {
-    throw new Error("ADDITIONAL_REFERENCE_INCOMPLETE");
-  }
-
-  const resolvedJobType = await resolveOrCreateJobType(
-    connection,
-    row.divisionId,
-    row.jobTypeId,
-    row.jobTypeName,
-  );
-  const additional = await getAdditionalContext(
-    connection,
-    row.carId,
-    row.divisionId,
-    row.panelId,
-    resolvedJobType.jobTypeId,
-  );
-  if (!additional || !additional.divisionId) {
-    throw new Error("ADDITIONAL_REFERENCE_INCOMPLETE");
-  }
-  const divisionId = additional.divisionId;
-
-  const existing = await findOpenAdditionalCountdown(connection, {
-    carId: additional.carId,
-    divisionId,
-    panelId: additional.panelId,
-    jobTypeId: additional.jobTypeId,
-  });
-  if (existing) return existing;
-
-  return createCountdownInTransaction(connection, params, {
-    carId: additional.carId,
-    divisionId,
-    panelId: additional.panelId,
-    taskCategory: "ADDITIONAL",
-    sectionName: `${additional.panelName ?? "Panel"} · ${additional.jobName ?? "Tambahan"}`,
-    jobTypeId: additional.jobTypeId,
-    targetHoursInitial: workspaceMeta.projectTargetHours,
-    picPlan: row.picPlan ?? row.assignedUserId,
-    requiredGrade: row.requiredGrade ?? null,
-    startDate: workspaceMeta.taskDate,
-    deadlineDate: workspaceMeta.deadlineDate,
-    initialFinding: null,
-    refTaskId: null,
-    note: row.note ?? null,
-  });
-}
-
 export interface JobPlanRepository {
   list(params: JobPlanListParams): Promise<{
     rows: JobPlanRecord[];
@@ -1327,6 +925,9 @@ export interface JobPlanRepository {
     countdownIds: string[];
     panelIds: number[];
   }): Promise<JobPlanDraftReferenceMaps>;
+  listQcReworkDrafts?(params: ScopeParams & { divisionIds: number[] }): Promise<unknown[]>;
+  saveQcReworkDrafts?(params: ScopeParams & { items: JobPlanDraftRecord[] }): Promise<unknown[]>;
+  dismissQcReworkDrafts?(params: ScopeParams & { draftItemIds: string[] }): Promise<string[]>;
   listOptions(params: JobPlanOptionsParams): Promise<JobPlanOption[]>;
   getPicLoad(
     employeeId: string,
@@ -1336,39 +937,110 @@ export interface JobPlanRepository {
   getPicLoadBatch(
     requests: Array<{ employeeId: string; taskDate: string }>,
   ): Promise<Map<string, JobPlanPicLoad>>;
-  createMany(
-    params: ScopeParams & { actorId: string; actorName: string },
-    plans: JobPlanDraftItem[],
-  ): Promise<{ createdIds: string[] }>;
-  createWorkspace(
-    params: ScopeParams & { actorId: string; actorName: string },
-    input: CreateJobPlanWorkspaceRequest,
-  ): Promise<{ createdIds: string[] }>;
   createAdditionalCountdown(
     params: ScopeParams,
     input: CreateJobPlanAdditionalCountdownRequest,
   ): Promise<AdditionalCountdownResult>;
-  submitDrafts(
-    params: ScopeParams & { actorId: string; actorName: string },
-    drafts: JobPlanDraftRecord[],
-  ): Promise<{ createdIds: string[] }>;
-  findById(params: JobPlanMutationParams): Promise<JobPlanRecord | null>;
-  update(
-    params: JobPlanMutationParams,
-    input: UpdateJobPlanRequest,
-  ): Promise<{ updatedPlanId: string }>;
-  updateStatus(
-    params: JobPlanMutationParams,
-    input: UpdateJobPlanStatusRequest,
-  ): Promise<{ planId: string; status: JobPlanStatus }>;
-  delete(params: JobPlanMutationParams): Promise<void>;
-  getApproversForCars(
-    carIds: string[],
-  ): Promise<Array<{ carId: string; kpId: string | null; advisorId: string | null; kdId: string | null }>>;
 }
 
 export class MySqlJobPlanRepository implements JobPlanRepository {
   constructor(private readonly poolFactory: () => Pool = getMySqlPool) {}
+
+  async saveQcReworkDrafts(params: ScopeParams & { items: JobPlanDraftRecord[] }): Promise<unknown[]> {
+    const items = new Map(params.items.filter((item) => item.draftItemId.startsWith("qc-rework:"))
+      .map((item) => [item.draftItemId.slice(10), item]));
+    if (items.size === 0) return [];
+    const connection = await this.poolFactory().getConnection();
+    try {
+      await connection.beginTransaction();
+      const values: unknown[] = [...items.keys()];
+      const scopeSql = buildScopeWhereClause(params.scope, params.employeeId, values, "jc", "p_scope");
+      const [rows] = await connection.query<Array<RowDataPacket & { qcId: string; coreId: string; qcNotes: string }>>(`
+        SELECT DISTINCT q.id AS qcId, q.core_id AS coreId, q.qc_notes AS qcNotes
+        FROM sm_qc_inspections q
+        JOIN sm_jobdesc_countdown jc ON jc.id = q.core_id AND jc.ref_rework_qc_id = q.id
+        ${scopeSql ? "LEFT JOIN sm_jobdesc_plan p_scope ON p_scope.core_id = jc.id" : ""}
+        WHERE q.id IN (${[...items.keys()].map(() => "?").join(", ")})
+          AND q.result_status = 'TIDAK_LOLOS'
+          AND CASE WHEN JSON_VALID(q.qc_notes)
+            THEN JSON_UNQUOTE(JSON_EXTRACT(q.qc_notes, '$.jobPlanDraftState')) = 'DRAFT'
+            ELSE FALSE END
+          ${scopeSql ? `AND ${scopeSql}` : ""}
+        FOR UPDATE
+      `, values);
+      if (rows.length !== items.size) throw new Error("DRAFT_NOT_FOUND");
+      const editableFields = ["assignedUserId", "assignedUserName", "taskDate", "targetHours", "startTime", "finishTime",
+        "jobDescription", "note", "isOvertime", "isPriority", "deadlineDate", "picPlan", "requiredGrade"] as const;
+      const saved: unknown[] = [];
+      for (const row of rows) {
+        const item = items.get(row.qcId)!;
+        const envelope = parseQcNotes(row.qcNotes);
+        if (!envelope) throw new Error("DRAFT_NOT_FOUND");
+        if (item.coreId !== row.coreId) throw new Error("SCOPE_FORBIDDEN");
+        const edits = Object.fromEntries(editableFields.filter((key) => item[key] !== undefined)
+          .map((key) => [key, item[key]]));
+        const draft = { ...(envelope.jobPlanDraft as Record<string, unknown>), ...edits,
+          draftItemId: `qc-rework:${row.qcId}`, coreId: row.coreId, sourceType: "COUNTDOWN", isRework: true };
+        await connection.execute("UPDATE sm_qc_inspections SET qc_notes = ? WHERE id = ?",
+          [JSON.stringify({ ...envelope, jobPlanDraft: draft }), row.qcId]);
+        saved.push(draft);
+      }
+      await connection.commit();
+      return saved;
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
+
+  async listQcReworkDrafts(params: ScopeParams & { divisionIds: number[] }): Promise<unknown[]> {
+    const values: unknown[] = [];
+    const scopeSql = buildScopeWhereClause(params.scope, params.employeeId, values, "jc", "p_scope");
+    const divisionSql = params.divisionIds.length > 0
+      ? `AND jc.division_id IN (${params.divisionIds.map(() => "?").join(", ")})` : "";
+    values.push(...params.divisionIds);
+    const [rows] = await this.poolFactory().query<Array<RowDataPacket & {
+      qcId: string; coreId: string; qcNotes: string;
+    }>>(`
+      SELECT DISTINCT q.id AS qcId, q.core_id AS coreId, q.qc_notes AS qcNotes
+      FROM sm_qc_inspections q
+      JOIN sm_jobdesc_countdown jc ON jc.id = q.core_id AND jc.ref_rework_qc_id = q.id
+      ${scopeSql ? "LEFT JOIN sm_jobdesc_plan p_scope ON p_scope.core_id = jc.id" : ""}
+      WHERE q.result_status = 'TIDAK_LOLOS'
+        AND CASE WHEN JSON_VALID(q.qc_notes)
+          THEN JSON_UNQUOTE(JSON_EXTRACT(q.qc_notes, '$.jobPlanDraftState')) = 'DRAFT'
+          ELSE FALSE END
+        ${scopeSql ? `AND ${scopeSql}` : ""}
+        ${divisionSql}
+    `, values);
+    return rows.flatMap((row) => {
+      const draft = parseQcNotes(row.qcNotes)?.jobPlanDraft;
+      return draft && typeof draft === "object" && !Array.isArray(draft)
+        ? [{ ...draft, draftItemId: `qc-rework:${row.qcId}`, coreId: row.coreId }] : [];
+    });
+  }
+
+  async dismissQcReworkDrafts(params: ScopeParams & { draftItemIds: string[] }): Promise<string[]> {
+    const qcIds = params.draftItemIds.filter((id) => id.startsWith("qc-rework:")).map((id) => id.slice(10));
+    if (qcIds.length === 0) return [];
+    const values: unknown[] = [...qcIds];
+    const scopeSql = buildScopeWhereClause(params.scope, params.employeeId, values, "jc", "p_scope");
+    const [consumed] = await this.poolFactory().query<Array<RowDataPacket & { qcId: string; draftState: string }>>(`
+      SELECT DISTINCT q.id AS qcId, JSON_UNQUOTE(JSON_EXTRACT(q.qc_notes, '$.jobPlanDraftState')) AS draftState
+      FROM sm_qc_inspections q
+      JOIN sm_jobdesc_countdown jc ON jc.id = q.core_id
+      ${scopeSql ? "LEFT JOIN sm_jobdesc_plan p_scope ON p_scope.core_id = jc.id" : ""}
+      WHERE q.id IN (${qcIds.map(() => "?").join(", ")})
+        AND CASE WHEN JSON_VALID(q.qc_notes)
+          THEN JSON_UNQUOTE(JSON_EXTRACT(q.qc_notes, '$.jobPlanDraftState')) IN ('DRAFT', 'DISMISSED', 'SUBMITTED')
+          ELSE FALSE END
+        ${scopeSql ? `AND ${scopeSql}` : ""}
+    `, values);
+    if (consumed.some((row) => row.draftState === "DRAFT")) throw new Error("QC_REWORK_DRAFT_LINKED");
+    return consumed.map((row) => `qc-rework:${row.qcId}`);
+  }
 
   async list(params: JobPlanListParams) {
     const pool = this.poolFactory();
@@ -2475,166 +2147,6 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
     return result;
   }
 
-  async createMany(
-    params: ScopeParams & { actorId: string; actorName: string },
-    plans: JobPlanDraftItem[],
-  ) {
-    const pool = this.poolFactory();
-    const connection = await pool.getConnection();
-    const createdIds: string[] = [];
-
-    try {
-      await connection.beginTransaction();
-
-      for (const plan of plans) {
-        const countdown = await assertCountdownAccessible(connection, params, plan.coreId);
-        await checkPanelLock(connection, countdown);
-        await assertCountdownCapacity(connection, countdown, plan.targetHours);
-        const initialStatus = await resolveInitialSubmittedStatus(
-          connection,
-          countdown.carId,
-        );
-
-        const planId = `PLAN-${randomUUID().replace(/-/gu, "").slice(0, 20).toUpperCase()}`;
-        await connection.execute(
-          `
-            INSERT INTO sm_jobdesc_plan (
-              id,
-              core_id,
-              task_date,
-              jobdescription,
-              assigned_user_id,
-              target_start_hours,
-              target_finish_hours,
-              dailyTargetHours,
-              is_overtime,
-              is_rework,
-              isPriority,
-              status,
-              acc_tracking,
-              note
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, SEC_TO_TIME(? * 3600), ?, 0, ?, ?, 0, ?)
-          `,
-          [
-            planId,
-            plan.coreId,
-            plan.taskDate,
-            plan.jobDescription,
-            plan.assignedUserId,
-            plan.startTime,
-            plan.finishTime,
-            plan.targetHours,
-            plan.isOvertime ? 1 : 0,
-            plan.isPriority ? 1 : 0,
-            initialStatus,
-            plan.note,
-          ],
-        );
-
-        await lockPanel(connection, countdown);
-        createdIds.push(planId);
-      }
-
-      await connection.commit();
-      return { createdIds };
-    } catch (error) {
-      await connection.rollback();
-      throw error;
-    } finally {
-      connection.release();
-    }
-  }
-
-  async createWorkspace(
-    params: ScopeParams & { actorId: string; actorName: string },
-    input: CreateJobPlanWorkspaceRequest,
-  ) {
-    const pool = this.poolFactory();
-    const connection = await pool.getConnection();
-    const createdIds: string[] = [];
-
-    try {
-      await connection.beginTransaction();
-
-      const projectTargetHours = parseDurationHours(input.projectTargetHours);
-      if (input.deadlineDate < input.taskDate) {
-        throw new Error("PROJECT_DEADLINE_INVALID");
-      }
-
-      for (const row of input.rows) {
-        const countdown = await resolveWorkspaceCountdown(connection, params, row, {
-          projectTargetHours,
-          taskDate: input.taskDate,
-          deadlineDate: input.deadlineDate,
-        });
-        const initialStatus = await resolveInitialSubmittedStatus(
-          connection,
-          countdown.carId,
-        );
-        const scheduleSegments = buildJobPlanScheduleSegments({
-          taskDate: input.taskDate,
-          requestedMode: input.mode,
-          targetHours: row.targetHours,
-          startTime: row.startTime,
-        });
-
-        await checkPanelLock(connection, countdown);
-        await assertCountdownCapacity(connection, countdown, row.targetHours);
-
-        for (const segment of scheduleSegments) {
-          const planId = `PLAN-${randomUUID().replace(/-/gu, "").slice(0, 20).toUpperCase()}`;
-          await connection.execute(
-            `
-              INSERT INTO sm_jobdesc_plan (
-                id,
-                core_id,
-                task_date,
-                jobdescription,
-                assigned_user_id,
-                target_start_hours,
-                target_finish_hours,
-                dailyTargetHours,
-                is_overtime,
-                is_rework,
-                isPriority,
-                status,
-                acc_tracking,
-                note
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, SEC_TO_TIME(? * 3600), ?, ?, ?, ?, 0, ?)
-            `,
-            [
-              planId,
-              countdown.coreId,
-              input.taskDate,
-              row.jobDescription,
-              row.assignedUserId,
-              segment.startTime,
-              segment.finishTime,
-              segment.targetHours,
-              segment.mode === "overtime" ? 1 : 0,
-              input.isRework ? 1 : 0,
-              row.isPriority ? 1 : 0,
-              initialStatus,
-              row.note,
-            ],
-          );
-
-          createdIds.push(planId);
-        }
-
-        await lockPanel(connection, countdown);
-      }
-
-      await connection.commit();
-      return { createdIds };
-    } catch (error) {
-      await connection.rollback();
-      throw error;
-    } finally {
-      connection.release();
-    }
-  }
-
   async createAdditionalCountdown(
     params: ScopeParams,
     input: CreateJobPlanAdditionalCountdownRequest,
@@ -2644,11 +2156,19 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
 
     try {
       await connection.beginTransaction();
+      if (!await hasScopeAccess(connection, params.scope, params.employeeId, {
+        carId: input.carId,
+        divisionId: input.divisionId,
+      })) {
+        throw new Error("SCOPE_FORBIDDEN");
+      }
+      await assertUnitAcceptsNewWork(connection, input.carId);
       const resolvedJobType = await resolveOrCreateJobType(
         connection,
         input.divisionId,
         input.jobTypeId,
         input.jobTypeName,
+        input.isNonTechnicalJob,
       );
 
       const additional = await getAdditionalContext(
@@ -2709,546 +2229,5 @@ export class MySqlJobPlanRepository implements JobPlanRepository {
     } finally {
       connection.release();
     }
-  }
-
-  private async findMatchingSubmittedPlanId(
-    connection: PoolConnection,
-    input: {
-      coreId: string;
-      taskDate: string;
-      jobDescription: string;
-      assignedUserId: string;
-      startTime: string;
-      finishTime: string;
-      targetHours: number;
-      isOvertime: boolean;
-      note: string | null;
-    },
-  ): Promise<string | null> {
-    const [rows] = (await connection.query(
-      `
-        SELECT id
-        FROM sm_jobdesc_plan
-        WHERE core_id = ?
-          AND task_date = ?
-          AND jobdescription = ?
-          AND assigned_user_id = ?
-          AND target_start_hours = ?
-          AND target_finish_hours = ?
-          AND TIME_TO_SEC(dailyTargetHours) = ?
-          AND is_overtime = ?
-          AND note <=> ?
-        LIMIT 1
-      `,
-      [
-        input.coreId,
-        input.taskDate,
-        input.jobDescription,
-        input.assignedUserId,
-        input.startTime,
-        input.finishTime,
-        Math.round(input.targetHours * 3_600),
-        input.isOvertime ? 1 : 0,
-        input.note,
-      ],
-    )) as [Array<RowDataPacket & { id: string }>, unknown];
-
-    return rows[0]?.id ?? null;
-  }
-
-  async submitDrafts(
-    params: ScopeParams & { actorId: string; actorName: string },
-    drafts: JobPlanDraftRecord[],
-  ) {
-    const pool = this.poolFactory();
-    const connection = await pool.getConnection();
-    const createdIds: string[] = [];
-
-    try {
-      await connection.beginTransaction();
-
-      for (const draft of drafts) {
-        if (draft.sourceType === "ADDITIONAL") {
-          const row: JobPlanWorkspaceDraftRow = {
-            source: "additional",
-            referenceId: null,
-            carId: draft.carId,
-            divisionId: draft.divisionId,
-            panelId: draft.panelId,
-            jobTypeId: draft.jobTypeId,
-            jobTypeName: draft.jobName ?? draft.jobDescription,
-            assignedUserId: draft.assignedUserId,
-            targetHours: draft.targetHours,
-            startTime: draft.startTime,
-            finishTime: draft.finishTime,
-            jobDescription: draft.jobDescription,
-            note: draft.note ?? null,
-            isPriority: draft.isPriority,
-            isNonTechnicalJob: draft.isNonTechnicalJob,
-            picPlan: draft.picPlan ?? draft.assignedUserId,
-            requiredGrade: draft.requiredGrade ?? null,
-          };
-          const countdown = await resolveWorkspaceCountdown(connection, params, row, {
-            projectTargetHours: draft.targetHours,
-            taskDate: draft.taskDate,
-            deadlineDate: draft.deadlineDate ?? draft.taskDate,
-          });
-          const initialStatus = await resolveInitialSubmittedStatus(
-            connection,
-            countdown.carId,
-          );
-          const scheduleSegments = buildJobPlanScheduleSegments({
-            taskDate: draft.taskDate,
-            requestedMode: draft.isOvertime ? "overtime" : "normal",
-            targetHours: draft.targetHours,
-            startTime: draft.startTime,
-          });
-          const existingIdsBySegment = new Map<string, string>();
-
-          for (const segment of scheduleSegments) {
-            const existingPlanId = await this.findMatchingSubmittedPlanId(connection, {
-              coreId: countdown.coreId,
-              taskDate: draft.taskDate,
-              jobDescription: draft.jobDescription,
-              assignedUserId: draft.assignedUserId,
-              startTime: segment.startTime,
-              finishTime: segment.finishTime,
-              targetHours: segment.targetHours,
-              isOvertime: segment.mode === "overtime",
-              note: draft.note ?? null,
-            });
-            if (existingPlanId) {
-              existingIdsBySegment.set(`${segment.startTime}|${segment.finishTime}|${segment.targetHours}`, existingPlanId);
-            }
-          }
-
-          if (existingIdsBySegment.size === scheduleSegments.length) {
-            createdIds.push(...existingIdsBySegment.values());
-            continue;
-          }
-
-          await checkPanelLock(connection, countdown);
-          await assertCountdownCapacity(connection, countdown, draft.targetHours);
-
-          for (const segment of scheduleSegments) {
-            const segmentKey = `${segment.startTime}|${segment.finishTime}|${segment.targetHours}`;
-            if (existingIdsBySegment.has(segmentKey)) {
-              createdIds.push(existingIdsBySegment.get(segmentKey)!);
-              continue;
-            }
-            const existingPlanId = await this.findMatchingSubmittedPlanId(connection, {
-              coreId: countdown.coreId,
-              taskDate: draft.taskDate,
-              jobDescription: draft.jobDescription,
-              assignedUserId: draft.assignedUserId,
-              startTime: segment.startTime,
-              finishTime: segment.finishTime,
-              targetHours: segment.targetHours,
-              isOvertime: segment.mode === "overtime",
-              note: draft.note ?? null,
-            });
-            if (existingPlanId) {
-              createdIds.push(existingPlanId);
-              continue;
-            }
-
-            const planId = `PLAN-${randomUUID().replace(/-/gu, "").slice(0, 20).toUpperCase()}`;
-            await connection.execute(
-              `
-                INSERT INTO sm_jobdesc_plan (
-                  id,
-                  core_id,
-                  task_date,
-                  jobdescription,
-                  assigned_user_id,
-                  target_start_hours,
-                  target_finish_hours,
-                  dailyTargetHours,
-                  is_overtime,
-                  is_rework,
-                  isPriority,
-                  status,
-                  acc_tracking,
-                  note
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, SEC_TO_TIME(? * 3600), ?, ?, ?, ?, 0, ?)
-              `,
-              [
-                planId,
-                countdown.coreId,
-                draft.taskDate,
-                draft.jobDescription,
-                draft.assignedUserId,
-                segment.startTime,
-                segment.finishTime,
-                segment.targetHours,
-                segment.mode === "overtime" ? 1 : 0,
-                draft.isRework ? 1 : 0,
-                draft.isPriority ? 1 : 0,
-                initialStatus,
-                draft.note ?? null,
-              ],
-            );
-            createdIds.push(planId);
-          }
-
-          await lockPanel(connection, countdown);
-          continue;
-        }
-
-        if (!draft.coreId) {
-          throw new Error("COUNTDOWN_NOT_FOUND");
-        }
-
-        const countdown = await assertCountdownAccessible(connection, params, draft.coreId);
-        const initialStatus = await resolveInitialSubmittedStatus(
-          connection,
-          countdown.carId,
-        );
-        const scheduleSegments = buildJobPlanScheduleSegments({
-          taskDate: draft.taskDate,
-          requestedMode: draft.isOvertime ? "overtime" : "normal",
-          targetHours: draft.targetHours,
-          startTime: draft.startTime,
-        });
-        const existingIdsBySegment = new Map<string, string>();
-
-        for (const segment of scheduleSegments) {
-          const existingPlanId = await this.findMatchingSubmittedPlanId(connection, {
-            coreId: draft.coreId,
-            taskDate: draft.taskDate,
-            jobDescription: draft.jobDescription,
-            assignedUserId: draft.assignedUserId,
-            startTime: segment.startTime,
-            finishTime: segment.finishTime,
-            targetHours: segment.targetHours,
-            isOvertime: segment.mode === "overtime",
-            note: draft.note ?? null,
-          });
-          if (existingPlanId) {
-            existingIdsBySegment.set(`${segment.startTime}|${segment.finishTime}|${segment.targetHours}`, existingPlanId);
-          }
-        }
-
-        if (existingIdsBySegment.size === scheduleSegments.length) {
-          createdIds.push(...existingIdsBySegment.values());
-          continue;
-        }
-
-        await checkPanelLock(connection, countdown);
-        await assertCountdownCapacity(connection, countdown, draft.targetHours);
-
-        for (const segment of scheduleSegments) {
-          const segmentKey = `${segment.startTime}|${segment.finishTime}|${segment.targetHours}`;
-          if (existingIdsBySegment.has(segmentKey)) {
-            createdIds.push(existingIdsBySegment.get(segmentKey)!);
-            continue;
-          }
-          const existingPlanId = await this.findMatchingSubmittedPlanId(connection, {
-            coreId: draft.coreId,
-            taskDate: draft.taskDate,
-            jobDescription: draft.jobDescription,
-            assignedUserId: draft.assignedUserId,
-            startTime: segment.startTime,
-            finishTime: segment.finishTime,
-            targetHours: segment.targetHours,
-            isOvertime: segment.mode === "overtime",
-            note: draft.note ?? null,
-          });
-          if (existingPlanId) {
-            createdIds.push(existingPlanId);
-            continue;
-          }
-
-          const planId = `PLAN-${randomUUID().replace(/-/gu, "").slice(0, 20).toUpperCase()}`;
-          await connection.execute(
-            `
-              INSERT INTO sm_jobdesc_plan (
-                id,
-                core_id,
-                task_date,
-                jobdescription,
-                assigned_user_id,
-                target_start_hours,
-                target_finish_hours,
-                dailyTargetHours,
-                is_overtime,
-                is_rework,
-                isPriority,
-                status,
-                acc_tracking,
-                note
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, SEC_TO_TIME(? * 3600), ?, 0, ?, ?, 0, ?)
-            `,
-            [
-              planId,
-              draft.coreId,
-              draft.taskDate,
-              draft.jobDescription,
-              draft.assignedUserId,
-              segment.startTime,
-              segment.finishTime,
-              segment.targetHours,
-              segment.mode === "overtime" ? 1 : 0,
-              draft.isPriority ? 1 : 0,
-              initialStatus,
-              draft.note ?? null,
-            ],
-          );
-          createdIds.push(planId);
-        }
-
-        await lockPanel(connection, countdown);
-      }
-
-      await connection.commit();
-      return { createdIds };
-    } catch (error) {
-      await connection.rollback();
-      throw error;
-    } finally {
-      connection.release();
-    }
-  }
-
-  async findById(params: JobPlanMutationParams): Promise<JobPlanRecord | null> {
-    const pool = this.poolFactory();
-    return this.findByIdWithConnection(pool, params);
-  }
-
-  async findByIdWithConnection(
-    connection: Pick<Pool | PoolConnection, "query">,
-    params: JobPlanMutationParams,
-  ): Promise<JobPlanRecord | null> {
-    const queryParams: unknown[] = [params.planId];
-    const scopeSql = buildScopeWhereClause(
-      params.scope,
-      params.employeeId,
-      queryParams,
-    );
-
-    const [rows] = (await connection.query(
-      `
-        ${buildListSelectSql()}
-        WHERE p.id = ?
-        ${scopeSql ? `AND ${scopeSql}` : ""}
-        LIMIT 1
-      `,
-      queryParams,
-    )) as [JobPlanRow[], unknown];
-
-    return rows[0] ? mapJobPlanRow(rows[0]) : null;
-  }
-
-  async update(
-    params: JobPlanMutationParams,
-    input: UpdateJobPlanRequest,
-  ): Promise<{ updatedPlanId: string }> {
-    const pool = this.poolFactory();
-    const connection = await pool.getConnection();
-
-    try {
-      await connection.beginTransaction();
-
-      const existing = await this.findByIdWithConnection(connection, params);
-      if (!existing) {
-        throw new Error("PLAN_NOT_FOUND");
-      }
-      if (existing.divisionId === null) {
-        throw new Error("PLAN_SCOPE_INCOMPLETE");
-      }
-
-      if (await isPlanLocked(connection, params.planId)) {
-        throw new Error("PLAN_LOCKED");
-      }
-
-      const countdown = await assertCountdownAccessible(connection, params, existing.coreId);
-      const nextTargetHours = input.targetHours ?? existing.targetHours;
-      await checkPanelLock(connection, countdown);
-      await assertCountdownCapacity(connection, countdown, nextTargetHours, params.planId);
-
-      const [updateResult] = (await connection.execute(
-        `
-          UPDATE sm_jobdesc_plan
-          SET
-            task_date = COALESCE(?, task_date),
-            jobdescription = COALESCE(?, jobdescription),
-            assigned_user_id = COALESCE(?, assigned_user_id),
-            target_start_hours = COALESCE(?, target_start_hours),
-            target_finish_hours = COALESCE(?, target_finish_hours),
-            dailyTargetHours = COALESCE(SEC_TO_TIME(? * 3600), dailyTargetHours),
-            is_overtime = COALESCE(?, is_overtime),
-            isPriority = COALESCE(?, isPriority),
-            note = COALESCE(?, note)
-          WHERE id = ?
-            AND EXISTS (
-              SELECT 1
-              FROM sm_jobdesc_countdown scope_countdown
-              WHERE scope_countdown.id = sm_jobdesc_plan.core_id
-                AND scope_countdown.division_id = ?
-            )
-        `,
-        [
-          input.taskDate ?? null,
-          input.jobDescription ?? null,
-          input.assignedUserId ?? null,
-          input.startTime ?? null,
-          input.finishTime ?? null,
-          input.targetHours ?? null,
-          typeof input.isOvertime === "boolean" ? (input.isOvertime ? 1 : 0) : null,
-          typeof input.isPriority === "boolean" ? (input.isPriority ? 1 : 0) : null,
-          input.note ?? null,
-          params.planId,
-          existing.divisionId,
-        ],
-      )) as [ResultSetHeader, unknown];
-      if (updateResult.affectedRows === 0) {
-        throw new Error("PLAN_NOT_FOUND");
-      }
-
-      await connection.commit();
-      return { updatedPlanId: params.planId };
-    } catch (error) {
-      await connection.rollback();
-      throw error;
-    } finally {
-      connection.release();
-    }
-  }
-
-  async updateStatus(
-    params: JobPlanMutationParams,
-    input: UpdateJobPlanStatusRequest,
-  ): Promise<{ planId: string; status: JobPlanStatus }> {
-    const pool = this.poolFactory();
-    const connection = await pool.getConnection();
-
-    try {
-      await connection.beginTransaction();
-
-      const existing = await this.findByIdWithConnection(connection, params);
-      if (!existing) {
-        throw new Error("PLAN_NOT_FOUND");
-      }
-      if (existing.divisionId === null) {
-        throw new Error("PLAN_SCOPE_INCOMPLETE");
-      }
-
-      const [updateResult] = (await connection.execute(
-        `
-          UPDATE sm_jobdesc_plan
-          SET status = ?, note = COALESCE(?, note)
-          WHERE id = ?
-            AND EXISTS (
-              SELECT 1
-              FROM sm_jobdesc_countdown scope_countdown
-              WHERE scope_countdown.id = sm_jobdesc_plan.core_id
-                AND scope_countdown.division_id = ?
-            )
-        `,
-        [input.status, input.note ?? null, params.planId, existing.divisionId],
-      )) as [ResultSetHeader, unknown];
-      if (updateResult.affectedRows === 0) {
-        throw new Error("PLAN_NOT_FOUND");
-      }
-
-      const countdown = await getCountdownContext(connection, existing.coreId);
-      if (countdown && input.status === "REJECTED") {
-        await syncPanelLock(connection, countdown);
-      }
-
-      await connection.commit();
-      return {
-        planId: params.planId,
-        status: input.status,
-      };
-    } catch (error) {
-      await connection.rollback();
-      throw error;
-    } finally {
-      connection.release();
-    }
-  }
-
-  async delete(params: JobPlanMutationParams): Promise<void> {
-    const pool = this.poolFactory();
-    const connection = await pool.getConnection();
-
-    try {
-      await connection.beginTransaction();
-
-      const existing = await this.findByIdWithConnection(connection, params);
-      if (!existing) {
-        throw new Error("PLAN_NOT_FOUND");
-      }
-      if (existing.divisionId === null) {
-        throw new Error("PLAN_SCOPE_INCOMPLETE");
-      }
-
-      if (await isPlanLocked(connection, params.planId)) {
-        throw new Error("PLAN_LOCKED");
-      }
-
-      const countdown = await getCountdownContext(connection, existing.coreId);
-      const [deleteResult] = (await connection.execute(
-        `
-          DELETE FROM sm_jobdesc_plan
-          WHERE id = ?
-            AND EXISTS (
-              SELECT 1
-              FROM sm_jobdesc_countdown scope_countdown
-              WHERE scope_countdown.id = sm_jobdesc_plan.core_id
-                AND scope_countdown.division_id = ?
-            )
-        `,
-        [params.planId, existing.divisionId],
-      )) as [ResultSetHeader, unknown];
-      if (deleteResult.affectedRows === 0) {
-        throw new Error("PLAN_NOT_FOUND");
-      }
-      if (countdown) {
-        await syncPanelLock(connection, countdown);
-      }
-
-      await connection.commit();
-    } catch (error) {
-      await connection.rollback();
-      throw error;
-    } finally {
-      connection.release();
-    }
-  }
-
-  async getApproversForCars(
-    carIds: string[],
-  ): Promise<Array<{ carId: string; kpId: string | null; advisorId: string | null; kdId: string | null }>> {
-    if (carIds.length === 0) {
-      return [];
-    }
-
-    const pool = this.poolFactory();
-    const placeholders = carIds.map(() => "?").join(", ");
-
-    interface ApproverRow extends RowDataPacket {
-      carId: string;
-      kpId: string | null;
-      advisorId: string | null;
-      kdId: string | null;
-    }
-
-    const [rows] = (await pool.query(
-      `
-        SELECT
-          car_id AS carId,
-          kp_id AS kpId,
-          advisor_id AS advisorId,
-          kd_id AS kdId
-        FROM car_project_assignment
-        WHERE car_id IN (${placeholders})
-          AND ended_at IS NULL
-      `,
-      carIds,
-    )) as [ApproverRow[], unknown];
-
-    return rows;
   }
 }

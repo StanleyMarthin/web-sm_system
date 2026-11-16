@@ -49,6 +49,9 @@ interface QcMutationResult {
   resultStatus: "LOLOS" | "TIDAK_LOLOS";
   issueId: string | null;
   reworkPlanId: string | null;
+  draftItemId?: string;
+  extensionHours?: number;
+  reused?: boolean;
 }
 
 interface QcFinalChecklistResult {
@@ -233,12 +236,15 @@ export class DefaultQcService implements QcService {
 
     if (result.applied === false) return result;
     try {
+      const { kdIds } = await (this.repository.findNotificationRecipients?.(coreId)
+        ?? Promise.resolve({ kdIds: [], kpPmIds: [] }));
       const recipients = isFinalQcLevel(qcLevel)
         ? [...new Set([
+            ...kdIds,
             ...await (this.repository.findAssignedEmployeeIds?.(coreId) ?? Promise.resolve([])),
             detail.item.reworkAssignedUserId,
           ].filter((employeeId): employeeId is string => Boolean(employeeId)))]
-        : await this.resolvePendingQaRecipients(detail.item.carId, detail.item.divisionId);
+        : [...new Set([...kdIds, ...await this.resolvePendingQaRecipients(detail.item.carId, detail.item.divisionId)])];
       await notifyMobileEmployees(recipients, {
         title: "QC Lolos",
         body: buildQcPassBody(
@@ -246,7 +252,7 @@ export class DefaultQcService implements QcService {
           detail.item.unitName,
           detail.item.panelName ?? detail.item.jobName,
         ),
-        data: { coreId, qcId: result.qcId, resultStatus: "LOLOS", qcLevel, module: "qc" },
+        data: { coreId, qcId: result.qcId, resultStatus: "LOLOS", qcLevel, module: "qc", eventId: `${result.qcId}:result` },
       }, "sm_job_qc");
     } catch (error) {
       console.error("[qc] notification error:", error);
@@ -277,7 +283,7 @@ export class DefaultQcService implements QcService {
       },
     );
 
-    if (result.applied === false) {
+    if (result.applied === false || result.reused) {
       await this.auditService.log({ actorId: session.user.employeeId, actorName: session.user.fullName,
         action: "qc.reject", module: "qc", recordId: coreId, newValue: result });
       return result;
@@ -326,17 +332,19 @@ export class DefaultQcService implements QcService {
     });
 
     try {
-      const originalWorkers = await (this.repository.findAssignedEmployeeIds?.(coreId) ?? []);
-      const recipients = qcLevel === "QC_KD"
-        ? [input.reworkAssignedUser, ...originalWorkers]
-        : await resolveEmployeeIdsByPermission(
-          permissionCodes.qcSubmit,
-          detail.item.divisionId ?? undefined,
-        );
-      await notifyMobileEmployees(recipients, {
+      const { kdIds, kpPmIds } = await (this.repository.findNotificationRecipients?.(coreId)
+        ?? Promise.resolve({ kdIds: [], kpPmIds: [] }));
+      await notifyMobileEmployees(kdIds, {
         title: "QC Tidak Lolos",
-        body: `QC ${qcLevel.replace("QC_", "")} menyatakan ${detail.item.unitName} - ${detail.item.panelName ?? detail.item.jobName} tidak lolos dan perlu diperbaiki.`,
-        data: { coreId, qcId: result.qcId, resultStatus: "TIDAK_LOLOS", qcLevel, module: "qc" },
+        body: `QC ${qcLevel.replace("QC_", "")} menyatakan ${detail.item.unitName} - ${detail.item.panelName ?? detail.item.jobName} tidak lolos. Rework masuk draft Job Plan.`,
+        data: { coreId, qcId: result.qcId, resultStatus: "TIDAK_LOLOS", qcLevel, module: "job_plan", eventId: `${result.qcId}:result`,
+          ...(result.draftItemId ? { draftItemId: result.draftItemId } : {}) },
+      }, "sm_job_qc");
+      if ((result.extensionHours ?? 0) > 0) await notifyMobileEmployees(kpPmIds, {
+        title: "Penambahan Waktu Rework QC",
+        body: `${detail.item.unitName} - ${detail.item.panelName ?? detail.item.jobName} memerlukan tambahan ${result.extensionHours} jam untuk rework QC. Draft Job Plan menunggu penjadwalan.`,
+        data: { coreId, qcId: result.qcId, module: "job_plan", eventId: `${result.qcId}:extension`,
+          extensionHours: String(result.extensionHours), ...(result.draftItemId ? { draftItemId: result.draftItemId } : {}) },
       }, "sm_job_qc");
     } catch (error) {
       console.error("[qc] notification error:", error);

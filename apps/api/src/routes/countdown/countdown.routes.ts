@@ -68,6 +68,7 @@ async function requireManageCountdownSession(
 
 function mapCountdownError(request: Request, error: unknown): Response {
   if (error instanceof Error) {
+    if (error.message === "UNIT_ON_HOLD") return errorResponse(request, "Unit sedang HOLD. Jobdesc baru tidak dapat dibuat.", 409, "UNIT_ON_HOLD");
     if (error.message === "SCOPE_FORBIDDEN") {
       return errorResponse(
         request,

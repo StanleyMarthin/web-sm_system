@@ -30,5 +30,9 @@ export async function requireSession(
     };
   }
 
+  if (session.user.roleProfile?.webEnabled === false) {
+    return { response: errorResponse(request, "Role ini tidak diaktifkan untuk Web.", 403, "WEB_ACCESS_DISABLED") };
+  }
+
   return { session };
 }
