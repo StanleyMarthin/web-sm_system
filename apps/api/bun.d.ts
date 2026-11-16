@@ -8,6 +8,7 @@ declare module "bun:test" {
     skip: (name: string, fn: () => void | Promise<void>) => void;
   };
   export const expect: <T>(value: T) => {
+    not: { toBe: (expected: unknown) => void };
     toBe: (expected: unknown) => void;
     toEqual: (expected: unknown) => void;
     toContain: (expected: unknown) => void;
@@ -16,15 +17,26 @@ declare module "bun:test" {
   };
 }
 
+interface ImportMeta { readonly dir: string; }
+
 declare const Bun: {
+  spawn: (command: string[], options: {
+    cwd?: string;
+    env?: Record<string, string | undefined>;
+    stdin?: "inherit";
+    stdout?: "inherit";
+    stderr?: "inherit";
+  }) => { exited: Promise<number>; kill: (signal?: string) => void };
   serve: (options: {
     fetch: (request: Request) => Response | Promise<Response>;
     hostname?: string;
     port?: number;
+    maxRequestBodySize?: number;
+    error?: (error: Error) => Response | Promise<Response>;
   }) => {
     hostname: string;
     port: number;
-    stop: () => void;
+    stop: (closeActiveConnections?: boolean) => Promise<void>;
   };
   password: {
     hash: (

@@ -129,3 +129,9 @@ patch-vehicles-log.sh
 # Historical import tooling and its private data stay local.
 /tools/migrations/
 /apps/api/src/services/migrations/
+
+# Empty schema for the isolated local bootstrap is application setup source.
+!/tools/local/schema.sql
+
+# Project onboarding documentation is published; assistant notes stay local.
+!/README.md

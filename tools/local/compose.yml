@@ -1,0 +1,31 @@
+name: smsystem-local
+services:
+  mysql:
+    image: mysql:8.4
+    env_file: ../../.dev/local/mysql.env
+    ports:
+      - "127.0.0.1:13306:3306"
+    volumes:
+      - mysql:/var/lib/mysql
+      - ./schema.sql:/docker-entrypoint-initdb.d/10-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "MYSQL_PWD=$$MYSQL_ROOT_PASSWORD mysql --protocol=tcp -h127.0.0.1 -uroot -Nse 'SELECT schema_version FROM sms_local_setup.installation WHERE id=1'"]
+      interval: 3s
+      timeout: 5s
+      retries: 40
+      start_period: 30s
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "127.0.0.1:16379:6379"
+    volumes:
+      - redis:/data
+    command: ["redis-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+volumes:
+  mysql:
+  redis:
